@@ -1,0 +1,53 @@
+<UserControl
+    x:Class="DesktopBoxesUI.Controls.BoxControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
+    d:DesignHeight="200"
+    d:DesignWidth="240"
+    AllowDrop="True"
+    Drop="BoxControl_Drop"
+    DragOver="BoxControl_DragOver"
+    mc:Ignorable="d">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <ItemsControl
+            x:Name="ItemsList"
+            ItemsSource="{Binding Items}">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="vm:BoxItemViewModel">
+                    <Border
+                        x:Name="ItemBorder"
+                        Margin="4"
+                        Padding="4"
+                        Background="Transparent"
+                        Cursor="Hand"
+                        MouseLeftButtonDown="ItemBorder_MouseLeftButtonDown"
+                        MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp"
+                        MouseMove="ItemBorder_MouseMove">
+                        <StackPanel Width="72" Orientation="Vertical">
+                            <Image
+                                Width="32"
+                                Height="32"
+                                RenderOptions.BitmapScalingMode="HighQuality"
+                                Source="{Binding Icon}" />
+                            <TextBlock
+                                Margin="0,4,0,0"
+                                FontSize="11"
+                                Foreground="White"
+                                Text="{Binding DisplayName}"
+                                TextAlignment="Center"
+                                TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </ScrollViewer>
+</UserControl>

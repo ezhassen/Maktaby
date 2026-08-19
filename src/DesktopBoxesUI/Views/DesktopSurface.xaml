@@ -1,0 +1,17 @@
+<Window
+    x:Class="DesktopBoxesUI.Views.DesktopSurface"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    mc:Ignorable="d"
+    WindowStyle="None"
+    AllowsTransparency="True"
+    Background="Transparent"
+    ShowInTaskbar="False"
+    ResizeMode="NoResize"
+    Topmost="False"
+    AllowDrop="True"
+    DragOver="Surface_DragOver"
+    Drop="Surface_Drop">
+</Window>
