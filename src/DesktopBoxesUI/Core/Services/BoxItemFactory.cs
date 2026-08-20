@@ -30,4 +30,16 @@ public static class BoxItemFactory
             ItemType = isDir ? BoxItemType.Folder : BoxItemType.File,
         };
     }
+
+    /// <summary>Builds a <see cref="BoxItem"/> for a virtual shell item (e.g. a UWP/Store app) identified by its PIDL.</summary>
+    public static BoxItem FromShellPidl(string pidlBase64, string displayName)
+    {
+        return new BoxItem
+        {
+            Pidl = pidlBase64,
+            DisplayName = string.IsNullOrEmpty(displayName) ? "App" : displayName,
+            ItemType = BoxItemType.App,
+            Path = string.Empty,
+        };
+    }
 }

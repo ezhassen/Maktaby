@@ -1,6 +1,12 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Windows;
+using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Win32.NativeMethods;
 
 namespace DesktopBoxesUI.Views;
 
@@ -11,16 +17,33 @@ namespace DesktopBoxesUI.Views;
 /// </summary>
 internal static class DropHelper
 {
+    private const string ShellIdListFormat = "Shell IDList Array";
+
     public static DragDropEffects GetEffect(DragEventArgs e)
     {
-        if (e.Data.GetDataPresent("DesktopBoxesItem"))
+        var allowed = e.AllowedEffects;
+
+        DragDropEffects Pick(params DragDropEffects[] preferred)
         {
-            return DragDropEffects.Move;
+            foreach (var effect in preferred)
+            {
+                if (allowed.HasFlag(effect))
+                {
+                    return effect;
+                }
+            }
+
+            return DragDropEffects.None;
         }
 
-        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        if (e.Data.GetDataPresent("DesktopBoxesItem"))
         {
-            return DragDropEffects.Copy;
+            return Pick(DragDropEffects.Move, DragDropEffects.Copy);
+        }
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(ShellIdListFormat))
+        {
+            return Pick(DragDropEffects.Copy, DragDropEffects.Move, DragDropEffects.Link);
         }
 
         return DragDropEffects.None;
@@ -45,18 +68,180 @@ internal static class DropHelper
             }
         }
 
+        var entries = GetShellItems(e).ToArray();
+
+        int index = 0;
+        foreach (var entry in entries)
+        {
+            BoxItem? boxItem = null;
+            if (entry.FilePath != null)
+            {
+                var resolved = ResolveDroppedFile(entry.FilePath);
+                boxItem = BoxItemFactory.FromPath(resolved);
+            }
+            else if (entry.Pidl != null)
+            {
+                var b64 = Convert.ToBase64String(entry.Pidl);
+                boxItem = BoxItemFactory.FromShellPidl(b64, Win32Apis.GetPidlDisplayName(b64));
+            }
+
+            if (boxItem is not null)
+            {
+                target.AddItem(boxItem);
+            }
+
+            index++;
+        }
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(ShellIdListFormat))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private static IEnumerable<Win32Apis.ShellItemEntry> GetShellItems(DragEventArgs e)
+    {
+        // FileDrop yields real filesystem paths (and an AppUserModelID for UWP apps), which is the
+        // reliable source for ordinary drags. Resolve non-filesystem ids to PIDLs for icons/launch.
         if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] paths)
         {
-            foreach (var path in paths)
+            foreach (var p in paths)
             {
-                var boxItem = BoxItemFactory.FromPath(path);
-                if (boxItem is not null)
+                if (File.Exists(p) || Directory.Exists(p))
                 {
-                    target.AddItem(boxItem);
+                    yield return new Win32Apis.ShellItemEntry { FilePath = p };
+                }
+                else
+                {
+                    byte[]? pidl = Win32Apis.GetPidlForAppId(p);
+                    if (pidl != null)
+                    {
+                        yield return new Win32Apis.ShellItemEntry { Pidl = pidl };
+                    }
+                    else
+                    {
+                        yield return new Win32Apis.ShellItemEntry { FilePath = p };
+                    }
                 }
             }
 
-            e.Handled = true;
+            yield break;
         }
+
+        // Fallback: raw Shell IDList (PIDL) when FileDrop is absent.
+        byte[]? cida = GetShellIdListBytes(e);
+        if (cida != null)
+        {
+            foreach (var entry in Win32Apis.GetShellIdListEntries(cida))
+            {
+                yield return entry;
+            }
+        }
+    }
+
+    /// <summary>
+    /// For a dropped filesystem path, copies the item into the user's Desktop folder (so the Box item
+    /// is a real desktop file, like Fences). If the source is already on the Desktop, the path is used
+    /// as-is. Virtual/shell items (returned as PIDLs) are handled separately.
+    /// </summary>
+    private static string ResolveDroppedFile(string source)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(source) || (!File.Exists(source) && !Directory.Exists(source)))
+            {
+                return source;
+            }
+
+            var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            if (string.IsNullOrEmpty(desktop))
+            {
+                return source;
+            }
+
+            var srcDir = Path.GetDirectoryName(source);
+            if (srcDir != null && string.Equals(srcDir, desktop, StringComparison.OrdinalIgnoreCase))
+            {
+                return source;
+            }
+
+            var dest = MakeUnique(Path.Combine(desktop, Path.GetFileName(source)));
+
+            if (File.Exists(source))
+            {
+                File.Copy(source, dest, false);
+            }
+            else
+            {
+                CopyDirectory(source, dest);
+            }
+
+            return dest;
+        }
+        catch
+        {
+            return source;
+        }
+    }
+
+    private static string MakeUnique(string path)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            return path;
+        }
+
+        var dir = Path.GetDirectoryName(path) ?? string.Empty;
+        var name = Path.GetFileNameWithoutExtension(path);
+        var ext = Path.GetExtension(path);
+        int i = 1;
+        string candidate;
+        do
+        {
+            candidate = Path.Combine(dir, $"{name} ({i}){ext}");
+            i++;
+        }
+        while (File.Exists(candidate) || Directory.Exists(candidate));
+
+        return candidate;
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        Directory.CreateDirectory(destination);
+        foreach (var file in Directory.GetFiles(source))
+        {
+            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), false);
+        }
+
+        foreach (var dir in Directory.GetDirectories(source))
+        {
+            CopyDirectory(dir, Path.Combine(destination, Path.GetFileName(dir)));
+        }
+    }
+
+    private static byte[]? GetShellIdListBytes(DragEventArgs e)
+    {
+        try
+        {
+            return e.Data.GetData(ShellIdListFormat) switch
+            {
+                byte[] raw => raw,
+                MemoryStream ms => ms.ToArray(),
+                Stream s => ReadAllBytes(s),
+                _ => null
+            };
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static byte[] ReadAllBytes(Stream stream)
+    {
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        return ms.ToArray();
     }
 }

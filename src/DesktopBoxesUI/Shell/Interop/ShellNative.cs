@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace DesktopBoxesUI.Shell.Interop;
 
@@ -30,6 +31,32 @@ internal static class ShellNative
 
     [DllImport("shell32.dll")]
     public static extern void ILFree(IntPtr pidl);
+
+    public static readonly Guid IID_IContextMenu = new("000214e4-0000-0000-c000-000000000046");
+}
+
+[ComImport]
+[Guid("000214e4-0000-0000-c000-000000000046")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IContextMenu
+{
+    [PreserveSig] int QueryContextMenu(IntPtr hMenu, uint indexMenu, uint idCmdFirst, uint idCmdLast, uint uFlags);
+    [PreserveSig] int InvokeCommand(ref CMINVOKECOMMANDINFO pici);
+    [PreserveSig] int GetCommandString(uint idCmd, uint uType, IntPtr pReserved, StringBuilder pszName, uint cchMax);
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+internal struct CMINVOKECOMMANDINFO
+{
+    public int cbSize;
+    public int fMask;
+    public IntPtr hwnd;
+    public IntPtr lpVerb;
+    public IntPtr lpParameters;
+    public IntPtr lpDirectory;
+    public int nShow;
+    public int dwHotKey;
+    public IntPtr hIcon;
 }
 
 [ComImport]

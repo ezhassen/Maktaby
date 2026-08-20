@@ -23,6 +23,7 @@ public sealed class IconImageService
 {
     private readonly IShellIconService _shellIcon;
     private readonly ConcurrentDictionary<string, ImageSource?> _cache = new();
+    private readonly ConcurrentDictionary<string, ImageSource?> _pidlCache = new();
 
     public IconImageService(IShellIconService shellIcon) => _shellIcon = shellIcon;
 
@@ -44,6 +45,27 @@ public sealed class IconImageService
         }
 
         _cache[path] = source;
+        return source;
+    }
+
+    /// <summary>Loads an icon for a stored shell PIDL (virtual items such as UWP/Store apps).</summary>
+    public async Task<ImageSource?> GetIconFromPidlAsync(string pidlBase64, CancellationToken cancellationToken = default)
+    {
+        if (_pidlCache.TryGetValue(pidlBase64, out var cached))
+        {
+            return cached;
+        }
+
+        ImageSource? source = null;
+        IntPtr hicon = Win32Apis.GetIconForPidl(pidlBase64);
+        if (hicon != IntPtr.Zero)
+        {
+            source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+            source.Freeze();
+            Win32Apis.DestroyIcon(hicon);
+        }
+
+        _pidlCache[pidlBase64] = source;
         return source;
     }
 }

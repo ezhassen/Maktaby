@@ -30,7 +30,9 @@
                         Cursor="Hand"
                         MouseLeftButtonDown="ItemBorder_MouseLeftButtonDown"
                         MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp"
-                        MouseMove="ItemBorder_MouseMove">
+                        MouseMove="ItemBorder_MouseMove"
+                        MouseRightButtonUp="ItemBorder_MouseRightButtonUp"
+                        ContextMenuOpening="ItemBorder_ContextMenuOpening">
                         <StackPanel Width="72" Orientation="Vertical">
                             <Image
                                 Width="32"

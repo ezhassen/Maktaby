@@ -4,9 +4,12 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Views;
 
 namespace DesktopBoxesUI.Controls;
@@ -77,6 +80,21 @@ public partial class BoxControl : UserControl
 
     private static void OpenItem(BoxItemViewModel item)
     {
+        if (!string.IsNullOrEmpty(item.Model.Pidl))
+        {
+            try
+            {
+                if (Win32Apis.LaunchPidl(item.Model.Pidl))
+                {
+                    return;
+                }
+            }
+            catch
+            {
+                // fall through to path-based attempt
+            }
+        }
+
         var path = item.Path;
         if (string.IsNullOrEmpty(path))
         {
@@ -88,6 +106,11 @@ public partial class BoxControl : UserControl
             if (File.Exists(path) || Directory.Exists(path))
             {
                 Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            }
+            else if (path.Contains('!') && path.Contains('_'))
+            {
+                // AppUserModelID fallback (UWP/Store app) when no PIDL was resolved.
+                Process.Start(new ProcessStartInfo("explorer.exe", "shell:appsFolder\\" + path) { UseShellExecute = true });
             }
             else
             {
@@ -119,5 +142,37 @@ public partial class BoxControl : UserControl
         {
             RequestSave?.Invoke();
         }
+    }
+
+    private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not BoxItemViewModel vm)
+        {
+            return;
+        }
+
+        var window = Window.GetWindow(this);
+        var hwnd = new WindowInteropHelper(window).Handle;
+
+        var screen = PointToScreen(e.GetPosition(this));
+        var dpi = VisualTreeHelper.GetDpi(this);
+        var point = new Point(screen.X * dpi.PixelsPerDip, screen.Y * dpi.PixelsPerDip);
+
+        if (!string.IsNullOrEmpty(vm.Model.Pidl))
+        {
+            ShellContextMenu.ShowForPidl(hwnd, Convert.FromBase64String(vm.Model.Pidl), point);
+        }
+        else if (!string.IsNullOrEmpty(vm.Path))
+        {
+            ShellContextMenu.ShowForPath(hwnd, vm.Path, point);
+        }
+
+        e.Handled = true;
+    }
+
+    private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        // We show the native shell menu ourselves; suppress any WPF default.
+        e.Handled = true;
     }
 }

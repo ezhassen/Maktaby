@@ -12,4 +12,5 @@ public enum BoxItemType
     Shortcut,
     Drive,
     SpecialFolder,
+    App,
 }

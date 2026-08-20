@@ -10,8 +10,6 @@
     Background="Transparent"
     ShowInTaskbar="False"
     ResizeMode="NoResize"
-    Topmost="False"
-    AllowDrop="True"
-    DragOver="Surface_DragOver"
-    Drop="Surface_Drop">
+    Topmost="False">
+    <Grid x:Name="Root" Background="Transparent" AllowDrop="True" DragOver="Surface_DragOver" DragLeave="Surface_DragLeave" Drop="Surface_Drop" />
 </Window>

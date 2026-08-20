@@ -1,6 +1,7 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
@@ -88,9 +89,12 @@ public partial class BoxWindow : Window
         try
         {
             var hwnd = new WindowInteropHelper(this).Handle;
+            Win32Apis.GlueToDesktop(hwnd);
+            Win32Apis.PreventMinimize(hwnd);
             _positioning.SetBounds(hwnd, new RectD(_box.Left, _box.Top, _box.Width, _box.Height));
             _source = HwndSource.FromHwnd(hwnd);
             _source.AddHook(HwndHook);
+            _source.AddHook(Win32Apis.MinimizePreventionHook);
         }
         catch
         {

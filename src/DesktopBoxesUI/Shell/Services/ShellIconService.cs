@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -20,22 +19,9 @@ public sealed class ShellIconService : IShellIconService
 {
     private const SHGFI IconFlags = SHGFI.Icon | SHGFI.SmallIcon | SHGFI.AddOverlays;
 
-    private readonly ConcurrentDictionary<string, IntPtr> _cache = new();
-
     public ValueTask<object?> GetIconAsync(string path, int size = 32, CancellationToken cancellationToken = default)
     {
-        if (_cache.TryGetValue(path, out var cached) && cached != System.IntPtr.Zero)
-        {
-            return new ValueTask<object?>(cached);
-        }
-
         IntPtr hicon = ExtractIcon(path);
-
-        if (hicon != System.IntPtr.Zero)
-        {
-            _cache[path] = hicon;
-        }
-
         return new ValueTask<object?>(hicon);
     }
 
@@ -72,7 +58,7 @@ public sealed class ShellIconService : IShellIconService
                     try
                     {
                         var psfiPidl = new SHFILEINFOW();
-                        int result = Win32Apis.SHGetFileInfo(pidl, 0, ref psfiPidl, cb, IconFlags);
+                        int result = Win32Apis.SHGetFileInfo(pidl, 0, ref psfiPidl, cb, IconFlags | SHGFI.Pidl);
                         return result != 0 ? psfiPidl.hIcon : System.IntPtr.Zero;
                     }
                     finally

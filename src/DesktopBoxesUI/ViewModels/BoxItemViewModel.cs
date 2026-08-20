@@ -41,6 +41,13 @@ public sealed class BoxItemViewModel : ViewModelBase
 
     private async Task LoadIconAsync()
     {
-        Icon = await _icons.GetIconAsync(_model.Path);
+        if (!string.IsNullOrEmpty(_model.Pidl))
+        {
+            Icon = await _icons.GetIconFromPidlAsync(_model.Pidl);
+        }
+        else
+        {
+            Icon = await _icons.GetIconAsync(_model.Path);
+        }
     }
 }

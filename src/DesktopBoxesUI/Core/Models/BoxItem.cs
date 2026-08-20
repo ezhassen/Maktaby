@@ -11,6 +11,13 @@ public sealed class BoxItem
     /// <summary>Full filesystem or shell path identifying this item.</summary>
     public string Path { get; set; } = string.Empty;
 
+    /// <summary>
+    /// For non-filesystem shell items (e.g. UWP/Store apps dragged from the Start Menu), this holds
+    /// the base64 of the item's absolute PIDL. The PIDL is used to resolve the icon and to launch the
+    /// item, since such items have no usable filesystem path.
+    /// </summary>
+    public string? Pidl { get; set; }
+
     /// <summary>Human-readable name shown in the UI.</summary>
     public string DisplayName { get; set; } = string.Empty;
 
