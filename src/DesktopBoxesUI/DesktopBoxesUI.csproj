@@ -23,6 +23,13 @@
 		<IsTrimmable>false</IsTrimmable>
 		<EnableAot>false</EnableAot>
 		<Platforms>AnyCPU;x64</Platforms>
+		<!--
+      .NET 9/10 enable CET (shadow stacks) by default. The UAC elevation path used by
+      "Run as administrator" (Process.Start with Verb="runas") crashes natively
+      (ntd.dll 0xc0000409) on CET-capable CPUs when the binary is CET-marked. This is an
+      uncatchable native fault, so disable CET marking for this binary.
+    -->
+		<CETCompat>false</CETCompat>
 	</PropertyGroup>
 
 	<ItemGroup>

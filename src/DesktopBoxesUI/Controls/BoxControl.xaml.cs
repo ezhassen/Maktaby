@@ -154,17 +154,13 @@ public partial class BoxControl : UserControl
         var window = Window.GetWindow(this);
         var hwnd = new WindowInteropHelper(window).Handle;
 
-        var screen = PointToScreen(e.GetPosition(this));
-        var dpi = VisualTreeHelper.GetDpi(this);
-        var point = new Point(screen.X * dpi.PixelsPerDip, screen.Y * dpi.PixelsPerDip);
-
         if (!string.IsNullOrEmpty(vm.Model.Pidl))
         {
-            ShellContextMenu.ShowForPidl(hwnd, Convert.FromBase64String(vm.Model.Pidl), point);
+            ShellContextMenu.ShowForPidl(hwnd, Convert.FromBase64String(vm.Model.Pidl));
         }
         else if (!string.IsNullOrEmpty(vm.Path))
         {
-            ShellContextMenu.ShowForPath(hwnd, vm.Path, point);
+            ShellContextMenu.ShowForPath(hwnd, vm.Path);
         }
 
         e.Handled = true;

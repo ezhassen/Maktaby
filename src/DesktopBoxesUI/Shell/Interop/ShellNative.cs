@@ -45,6 +45,19 @@ internal interface IContextMenu
     [PreserveSig] int GetCommandString(uint idCmd, uint uType, IntPtr pReserved, StringBuilder pszName, uint cchMax);
 }
 
+[ComImport]
+[Guid("000214f4-0000-0000-c000-000000000046")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IContextMenu2
+{
+    [PreserveSig] int QueryContextMenu(IntPtr hMenu, uint indexMenu, uint idCmdFirst, uint idCmdLast, uint uFlags);
+    [PreserveSig] int InvokeCommand(ref CMINVOKECOMMANDINFO pici);
+    [PreserveSig] int GetCommandString(uint idCmd, uint uType, IntPtr pReserved, StringBuilder pszName, uint cchMax);
+    // Forwards owner-draw / menu-setup messages so the shell can render its items (e.g. the
+    // "Run as administrator" shield) without corrupting state and crashing the host.
+    [PreserveSig] int HandleMenuMsg(uint uMsg, IntPtr wParam, IntPtr lParam);
+}
+
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 internal struct CMINVOKECOMMANDINFO
 {
