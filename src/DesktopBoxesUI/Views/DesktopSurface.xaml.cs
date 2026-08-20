@@ -109,8 +109,11 @@ public sealed partial class DesktopSurface : Window
         double left = Math.Max(wa.Left, Math.Min(p.X, wa.Right - NewBoxWidth));
         double top = Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - NewBoxHeight));
 
-        var box = _host.CreateBoxAt(left, top);
-        DropHelper.AddToBox(box, _host, e);
+        var container = _host.CreateBoxAt(left, top);
+        if (container.ActiveBox != null)
+        {
+            DropHelper.AddToBox(container.ActiveBox, _host, e);
+        }
 
         if (e.Handled)
         {

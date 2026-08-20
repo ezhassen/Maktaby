@@ -27,6 +27,7 @@ public sealed class TrayIconService : IDisposable
     private NOTIFYICONDATAW _data;
 
     public event EventHandler? NewBoxRequested;
+    public event EventHandler? NewBoxContainerRequested;
     public event EventHandler? ResetRequested;
     public event EventHandler? ExitRequested;
 

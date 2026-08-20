@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
@@ -9,11 +8,11 @@ using DesktopBoxesUI.Core.Models;
 namespace DesktopBoxesUI.Core.Services;
 
 /// <summary>
-/// JSON-file persistence for boxes (the snapshot / "db file"). Located under Core because it
-/// only uses the Base Class Library (no Win32/Shell/WPF). The file lives in
+/// JSON-file persistence for the desktop snapshot. Located under Core because it only uses the Base
+/// Class Library (no Win32/Shell/WPF). The file lives in
 /// %LocalAppData%/DesktopBoxes/boxes.snapshot.json.
 /// </summary>
-public sealed class JsonBoxPersistenceService : IPersistenceService
+public sealed class JsonSnapshotPersistenceService : IPersistenceService
 {
     private static readonly string FilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -22,7 +21,7 @@ public sealed class JsonBoxPersistenceService : IPersistenceService
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
-    public async Task<IReadOnlyList<Box>?> LoadBoxesAsync(CancellationToken cancellationToken = default)
+    public async Task<DesktopSnapshot?> LoadSnapshotAsync(CancellationToken cancellationToken = default)
     {
         if (!File.Exists(FilePath))
         {
@@ -32,8 +31,7 @@ public sealed class JsonBoxPersistenceService : IPersistenceService
         try
         {
             await using var stream = File.OpenRead(FilePath);
-            var boxes = await JsonSerializer.DeserializeAsync<List<Box>>(stream, Options, cancellationToken).ConfigureAwait(false);
-            return boxes;
+            return await JsonSerializer.DeserializeAsync<DesktopSnapshot>(stream, Options, cancellationToken).ConfigureAwait(false);
         }
         catch
         {
@@ -41,10 +39,10 @@ public sealed class JsonBoxPersistenceService : IPersistenceService
         }
     }
 
-    public async Task SaveBoxesAsync(IEnumerable<Box> boxes, CancellationToken cancellationToken = default)
+    public async Task SaveSnapshotAsync(DesktopSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         await using var stream = File.Create(FilePath);
-        await JsonSerializer.SerializeAsync(stream, new List<Box>(boxes), Options, cancellationToken).ConfigureAwait(false);
+        await JsonSerializer.SerializeAsync(stream, snapshot, Options, cancellationToken).ConfigureAwait(false);
     }
 }

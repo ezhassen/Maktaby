@@ -232,7 +232,7 @@ internal static class ShellContextMenu
     private static IContextMenu2? TryGetContextMenu2(IntPtr ctxPtr)
     {
         var iid = new Guid("000214f4-0000-0000-c000-000000000046"); // IID_IContextMenu2
-        if (Marshal.QueryInterface(ctxPtr, ref iid, out IntPtr p) != 0 || p == IntPtr.Zero)
+        if (Marshal.QueryInterface(ctxPtr, in iid, out IntPtr p) != 0 || p == IntPtr.Zero)
         {
             return null;
         }

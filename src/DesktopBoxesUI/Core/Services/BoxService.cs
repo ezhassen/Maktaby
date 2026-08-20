@@ -40,13 +40,11 @@ public sealed class BoxService : IBoxService
 
     public Box CreateBox(string name, double left, double top, double width, double height)
     {
+        // Geometry now lives on BoxContainer, not Box; the position is only used as a hint when the
+        // box is first placed into a container.
         var box = new Box
         {
             Name = name,
-            Left = left,
-            Top = top,
-            Width = width,
-            Height = height,
         };
 
         lock (_gate)

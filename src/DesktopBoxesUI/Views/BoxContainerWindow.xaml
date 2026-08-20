@@ -1,0 +1,161 @@
+<Window
+    x:Class="DesktopBoxesUI.Views.BoxContainerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:DesktopBoxesUI.Controls"
+    xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
+    MinWidth="160"
+    MinHeight="120"
+    AllowsTransparency="True"
+    Background="Transparent"
+    MouseLeftButtonUp="TitleArea_MouseLeftButtonUp"
+    MouseMove="TitleArea_MouseMove"
+    ResizeMode="CanResize"
+    ShowInTaskbar="False"
+    WindowStyle="None"
+    mc:Ignorable="d">
+    <Window.Resources>
+        <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+    </Window.Resources>
+    <Border
+        x:Name="RootBorder"
+        Background="#2d2d30"
+        BorderBrush="#3f3f46"
+        BorderThickness="1"
+        CornerRadius="8">
+        <DockPanel LastChildFill="True">
+            <Border
+                x:Name="HeaderBorder"
+                Padding="6,4"
+                Background="#3f3f46"
+                CornerRadius="8,8,0,0"
+                DockPanel.Dock="Top">
+                <Grid ColumnDefinitions="auto, *, auto">
+                    <Button
+                        x:Name="MenuButton"
+                        Grid.Column="0"
+                        Width="26"
+                        Height="22"
+                        Margin="0,0,6,0"
+                        Click="MenuButton_Click"
+                        Content="&#9776;"
+                        Cursor="Arrow"
+                        DockPanel.Dock="Left">
+                        <Button.ContextMenu>
+                            <ContextMenu x:Name="BoxMenu">
+                                <MenuItem Click="MenuDelete_Click" Header="Delete" />
+                                <MenuItem Click="MenuHide_Click" Header="Hide" />
+                                <MenuItem Click="MenuLock_Click" Header="Lock / Unlock" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
+                    </Button>
+
+                    <Grid
+                        x:Name="TitleArea"
+                        Grid.Column="1"
+                        HorizontalAlignment="Stretch"
+                        Cursor="SizeAll"
+                        MouseLeftButtonDown="TitleArea_MouseLeftButtonDown">
+                        <TextBlock
+                            x:Name="TitleText"
+                            MinWidth="120"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            Foreground="White"
+                            MouseLeftButtonDown="TitleText_MouseLeftButtonDown"
+                            Text="{Binding Title}"
+                            TextAlignment="Center" />
+                        <TextBox
+                            x:Name="TitleEdit"
+                            MinWidth="120"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            KeyDown="TitleEdit_KeyDown"
+                            LostFocus="TitleEdit_LostFocus"
+                            Text="{Binding ActiveBox.Name, UpdateSourceTrigger=PropertyChanged}"
+                            TextAlignment="Center"
+                            Visibility="Collapsed" />
+                    </Grid>
+
+                    <StackPanel
+                        x:Name="AddRemoveButtons"
+                        Grid.Column="2"
+                        Orientation="Horizontal">
+                        <Button
+                            Width="24"
+                            Height="22"
+                            Margin="2,0"
+                            Click="AddTab_Click"
+                            Content="+"
+                            Cursor="Hand" />
+                        <Button
+                            Width="24"
+                            Height="22"
+                            Margin="2,0"
+                            Click="RemoveTab_Click"
+                            Content="-"
+                            Cursor="Hand" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Tab strip: only shown for more than one tab -->
+            <Border
+                x:Name="TabStrip"
+                Padding="4,2"
+                Background="#333337"
+                BorderBrush="#3f3f46"
+                BorderThickness="0,0,0,1"
+                DockPanel.Dock="Top"
+                Visibility="{Binding BoxContainerVm.ShowTabs, Converter={StaticResource BoolToVis}}">
+                <ItemsControl ItemsSource="{Binding BoxContainerVm.Tabs}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:BoxViewModel">
+                            <Button
+                                Margin="2,0"
+                                Padding="8,2"
+                                Background="Transparent"
+                                BorderBrush="#3f3f46"
+                                BorderThickness="1"
+                                Click="Tab_Click"
+                                Content="{Binding Name}"
+                                Cursor="Hand"
+                                Foreground="White"
+                                Tag="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Border>
+
+            <Grid>
+                <controls:BoxControl x:Name="BoxContent" DataContext="{Binding ActiveBox}" />
+                <Border
+                    x:Name="Placeholder"
+                    Padding="16"
+                    Visibility="Collapsed">
+                    <StackPanel
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center">
+                        <TextBlock
+                            FontSize="14"
+                            Foreground="White"
+                            Text="Custom Widget"
+                            TextAlignment="Center" />
+                        <TextBlock
+                            Foreground="#cccccc"
+                            Text="{Binding CustomTypeName}"
+                            TextAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </DockPanel>
+    </Border>
+</Window>

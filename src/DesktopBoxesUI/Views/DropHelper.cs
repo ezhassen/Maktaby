@@ -56,7 +56,7 @@ internal static class DropHelper
         {
             if (e.Data.GetData("DesktopBoxesItem") is BoxItemViewModel item)
             {
-                var source = host?.Boxes.FirstOrDefault(b => b.Items.Contains(item));
+                var source = host?.FindBoxContaining(item);
                 if (source != null && source != target)
                 {
                     source.RemoveItem(item.Model);
