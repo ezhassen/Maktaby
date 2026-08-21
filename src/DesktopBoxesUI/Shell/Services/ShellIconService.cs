@@ -1,10 +1,10 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Shell.Interop;
+using DesktopBoxesUI.Win32.NativeMethods;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Shell.Interop;
-using DesktopBoxesUI.Win32.NativeMethods;
 
 namespace DesktopBoxesUI.Shell.Services;
 
@@ -19,10 +19,11 @@ public sealed class ShellIconService : IShellIconService
 {
     private const SHGFI IconFlags = SHGFI.Icon | SHGFI.SmallIcon | SHGFI.AddOverlays;
 
-    public ValueTask<object?> GetIconAsync(string path, int size = 32, CancellationToken cancellationToken = default)
+    public async ValueTask<object?> GetIconAsync(string path, int size = 32, CancellationToken cancellationToken = default)
     {
-        IntPtr hicon = ExtractIcon(path);
-        return new ValueTask<object?>(hicon);
+        IntPtr hicon = await Task.Run(() => ExtractIcon(path));
+        return hicon;
+        //return new ValueTask<object?>(hicon);
     }
 
     private static IntPtr ExtractIcon(string path)

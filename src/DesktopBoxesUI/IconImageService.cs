@@ -1,3 +1,5 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Win32.NativeMethods;
 using System.Collections.Concurrent;
 using System.Runtime.Versioning;
 using System.Threading;
@@ -6,8 +8,6 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Win32.NativeMethods;
 using HICON = Windows.Win32.UI.WindowsAndMessaging.HICON;
 
 namespace DesktopBoxesUI;
@@ -37,12 +37,15 @@ public sealed class IconImageService
         object? token = await _shellIcon.GetIconAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         ImageSource? source = null;
-        if (token is IntPtr hicon && hicon != IntPtr.Zero)
+        await Task.Run(() =>
         {
-            source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-            source.Freeze();
-            Win32Apis.DestroyIcon(hicon);
-        }
+            if (token is IntPtr hicon && hicon != IntPtr.Zero)
+            {
+                source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze();
+                Win32Apis.DestroyIcon(hicon);
+            }
+        }, cancellationToken);
 
         _cache[path] = source;
         return source;
@@ -57,13 +60,17 @@ public sealed class IconImageService
         }
 
         ImageSource? source = null;
-        IntPtr hicon = Win32Apis.GetIconForPidl(pidlBase64);
-        if (hicon != IntPtr.Zero)
+        await Task.Run(() =>
         {
-            source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-            source.Freeze();
-            Win32Apis.DestroyIcon(hicon);
-        }
+            IntPtr hicon = Win32Apis.GetIconForPidl(pidlBase64);
+            if (hicon != IntPtr.Zero)
+            {
+                source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze();
+                Win32Apis.DestroyIcon(hicon);
+            }
+        }, cancellationToken);
+
 
         _pidlCache[pidlBase64] = source;
         return source;
