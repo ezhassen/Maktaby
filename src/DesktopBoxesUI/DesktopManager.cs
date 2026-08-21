@@ -1,16 +1,12 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
-using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
-using System.Linq;
 using System.Runtime.Versioning;
-using System.Threading.Tasks;
 using System.Windows;
 
 namespace DesktopBoxesUI;
@@ -469,7 +465,7 @@ public sealed class DesktopManager
             return;
         }
 
-        Window window = new BoxContainerWindow(vm, _mainVm, _positioning, Save);
+        Window window = new BoxContainerWindow(vm, _mainVm, _positioning, SaveAsyncFireAndForget);
 
         _windows[vm.Id] = window;
         window.Show();
@@ -520,7 +516,7 @@ public sealed class DesktopManager
 
     private void EnsureSurface()
     {
-        _surface ??= new DesktopSurface(_mainVm, Save);
+        _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
         if (!_surface.IsVisible)
         {
             _surface.Show();
@@ -540,19 +536,33 @@ public sealed class DesktopManager
         _ = SaveAsync();
     }
 
-    public async Task SaveAsync()
+    public DesktopSnapshot GetCurrentDesktopSnapshot()
     {
         var current = GetPrimaryWorkAreaDip();
-        var snapshot = new DesktopSnapshot
+        return new DesktopSnapshot
         {
             DesktopResolution = new SizeD(current.Width, current.Height),
             Containers = _containers.GetContainers().ToList(),
             Rules = _rules.GetRules().ToList(),
         };
-        await _persistence.SaveSnapshotAsync(snapshot);
     }
 
-    public void Save() => _ = SaveAsync();
+    /// <summary>
+    /// Sync save for app exit and other sync only operations. (No Task)
+    /// </summary>
+    public void SaveSync()
+    {
+        _persistence.SaveSnapshot(GetCurrentDesktopSnapshot());
+    }
+    public async Task SaveAsync()
+    {
+        await _persistence.SaveSnapshotAsync(GetCurrentDesktopSnapshot());
+    }
+
+    /// <summary>
+    /// SaveAsync FireAndForget
+    /// </summary>
+    public void SaveAsyncFireAndForget() => _ = SaveAsync();
 
     public void CloseAll()
     {

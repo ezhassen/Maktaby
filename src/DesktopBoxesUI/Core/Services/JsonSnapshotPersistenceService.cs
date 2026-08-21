@@ -1,9 +1,9 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Core.Models;
 
 namespace DesktopBoxesUI.Core.Services;
 
@@ -38,7 +38,12 @@ public sealed class JsonSnapshotPersistenceService : IPersistenceService
             return null;
         }
     }
-
+    public void SaveSnapshot(DesktopSnapshot snapshot)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+        using var stream = File.Create(FilePath);
+        JsonSerializer.Serialize(stream, snapshot, Options);
+    }
     public async Task SaveSnapshotAsync(DesktopSnapshot snapshot, CancellationToken cancellationToken = default)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);

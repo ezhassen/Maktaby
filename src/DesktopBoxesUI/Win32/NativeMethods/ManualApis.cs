@@ -48,7 +48,7 @@ internal static class ManualApis
     [DllImport("user32.dll")]
     public static extern short GetAsyncKeyState(int vKey);
 
-    [DllImport("shlwapi.dll")]
+    [DllImport("shell32")]
     public static extern IntPtr ILCombine(IntPtr pidl1, IntPtr pidl2);
 
     [DllImport("shell32.dll")]

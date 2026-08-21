@@ -1,6 +1,6 @@
+using DesktopBoxesUI.Core.Models;
 using System.Threading;
 using System.Threading.Tasks;
-using DesktopBoxesUI.Core.Models;
 
 namespace DesktopBoxesUI.Core.Interfaces;
 
@@ -13,5 +13,9 @@ public interface IPersistenceService
 {
     Task<DesktopSnapshot?> LoadSnapshotAsync(CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Sync save for app exit
+    /// </summary>
+    void SaveSnapshot(DesktopSnapshot snapshot);
     Task SaveSnapshotAsync(DesktopSnapshot snapshot, CancellationToken cancellationToken = default);
 }

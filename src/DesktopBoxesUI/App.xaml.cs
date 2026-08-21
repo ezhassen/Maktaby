@@ -53,12 +53,15 @@ public partial class App : Application
             Shutdown();
         };
 
-        Exit += async (_, _) =>
+        Exit += (_, _) =>
         {
-            Services.GetRequiredService<IMouseMonitor>().Stop();
             var mang = Services.GetRequiredService<DesktopManager>();
-            await mang.SaveAsync();
+            //RestoreIcons first.
             mang.RestoreIcons();
+            Services.GetRequiredService<IMouseMonitor>().Stop();
+            //async is not ok in app exit
+            //await mang.SaveAsync();
+            mang.SaveSync();
         };
         // The splash runs initialization itself once it is first shown (see LoadingWindow),
         // so the Box windows are created under a fully-rendered WPF context.
@@ -80,7 +83,7 @@ public partial class App : Application
             serv.GetRequiredService<IRuleService>(),
             serv.GetRequiredService<IBoxService>(),
             serv.GetRequiredService<IDispatcher>(),
-            () => serv.GetRequiredService<DesktopManager>().Save()));
+            () => serv.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget()));
 
         // Win32 platform services
         services.AddSingleton<IMonitorService, MonitorService>();
