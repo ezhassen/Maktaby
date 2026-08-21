@@ -7,6 +7,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     MinWidth="160"
     MinHeight="120"
     AllowsTransparency="True"
@@ -45,14 +46,25 @@
                         Height="22"
                         Margin="0,0,6,0"
                         Click="MenuButton_Click"
-                        Content="&#9776;"
                         Cursor="Arrow"
-                        DockPanel.Dock="Left">
+                        DockPanel.Dock="Left"
+                        Style="{StaticResource BorderlesButtonStyle}"
+                        ToolTip="Menu">
+                        <ui:SymbolIcon Symbol="Navigation24" />
                         <Button.ContextMenu>
                             <ContextMenu x:Name="BoxMenu">
                                 <MenuItem Click="MenuDelete_Click" Header="Delete" />
                                 <MenuItem Click="MenuHide_Click" Header="Hide" />
                                 <MenuItem Click="MenuLock_Click" Header="Lock / Unlock" />
+                                <Separator />
+                                <MenuItem
+                                    x:Name="MenuAddTab"
+                                    Click="AddTab_Click"
+                                    Header="Add Tab" />
+                                <MenuItem
+                                    x:Name="MenuRemoveTab"
+                                    Click="RemoveTab_Click"
+                                    Header="Remove Tab" />
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
@@ -84,25 +96,18 @@
                             Visibility="Collapsed" />
                     </Grid>
 
-                    <StackPanel
-                        x:Name="AddRemoveButtons"
+                    <Button
+                        x:Name="RollButton"
                         Grid.Column="2"
-                        Orientation="Horizontal">
-                        <Button
-                            Width="24"
-                            Height="22"
-                            Margin="2,0"
-                            Click="AddTab_Click"
-                            Content="+"
-                            Cursor="Hand" />
-                        <Button
-                            Width="24"
-                            Height="22"
-                            Margin="2,0"
-                            Click="RemoveTab_Click"
-                            Content="-"
-                            Cursor="Hand" />
-                    </StackPanel>
+                        Width="26"
+                        Height="22"
+                        Margin="6,0,0,0"
+                        Click="RollButton_Click"
+                        Cursor="Arrow"
+                        Style="{StaticResource BorderlesButtonStyle}"
+                        ToolTip="Roll up">
+                        <ui:SymbolIcon x:Name="RollIcon" Symbol="ChevronUp24" />
+                    </Button>
                 </Grid>
             </Border>
 
@@ -151,7 +156,7 @@
                 </Grid>
             </Border>
 
-            <Grid>
+            <Grid x:Name="BodyContent">
                 <controls:BoxControl x:Name="BoxContent" DataContext="{Binding ActiveBox}" />
                 <Border
                     x:Name="Placeholder"

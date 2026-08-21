@@ -37,6 +37,8 @@ public partial class BoxContainerWindow : Window
     private bool _mouseOver;
     private bool _keyboardFocused;
     private bool _isRenaming;
+    private bool _isRolledUp;
+    private double _savedHeight;
 
     static BoxContainerWindow()
     {
@@ -155,7 +157,8 @@ public partial class BoxContainerWindow : Window
     private void ApplyType()
     {
         bool isBox = _vm.BoxContainerVm != null;
-        AddRemoveButtons.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
+        MenuAddTab.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
+        MenuRemoveTab.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         BoxContent.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         Placeholder.Visibility = isBox ? Visibility.Collapsed : Visibility.Visible;
         UpdateChrome();
@@ -171,7 +174,6 @@ public partial class BoxContainerWindow : Window
         bool show = isBox && (_mouseOver || _keyboardFocused);
 
         MenuButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        AddRemoveButtons.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
 
         // The tab strip is always visible when there is more than one tab; the header buttons and
         // scrollbar stay hidden until the container is hovered or focused.
@@ -306,6 +308,33 @@ public partial class BoxContainerWindow : Window
 
         _vm.RemoveTabCommand.Execute(null);
         UpdateBody();
+    }
+
+    private void RollButton_Click(object sender, RoutedEventArgs e)
+    {
+        _isRolledUp = !_isRolledUp;
+        if (_isRolledUp)
+        {
+            // Collapse to just the title bar. We only change the live window height (not the
+            // persisted _vm.Height) so a rolled-up container reloads normally.
+            _savedHeight = Height;
+            double headerH = HeaderBorder.ActualHeight;
+            BodyContent.Visibility = Visibility.Collapsed;
+            TabStrip.Visibility = Visibility.Collapsed;
+            RollIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ChevronDown24;
+            RollButton.ToolTip = "Roll down";
+            MinHeight = headerH;
+            Height = headerH;
+        }
+        else
+        {
+            BodyContent.Visibility = Visibility.Visible;
+            RollIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ChevronUp24;
+            RollButton.ToolTip = "Roll up";
+            MinHeight = 120;
+            Height = _savedHeight;
+            UpdateChrome();
+        }
     }
 
     private void TitleText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

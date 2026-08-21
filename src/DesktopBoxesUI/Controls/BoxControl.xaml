@@ -8,13 +8,14 @@
     d:DesignHeight="200"
     d:DesignWidth="240"
     AllowDrop="True"
-    Drop="BoxControl_Drop"
     DragOver="BoxControl_DragOver"
+    Drop="BoxControl_Drop"
     mc:Ignorable="d">
-    <ScrollViewer x:Name="Scroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-        <ItemsControl
-            x:Name="ItemsList"
-            ItemsSource="{Binding Items}">
+    <ScrollViewer
+        x:Name="Scroll"
+        HorizontalScrollBarVisibility="Disabled"
+        VerticalScrollBarVisibility="Auto">
+        <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
                     <WrapPanel Orientation="Horizontal" />
@@ -27,12 +28,12 @@
                         Margin="4"
                         Padding="4"
                         Background="Transparent"
-                        Cursor="Hand"
+                        ContextMenuOpening="ItemBorder_ContextMenuOpening"
+                        Cursor="Arrow"
                         MouseLeftButtonDown="ItemBorder_MouseLeftButtonDown"
                         MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp"
                         MouseMove="ItemBorder_MouseMove"
-                        MouseRightButtonUp="ItemBorder_MouseRightButtonUp"
-                        ContextMenuOpening="ItemBorder_ContextMenuOpening">
+                        MouseRightButtonUp="ItemBorder_MouseRightButtonUp">
                         <StackPanel Width="72" Orientation="Vertical">
                             <Image
                                 Width="32"
