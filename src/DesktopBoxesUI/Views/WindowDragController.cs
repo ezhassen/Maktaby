@@ -53,6 +53,17 @@ internal sealed class WindowDragController
     private SnapOverlay? _overlay;
     private bool _dragging;
     private Point _dragOffset;
+    private bool _enableGuides = true;
+
+    /// <summary>
+    /// When false, snap guide overlays are suppressed (e.g. while a container is being dragged onto
+    /// another to merge, so only the drop-target highlight shows).
+    /// </summary>
+    public bool EnableGuides
+    {
+        get => _enableGuides;
+        set => _enableGuides = value;
+    }
 
     public WindowDragController(
         Window window,
@@ -268,6 +279,12 @@ internal sealed class WindowDragController
 
     private void ShowGuides(IReadOnlyList<GuideLine> guides, IntPtr hwnd)
     {
+        if (!_enableGuides)
+        {
+            _overlay?.HideGuides();
+            return;
+        }
+
         if (guides.Count == 0)
         {
             _overlay?.HideGuides();

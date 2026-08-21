@@ -9,6 +9,7 @@ using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 
 namespace DesktopBoxesUI.Views;
@@ -28,6 +29,7 @@ public partial class BoxContainerWindow : Window
     private readonly IWindowPositioningService _positioning;
     private readonly Action _save;
     private readonly WindowDragController _drag;
+    private readonly IZOrderService _zOrder = App.Services.GetRequiredService<IZOrderService>();
 
     public BoxContainerWindow(ContainerViewModel vm, MainViewModel host, IWindowPositioningService positioning, Action save)
     {
@@ -43,6 +45,12 @@ public partial class BoxContainerWindow : Window
         var snapping = App.Services.GetRequiredService<IWindowSnappingService>();
 
         DataContext = vm;
+
+        AllowDrop = true;
+        DragEnter += Window_DragEnter;
+        DragOver += Window_DragOver;
+        DragLeave += Window_DragLeave;
+        Drop += Window_Drop;
 
         ApplyTransparency();
 
@@ -77,7 +85,31 @@ public partial class BoxContainerWindow : Window
     {
         ApplyType();
         UpdateBody();
+        if (_vm.BoxContainerVm != null)
+        {
+            _vm.BoxContainerVm.SelectedIndexChanged += () => UpdateBody();
+        }
+
+        // Clear any lingering drop highlight on every container when this window's tab drag ends
+        // (drop or cancel), since WPF does not reliably raise DragLeave on a canceled drag.
+        DragDrop.AddQueryContinueDragHandler(this, OnQueryContinueDrag);
         _drag.Attach();
+    }
+
+    private void OnQueryContinueDrag(object? sender, QueryContinueDragEventArgs e)
+    {
+        if (e.Action != DragAction.Continue)
+        {
+            ClearAllDropHighlights();
+        }
+    }
+
+    private static void ClearAllDropHighlights()
+    {
+        foreach (var w in Application.Current.Windows.OfType<BoxContainerWindow>())
+        {
+            w.HideDropHighlight();
+        }
     }
 
     /// <summary>Adjusts which parts of the window are visible based on the container type.</summary>
@@ -114,9 +146,17 @@ public partial class BoxContainerWindow : Window
 
     private void TitleArea_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _drag.BeginTitleDrag(e);
 
-    private void TitleArea_MouseMove(object sender, MouseEventArgs e) => _drag.TitleDrag(e);
+    private void TitleArea_MouseMove(object sender, MouseEventArgs e)
+    {
+        _drag.TitleDrag(e);
+        UpdateMergeTargetDuringDrag();
+    }
 
-    private void TitleArea_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) => _drag.EndTitleDrag(e);
+    private void TitleArea_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _drag.EndTitleDrag(e);
+        CompleteMergeIfAny();
+    }
 
     private void AddTab_Click(object sender, RoutedEventArgs e)
     {
@@ -141,19 +181,6 @@ public partial class BoxContainerWindow : Window
 
         _vm.RemoveTabCommand.Execute(null);
         UpdateBody();
-    }
-
-    private void Tab_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is Button button && button.Tag is BoxViewModel box && _vm.BoxContainerVm != null)
-        {
-            int idx = _vm.BoxContainerVm.Tabs.IndexOf(box);
-            if (idx >= 0)
-            {
-                _vm.BoxContainerVm.SelectedIndex = idx;
-                UpdateBody();
-            }
-        }
     }
 
     private void TitleText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -234,5 +261,506 @@ public partial class BoxContainerWindow : Window
     {
         _vm.IsLocked = !_vm.IsLocked;
         _save();
+    }
+
+    // --- Tab drag (custom mouse-driven; no OLE, so the OS "no-drop" cursor never appears) ---
+
+    private BoxViewModel? _dragTab;
+    private bool _tabDragging;
+    private Point _dragStart;
+    private Point _lastDragPoint;
+    private BoxContainerWindow? _dropWindow;    // container currently under the cursor (owns the drop visuals)
+    private int _tabDropIndex = -1;             // insertion index within _dropWindow
+    private ContainerViewModel? _mergeTarget;
+    private Brush? _origBorderBrush;
+    private Thickness _origBorderThickness;
+    private bool _tabStripTempShown;
+
+    private void Tab_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is Button { Tag: BoxViewModel box })
+        {
+            _dragTab = box;
+            _tabDragging = false;
+            _dragStart = e.GetPosition(this);
+        }
+    }
+
+    private void Tab_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (_dragTab == null)
+        {
+            return;
+        }
+
+        if (!_tabDragging)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                return;
+            }
+
+            if ((e.GetPosition(this) - _dragStart).Length < 4)
+            {
+                return;
+            }
+
+            _tabDragging = true;
+            Mouse.OverrideCursor = Cursors.SizeAll;
+            ((UIElement)sender).CaptureMouse();
+        }
+
+        // GetPosition(null) under capture is window-relative; convert to true screen coordinates
+        // so the live-bounds hit-test (FindContainerWindowAt) and the indicator maths line up.
+        _lastDragPoint = this.PointToScreen(e.GetPosition(this));
+        UpdateTabDropTarget(_lastDragPoint);
+    }
+
+    private void Tab_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragTab == null)
+        {
+            return;
+        }
+
+        if (_tabDragging)
+        {
+            // Recompute from the release point so a stale last-move position can't drive the drop.
+            _lastDragPoint = this.PointToScreen(e.GetPosition(this));
+            UpdateTabDropTarget(_lastDragPoint);
+            ((UIElement)sender).ReleaseMouseCapture();
+            Mouse.OverrideCursor = null;
+            PerformTabDrop();
+            ClearTabDropVisuals();
+        }
+        else if (_vm.BoxContainerVm != null)
+        {
+            // A plain click (no drag) selects the tab.
+            int idx = _vm.BoxContainerVm.Tabs.IndexOf(_dragTab);
+            if (idx >= 0)
+            {
+                _vm.BoxContainerVm.SelectedIndex = idx;
+                UpdateBody();
+            }
+        }
+
+        _dragTab = null;
+        _tabDragging = false;
+    }
+
+    /// <summary>
+    /// Resolves and renders the drop target for the current cursor position. The target window owns
+    /// the visual feedback (vertical insertion indicator + a temporarily-revealed tab strip), so the
+    /// same logic drives both reordering within this container and merging into another.
+    /// </summary>
+    private void UpdateTabDropTarget(Point p)
+    {
+        var target = FindContainerWindowAt(p);
+
+        if (target != _dropWindow)
+        {
+            // Cursor left the previous target: clear its indicator and restore its tab-strip visibility.
+            _dropWindow?.HideTabDropIndicator();
+            _dropWindow?.RestoreTabStripTemp();
+            _dropWindow = target;
+
+            if (target != null)
+            {
+                target.ShowTabStripTemp();    // reveal the strip if it was hidden (single tab)
+                target.BringToFrontForDrag(); // keep the target (and its indicator) above neighbours
+            }
+        }
+
+        if (target == null)
+        {
+            _tabDropIndex = -1;
+            return;
+        }
+
+        // Always show the vertical drop indicator while the cursor is over a container.
+        _tabDropIndex = target.ComputeInsertionIndex(p);
+        target.ShowTabDropIndicator(_tabDropIndex);
+    }
+
+    private void ClearTabDropVisuals()
+    {
+        _dropWindow?.HideTabDropIndicator();
+        _dropWindow?.RestoreTabStripTemp();
+        _dropWindow = null;
+        _tabDropIndex = -1;
+    }
+
+    private void PerformTabDrop()
+    {
+        if (_dragTab == null)
+        {
+            return;
+        }
+
+        var box = _dragTab.Model;
+
+        if (_dropWindow == null)
+        {
+            // Released over empty desktop: create a new container at the cursor.
+            var p = _lastDragPoint;
+            var wa = SystemParameters.WorkArea;
+            double left = Math.Max(wa.Left, Math.Min(p.X, wa.Right - 240));
+            double top = Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - 200));
+            _host.MoveBoxToNewContainer(box, _vm, left, top);
+            _save();
+            return;
+        }
+
+        if (_dropWindow == this && _vm.BoxContainerVm != null)
+        {
+            int from = _vm.BoxContainerVm.Tabs.IndexOf(_dragTab);
+            _vm.BoxContainerVm.MoveTab(from, _tabDropIndex);
+            _save();
+        }
+        else
+        {
+            // Merge into another container at the indicated insertion index; make it the active tab.
+            _host.MoveBoxToContainer(box, _vm, _dropWindow._vm, _tabDropIndex);
+            _save();
+        }
+    }
+
+    private BoxContainerWindow? FindContainerWindowAt(Point p)
+    {
+        BoxContainerWindow? self = null;
+        BoxContainerWindow? other = null;
+
+        foreach (var w in Application.Current.Windows.OfType<BoxContainerWindow>())
+        {
+            if (w._vm.BoxContainerVm == null)
+            {
+                continue; // Custom widgets are not tab targets.
+            }
+
+            // Recompute the window's on-screen rectangle live (DIP, matching the screen mouse point)
+            // rather than trusting a cached stored bounds value.
+            var tl = w.PointToScreen(new Point(0, 0));
+            double x = tl.X, y = tl.Y, ww = w.ActualWidth, hh = w.ActualHeight;
+            if (p.X < x || p.X > x + ww || p.Y < y || p.Y > y + hh)
+            {
+                continue;
+            }
+
+            // Prefer another container over the source when both contain the point (e.g. stacked
+            // containers), so dragging onto an overlapping neighbour merges into it.
+            if (w == this)
+            {
+                self = w;
+            }
+            else
+            {
+                other ??= w;
+            }
+        }
+
+        return other ?? self;
+    }
+
+    private int ComputeInsertionIndex(Point screenP)
+    {
+        int index = 0;
+        int from = _dragTab != null && _vm.BoxContainerVm != null && _vm.BoxContainerVm.Tabs.Contains(_dragTab)
+            ? _vm.BoxContainerVm.Tabs.IndexOf(_dragTab)
+            : -1;
+
+        if (TabItems.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+        {
+            int count = TabItems.Items.Count;
+            for (int i = 0; i < count; i++)
+            {
+                if (i == from)
+                {
+                    continue; // the dragged tab doesn't define a gap
+                }
+
+                if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is not UIElement container || !container.IsVisible)
+                {
+                    continue;
+                }
+
+                var topLeft = container.PointToScreen(new Point(0, 0));
+                double mid = topLeft.X + container.RenderSize.Width / 2;
+                if (screenP.X > mid)
+                {
+                    index++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+
+        return index;
+    }
+
+    private void ShowTabDropIndicator(int index)
+    {
+        int from = _dragTab != null && _vm.BoxContainerVm != null && _vm.BoxContainerVm.Tabs.Contains(_dragTab)
+            ? _vm.BoxContainerVm.Tabs.IndexOf(_dragTab)
+            : -1;
+        int count = TabItems.Items.Count;
+
+        double stripLeft = TabStrip.PointToScreen(new Point(0, 0)).X + TabStrip.Padding.Left;
+        double screenBoundaryX = stripLeft;
+        int gap = 0;
+        bool found = false;
+
+        for (int i = 0; i < count; i++)
+        {
+            if (i == from)
+            {
+                continue;
+            }
+
+            if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is not UIElement c || !c.IsVisible)
+            {
+                continue;
+            }
+
+            var tl = c.PointToScreen(new Point(0, 0));
+            double left = tl.X;
+            double right = tl.X + c.RenderSize.Width;
+
+            if (gap == index)
+            {
+                screenBoundaryX = left;
+                found = true;
+                break;
+            }
+
+            gap++;
+            if (gap == index)
+            {
+                screenBoundaryX = right;
+                found = true;
+                break;
+            }
+        }
+
+        if (!found)
+        {
+            // Index at/after the last non-dragged tab: drop at the end of the strip.
+            for (int i = 0; i < count; i++)
+            {
+                if (i == from)
+                {
+                    continue;
+                }
+
+                if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is UIElement c && c.IsVisible)
+                {
+                    var tl = c.PointToScreen(new Point(0, 0));
+                    screenBoundaryX = tl.X + c.RenderSize.Width;
+                }
+            }
+        }
+
+        double localX = screenBoundaryX - stripLeft;
+        TabDropIndicator.Margin = new Thickness(localX, 0, 0, 0);
+        TabDropIndicator.Visibility = Visibility.Visible;
+    }
+
+    private void HideTabDropIndicator() => TabDropIndicator.Visibility = Visibility.Collapsed;
+
+    private void Window_DragEnter(object sender, DragEventArgs e) => HandleContainerDragOver(e);
+
+    private void Window_DragOver(object sender, DragEventArgs e) => HandleContainerDragOver(e);
+
+    private void Window_DragLeave(object sender, DragEventArgs e)
+    {
+        // Only clear the highlight when the pointer actually leaves the window, not when it crosses
+        // between child elements (which also raise DragLeave that bubbles here).
+        if (e.OriginalSource is DependencyObject d && RootBorder.IsAncestorOf(d))
+        {
+            return;
+        }
+
+        HideDropHighlight();
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        HideDropHighlight();
+
+        if (!IsValidContainerDrop(e))
+        {
+            // Dropped back onto its own (or an invalid) container: treat as a cancel, never a move.
+            e.Handled = true;
+            return;
+        }
+
+        var source = (ContainerViewModel)e.Data.GetData(DndFormats.SourceContainer)!;
+        var box = e.Data.GetData(DndFormats.Box) as Box;
+
+        if (box != null)
+        {
+            _host.MoveBoxToContainer(box, source, _vm);
+        }
+        else
+        {
+            _host.MergeContainers(source, _vm);
+        }
+
+        e.Handled = true;
+        _save();
+    }
+
+    private void HandleContainerDragOver(DragEventArgs e)
+    {
+        if (IsValidContainerDrop(e))
+        {
+            e.Effects = DragDropEffects.Move;
+            e.Handled = true;
+            ShowDropHighlight();
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+            e.Handled = true;
+            HideDropHighlight();
+        }
+    }
+
+    private bool IsValidContainerDrop(DragEventArgs e)
+    {
+        // Only BoxContainer-type containers participate; drop must originate from a different BoxContainer.
+        if (_vm.BoxContainerVm == null || !e.Data.GetDataPresent(DndFormats.SourceContainer))
+        {
+            return false;
+        }
+
+        if (e.Data.GetData(DndFormats.SourceContainer) is not ContainerViewModel source)
+        {
+            return false;
+        }
+
+        return source.Id != _vm.Id && source.BoxContainerVm != null;
+    }
+
+    internal void ShowDropHighlight()
+    {
+        if (_origBorderBrush == null)
+        {
+            _origBorderBrush = RootBorder.BorderBrush;
+            _origBorderThickness = RootBorder.BorderThickness;
+        }
+
+        RootBorder.BorderBrush = new SolidColorBrush(Color.FromRgb(0x4E, 0xC9, 0xB0));
+        RootBorder.BorderThickness = new Thickness(3);
+    }
+
+    internal void HideDropHighlight()
+    {
+        if (_origBorderBrush == null)
+        {
+            return;
+        }
+
+        RootBorder.BorderBrush = _origBorderBrush;
+        RootBorder.BorderThickness = _origBorderThickness;
+        _origBorderBrush = null;
+    }
+
+    /// <summary>Raises this window above its sibling containers so its drop highlight is visible during a drag.</summary>
+    internal void BringToFrontForDrag()
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        _zOrder.SetZOrder(hwnd, ZOrderTarget.Top);
+    }
+
+    /// <summary>Reveals the tab strip while the cursor is over this container during a drag, even when it is
+    /// normally hidden (a single tab). <see cref="RestoreTabStripTemp"/> reverts to the bound visibility.</summary>
+    internal void ShowTabStripTemp()
+    {
+        if (TabStrip.Visibility != Visibility.Visible)
+        {
+            TabStrip.Visibility = Visibility.Visible;
+            _tabStripTempShown = true;
+        }
+    }
+
+    internal void RestoreTabStripTemp()
+    {
+        if (_tabStripTempShown)
+        {
+            TabStrip.ClearValue(VisibilityProperty); // drop the local override, let the binding decide
+            _tabStripTempShown = false;
+        }
+    }
+
+    /// <summary>
+    /// While the existing window-move gesture is in progress, checks whether this container's centre is
+    /// over another <see cref="DesktopItemContainerType.BoxContainer"/>. If so, that container is highlighted
+    /// as the merge target; on release <see cref="CompleteMergeIfAny"/> merges into it.
+    /// </summary>
+    private void UpdateMergeTargetDuringDrag()
+    {
+        if (_vm.BoxContainerVm == null)
+        {
+            return;
+        }
+
+        double cx = Left + Width / 2;
+        double cy = Top + Height / 2;
+
+        var newTarget = _host.Containers.FirstOrDefault(c =>
+            c.Id != _vm.Id &&
+            c.BoxContainerVm != null &&
+            cx >= c.Bounds.X && cx <= c.Bounds.X + c.Bounds.Width &&
+            cy >= c.Bounds.Y && cy <= c.Bounds.Y + c.Bounds.Height);
+
+        if (newTarget == _mergeTarget)
+        {
+            return;
+        }
+
+        // While merging onto another container, hide the snap guides so only the drop highlight shows.
+        _drag.EnableGuides = newTarget == null;
+
+        if (_mergeTarget != null)
+        {
+            FindWindowFor(_mergeTarget)?.HideDropHighlight();
+        }
+
+        _mergeTarget = newTarget;
+        if (_mergeTarget != null)
+        {
+            FindWindowFor(_mergeTarget)?.ShowDropHighlight();
+        }
+    }
+
+    private void CompleteMergeIfAny()
+    {
+        var target = _mergeTarget;
+        _mergeTarget = null;
+        _drag.EnableGuides = true;
+
+        if (target == null)
+        {
+            return;
+        }
+
+        FindWindowFor(target)?.HideDropHighlight();
+        _host.MergeContainers(_vm, target);
+        _save();
+    }
+
+    private static BoxContainerWindow? FindWindowFor(ContainerViewModel vm)
+    {
+        foreach (Window w in Application.Current.Windows)
+        {
+            if (w is BoxContainerWindow bw && bw.DataContext == vm)
+            {
+                return bw;
+            }
+        }
+
+        return null;
     }
 }

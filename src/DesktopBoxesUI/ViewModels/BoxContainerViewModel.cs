@@ -92,4 +92,50 @@ public sealed class BoxContainerViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowTabs));
         SelectedIndexChanged?.Invoke();
     }
+
+    /// <summary>Moves an existing <see cref="Box"/> (e.g. dragged from another container) into this container.</summary>
+    public void InsertBox(Box box, int index = -1)
+    {
+        var vm = new BoxViewModel(box, _icons);
+        if (index >= 0 && index < _model.Boxes.Count)
+        {
+            _model.Boxes.Insert(index, box);
+            Tabs.Insert(index, vm);
+        }
+        else
+        {
+            _model.Boxes.Add(box);
+            Tabs.Add(vm);
+        }
+
+        OnPropertyChanged(nameof(ShowTabs));
+    }
+
+    /// <summary>
+    /// Reorders an existing tab from <paramref name="from"/> to the insertion index <paramref name="to"/>,
+    /// where <paramref name="to"/> is expressed in the coordinate space that excludes the dragged tab
+    /// (i.e. the position among the remaining tabs).
+    /// </summary>
+    public void MoveTab(int from, int to)
+    {
+        if (from < 0 || from >= Tabs.Count || to < 0 || to > Tabs.Count - 1)
+        {
+            return;
+        }
+
+        var vm = Tabs[from];
+        var model = _model.Boxes[from];
+        Tabs.RemoveAt(from);
+        _model.Boxes.RemoveAt(from);
+
+        int insert = System.Math.Clamp(to, 0, Tabs.Count);
+
+        Tabs.Insert(insert, vm);
+        _model.Boxes.Insert(insert, model);
+
+        _selectedIndex = insert;
+        OnPropertyChanged(nameof(SelectedIndex));
+        OnPropertyChanged(nameof(ShowTabs));
+        SelectedIndexChanged?.Invoke();
+    }
 }

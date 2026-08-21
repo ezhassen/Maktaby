@@ -36,7 +36,6 @@ public partial class App : Application
 
         _tray = new TrayIconService();
         _tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
-        _tray.NewBoxContainerRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBoxContainer();
         _tray.ResetRequested += async (_, _) =>
         {
             // try

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
@@ -20,6 +21,7 @@ public sealed partial class DesktopSurface : Window
     private readonly MainViewModel _host;
     private readonly System.Action _save;
     private bool _dragging;
+    private IntPtr _listView;
 
     public DesktopSurface(MainViewModel host, System.Action save)
     {
@@ -46,8 +48,27 @@ public sealed partial class DesktopSurface : Window
             source.AddHook(Win32Apis.MinimizePreventionHook);
         }
 
-        Win32Apis.GlueToDesktop(helper.Handle);
+        Win32Apis.GlueToDesktopSurface(helper.Handle);
         Win32Apis.PreventMinimize(helper.Handle);
+        _listView = ExplorerDesktopService.FindDesktopListView();
+    }
+
+    private IntPtr GetListView()
+    {
+        if (_listView == IntPtr.Zero)
+        {
+            _listView = ExplorerDesktopService.FindDesktopListView();
+        }
+
+        return _listView;
+    }
+
+    /// <summary>Raises/lowers this surface above the Explorer list-view so it becomes (or stops being)
+    /// the OLE drop target during our own tab drag.</summary>
+    internal void SetAboveList(bool above)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        Win32Apis.RaiseDesktopSurface(hwnd, GetListView(), above);
     }
 
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -69,21 +90,26 @@ public sealed partial class DesktopSurface : Window
             return (IntPtr)1; // HTCLIENT
         }
 
-        // Forward genuine left-clicks to the real desktop shell view so it behaves as if the click
-        // penetrated: any open context menu is dismissed and icon selection is cleared. Handled at the
-        // message level (not via WPF mouse events) because this layered window with a manual HwndSource
-        // hook does not reliably route MouseLeftButtonDown through the visual tree. Skipped while an
-        // external drag is over us so drops are not disturbed.
-        if ((msg == 0x0201 || msg == 0x0202) && !_dragging) // WM_LBUTTONDOWN / WM_LBUTTONUP
+        // Forward genuine mouse interaction to the real desktop shell view so the surface behaves as if
+        // the click penetrated: icon selection, double-click-to-open, rubber-band marquee selection and
+        // wheel scrolling all keep working even though we sit above the list-view. The right button is
+        // not forwarded because WM_NCHITTEST already reports HTTRANSPARENT for it, letting the context
+        // menu reach Explorer directly. Skipped while an external drag is over us so drops are not
+        // disturbed.
+        if (!_dragging)
         {
-            var listView = ExplorerDesktopService.FindDesktopListView();
-            if (listView != IntPtr.Zero)
+            uint m = (uint)msg;
+            if (m is 0x0200 or 0x0201 or 0x0202 or 0x0203 or 0x020A) // MOUSEMOVE / LBUTTONDOWN / LBUTTONUP / LBUTTONDBLCLK / MOUSEWHEEL
             {
-                ManualApis.PostMessage(listView, (uint)msg, wParam, lParam);
-            }
+                var listView = GetListView();
+                if (listView != IntPtr.Zero)
+                {
+                    ManualApis.PostMessage(listView, m, wParam, lParam);
+                }
 
-            handled = true;
-            return IntPtr.Zero;
+                handled = true;
+                return IntPtr.Zero;
+            }
         }
 
         return IntPtr.Zero;
@@ -104,12 +130,29 @@ public sealed partial class DesktopSurface : Window
     private void Surface_Drop(object sender, DragEventArgs e)
     {
         _dragging = false;
-        var p = e.GetPosition(null);
-        var wa = SystemParameters.WorkArea;
-        double left = Math.Max(wa.Left, Math.Min(p.X, wa.Right - NewBoxWidth));
-        double top = Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - NewBoxHeight));
 
-        var container = _host.CreateBoxAt(left, top);
+        // Internal tab move onto empty desktop: spin up a new container that holds the dragged box.
+        if (e.Data.GetDataPresent(DndFormats.Box))
+        {
+            var box = (Box)e.Data.GetData(DndFormats.Box)!;
+            var source = e.Data.GetData(DndFormats.SourceContainer) as ContainerViewModel;
+            var p = e.GetPosition(null);
+            var wa = SystemParameters.WorkArea;
+            double left = Math.Max(wa.Left, Math.Min(p.X, wa.Right - NewBoxWidth));
+            double top = Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - NewBoxHeight));
+
+            _host.MoveBoxToNewContainer(box, source, left, top);
+            e.Handled = true;
+            _save();
+            return;
+        }
+
+        var p2 = e.GetPosition(null);
+        var wa2 = SystemParameters.WorkArea;
+        double left2 = Math.Max(wa2.Left, Math.Min(p2.X, wa2.Right - NewBoxWidth));
+        double top2 = Math.Max(wa2.Top, Math.Min(p2.Y, wa2.Bottom - NewBoxHeight));
+
+        var container = _host.CreateBoxAt(left2, top2);
         if (container.ActiveBox != null)
         {
             DropHelper.AddToBox(container.ActiveBox, _host, e);

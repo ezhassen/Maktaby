@@ -1,3 +1,8 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Shell.Services;
+using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Views;
+using DesktopBoxesUI.Win32.NativeMethods;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -6,11 +11,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Shell.Services;
-using DesktopBoxesUI.ViewModels;
-using DesktopBoxesUI.Win32.NativeMethods;
-using DesktopBoxesUI.Views;
 
 namespace DesktopBoxesUI.Controls;
 
@@ -125,12 +125,26 @@ public partial class BoxControl : UserControl
 
     private void BoxControl_DragOver(object sender, DragEventArgs e)
     {
+        // Let our own container/tab drag payloads bubble up to the owning window (which handles the
+        // highlight and the merge/move). Everything else is an item/file drop handled here.
+        if (e.Data.GetDataPresent(DndFormats.SourceContainer))
+        {
+            e.Effects = DragDropEffects.Move;
+            return;
+        }
+
         e.Effects = DropHelper.GetEffect(e);
         e.Handled = true;
     }
 
     private void BoxControl_Drop(object sender, DragEventArgs e)
     {
+        if (e.Data.GetDataPresent(DndFormats.SourceContainer))
+        {
+            // Handled by the owning BoxContainerWindow's Drop handler.
+            return;
+        }
+
         if (DataContext is not BoxViewModel targetBox)
         {
             return;

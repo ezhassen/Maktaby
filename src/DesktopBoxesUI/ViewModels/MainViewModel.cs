@@ -107,4 +107,86 @@ public sealed class MainViewModel : ViewModelBase
 
         return null;
     }
+
+    /// <summary>Moves a single box from <paramref name="source"/> into <paramref name="target"/>.</summary>
+    public void MoveBoxToContainer(Box box, ContainerViewModel source, ContainerViewModel target, int index = -1)
+    {
+        if (source == target || source.BoxContainerVm == null || target.BoxContainerVm == null)
+        {
+            return;
+        }
+
+        var sourceTabs = source.BoxContainerVm.Tabs;
+        int idx = sourceTabs.IndexOf(sourceTabs.FirstOrDefault(t => t.Model == box)!);
+        if (idx < 0)
+        {
+            return;
+        }
+
+        source.BoxContainerVm.RemoveTab(idx);
+        target.BoxContainerVm.InsertBox(box, index);
+
+        // Make the moved box the active tab in its new container.
+        var tvm = target.BoxContainerVm;
+        int active = index >= 0 && index < tvm.Tabs.Count ? index : tvm.Tabs.Count - 1;
+        tvm.SelectedIndex = System.Math.Clamp(active, 0, tvm.Tabs.Count - 1);
+
+        if (source.BoxContainerVm.Tabs.Count == 0)
+        {
+            RemoveContainer(source);
+        }
+    }
+
+    /// <summary>Moves a box out of <paramref name="source"/> and into a brand-new container created at the drop point.</summary>
+    public void MoveBoxToNewContainer(Box box, ContainerViewModel? source, double left, double top)
+    {
+        if (source == null || source.BoxContainerVm == null)
+        {
+            return;
+        }
+
+        var sourceVm = source.BoxContainerVm;
+        var sourceTabs = sourceVm.Tabs;
+        int idx = sourceTabs.IndexOf(sourceTabs.FirstOrDefault(t => t.Model == box)!);
+        if (idx < 0)
+        {
+            return;
+        }
+
+        sourceVm.RemoveTab(idx);
+
+        var childContainer = new BoxContainer { Boxes = { box }, SelectedIndex = 0 };
+        var container = _containers.CreateContainer(DesktopItemContainerType.BoxContainer, left, top, 240, 200, childContainer: childContainer);
+        var vm = new ContainerViewModel(container, _icons, _boxService);
+        Containers.Add(vm);
+
+        if (sourceVm.Tabs.Count == 0)
+        {
+            RemoveContainer(source);
+        }
+    }
+
+    /// <summary>Merges every box from <paramref name="source"/> into <paramref name="target"/>, then removes the source.</summary>
+    public void MergeContainers(ContainerViewModel source, ContainerViewModel target)
+    {
+        if (source == target || source.BoxContainerVm == null || target.BoxContainerVm == null)
+        {
+            return;
+        }
+
+        var models = source.BoxContainerVm.Tabs.Select(t => t.Model).ToList();
+        foreach (var model in models)
+        {
+            var sourceTabs = source.BoxContainerVm.Tabs;
+            int idx = sourceTabs.IndexOf(sourceTabs.First(t => t.Model == model));
+            if (idx >= 0)
+            {
+                source.BoxContainerVm.RemoveTab(idx);
+            }
+
+            target.BoxContainerVm.InsertBox(model);
+        }
+
+        RemoveContainer(source);
+    }
 }

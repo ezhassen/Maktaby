@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
 using DesktopBoxesUI.Shell.Interop;
+using DesktopBoxesUI.Win32.Services;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
@@ -407,10 +408,76 @@ internal static class Win32Apis
             }
 
             ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, progman);
+
+            // Raise the window above the Explorer desktop listview (SysListView32) within the desktop
+            // layer. Without this, OLE drag/drop over empty desktop is delivered to Explorer instead of
+            // our surface, so drops onto empty space never reach us. It stays below the real top-level
+            // app windows (and below the BoxContainer windows, which are created after it and also
+            // glued to the desktop), preserving click-through and per-container drops.
+            ManualApis.SetWindowPos(hwnd, ManualApis.HWND_TOP, 0, 0, 0, 0,
+                ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
         }
         catch (Exception)
         {
             // Non-critical window setup; ignore failures.
+        }
+    }
+
+    /// <summary>
+    /// Glues the desktop overlay surface to the Explorer desktop, but places it directly ABOVE the
+    /// desktop list-view (SysListView32) so that OLE drag/drop over empty desktop is delivered to the
+    /// surface instead of to Explorer (which rejects our custom format and shows a "no-drop" cursor).
+    /// The surface stays below the real top-level app windows and below the box container windows
+    /// (which are glued to Progman and created afterwards), so per-container drops and normal window
+    /// interaction are unaffected. Falls back to <see cref="GlueToDesktop"/> if the list-view can't be
+    /// located.
+    /// </summary>
+    public static void GlueToDesktopSurface(IntPtr hwnd)
+    {
+        try
+        {
+            var listView = ExplorerDesktopService.FindDesktopListView();
+            var parent = listView != IntPtr.Zero ? ManualApis.GetParent(listView) : IntPtr.Zero;
+            if (parent == IntPtr.Zero)
+            {
+                parent = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", null);
+            }
+
+            if (parent == IntPtr.Zero)
+            {
+                return;
+            }
+
+            ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, parent);
+
+            // Sit BELOW the list-view by default so Explorer's own drag/drop (moving icons, dropping
+            // files) is delivered to Explorer as normal. It is raised above the list-view only for the
+            // duration of our own tab drag (see RaiseDesktopSurface) to show the correct drop cursor.
+            ManualApis.SetWindowPos(hwnd, ManualApis.HWND_BOTTOM, 0, 0, 0, 0,
+                ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+        }
+        catch (Exception)
+        {
+            // Non-critical window setup; ignore failures.
+        }
+    }
+
+    /// <summary>
+    /// Temporarily raises the desktop surface above the Explorer list-view (so OLE delivers our
+    /// in-process tab drag to it and the correct drop cursor shows) or restores it below the list-view
+    /// (so Explorer's native drag/drop keeps working). Used only for the duration of a tab drag.
+    /// </summary>
+    public static void RaiseDesktopSurface(IntPtr surfaceHwnd, IntPtr listViewHwnd, bool above)
+    {
+        try
+        {
+            var insertAfter = above && listViewHwnd != IntPtr.Zero ? listViewHwnd : ManualApis.HWND_BOTTOM;
+            ManualApis.SetWindowPos(surfaceHwnd, insertAfter, 0, 0, 0, 0,
+                ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+        }
+        catch (Exception)
+        {
+            // Non-critical; ignore.
         }
     }
 

@@ -111,28 +111,39 @@
                 BorderThickness="0,0,0,1"
                 DockPanel.Dock="Top"
                 Visibility="{Binding BoxContainerVm.ShowTabs, Converter={StaticResource BoolToVis}}">
-                <ItemsControl ItemsSource="{Binding BoxContainerVm.Tabs}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Orientation="Horizontal" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="vm:BoxViewModel">
-                            <Button
-                                Margin="2,0"
-                                Padding="8,2"
-                                Background="Transparent"
-                                BorderBrush="#3f3f46"
-                                BorderThickness="1"
-                                Click="Tab_Click"
-                                Content="{Binding Name}"
-                                Cursor="Hand"
-                                Foreground="White"
-                                Tag="{Binding}" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <Grid>
+                    <ItemsControl x:Name="TabItems" ItemsSource="{Binding BoxContainerVm.Tabs}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="vm:BoxViewModel">
+                                <Button
+                                    Margin="2,0"
+                                    Padding="8,2"
+                                    Background="Transparent"
+                                    BorderBrush="#3f3f46"
+                                    BorderThickness="1"
+                                    Content="{Binding Name}"
+                                    Cursor="Hand"
+                                    Foreground="White"
+                                    PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
+                                    PreviewMouseMove="Tab_PreviewMouseMove"
+                                    PreviewMouseLeftButtonUp="Tab_PreviewMouseLeftButtonUp"
+                                    Tag="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Rectangle
+                        x:Name="TabDropIndicator"
+                        Width="3"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Stretch"
+                        Fill="#4EC9B0"
+                        Visibility="Collapsed" />
+                </Grid>
             </Border>
 
             <Grid>

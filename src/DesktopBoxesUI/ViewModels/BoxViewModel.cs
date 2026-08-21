@@ -23,6 +23,9 @@ public sealed class BoxViewModel : ViewModelBase
 
     public System.Guid Id => _box.Id;
 
+    /// <summary>The underlying <see cref="Box"/> model (used when moving a box between containers).</summary>
+    public Box Model => _box;
+
     public string Name
     {
         get => _box.Name;
