@@ -42,9 +42,6 @@
                     <Button
                         x:Name="MenuButton"
                         Grid.Column="0"
-                        Width="26"
-                        Height="22"
-                        Margin="0,0,6,0"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Click="MenuButton_Click"
@@ -71,6 +68,11 @@
                                 <MenuItem x:Name="MenuRollDir" Header="Roll Direction">
                                     <MenuItem
                                         Click="MenuSetRollDir_Click"
+                                        Header="Auto (snap)"
+                                        Tag="Auto" />
+                                    <Separator />
+                                    <MenuItem
+                                        Click="MenuSetRollDir_Click"
                                         Header="Top"
                                         Tag="Top" />
                                     <MenuItem
@@ -85,10 +87,6 @@
                                         Click="MenuSetRollDir_Click"
                                         Header="Right"
                                         Tag="Right" />
-                                    <MenuItem
-                                        Click="MenuSetRollDir_Click"
-                                        Header="Auto (snap)"
-                                        Tag="Auto" />
                                 </MenuItem>
                             </ContextMenu>
                         </Button.ContextMenu>
@@ -124,9 +122,6 @@
                     <Button
                         x:Name="RollButton"
                         Grid.Column="2"
-                        Width="26"
-                        Height="22"
-                        Margin="6,0,0,0"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Click="RollButton_Click"

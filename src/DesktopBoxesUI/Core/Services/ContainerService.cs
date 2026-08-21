@@ -1,7 +1,7 @@
-using System.Collections.Generic;
-using System.Linq;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace DesktopBoxesUI.Core.Services;
 
@@ -18,7 +18,7 @@ public sealed class ContainerService : IContainerService
     {
         lock (_gate)
         {
-            return _containers.ToArray();
+            return _containers.AsReadOnly();
         }
     }
 

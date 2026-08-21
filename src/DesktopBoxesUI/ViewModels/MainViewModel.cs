@@ -42,6 +42,24 @@ public sealed class MainViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Constructs the <see cref="ContainerViewModel"/> tree (including every <see cref="BoxItemViewModel"/>
+    /// and its async icon-load kick-off) without adding anything to <see cref="Containers"/>. Safe to call
+    /// on a background thread so the caller can keep the UI responsive, then add the built VMs on the UI
+    /// thread.
+    /// </summary>
+    public System.Collections.Generic.List<ContainerViewModel> BuildContainerViewModels(
+        System.Collections.Generic.IEnumerable<DesktopItemContainer> containers)
+    {
+        var list = new System.Collections.Generic.List<ContainerViewModel>();
+        foreach (var container in containers)
+        {
+            list.Add(new ContainerViewModel(container, _icons, _boxService));
+        }
+
+        return list;
+    }
+
     /// <summary>Creates a BoxContainer with a single box (no tab strip).</summary>
     public ContainerViewModel CreateBox(double left = 60, double top = 60)
     {

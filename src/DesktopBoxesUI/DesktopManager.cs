@@ -1,12 +1,17 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
+using System.Linq;
 using System.Runtime.Versioning;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 
 namespace DesktopBoxesUI;
@@ -79,22 +84,36 @@ public sealed class DesktopManager
             EnsureDefaultRuleAndBox();
         }
 
+        // Build the container view-models off the UI thread (this also kicks off the per-item icon loads)
+        // so the splash keeps animating, then add the already-built VMs on the UI thread. The
+        // CollectionChanged handler is detached so we don't synchronously spin up windows during the load.
+        _mainVm.Containers.CollectionChanged -= Containers_CollectionChanged;
+        var builtVms = await Task.Run(() => _mainVm.BuildContainerViewModels(_containers.GetContainers()));
+        foreach (var vm in builtVms)
+        {
+            _mainVm.Containers.Add(vm);
+        }
+
         _mainVm.Containers.CollectionChanged += Containers_CollectionChanged;
-        _mainVm.LoadFromContainers(_containers.GetContainers());
 
         EnsureSurface();
 
-        foreach (var vm in _mainVm.Containers)
+        // Show the first container right away so the desktop isn't empty, then lazily stream the
+        // remaining container windows in the background (after the splash closes) for an instant startup.
+        // This defers window creation only — item drag/drop logic is untouched.
+        if (_mainVm.Containers.Count > 0)
         {
-            AddWindow(vm);
+            AddWindow(_mainVm.Containers[0]);
         }
+
+        _ = StreamRemainingContainersAsync();
 
         await ReconcileItemsAsync();
 
         _appliedResolution = GetPrimaryWorkAreaDip();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
-        _explorer.SetDesktopIconsVisible(false);
+        await _explorer.SetDesktopIconsVisibleAsync(false);
 
         _coordinator.Start();
     }
@@ -222,6 +241,47 @@ public sealed class DesktopManager
     }
 
     /// <summary>
+    /// Enumerates the live desktop on a dedicated STA thread. The Shell COM walk
+    /// (<c>IShellFolder.EnumObjects</c>, <c>IShellItem</c> display names) must run on an STA thread and is
+    /// CPU/IO heavy, so running it off the WPF UI thread keeps startup responsive. Only plain
+    /// <see cref="BoxItem"/> models cross the thread boundary — no COM objects are marshalled.
+    /// </summary>
+    private Task<List<BoxItem>> EnumerateDesktopAsync(CancellationToken cancellationToken = default)
+    {
+        var tcs = new TaskCompletionSource<List<BoxItem>>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var items = new List<BoxItem>();
+                var enumerator = _desktop.GetDesktopItemsAsync(cancellationToken).GetAsyncEnumerator(cancellationToken);
+                try
+                {
+                    while (enumerator.MoveNextAsync().AsTask().GetAwaiter().GetResult())
+                    {
+                        items.Add(enumerator.Current);
+                    }
+                }
+                finally
+                {
+                    enumerator.DisposeAsync().AsTask().GetAwaiter().GetResult();
+                }
+
+                tcs.TrySetResult(items);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        return tcs.Task;
+    }
+
+    /// <summary>
     /// Reconciles the persisted <see cref="BoxItem"/>s with the live desktop: items that no longer exist
     /// on the desktop are removed from every <see cref="BoxType.DesktopItems"/> box, and desktop items that
     /// aren't tracked in any box yet get a <see cref="BoxItem"/> created and routed (by rule, falling back to
@@ -229,13 +289,10 @@ public sealed class DesktopManager
     /// </summary>
     private async Task ReconcileItemsAsync()
     {
-        var current = new List<BoxItem>();
+        List<BoxItem> current;
         try
         {
-            await foreach (var item in _desktop.GetDesktopItemsAsync())
-            {
-                current.Add(item);
-            }
+            current = await EnumerateDesktopAsync();
         }
         catch
         {
@@ -401,11 +458,7 @@ public sealed class DesktopManager
                     await Task.Delay(400);
                 }
 
-                items.Clear();
-                await foreach (var item in _desktop.GetDesktopItemsAsync())
-                {
-                    items.Add(item);
-                }
+                items = await EnumerateDesktopAsync();
             }
         }
         catch
@@ -471,6 +524,44 @@ public sealed class DesktopManager
         window.Show();
     }
 
+    /// <summary>
+    /// Shows every container window, yielding to the dispatcher between each so the UI thread stays
+    /// responsive while a potentially large number of <see cref="BoxContainerWindow"/>s is constructed.
+    /// </summary>
+    private async Task AddWindowsAsync()
+    {
+        foreach (var vm in _mainVm.Containers)
+        {
+            AddWindow(vm);
+            await Task.Yield();
+        }
+    }
+
+    /// <summary>
+    /// Lazily creates the remaining container windows in the background (the caller shows the first one
+    /// synchronously). Creation is spread across dispatcher turns so the UI stays responsive and the splash
+    /// can close — the containers stream in after startup instead of blocking it.
+    /// </summary>
+    private async Task StreamRemainingContainersAsync()
+    {
+        try
+        {
+            // Let the first frame render (and the splash close) before continuing.
+            await Task.Yield();
+
+            var rest = _mainVm.Containers.Skip(1).ToList();
+            foreach (var vm in rest)
+            {
+                AddWindow(vm);
+                await Task.Yield();
+            }
+        }
+        catch
+        {
+            // Best-effort background streaming; a window failure must never break startup.
+        }
+    }
+
     private void RemoveWindow(System.Guid id)
     {
         if (_windows.TryGetValue(id, out var window))
@@ -492,7 +583,17 @@ public sealed class DesktopManager
         await BuildDefaultContainerAsync();
         RegisterAllBoxes();
         EnsureSurface();
-        _mainVm.LoadFromContainers(_containers.GetContainers());
+
+        _mainVm.Containers.CollectionChanged -= Containers_CollectionChanged;
+        var builtVms = await Task.Run(() => _mainVm.BuildContainerViewModels(_containers.GetContainers()));
+        foreach (var vm in builtVms)
+        {
+            _mainVm.Containers.Add(vm);
+        }
+
+        _mainVm.Containers.CollectionChanged += Containers_CollectionChanged;
+
+        await AddWindowsAsync();
         await SaveAsync();
     }
 

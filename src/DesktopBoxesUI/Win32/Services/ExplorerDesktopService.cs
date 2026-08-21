@@ -1,7 +1,7 @@
-using System;
-using System.Runtime.Versioning;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Win32.NativeMethods;
+using System;
+using System.Runtime.Versioning;
 using HWND = Windows.Win32.Foundation.HWND;
 
 namespace DesktopBoxesUI.Win32.Services;
@@ -34,6 +34,10 @@ public sealed class ExplorerDesktopService : IExplorerDesktopService
 
         _lastApplied = hide;
         Win32Apis.ToggleDesktopIcons();
+    }
+    public async Task SetDesktopIconsVisibleAsync(bool visible)
+    {
+        await Task.Run(() => SetDesktopIconsVisible(visible));
     }
 
     internal static IntPtr FindDesktopListView()

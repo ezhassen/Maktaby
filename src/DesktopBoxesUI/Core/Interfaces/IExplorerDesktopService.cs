@@ -9,4 +9,5 @@ public interface IExplorerDesktopService
     bool AreDesktopIconsVisible { get; }
 
     void SetDesktopIconsVisible(bool visible);
+    Task SetDesktopIconsVisibleAsync(bool visible);
 }
