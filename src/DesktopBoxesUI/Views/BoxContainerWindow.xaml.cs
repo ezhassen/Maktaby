@@ -37,8 +37,15 @@ public partial class BoxContainerWindow : Window
     private bool _mouseOver;
     private bool _keyboardFocused;
     private bool _isRenaming;
-    private bool _isRolledUp;
-    private double _savedHeight;
+
+    // Effective roll direction used for geometry/orientation. Starts at Top and follows either the
+    // explicit user choice (_vm.RollDirection) or snap-based detection when _vm.RollDirection is null.
+    private RollDirection _effectiveDir = RollDirection.Top;
+    private DateTime? _lastTitleClick;
+
+    // Thickness of the TitleBar strip (unrotated header height). Captured once; for Left/Right rolls the
+    // header is rotated and fills the full window height, so its measured height can no longer be used.
+    private double _headerThickness = 30;
 
     static BoxContainerWindow()
     {
@@ -115,15 +122,8 @@ public partial class BoxContainerWindow : Window
             dpi,
             snapping,
             _positioning,
-            () => RectD.FromXYWH(_vm.Left, _vm.Top, _vm.Width, _vm.Height),
-            r =>
-            {
-                _vm.Left = r.X;
-                _vm.Top = r.Y;
-                _vm.Width = r.Width;
-                _vm.Height = r.Height;
-            },
-            () => _host.Containers.Where(c => c.Id != _vm.Id).Select(c => c.Bounds).ToList(),
+            r => ApplyDraggedBounds(r),
+            () => _host.Containers.Where(c => c.Id != _vm.Id).Select(GetDropRect).ToList(),
             _save,
             () => HeaderBorder.ActualHeight);
 
@@ -142,6 +142,15 @@ public partial class BoxContainerWindow : Window
         }
 
         UpdateChrome();
+        if (_vm.RollDirection != null)
+        {
+            _effectiveDir = _vm.RollDirection.Value;
+        }
+
+        // Self-heal any off-screen bounds (e.g. from a rolled container dragged/snapped before this
+        // guard existed) so the layout loads correctly.
+        ClampBoundsToWorkArea();
+        ApplyRoll();
         _drag.Attach();
     }
 
@@ -159,6 +168,8 @@ public partial class BoxContainerWindow : Window
         bool isBox = _vm.BoxContainerVm != null;
         MenuAddTab.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         MenuRemoveTab.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
+        MenuRollDir.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
+        RollButton.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         BoxContent.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         Placeholder.Visibility = isBox ? Visibility.Collapsed : Visibility.Visible;
         UpdateChrome();
@@ -172,12 +183,15 @@ public partial class BoxContainerWindow : Window
     {
         bool isBox = _vm.BoxContainerVm != null;
         bool show = isBox && (_mouseOver || _keyboardFocused);
-
-        MenuButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        Visibility headerButtonsVisibility = show ? Visibility.Visible : Visibility.Collapsed;
+        MenuButton.Visibility = headerButtonsVisibility;
+        RollButton.Visibility = headerButtonsVisibility;
 
         // The tab strip is always visible when there is more than one tab; the header buttons and
-        // scrollbar stay hidden until the container is hovered or focused.
-        TabStrip.Visibility = isBox && _vm.BoxContainerVm!.ShowTabs ? Visibility.Visible : Visibility.Collapsed;
+        // scrollbar stay hidden until the container is hovered or focused. While rolled it is hidden.
+        TabStrip.Visibility = isBox && _vm.BoxContainerVm!.ShowTabs && !_vm.IsRolled
+            ? Visibility.Visible
+            : Visibility.Collapsed;
 
         BoxContent.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
     }
@@ -260,13 +274,41 @@ public partial class BoxContainerWindow : Window
         }
     }
 
-    private void TitleArea_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _drag.BeginTitleDrag(e);
+    private void TitleArea_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_isRenaming)
+        {
+            CommitRename();
+            return;
+        }
+
+        // A fast double-click toggles roll. Two distinct clicks separated by a gap (a "slow double-click",
+        // like Explorer's rename gesture) starts an inline rename.
+        if (e.ClickCount == 2)
+        {
+            _lastTitleClick = null;
+            RollButton_Click(sender, e);
+            return;
+        }
+
+        if (_lastTitleClick != null && _vm.ActiveBox != null &&
+            (DateTime.UtcNow - _lastTitleClick.Value).TotalMilliseconds <= 1200)
+        {
+            _lastTitleClick = null;
+            BeginRename();
+            return;
+        }
+
+        _lastTitleClick = DateTime.UtcNow;
+        _drag.BeginTitleDrag(e);
+    }
 
     private void TitleArea_MouseMove(object sender, MouseEventArgs e)
     {
         _drag.TitleDrag(e);
         if (_drag.IsDragging)
         {
+            _lastTitleClick = null; // a real drag cancels the pending rename gesture
             UpdateMergeTargetDuringDrag();
         }
     }
@@ -278,6 +320,27 @@ public partial class BoxContainerWindow : Window
         if (wasDragging)
         {
             CompleteMergeIfAny();
+            if (_vm.RollDirection == null)
+            {
+                var dir = DetectRollDirection();
+                if (dir != null)
+                {
+                    _effectiveDir = dir.Value;
+                }
+                else
+                {
+                    _effectiveDir = RollDirection.Top;//restore to default
+                }
+            }
+            else
+            {
+                _effectiveDir = _vm.RollDirection.Value;
+            }
+
+            if (_vm.IsRolled)
+            {
+                ApplyRoll();
+            }
         }
         else
         {
@@ -312,42 +375,263 @@ public partial class BoxContainerWindow : Window
 
     private void RollButton_Click(object sender, RoutedEventArgs e)
     {
-        _isRolledUp = !_isRolledUp;
-        if (_isRolledUp)
+        _vm.IsRolled = !_vm.IsRolled;
+        ApplyRoll();
+        _save();
+    }
+
+    /// <summary>
+    /// Sets the roll direction. A non-null value is an explicit user choice (persisted, overrides snap
+    /// detection) and immediately rolls the container to that edge. <c>null</c> restores auto-detection.
+    /// </summary>
+    private void SetRollDirection(RollDirection? dir)
+    {
+        _vm.RollDirection = dir;
+        if (dir == null)
         {
-            // Collapse to just the title bar. We only change the live window height (not the
-            // persisted _vm.Height) so a rolled-up container reloads normally.
-            _savedHeight = Height;
-            double headerH = HeaderBorder.ActualHeight;
-            BodyContent.Visibility = Visibility.Collapsed;
-            TabStrip.Visibility = Visibility.Collapsed;
-            RollIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ChevronDown24;
-            RollButton.ToolTip = "Roll down";
-            MinHeight = headerH;
-            Height = headerH;
+            var detected = DetectRollDirection();
+            if (detected != null)
+            {
+                _effectiveDir = detected.Value;
+            }
         }
         else
         {
-            BodyContent.Visibility = Visibility.Visible;
-            RollIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.ChevronUp24;
-            RollButton.ToolTip = "Roll up";
-            MinHeight = 120;
-            Height = _savedHeight;
-            UpdateChrome();
+            _effectiveDir = dir.Value;
+            _vm.IsRolled = true;
         }
+
+        if (_vm.IsRolled)
+        {
+            ApplyRoll();
+            _save();
+        }
+    }
+
+    private void MenuSetRollDir_Click(object sender, RoutedEventArgs e)
+    {
+        var tag = (sender as FrameworkElement)?.Tag as string;
+        RollDirection? dir = tag switch
+        {
+            "Top" => RollDirection.Top,
+            "Bottom" => RollDirection.Bottom,
+            "Left" => RollDirection.Left,
+            "Right" => RollDirection.Right,
+            _ => null,
+        };
+        SetRollDirection(dir);
+    }
+
+    /// <summary>
+    /// Builds the on-screen rectangle for the rolled TitleBar strip, snapped to the given edge of the full
+    /// (unrolled) <see cref="DesktopItemContainer"/> bounds.
+    /// </summary>
+    private RectD GetRolledRect(RectD full, RollDirection dir)
+    {
+        double headerH = _headerThickness;
+        double stripW = headerH;
+        return dir switch
+        {
+            RollDirection.Bottom => RectD.FromXYWH(full.X, full.Y + full.Height - headerH, full.Width, headerH),
+            RollDirection.Left => RectD.FromXYWH(full.X, full.Y, stripW, full.Height),
+            RollDirection.Right => RectD.FromXYWH(full.X + full.Width - stripW, full.Y, stripW, full.Height),
+            _ => RectD.FromXYWH(full.X, full.Y, full.Width, headerH), // Top
+        };
+    }
+
+    /// <summary>Applies the current roll state and direction to the window geometry, chrome and TitleBar orientation.</summary>
+    private void ApplyRoll()
+    {
+        // Capture the unrotated header thickness. Once rolled Left/Right the header is rotated and spans
+        // the full window height, so its measured height can no longer stand in for the strip thickness.
+        if (HeaderContent.LayoutTransform == null && HeaderBorder.ActualHeight > 0)
+        {
+            _headerThickness = HeaderBorder.ActualHeight;
+        }
+
+        if (!_vm.IsRolled)
+        {
+            BodyContent.Visibility = Visibility.Visible;
+            MinHeight = 120;
+            MinWidth = 160;
+            ResizeMode = ResizeMode.CanResize;
+            Left = _vm.Left;
+            Top = _vm.Top;
+            Width = _vm.Width;
+            Height = _vm.Height;
+            ApplyTitleOrientation(RollDirection.Top);
+            UpdateChrome();
+            UpdateRollIcon();
+            return;
+        }
+
+        ResizeMode = ResizeMode.NoResize;
+
+        var rect = ClampToWorkArea(GetRolledRect(new RectD(_vm.Left, _vm.Top, _vm.Width, _vm.Height), _effectiveDir));
+
+        BodyContent.Visibility = Visibility.Collapsed;
+        TabStrip.Visibility = Visibility.Collapsed;
+
+        double headerH = _headerThickness;
+        double stripW = headerH;
+        MinHeight = _effectiveDir is RollDirection.Top or RollDirection.Bottom ? headerH : 120;
+        MinWidth = _effectiveDir is RollDirection.Left or RollDirection.Right ? stripW : 160;
+
+        Left = rect.X;
+        Top = rect.Y;
+        Width = rect.Width;
+        Height = rect.Height;
+
+        ApplyTitleOrientation(_effectiveDir);
+        UpdateRollIcon();
+    }
+
+    /// <summary>
+    /// Positions the TitleBar on the rolled edge and rotates the header content so a Left/Right roll reads
+    /// as a vertical TitleBar. When not rolled the TitleBar stays at the top, unrotated.
+    /// </summary>
+    private void ApplyTitleOrientation(RollDirection dir)
+    {
+        DockPanel.SetDock(HeaderBorder, dir switch
+        {
+            RollDirection.Bottom => Dock.Bottom,
+            RollDirection.Left => Dock.Left,
+            RollDirection.Right => Dock.Right,
+            _ => Dock.Top,
+        });
+
+        double angle = dir switch
+        {
+            RollDirection.Left => 90,
+            RollDirection.Right => -90,
+            _ => 0,
+        };
+        HeaderContent.LayoutTransform = angle == 0 ? null! : new RotateTransform(-90);
+    }
+
+    private void UpdateRollIcon()
+    {
+        if (!_vm.IsRolled)
+        {
+            RollIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Subtract24;//FullScreenMinimize24, ArrowMinimize24,ArrowMinimizeVertical24
+            RollButton.ToolTip = "Roll";
+            return;
+        }
+
+        RollIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.FullScreenMaximize24;
+        RollButton.ToolTip = "Unroll";
+    }
+
+    /// <summary>
+    /// Maps a dragged/displayed bounds rectangle back onto the (unrolled) container bounds. The collapsed
+    /// dimension is preserved so the "home" size survives rolling; the moved strip anchors the home rect.
+    /// </summary>
+    private void ApplyDraggedBounds(RectD r)
+    {
+        double headerH = _headerThickness;
+        double stripW = headerH;
+
+        if (!_vm.IsRolled)
+        {
+            _vm.Left = r.X;
+            _vm.Top = r.Y;
+            _vm.Width = r.Width;
+            _vm.Height = r.Height;
+            ClampBoundsToWorkArea();
+            return;
+        }
+
+        switch (_effectiveDir)
+        {
+            case RollDirection.Top:
+                _vm.Left = r.X;
+                _vm.Top = r.Y;
+                break;
+            case RollDirection.Bottom:
+                _vm.Left = r.X;
+                _vm.Top = r.Y - _vm.Height + headerH;
+                break;
+            case RollDirection.Left:
+                _vm.Left = r.X;
+                _vm.Top = r.Y;
+                break;
+            case RollDirection.Right:
+                _vm.Left = r.X - _vm.Width + stripW;
+                _vm.Top = r.Y;
+                break;
+        }
+
+        // The collapsed strip implies a full-size home; keep that home within the work area so a rolled
+        // container can never be dragged/snapped into an off-screen position (and then saved that way).
+        ClampBoundsToWorkArea();
+    }
+
+    private void ClampBoundsToWorkArea()
+    {
+        var wa = SystemParameters.WorkArea;
+        _vm.Left = Math.Max(wa.X, Math.Min(_vm.Left, wa.Right - _vm.Width));
+        _vm.Top = Math.Max(wa.Y, Math.Min(_vm.Top, wa.Bottom - _vm.Height));
+    }
+
+    private static RectD ClampToWorkArea(RectD rect)
+    {
+        var wa = SystemParameters.WorkArea;
+        double x = Math.Max(wa.X, Math.Min(rect.X, wa.Right - rect.Width));
+        double y = Math.Max(wa.Y, Math.Min(rect.Y, wa.Bottom - rect.Height));
+        return RectD.FromXYWH(x, y, rect.Width, rect.Height);
+    }
+
+    /// <summary>
+    /// Detects which work-area edge the TitleBar is flush against after a drag (i.e. where it snapped) and
+    /// returns that as the roll direction. Horizontal edges (Top/Bottom) take priority over vertical ones so
+    /// a corner snap (e.g. TopLeft, bottomRight) yields a Top/Bottom roll, not Left/Right. Returns null when
+    /// not near any edge (caller keeps the current value).
+    /// </summary>
+    private RollDirection? DetectRollDirection()
+    {
+        var wa = SystemParameters.WorkArea;
+        double left = this.Left, top = this.Top, right = this.Left + this.Width, bottom = this.Top + this.Height;
+        double dl = left - wa.Left;
+        double dr = wa.Right - right;
+        double dt = top - wa.Top;
+        double db = wa.Bottom - bottom;
+        double threshold = 40;
+
+        bool nearH = dt <= threshold || db <= threshold;
+        bool nearV = dl <= threshold || dr <= threshold;
+
+        if (nearH)
+        {
+            return dt <= db ? RollDirection.Top : RollDirection.Bottom;
+        }
+
+        if (nearV)
+        {
+            return dl <= dr ? RollDirection.Left : RollDirection.Right;
+        }
+
+        return null;
     }
 
     private void TitleText_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ClickCount == 2 && _vm.ActiveBox != null)
+        // Rename is now driven by a slow double-click on the TitleBar (see TitleArea_MouseLeftButtonDown);
+        // let the event bubble to the TitleBar handler. This stub keeps the XAML wiring intact.
+    }
+
+    private void BeginRename()
+    {
+        if (_vm.ActiveBox == null || _isRenaming)
         {
-            _isRenaming = true;
-            TitleEdit.Text = _vm.ActiveBox.Name;
-            TitleText.Visibility = Visibility.Collapsed;
-            TitleEdit.Visibility = Visibility.Visible;
-            TitleEdit.Focus();
-            TitleEdit.SelectAll();
+            return;
         }
+
+        _isRenaming = true;
+        TitleEdit.Text = _vm.ActiveBox.Name;
+        TitleText.Visibility = Visibility.Collapsed;
+        TitleEdit.Visibility = Visibility.Visible;
+        TitleEdit.Focus();
+        TitleEdit.SelectAll();
     }
 
     private void TitleEdit_LostFocus(object sender, RoutedEventArgs e) => CommitRename();
@@ -876,8 +1160,8 @@ public partial class BoxContainerWindow : Window
         var newTarget = _host.Containers.FirstOrDefault(c =>
             c.Id != _vm.Id &&
             c.BoxContainerVm != null &&
-            cx >= c.Bounds.X && cx <= c.Bounds.X + c.Bounds.Width &&
-            cy >= c.Bounds.Y && cy <= c.Bounds.Y + c.Bounds.Height);
+            !c.IsRolled &&
+            ContainsPoint(GetDropRect(c), cx, cy));
 
         if (newTarget == _mergeTarget)
         {
@@ -926,5 +1210,25 @@ public partial class BoxContainerWindow : Window
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The rectangle used for drop / snap detection against <paramref name="c"/>. When the container is
+    /// rolled this is its on-screen strip (the visible title bar), not the full (hidden) unrolled bounds.
+    /// </summary>
+    private static RectD GetDropRect(ContainerViewModel c)
+    {
+        var w = FindWindowFor(c);
+        if (w != null)
+        {
+            return RectD.FromXYWH(w.Left, w.Top, w.Width, w.Height);
+        }
+
+        return c.Bounds;
+    }
+
+    private static bool ContainsPoint(RectD r, double x, double y)
+    {
+        return x >= r.X && x <= r.X + r.Width && y >= r.Y && y <= r.Y + r.Height;
     }
 }

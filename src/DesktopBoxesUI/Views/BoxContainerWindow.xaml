@@ -6,18 +6,18 @@
     xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
     MinWidth="160"
     MinHeight="120"
     AllowsTransparency="True"
     Background="Transparent"
-    MouseLeftButtonUp="TitleArea_MouseLeftButtonUp"
-    MouseMove="TitleArea_MouseMove"
+    Deactivated="Window_Deactivated"
+    IsKeyboardFocusWithinChanged="Window_IsKeyboardFocusWithinChanged"
     MouseEnter="Window_MouseEnter"
     MouseLeave="Window_MouseLeave"
-    IsKeyboardFocusWithinChanged="Window_IsKeyboardFocusWithinChanged"
-    Deactivated="Window_Deactivated"
+    MouseLeftButtonUp="TitleArea_MouseLeftButtonUp"
+    MouseMove="TitleArea_MouseMove"
     ResizeMode="CanResize"
     ShowInTaskbar="False"
     WindowStyle="None"
@@ -38,13 +38,15 @@
                 Background="#3f3f46"
                 CornerRadius="8,8,0,0"
                 DockPanel.Dock="Top">
-                <Grid ColumnDefinitions="auto, *, auto">
+                <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto">
                     <Button
                         x:Name="MenuButton"
                         Grid.Column="0"
                         Width="26"
                         Height="22"
                         Margin="0,0,6,0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
                         Click="MenuButton_Click"
                         Cursor="Arrow"
                         DockPanel.Dock="Left"
@@ -65,6 +67,29 @@
                                     x:Name="MenuRemoveTab"
                                     Click="RemoveTab_Click"
                                     Header="Remove Tab" />
+                                <Separator />
+                                <MenuItem x:Name="MenuRollDir" Header="Roll Direction">
+                                    <MenuItem
+                                        Click="MenuSetRollDir_Click"
+                                        Header="Top"
+                                        Tag="Top" />
+                                    <MenuItem
+                                        Click="MenuSetRollDir_Click"
+                                        Header="Bottom"
+                                        Tag="Bottom" />
+                                    <MenuItem
+                                        Click="MenuSetRollDir_Click"
+                                        Header="Left"
+                                        Tag="Left" />
+                                    <MenuItem
+                                        Click="MenuSetRollDir_Click"
+                                        Header="Right"
+                                        Tag="Right" />
+                                    <MenuItem
+                                        Click="MenuSetRollDir_Click"
+                                        Header="Auto (snap)"
+                                        Tag="Auto" />
+                                </MenuItem>
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>
@@ -102,6 +127,8 @@
                         Width="26"
                         Height="22"
                         Margin="6,0,0,0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
                         Click="RollButton_Click"
                         Cursor="Arrow"
                         Style="{StaticResource BorderlesButtonStyle}"
@@ -111,7 +138,7 @@
                 </Grid>
             </Border>
 
-            <!-- Tab strip: only shown for more than one tab AND when the container is active/hovered -->
+            <!--  Tab strip: only shown for more than one tab AND when the container is active/hovered  -->
             <Border
                 x:Name="TabStrip"
                 Padding="4,2"
@@ -123,7 +150,7 @@
                     <ItemsControl x:Name="TabItems" ItemsSource="{Binding BoxContainerVm.Tabs}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <UniformGrid Rows="1" Columns="{Binding BoxContainerVm.Tabs.Count}" />
+                                <UniformGrid Columns="{Binding BoxContainerVm.Tabs.Count}" Rows="1" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
@@ -140,8 +167,8 @@
                                     Cursor="Hand"
                                     Foreground="White"
                                     PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
-                                    PreviewMouseMove="Tab_PreviewMouseMove"
                                     PreviewMouseLeftButtonUp="Tab_PreviewMouseLeftButtonUp"
+                                    PreviewMouseMove="Tab_PreviewMouseMove"
                                     Tag="{Binding}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -162,9 +189,7 @@
                     x:Name="Placeholder"
                     Padding="16"
                     Visibility="Collapsed">
-                    <StackPanel
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock
                             FontSize="14"
                             Foreground="White"

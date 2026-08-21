@@ -1,7 +1,7 @@
-using System.Collections.ObjectModel;
-using System.Windows.Input;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using System.Collections.ObjectModel;
+using System.Windows.Input;
 
 namespace DesktopBoxesUI.ViewModels;
 
@@ -49,6 +49,38 @@ public sealed class ContainerViewModel : ViewModelBase
             : (ActiveBox?.Name ?? "");
 
     public BoxContainerViewModel? BoxContainerVm => _boxContainerVm;
+
+    /// <summary>Whether the container is rolled (collapsed to an edge). Only meaningful for a <see cref="DesktopItemContainerType.BoxContainer"/>.</summary>
+    public bool IsRolled
+    {
+        get => _container.ChildContainer?.IsRolled ?? false;
+        set
+        {
+            if (_container.ChildContainer == null || _container.ChildContainer.IsRolled == value)
+            {
+                return;
+            }
+
+            _container.ChildContainer.IsRolled = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Edge the rolled TitleBar snaps to. <c>null</c> = auto (detect from snap position). Only meaningful for a <see cref="DesktopItemContainerType.BoxContainer"/>.</summary>
+    public RollDirection? RollDirection
+    {
+        get => _container.ChildContainer?.RollDirection;
+        set
+        {
+            if (_container.ChildContainer == null || _container.ChildContainer.RollDirection == value)
+            {
+                return;
+            }
+
+            _container.ChildContainer.RollDirection = value;
+            OnPropertyChanged();
+        }
+    }
 
     // --- Geometry (always on the DesktopItemContainer) ---
 

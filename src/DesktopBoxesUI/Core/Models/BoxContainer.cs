@@ -16,4 +16,14 @@ public sealed class BoxContainer
 
     /// <summary>Index of the active tab. Clamped on load to stay within <see cref="Boxes"/>.</summary>
     public int SelectedIndex { get; set; }
+
+    /// <summary>Whether the container is rolled (collapsed to the <see cref="RollDirection"/> edge). Persisted; defaults to false.</summary>
+    public bool IsRolled { get; set; }
+
+    /// <summary>
+    /// Edge the rolled TitleBar snaps to. <c>null</c> means "auto": detect from where the container is
+    /// snapped (default behavior). A non-null value is an explicit user choice that overrides detection.
+    /// Persisted.
+    /// </summary>
+    public RollDirection? RollDirection { get; set; }
 }

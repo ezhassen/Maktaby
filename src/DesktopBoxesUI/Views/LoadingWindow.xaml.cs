@@ -20,6 +20,12 @@ public partial class LoadingWindow : Window
 
     private async void OnLoaded(object? sender, RoutedEventArgs e)
     {
+        //fire and forget
+        Init();
+    }
+
+    private async void Init()
+    {
         // Let the splash paint and the dispatcher settle before the Shell enumeration / Box
         // creation work begins.
         await Task.Delay(800);

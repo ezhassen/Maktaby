@@ -43,7 +43,6 @@ internal sealed class WindowDragController
     private readonly IDpiService _dpi;
     private readonly IWindowSnappingService _snapping;
     private readonly IWindowPositioningService _positioning;
-    private readonly Func<RectD> _getBounds;
     private readonly Action<RectD> _setBounds;
     private readonly Func<List<RectD>> _getOthers;
     private readonly Action _onChanged;
@@ -73,7 +72,6 @@ internal sealed class WindowDragController
         IDpiService dpi,
         IWindowSnappingService snapping,
         IWindowPositioningService positioning,
-        Func<RectD> getBounds,
         Action<RectD> setBounds,
         Func<List<RectD>> getOthers,
         Action onChanged,
@@ -84,7 +82,6 @@ internal sealed class WindowDragController
         _dpi = dpi;
         _snapping = snapping;
         _positioning = positioning;
-        _getBounds = getBounds;
         _setBounds = setBounds;
         _getOthers = getOthers;
         _onChanged = onChanged;
@@ -98,7 +95,6 @@ internal sealed class WindowDragController
             var hwnd = new WindowInteropHelper(_window).Handle;
             Win32Apis.GlueToDesktop(hwnd);
             Win32Apis.PreventMinimize(hwnd);
-            _positioning.SetBounds(hwnd, _getBounds());
             _source = HwndSource.FromHwnd(hwnd);
             _source.AddHook(HwndHook);
             _source.AddHook(Win32Apis.MinimizePreventionHook);

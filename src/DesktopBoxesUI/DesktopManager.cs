@@ -4,12 +4,12 @@ using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using Microsoft.Extensions.DependencyInjection;
-using System.Windows;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace DesktopBoxesUI;
 
@@ -30,7 +30,6 @@ public sealed class DesktopManager
     private readonly IDesktopService _desktop;
     private readonly IWindowPositioningService _positioning;
     private readonly IExplorerDesktopService _explorer;
-    private readonly IMonitorService _monitor;
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
     private DesktopSurface? _surface;
@@ -43,7 +42,6 @@ public sealed class DesktopManager
         _desktop = provider.GetRequiredService<IDesktopService>();
         _positioning = provider.GetRequiredService<IWindowPositioningService>();
         _explorer = provider.GetRequiredService<IExplorerDesktopService>();
-        _monitor = provider.GetRequiredService<IMonitorService>();
     }
 
     public async Task InitializeAsync()
@@ -71,8 +69,8 @@ public sealed class DesktopManager
         {
             AddWindow(vm);
         }
-
-        await SaveAsync();
+        //Why saving here?
+        //await SaveAsync();
         _explorer.SetDesktopIconsVisible(false);
     }
 
@@ -88,7 +86,26 @@ public sealed class DesktopManager
             return;
         }
 
-        var current = _monitor.GetPrimaryWorkArea();
+        var current = GetPrimaryWorkAreaDip();
+
+        double maxRight = 0;
+        double maxBottom = 0;
+        foreach (var container in snapshot.Containers)
+        {
+            maxRight = Math.Max(maxRight, container.Bounds.Right);
+            maxBottom = Math.Max(maxBottom, container.Bounds.Bottom);
+        }
+
+        // Older snapshots stored DesktopResolution in PHYSICAL pixels while bounds are DIPs. If the
+        // stored resolution is clearly larger than the current DIP work area yet the bounds already
+        // fit inside it, the bounds are correctly placed in DIP space — just re-baseline (the
+        // resolution is rewritten correctly on the next save) instead of wrongly shrinking them.
+        bool storedLooksPhysical = snapshot.DesktopResolution.Width > current.Width * 1.15;
+        if (storedLooksPhysical && maxRight <= current.Width && maxBottom <= current.Height)
+        {
+            return;
+        }
+
         if (current.Width == snapshot.DesktopResolution.Width &&
             current.Height == snapshot.DesktopResolution.Height)
         {
@@ -103,6 +120,18 @@ public sealed class DesktopManager
             var b = container.Bounds;
             container.Bounds = RectD.FromXYWH(b.X * sx, b.Y * sy, b.Width * sx, b.Height * sy);
         }
+    }
+
+    /// <summary>
+    /// The primary work area in WPF logical (DIP) coordinates. Container <c>Bounds</c> are always stored
+    /// in this same space (the WPF window geometry), so this is the correct basis for the persisted
+    /// <see cref="DesktopSnapshot.DesktopResolution"/> and for rescaling — never the raw physical pixels
+    /// from <see cref="IMonitorService.GetPrimaryWorkArea"/>.
+    /// </summary>
+    private static RectD GetPrimaryWorkAreaDip()
+    {
+        var wa = SystemParameters.WorkArea;
+        return RectD.FromXYWH(wa.X, wa.Y, wa.Width, wa.Height);
     }
 
     private async Task BuildDefaultContainerAsync()
@@ -233,7 +262,7 @@ public sealed class DesktopManager
 
     public async Task SaveAsync()
     {
-        var current = _monitor.GetPrimaryWorkArea();
+        var current = GetPrimaryWorkAreaDip();
         var snapshot = new DesktopSnapshot
         {
             DesktopResolution = new SizeD(current.Width, current.Height),
