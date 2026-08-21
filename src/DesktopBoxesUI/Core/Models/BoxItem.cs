@@ -34,4 +34,34 @@ public sealed class BoxItem
 
     /// <summary>Optional layout hint relative to the owning Box (in Box-local coordinates).</summary>
     public double? RelativeTop { get; set; }
+
+    /// <summary>
+    /// True when two items point at the same underlying desktop object. Filesystem/shell items match by
+    /// <see cref="Path"/>; non-filesystem items (e.g. UWP apps from the Start Menu) have no usable path and
+    /// match by their absolute <see cref="Pidl"/> instead. One identity is enough — both need not match.
+    /// </summary>
+    public static bool RefersToSame(BoxItem? a, BoxItem? b)
+    {
+        if (ReferenceEquals(a, b))
+        {
+            return true;
+        }
+
+        if (a is null || b is null)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrEmpty(a.Path) && !string.IsNullOrEmpty(b.Path))
+        {
+            return string.Equals(a.Path, b.Path, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (!string.IsNullOrEmpty(a.Pidl) && !string.IsNullOrEmpty(b.Pidl))
+        {
+            return string.Equals(a.Pidl, b.Pidl, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
 }

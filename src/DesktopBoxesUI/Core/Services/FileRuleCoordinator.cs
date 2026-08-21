@@ -8,20 +8,21 @@ using DesktopBoxesUI.Core.Services;
 namespace DesktopBoxesUI.Core.Services;
 
 /// <summary>
-/// Bridges the desktop file-system watcher to the box rule engine: when a file appears or disappears
-/// on the desktop it is routed (by file type) into the target <see cref="Box"/> and the snapshot is
-/// persisted. Only <see cref="BoxType.DesktopItems"/> boxes receive items.
+/// Bridges the desktop Shell watcher to the box rule engine: when an item appears or disappears on the
+/// desktop it is routed (by file type) into the target <see cref="Box"/> and the snapshot is persisted.
+/// Only <see cref="BoxType.DesktopItems"/> boxes receive items. Works for both real files and virtual
+/// shell items (the watcher resolves every change to a <see cref="BoxItem"/>).
 /// </summary>
 public sealed class FileRuleCoordinator : IFileRuleCoordinator
 {
-    private readonly IFileWatcherService _watcher;
+    private readonly IShellWatcherService _watcher;
     private readonly IRuleService _rules;
     private readonly IBoxService _boxService;
     private readonly IDispatcher _dispatcher;
     private readonly Action _save;
 
     public FileRuleCoordinator(
-        IFileWatcherService watcher,
+        IShellWatcherService watcher,
         IRuleService rules,
         IBoxService boxService,
         IDispatcher dispatcher,
@@ -36,31 +37,30 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
 
     public void Start()
     {
-        _watcher.FileCreated += OnFileCreated;
-        _watcher.FileDeleted += OnFileDeleted;
+        _watcher.ItemCreated += OnItemCreated;
+        _watcher.ItemDeleted += OnItemDeleted;
         _watcher.Start();
     }
 
     public void Stop()
     {
-        _watcher.FileCreated -= OnFileCreated;
-        _watcher.FileDeleted -= OnFileDeleted;
+        _watcher.ItemCreated -= OnItemCreated;
+        _watcher.ItemDeleted -= OnItemDeleted;
         _watcher.Stop();
     }
 
-    private void OnFileCreated(string path) => _dispatcher.Invoke(() => HandleCreated(path));
+    private void OnItemCreated(BoxItem item) => _dispatcher.Invoke(() => HandleCreated(item));
 
-    private void OnFileDeleted(string path) => _dispatcher.Invoke(() => HandleDeleted(path));
+    private void OnItemDeleted(BoxItem item) => _dispatcher.Invoke(() => HandleDeleted(item));
 
-    private void HandleCreated(string path)
+    private void HandleCreated(BoxItem item)
     {
-        var item = BoxItemFactory.FromPath(path);
         if (item is null || string.IsNullOrEmpty(item.Path))
         {
             return;
         }
 
-        if (AlreadyTracked(item.Path))
+        if (AlreadyTracked(item))
         {
             return;
         }
@@ -81,8 +81,13 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
         _save();
     }
 
-    private void HandleDeleted(string path)
+    private void HandleDeleted(BoxItem item)
     {
+        if (item is null || string.IsNullOrEmpty(item.Path))
+        {
+            return;
+        }
+
         bool changed = false;
         foreach (var box in _boxService.GetBoxes())
         {
@@ -91,8 +96,7 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
                 continue;
             }
 
-            var existing = box.Items.FirstOrDefault(i =>
-                string.Equals(i.Path, path, StringComparison.OrdinalIgnoreCase));
+            var existing = box.Items.FirstOrDefault(i => BoxItem.RefersToSame(i, item));
             if (existing != null)
             {
                 box.Items.Remove(existing);
@@ -106,11 +110,11 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
         }
     }
 
-    private bool AlreadyTracked(string path)
+    private bool AlreadyTracked(BoxItem item)
     {
         foreach (var box in _boxService.GetBoxes())
         {
-            if (box.Items.Any(i => string.Equals(i.Path, path, StringComparison.OrdinalIgnoreCase)))
+            if (box.Items.Any(i => BoxItem.RefersToSame(i, item)))
             {
                 return true;
             }

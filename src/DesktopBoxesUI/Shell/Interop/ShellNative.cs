@@ -33,6 +33,58 @@ internal static class ShellNative
     public static extern void ILFree(IntPtr pidl);
 
     public static readonly Guid IID_IContextMenu = new("000214e4-0000-0000-c000-000000000046");
+
+    // --- Shell change notifications (desktop watcher) ---
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SHChangeNotifyEntry
+    {
+        public IntPtr pidl;
+        public int fRecursive;
+    }
+
+    [Flags]
+    internal enum SHCNRF : int
+    {
+        InterruptLevel = 0x0001,
+        ShellLevel = 0x0002,
+        RecursiveInterrupt = 0x1000,
+        NewDelivery = 0x8000,
+    }
+
+    [Flags]
+    internal enum SHCNE : int
+    {
+        RENAMEITEM = 0x0001,
+        CREATE = 0x0002,
+        DELETE = 0x0004,
+        RENAMEFOLDER = 0x0008,
+        UPDATEITEM = 0x00002000,
+    }
+
+    [DllImport("shell32.dll")]
+    public static extern uint SHChangeNotifyRegister(
+        IntPtr hwnd,
+        SHCNRF fSources,
+        SHCNE fEvents,
+        uint wMsg,
+        int cEntries,
+        ref SHChangeNotifyEntry pshcne);
+
+    [DllImport("shell32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SHChangeNotifyDeregister(uint ulID);
+
+    [DllImport("shell32.dll")]
+    public static extern IntPtr SHChangeNotification_Lock(
+        IntPtr hChange,
+        uint dwProcessId,
+        out IntPtr pppidl,
+        out int lEvent);
+
+    [DllImport("shell32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SHChangeNotification_Unlock(IntPtr hLock);
 }
 
 [ComImport]

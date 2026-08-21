@@ -131,6 +131,10 @@ public partial class BoxContainerWindow : Window
         Closed += OnClosed;
     }
 
+    /// <summary>Re-applies the window geometry from the view-model bounds (handles both the rolled and
+    /// unrolled states). Used after a display/DPI/resolution change rescales the layout.</summary>
+    internal void ApplyGeometry() => ApplyRoll();
+
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
         ApplyType();

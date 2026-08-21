@@ -1,9 +1,9 @@
-using System.Windows;
-using System.Windows.Interop;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
+using System.Windows;
+using System.Windows.Interop;
 
 namespace DesktopBoxesUI.Views;
 
@@ -35,6 +35,15 @@ public sealed partial class DesktopSurface : Window
         Height = SystemParameters.WorkArea.Height;
 
         Loaded += OnLoaded;
+    }
+
+    /// <summary>Re-covers the (possibly changed) primary work area after a display/DPI/resolution change.</summary>
+    internal void Relayout()
+    {
+        Left = SystemParameters.WorkArea.Left;
+        Top = SystemParameters.WorkArea.Top;
+        Width = SystemParameters.WorkArea.Width;
+        Height = SystemParameters.WorkArea.Height;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)

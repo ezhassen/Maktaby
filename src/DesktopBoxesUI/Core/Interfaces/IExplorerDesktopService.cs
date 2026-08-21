@@ -9,7 +9,4 @@ public interface IExplorerDesktopService
     bool AreDesktopIconsVisible { get; }
 
     void SetDesktopIconsVisible(bool visible);
-
-    /// <summary>Raised when Explorer (and therefore the desktop window) restarts.</summary>
-    event System.EventHandler? ExplorerRestarted;
 }

@@ -76,7 +76,7 @@ public partial class App : Application
         services.AddSingleton<IPersistenceService, JsonSnapshotPersistenceService>();
         services.AddSingleton<IRuleService, RuleService>();
         services.AddSingleton<IFileRuleCoordinator, FileRuleCoordinator>((serv) => new FileRuleCoordinator(
-            serv.GetRequiredService<IFileWatcherService>(),
+            serv.GetRequiredService<IShellWatcherService>(),
             serv.GetRequiredService<IRuleService>(),
             serv.GetRequiredService<IBoxService>(),
             serv.GetRequiredService<IDispatcher>(),
@@ -90,6 +90,7 @@ public partial class App : Application
         services.AddSingleton<IZOrderService, ZOrderService>();
         services.AddSingleton<IDesktopWindowService, DesktopWindowService>();
         services.AddSingleton<IExplorerDesktopService, ExplorerDesktopService>();
+        services.AddSingleton<IShellWatcherService, ShellDesktopWatcher>();
         services.AddSingleton<IFileWatcherService, DesktopFileWatcher>();
         services.AddSingleton<IDispatcher, WpfDispatcher>();
         services.AddSingleton<DesktopManager, DesktopManager>((serv) => new DesktopManager(serv));

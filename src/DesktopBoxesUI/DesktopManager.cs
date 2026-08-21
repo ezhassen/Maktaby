@@ -4,8 +4,10 @@ using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Win32;
 using System.Collections.Generic;
 using System.Collections.Specialized;
+using System.IO;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Threading.Tasks;
@@ -36,6 +38,10 @@ public sealed class DesktopManager
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
     private DesktopSurface? _surface;
+
+    /// <summary>The work-area resolution the current container layout was computed against. When the
+    /// display settings change we rescale every container proportionally against this baseline.</summary>
+    private RectD _appliedResolution;
 
     public DesktopManager(IServiceProvider provider)
     {
@@ -86,8 +92,12 @@ public sealed class DesktopManager
         {
             AddWindow(vm);
         }
-        //Why saving here?
-        //await SaveAsync();
+
+        await ReconcileItemsAsync();
+
+        _appliedResolution = GetPrimaryWorkAreaDip();
+        SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
+
         _explorer.SetDesktopIconsVisible(false);
 
         _coordinator.Start();
@@ -213,6 +223,174 @@ public sealed class DesktopManager
     {
         var wa = SystemParameters.WorkArea;
         return RectD.FromXYWH(wa.X, wa.Y, wa.Width, wa.Height);
+    }
+
+    /// <summary>
+    /// Reconciles the persisted <see cref="BoxItem"/>s with the live desktop: items that no longer exist
+    /// on the desktop are removed from every <see cref="BoxType.DesktopItems"/> box, and desktop items that
+    /// aren't tracked in any box yet get a <see cref="BoxItem"/> created and routed (by rule, falling back to
+    /// the default box). Keeps the snapshot truthful after files were created/deleted outside the app.
+    /// </summary>
+    private async Task ReconcileItemsAsync()
+    {
+        var current = new List<BoxItem>();
+        try
+        {
+            await foreach (var item in _desktop.GetDesktopItemsAsync())
+            {
+                current.Add(item);
+            }
+        }
+        catch
+        {
+            return;
+        }
+
+        // Drop entries whose underlying desktop item has disappeared. Path-backed items (files, folders,
+        // shortcuts, virtual desktop items that resolve to a path) are matched by path or PIDL. Items that
+        // carry only a PIDL (e.g. UWP apps dragged from the Start Menu, which are not desktop items) cannot
+        // be verified against the desktop enumeration, so they are preserved.
+        foreach (var container in _containers.GetContainers())
+        {
+            if (container.ChildContainer is null)
+            {
+                continue;
+            }
+
+            foreach (var box in container.ChildContainer.Boxes)
+            {
+                if (box.BoxType != BoxType.DesktopItems)
+                {
+                    continue;
+                }
+
+                foreach (var existing in box.Items.ToList())
+                {
+                    if (string.IsNullOrEmpty(existing.Path))
+                    {
+                        continue;
+                    }
+
+                    if (!current.Any(c => BoxItem.RefersToSame(c, existing)))
+                    {
+                        box.Items.Remove(existing);
+                    }
+                }
+            }
+        }
+
+        // Create entries for desktop items that aren't represented in any box yet.
+        var defaultId = DefaultBoxId();
+        foreach (var item in current)
+        {
+            if (IsAlreadyTracked(item))
+            {
+                continue;
+            }
+
+            var targetId = !string.IsNullOrEmpty(item.Path)
+                ? _rules.MatchTargetBoxId(Path.GetFileName(item.Path))
+                : null;
+            targetId ??= defaultId;
+            if (targetId is null)
+            {
+                continue;
+            }
+
+            var box = _boxRegistry.GetBox(targetId.Value);
+            if (box is null || box.BoxType != BoxType.DesktopItems)
+            {
+                continue;
+            }
+
+            box.Items.Add(item);
+        }
+
+        await SaveAsync();
+    }
+
+    private bool IsAlreadyTracked(BoxItem item)
+    {
+        foreach (var container in _containers.GetContainers())
+        {
+            if (container.ChildContainer is null)
+            {
+                continue;
+            }
+
+            foreach (var box in container.ChildContainer.Boxes)
+            {
+                if (box.Items.Any(i => BoxItem.RefersToSame(i, item)))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Reacts to a screen/DPI/resolution change by proportionally rescaling the container layout against the
+    /// previously applied work area, pushing the new geometry to the live windows and re-laying the surface.
+    /// Runs on the UI thread (marshalled via the dispatcher if the system event arrives off-thread).
+    /// </summary>
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        var app = Application.Current;
+        if (app is null)
+        {
+            return;
+        }
+
+        if (app.Dispatcher.CheckAccess())
+        {
+            RescaleToCurrent();
+        }
+        else
+        {
+            app.Dispatcher.InvokeAsync(RescaleToCurrent);
+        }
+    }
+
+    private void RescaleToCurrent()
+    {
+        var current = GetPrimaryWorkAreaDip();
+        if (current.Width <= 0 || current.Height <= 0 ||
+            _appliedResolution.Width <= 0 || _appliedResolution.Height <= 0)
+        {
+            return;
+        }
+
+        if (current.Width == _appliedResolution.Width && current.Height == _appliedResolution.Height)
+        {
+            return;
+        }
+
+        double sx = current.Width / _appliedResolution.Width;
+        double sy = current.Height / _appliedResolution.Height;
+
+        foreach (var vm in _mainVm.Containers)
+        {
+            vm.Left *= sx;
+            vm.Top *= sy;
+            vm.Width *= sx;
+            vm.Height *= sy;
+        }
+
+        _appliedResolution = current;
+
+        foreach (var window in _windows.Values)
+        {
+            if (window is BoxContainerWindow boxWindow)
+            {
+                boxWindow.ApplyGeometry();
+            }
+        }
+
+        _surface?.Relayout();
+
+        _ = SaveAsync();
     }
 
     private async Task BuildDefaultContainerAsync()
@@ -379,6 +557,7 @@ public sealed class DesktopManager
     public void CloseAll()
     {
         _coordinator.Stop();
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
 
         foreach (var window in _windows.Values)
         {

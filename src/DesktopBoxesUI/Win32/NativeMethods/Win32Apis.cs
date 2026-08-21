@@ -47,6 +47,51 @@ internal static class Win32Apis
 
     public static BOOL ShowWindow(HWND hWnd, int nCmdShow) => PInvoke.ShowWindow(hWnd, (SHOW_WINDOW_CMD)nCmdShow);
 
+    public static bool IsWindowVisible(IntPtr hWnd) => ManualApis.IsWindowVisible(hWnd);
+
+    /// <summary>
+    /// Toggles desktop icon visibility the same way Explorer's "Show desktop icons" context-menu item
+    /// does: it sends <c>WM_COMMAND</c> 0x7402 to the desktop's <c>SHELLDLL_DefView</c> window. This
+    /// hides/shows the icon container while keeping the desktop view alive, so the right-click "New"
+    /// verb keeps working (unlike <c>ShowWindow(SW_HIDE)</c> on the list-view, which breaks it).
+    /// The operation flips the current state, so callers should only invoke it on a real state change.
+    /// </summary>
+    public static void ToggleDesktopIcons()
+    {
+        IntPtr defView = FindDesktopFolderView();
+        if (defView == IntPtr.Zero)
+        {
+            return;
+        }
+
+        const uint WmCommand = 0x0111;
+        ManualApis.SendMessage(defView, WmCommand, (IntPtr)0x7402, IntPtr.Zero);
+    }
+
+    private static IntPtr FindDesktopFolderView()
+    {
+        HWND progman = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, "Progman", "Program Manager");
+        HWND defView = Win32Apis.FindWindowEx(progman, HWND.Null, "SHELLDLL_DefView", null);
+        if ((IntPtr)defView != IntPtr.Zero)
+        {
+            return (IntPtr)defView;
+        }
+
+        HWND worker = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, "WorkerW", null);
+        while ((IntPtr)worker != IntPtr.Zero)
+        {
+            defView = Win32Apis.FindWindowEx(worker, HWND.Null, "SHELLDLL_DefView", null);
+            if ((IntPtr)defView != IntPtr.Zero)
+            {
+                return (IntPtr)defView;
+            }
+
+            worker = Win32Apis.FindWindowEx(HWND.Null, worker, "WorkerW", null);
+        }
+
+        return IntPtr.Zero;
+    }
+
     public static int SHGetFileInfo(string? pszPath, uint dwFileAttributes, ref SHFILEINFOW psfi, uint cbFileInfo, SHGFI uFlags)
         => ManualApis.SHGetFileInfo(pszPath, dwFileAttributes, ref psfi, cbFileInfo, (uint)uFlags);
 
