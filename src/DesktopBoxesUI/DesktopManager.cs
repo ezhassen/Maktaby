@@ -30,6 +30,9 @@ public sealed class DesktopManager
     private readonly IDesktopService _desktop;
     private readonly IWindowPositioningService _positioning;
     private readonly IExplorerDesktopService _explorer;
+    private readonly IRuleService _rules;
+    private readonly IBoxService _boxRegistry;
+    private readonly IFileRuleCoordinator _coordinator;
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
     private DesktopSurface? _surface;
@@ -42,6 +45,9 @@ public sealed class DesktopManager
         _desktop = provider.GetRequiredService<IDesktopService>();
         _positioning = provider.GetRequiredService<IWindowPositioningService>();
         _explorer = provider.GetRequiredService<IExplorerDesktopService>();
+        _rules = provider.GetRequiredService<IRuleService>();
+        _boxRegistry = provider.GetRequiredService<IBoxService>();
+        _coordinator = provider.GetRequiredService<IFileRuleCoordinator>();
     }
 
     public async Task InitializeAsync()
@@ -50,6 +56,8 @@ public sealed class DesktopManager
         if (snapshot is not { Containers.Count: > 0 })
         {
             await BuildDefaultContainerAsync();
+            RegisterAllBoxes();
+            _rules.EnsureDefaultRule(DefaultBoxId());
         }
         else
         {
@@ -58,6 +66,15 @@ public sealed class DesktopManager
             {
                 _containers.AddContainer(container);
             }
+
+            RegisterAllBoxes();
+
+            if (snapshot.Rules?.Count > 0)
+            {
+                _rules.LoadRules(snapshot.Rules);
+            }
+
+            EnsureDefaultRuleAndBox();
         }
 
         _mainVm.Containers.CollectionChanged += Containers_CollectionChanged;
@@ -72,6 +89,70 @@ public sealed class DesktopManager
         //Why saving here?
         //await SaveAsync();
         _explorer.SetDesktopIconsVisible(false);
+
+        _coordinator.Start();
+    }
+
+    /// <summary>
+    /// Resolves the id of the default box (the one the default rule feeds). Falls back to the first
+    /// box found if no box is flagged.
+    /// </summary>
+    private System.Guid? DefaultBoxId()
+    {
+        foreach (var container in _containers.GetContainers())
+        {
+            if (container.ChildContainer is null)
+            {
+                continue;
+            }
+
+            foreach (var box in container.ChildContainer.Boxes)
+            {
+                if (box.IsDefault)
+                {
+                    return box.Id;
+                }
+            }
+        }
+
+        foreach (var container in _containers.GetContainers())
+        {
+            if (container.ChildContainer is { Boxes.Count: > 0 })
+            {
+                return container.ChildContainer.Boxes[0].Id;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Makes sure a default rule exists and that the box it targets is flagged as the default box
+    /// (so it cannot be deleted).
+    /// </summary>
+    private void EnsureDefaultRuleAndBox()
+    {
+        var id = DefaultBoxId();
+        _rules.EnsureDefaultRule(id);
+
+        if (id is { } boxId)
+        {
+            foreach (var container in _containers.GetContainers())
+            {
+                if (container.ChildContainer is null)
+                {
+                    continue;
+                }
+
+                foreach (var box in container.ChildContainer.Boxes)
+                {
+                    if (box.Id == boxId)
+                    {
+                        box.IsDefault = true;
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -162,6 +243,7 @@ public sealed class DesktopManager
         {
             Name = "Desktop",
             BoxType = BoxType.DesktopItems,
+            IsDefault = true,
         };
         foreach (var item in items)
         {
@@ -232,10 +314,30 @@ public sealed class DesktopManager
             _containers.RemoveContainer(container.Id);
         }
 
+        _boxRegistry.Clear();
         await BuildDefaultContainerAsync();
+        RegisterAllBoxes();
         EnsureSurface();
         _mainVm.LoadFromContainers(_containers.GetContainers());
         await SaveAsync();
+    }
+
+    /// <summary>Registers every box from every container into <see cref="IBoxService"/> so the rule
+    /// coordinator can resolve a box by id (snapshot-loaded boxes are not created via the service).</summary>
+    private void RegisterAllBoxes()
+    {
+        foreach (var container in _containers.GetContainers())
+        {
+            if (container.ChildContainer is null)
+            {
+                continue;
+            }
+
+            foreach (var box in container.ChildContainer.Boxes)
+            {
+                _boxRegistry.AddBox(box);
+            }
+        }
     }
 
     private void EnsureSurface()
@@ -267,6 +369,7 @@ public sealed class DesktopManager
         {
             DesktopResolution = new SizeD(current.Width, current.Height),
             Containers = _containers.GetContainers().ToList(),
+            Rules = _rules.GetRules().ToList(),
         };
         await _persistence.SaveSnapshotAsync(snapshot);
     }
@@ -275,6 +378,8 @@ public sealed class DesktopManager
 
     public void CloseAll()
     {
+        _coordinator.Stop();
+
         foreach (var window in _windows.Values)
         {
             window.Close();

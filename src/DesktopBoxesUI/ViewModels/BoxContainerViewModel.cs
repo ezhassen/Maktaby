@@ -69,15 +69,25 @@ public sealed class BoxContainerViewModel : ViewModelBase
         return vm;
     }
 
-    public void RemoveTab(int index)
+    public void RemoveTab(int index, bool allowDefault = false)
     {
         if (index < 0 || index >= Tabs.Count)
         {
             return;
         }
 
+        // The default box (fed by the default rule) cannot be deleted by the user.
+        if (!allowDefault && Tabs[index].IsDefault)
+        {
+            return;
+        }
+
         Tabs.RemoveAt(index);
+        var removed = _model.Boxes[index];
         _model.Boxes.RemoveAt(index);
+
+        // A deleted box must stop receiving auto-routed files. (Moves re-register via InsertBox.)
+        _boxService.RemoveBox(removed.Id);
 
         if (Tabs.Count == 0)
         {
@@ -96,6 +106,7 @@ public sealed class BoxContainerViewModel : ViewModelBase
     /// <summary>Moves an existing <see cref="Box"/> (e.g. dragged from another container) into this container.</summary>
     public void InsertBox(Box box, int index = -1)
     {
+        _boxService.AddBox(box);
         var vm = new BoxViewModel(box, _icons);
         if (index >= 0 && index < _model.Boxes.Count)
         {

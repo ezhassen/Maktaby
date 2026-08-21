@@ -123,7 +123,7 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        source.BoxContainerVm.RemoveTab(idx);
+        source.BoxContainerVm.RemoveTab(idx, allowDefault: true);
         target.BoxContainerVm.InsertBox(box, index);
 
         // Make the moved box the active tab in its new container.
@@ -153,7 +153,7 @@ public sealed class MainViewModel : ViewModelBase
             return;
         }
 
-        sourceVm.RemoveTab(idx);
+        sourceVm.RemoveTab(idx, allowDefault: true);
 
         var childContainer = new BoxContainer { Boxes = { box }, SelectedIndex = 0 };
         var container = _containers.CreateContainer(DesktopItemContainerType.BoxContainer, left, top, 240, 200, childContainer: childContainer);
@@ -181,7 +181,7 @@ public sealed class MainViewModel : ViewModelBase
             int idx = sourceTabs.IndexOf(sourceTabs.First(t => t.Model == model));
             if (idx >= 0)
             {
-                source.BoxContainerVm.RemoveTab(idx);
+                source.BoxContainerVm.RemoveTab(idx, allowDefault: true);
             }
 
             target.BoxContainerVm.InsertBox(model);

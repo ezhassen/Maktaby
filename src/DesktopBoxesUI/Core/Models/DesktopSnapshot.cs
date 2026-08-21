@@ -14,4 +14,7 @@ public sealed class DesktopSnapshot
 
     /// <summary>All placed containers. Their bounds are stored in DIPs.</summary>
     public List<DesktopItemContainer> Containers { get; set; } = new();
+
+    /// <summary>Box auto-routing rules (see <see cref="BoxRule"/>).</summary>
+    public List<BoxRule> Rules { get; set; } = new();
 }

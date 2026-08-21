@@ -137,7 +137,11 @@ public partial class BoxContainerWindow : Window
         UpdateBody();
         if (_vm.BoxContainerVm != null)
         {
-            _vm.BoxContainerVm.SelectedIndexChanged += () => UpdateBody();
+            _vm.BoxContainerVm.SelectedIndexChanged += () =>
+        {
+            UpdateBody();
+            RefreshRemoveTabMenu();
+        };
             _vm.BoxContainerVm.PropertyChanged += OnBoxContainerVmPropertyChanged;
         }
 
@@ -167,12 +171,20 @@ public partial class BoxContainerWindow : Window
     {
         bool isBox = _vm.BoxContainerVm != null;
         MenuAddTab.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
-        MenuRemoveTab.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
+        RefreshRemoveTabMenu();
         MenuRollDir.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         RollButton.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         BoxContent.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         Placeholder.Visibility = isBox ? Visibility.Collapsed : Visibility.Visible;
         UpdateChrome();
+    }
+
+    private void RefreshRemoveTabMenu()
+    {
+        bool isBox = _vm.BoxContainerVm != null;
+        MenuRemoveTab.Visibility = (isBox && !(_vm.ActiveBox?.IsDefault ?? false))
+            ? Visibility.Visible
+            : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -356,6 +368,16 @@ public partial class BoxContainerWindow : Window
 
     private void RemoveTab_Click(object sender, RoutedEventArgs e)
     {
+        if (_vm.ActiveBox is { IsDefault: true })
+        {
+            MessageBox.Show(
+                "The default box cannot be deleted.",
+                "Cannot delete",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            return;
+        }
+
         if (_vm.ActiveBox is { Items.Count: > 0 })
         {
             var result = MessageBox.Show(

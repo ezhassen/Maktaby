@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using DesktopBoxesUI.Core.Models;
 
@@ -7,7 +8,8 @@ namespace DesktopBoxesUI.ViewModels;
 /// <summary>
 /// View-model for a single <see cref="Box"/> (one tab inside a <see cref="BoxContainer"/>). Geometry and
 /// styling live on the owning <see cref="BoxContainerViewModel"/>; this only models the box's items
-/// and behaviour.
+/// and behaviour. The <see cref="Items"/> collection mirrors the underlying <see cref="Box.Items"/>
+/// model collection (which the file-rule coordinator updates), so a single source of truth is kept.
 /// </summary>
 public sealed class BoxViewModel : ViewModelBase
 {
@@ -19,6 +21,7 @@ public sealed class BoxViewModel : ViewModelBase
         _box = box;
         _icons = icons;
         Items = new ObservableCollection<BoxItemViewModel>(box.Items.Select(i => new BoxItemViewModel(i, icons)));
+        _box.Items.CollectionChanged += OnBoxItemsChanged;
     }
 
     public System.Guid Id => _box.Id;
@@ -52,21 +55,37 @@ public sealed class BoxViewModel : ViewModelBase
         }
     }
 
+    /// <summary>True for the built-in default box (fed by the default rule; cannot be deleted).</summary>
+    public bool IsDefault => _box.IsDefault;
+
     public ObservableCollection<BoxItemViewModel> Items { get; }
 
-    public void AddItem(BoxItem item)
-    {
-        _box.Items.Add(item);
-        Items.Add(new BoxItemViewModel(item, _icons));
-    }
+    /// <summary>Adds an item to the underlying model; the <see cref="Items"/> view collection mirrors it.</summary>
+    public void AddItem(BoxItem item) => _box.Items.Add(item);
 
-    public void RemoveItem(BoxItem item)
+    /// <summary>Removes an item from the underlying model; the <see cref="Items"/> view collection mirrors it.</summary>
+    public void RemoveItem(BoxItem item) => _box.Items.Remove(item);
+
+    private void OnBoxItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        _box.Items.Remove(item);
-        var existing = Items.FirstOrDefault(vm => vm.Model == item);
-        if (existing != null)
+        if (e.NewItems != null)
         {
-            Items.Remove(existing);
+            foreach (BoxItem item in e.NewItems)
+            {
+                Items.Add(new BoxItemViewModel(item, _icons));
+            }
+        }
+
+        if (e.OldItems != null)
+        {
+            foreach (BoxItem item in e.OldItems)
+            {
+                var existing = Items.FirstOrDefault(vm => vm.Model == item);
+                if (existing != null)
+                {
+                    Items.Remove(existing);
+                }
+            }
         }
     }
 }

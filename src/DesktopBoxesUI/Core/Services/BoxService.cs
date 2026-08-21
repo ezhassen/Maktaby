@@ -87,4 +87,12 @@ public sealed class BoxService : IBoxService
             }
         }
     }
+
+    public void Clear()
+    {
+        lock (_gate)
+        {
+            _boxes.Clear();
+        }
+    }
 }

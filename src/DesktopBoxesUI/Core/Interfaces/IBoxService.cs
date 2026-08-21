@@ -22,4 +22,7 @@ public interface IBoxService
     void UpdateBox(Box box);
 
     void RemoveBox(Guid id);
+
+    /// <summary>Removes every registered box (used when rebuilding from scratch).</summary>
+    void Clear();
 }
