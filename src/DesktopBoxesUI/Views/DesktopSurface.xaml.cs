@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Input;
 using System.Windows.Interop;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;

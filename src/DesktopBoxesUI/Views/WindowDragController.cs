@@ -52,6 +52,8 @@ internal sealed class WindowDragController
     private HwndSource? _source;
     private SnapOverlay? _overlay;
     private bool _dragging;
+    private bool _dragPending;
+    private Point _dragStartPoint;
     private Point _dragOffset;
     private bool _enableGuides = true;
 
@@ -325,6 +327,9 @@ internal sealed class WindowDragController
 
     // --- Title-bar drag (mouse capture, our own snap loop) ---
 
+    /// <summary>True once an actual move drag has started (past the movement threshold).</summary>
+    public bool IsDragging => _dragging;
+
     public void BeginTitleDrag(MouseButtonEventArgs e)
     {
         if (e.ChangedButton != MouseButton.Left)
@@ -332,13 +337,42 @@ internal sealed class WindowDragController
             return;
         }
 
-        _dragging = true;
-        _dragOffset = e.GetPosition(_window);
-        _window.CaptureMouse();
+        // Don't start dragging yet: wait until the pointer actually moves. This lets a plain click or a
+        // double-click (e.g. to rename the title) happen without hijacking the gesture.
+        _dragPending = true;
+        _dragStartPoint = e.GetPosition(_window);
     }
 
     public void TitleDrag(MouseEventArgs e)
     {
+        if (!_dragPending && !_dragging)
+        {
+            return;
+        }
+
+        if (_dragPending)
+        {
+            if (e.LeftButton != MouseButtonState.Pressed)
+            {
+                _dragPending = false;
+                return;
+            }
+
+            if (!_dragging)
+            {
+                var current = e.GetPosition(_window);
+                if ((current - _dragStartPoint).Length < 4)
+                {
+                    return; // not moved far enough to begin a drag yet
+                }
+
+                _dragging = true;
+                _dragOffset = current;
+                _window.CaptureMouse();
+                Mouse.OverrideCursor = Cursors.SizeAll;
+            }
+        }
+
         if (!_dragging)
         {
             return;
@@ -365,6 +399,8 @@ internal sealed class WindowDragController
 
     public void EndTitleDrag(MouseButtonEventArgs e)
     {
+        _dragPending = false;
+
         if (!_dragging)
         {
             return;
@@ -373,6 +409,7 @@ internal sealed class WindowDragController
         _dragging = false;
         _window.ReleaseMouseCapture();
         _overlay?.HideGuides();
+        Mouse.OverrideCursor = null;
         _setBounds(RectD.FromXYWH(_window.Left, _window.Top, _window.Width, _window.Height));
         _onChanged();
     }

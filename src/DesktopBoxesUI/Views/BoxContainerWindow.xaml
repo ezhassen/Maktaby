@@ -13,6 +13,10 @@
     Background="Transparent"
     MouseLeftButtonUp="TitleArea_MouseLeftButtonUp"
     MouseMove="TitleArea_MouseMove"
+    MouseEnter="Window_MouseEnter"
+    MouseLeave="Window_MouseLeave"
+    IsKeyboardFocusWithinChanged="Window_IsKeyboardFocusWithinChanged"
+    Deactivated="Window_Deactivated"
     ResizeMode="CanResize"
     ShowInTaskbar="False"
     WindowStyle="None"
@@ -102,20 +106,19 @@
                 </Grid>
             </Border>
 
-            <!-- Tab strip: only shown for more than one tab -->
+            <!-- Tab strip: only shown for more than one tab AND when the container is active/hovered -->
             <Border
                 x:Name="TabStrip"
                 Padding="4,2"
                 Background="#333337"
                 BorderBrush="#3f3f46"
                 BorderThickness="0,0,0,1"
-                DockPanel.Dock="Top"
-                Visibility="{Binding BoxContainerVm.ShowTabs, Converter={StaticResource BoolToVis}}">
+                DockPanel.Dock="Top">
                 <Grid>
                     <ItemsControl x:Name="TabItems" ItemsSource="{Binding BoxContainerVm.Tabs}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" />
+                                <UniformGrid Rows="1" Columns="{Binding BoxContainerVm.Tabs.Count}" />
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
@@ -123,6 +126,8 @@
                                 <Button
                                     Margin="2,0"
                                     Padding="8,2"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
                                     Background="Transparent"
                                     BorderBrush="#3f3f46"
                                     BorderThickness="1"

@@ -31,6 +31,7 @@ public partial class App : Application
         Services = services.BuildServiceProvider();
 
         Services.GetRequiredService<ISettingsService>().Load();
+        Services.GetRequiredService<IMouseMonitor>().Start();
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -54,6 +55,7 @@ public partial class App : Application
 
         Exit += async (_, _) =>
         {
+            Services.GetRequiredService<IMouseMonitor>().Stop();
             var mang = Services.GetRequiredService<DesktopManager>();
             await mang.SaveAsync();
             mang.RestoreIcons();
@@ -91,5 +93,8 @@ public partial class App : Application
         // UI services and view models
         services.AddSingleton<IconImageService>();
         services.AddSingleton<MainViewModel>();
+
+        // Win32 watchers
+        services.AddSingleton<IMouseMonitor, MouseMonitor>();
     }
 }

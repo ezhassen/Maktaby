@@ -11,7 +11,7 @@
     Drop="BoxControl_Drop"
     DragOver="BoxControl_DragOver"
     mc:Ignorable="d">
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <ScrollViewer x:Name="Scroll" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
         <ItemsControl
             x:Name="ItemsList"
             ItemsSource="{Binding Items}">

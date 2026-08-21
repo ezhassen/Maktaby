@@ -570,4 +570,23 @@ internal static class Win32Apis
 
         return IntPtr.Zero;
     }
+
+    // --- Low-level mouse hook (used to detect clicks outside the app, e.g. the bare desktop) ---
+
+    public const int WH_MOUSE_LL = ManualApis.WH_MOUSE_LL;
+
+    public static IntPtr SetWindowsHookEx(int idHook, ManualApis.HookProc lpfn, IntPtr hMod, uint dwThreadId)
+        => ManualApis.SetWindowsHookEx(idHook, lpfn, hMod, dwThreadId);
+
+    public static bool UnhookWindowsHookEx(IntPtr hhk) => ManualApis.UnhookWindowsHookEx(hhk);
+
+    public static IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam)
+        => ManualApis.CallNextHookEx(hhk, nCode, wParam, lParam);
+
+    public static uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId)
+        => ManualApis.GetWindowThreadProcessId(hWnd, out lpdwProcessId);
+
+    public static IntPtr GetModuleHandle(string? moduleName) => ManualApis.GetModuleHandle(moduleName);
+
+    public static IntPtr WindowFromPoint(ManualApis.POINT pt) => ManualApis.WindowFromPoint(pt);
 }

@@ -35,6 +35,13 @@ public partial class BoxControl : UserControl
 
     public System.Action? RequestSave { get; set; }
 
+    /// <summary>Controls the vertical scrollbar visibility of the item list.</summary>
+    public ScrollBarVisibility VerticalScrollBarVisibility
+    {
+        get => Scroll.VerticalScrollBarVisibility;
+        set => Scroll.VerticalScrollBarVisibility = value;
+    }
+
     private void ItemBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _dragStart = e.GetPosition(null);

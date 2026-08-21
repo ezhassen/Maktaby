@@ -29,7 +29,52 @@ public partial class BoxContainerWindow : Window
     private readonly IWindowPositioningService _positioning;
     private readonly Action _save;
     private readonly WindowDragController _drag;
+    private readonly IMouseMonitor _mouseMonitor;
     private readonly IZOrderService _zOrder = App.Services.GetRequiredService<IZOrderService>();
+    private readonly uint _currentProcessId = (uint)System.Environment.ProcessId;
+
+    // Chrome (header buttons, tab strip, scrollbar) is shown only when the container is hovered or focused.
+    private bool _mouseOver;
+    private bool _keyboardFocused;
+    private bool _isRenaming;
+
+    static BoxContainerWindow()
+    {
+        // Commit any active inline rename when a mouse button is pressed anywhere in the app
+        // (covers clicks on the desktop, other containers, etc., where LostFocus may not fire).
+        EventManager.RegisterClassHandler(
+            typeof(Window),
+            PreviewMouseDownEvent,
+            new MouseButtonEventHandler(OnAnyPreviewMouseDown));
+    }
+
+    private static void OnAnyPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Application.Current == null)
+        {
+            return;
+        }
+
+        foreach (var w in Application.Current.Windows.OfType<BoxContainerWindow>())
+        {
+            w.TryCommitRename(e.OriginalSource);
+        }
+    }
+
+    private void TryCommitRename(object? originalSource)
+    {
+        if (!_isRenaming)
+        {
+            return;
+        }
+
+        if (originalSource is DependencyObject d && (d == TitleEdit || TitleEdit.IsAncestorOf(d)))
+        {
+            return; // clicks inside the editing box should not commit
+        }
+
+        CommitRename();
+    }
 
     public BoxContainerWindow(ContainerViewModel vm, MainViewModel host, IWindowPositioningService positioning, Action save)
     {
@@ -39,6 +84,9 @@ public partial class BoxContainerWindow : Window
         _host = host;
         _positioning = positioning;
         _save = save;
+
+        _mouseMonitor = App.Services.GetRequiredService<IMouseMonitor>();
+        _mouseMonitor.MouseButtonDown += OnGlobalMouseDown;
 
         var monitor = App.Services.GetRequiredService<IMonitorService>();
         var dpi = App.Services.GetRequiredService<IDpiService>();
@@ -88,27 +136,18 @@ public partial class BoxContainerWindow : Window
         if (_vm.BoxContainerVm != null)
         {
             _vm.BoxContainerVm.SelectedIndexChanged += () => UpdateBody();
+            _vm.BoxContainerVm.PropertyChanged += OnBoxContainerVmPropertyChanged;
         }
 
-        // Clear any lingering drop highlight on every container when this window's tab drag ends
-        // (drop or cancel), since WPF does not reliably raise DragLeave on a canceled drag.
-        DragDrop.AddQueryContinueDragHandler(this, OnQueryContinueDrag);
+        UpdateChrome();
         _drag.Attach();
     }
 
-    private void OnQueryContinueDrag(object? sender, QueryContinueDragEventArgs e)
+    private void OnBoxContainerVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (e.Action != DragAction.Continue)
+        if (e.PropertyName == nameof(BoxContainerViewModel.ShowTabs))
         {
-            ClearAllDropHighlights();
-        }
-    }
-
-    private static void ClearAllDropHighlights()
-    {
-        foreach (var w in Application.Current.Windows.OfType<BoxContainerWindow>())
-        {
-            w.HideDropHighlight();
+            UpdateChrome();
         }
     }
 
@@ -119,9 +158,84 @@ public partial class BoxContainerWindow : Window
         AddRemoveButtons.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         BoxContent.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         Placeholder.Visibility = isBox ? Visibility.Collapsed : Visibility.Visible;
+        UpdateChrome();
     }
 
-    private void OnClosed(object? sender, EventArgs e) => _drag.Detach();
+    /// <summary>
+    /// Shows the header buttons, tab strip and scrollbar only while the container is hovered or focused;
+    /// otherwise only the title (and content) remain, giving a clean desktop look.
+    /// </summary>
+    private void UpdateChrome()
+    {
+        bool isBox = _vm.BoxContainerVm != null;
+        bool show = isBox && (_mouseOver || _keyboardFocused);
+
+        MenuButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        AddRemoveButtons.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+
+        // The tab strip is always visible when there is more than one tab; the header buttons and
+        // scrollbar stay hidden until the container is hovered or focused.
+        TabStrip.Visibility = isBox && _vm.BoxContainerVm!.ShowTabs ? Visibility.Visible : Visibility.Collapsed;
+
+        BoxContent.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+    }
+
+    private void Window_MouseEnter(object sender, MouseEventArgs e)
+    {
+        _mouseOver = true;
+        UpdateChrome();
+    }
+
+    private void Window_MouseLeave(object sender, MouseEventArgs e)
+    {
+        _mouseOver = false;
+        UpdateChrome();
+    }
+
+    private void Window_IsKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        _keyboardFocused = (bool)e.NewValue;
+        UpdateChrome();
+    }
+
+    private void Window_Deactivated(object? sender, EventArgs e)
+    {
+        if (_isRenaming)
+        {
+            CommitRename();
+        }
+    }
+
+    private void OnClosed(object? sender, EventArgs e)
+    {
+        _mouseMonitor.MouseButtonDown -= OnGlobalMouseDown;
+        _drag.Detach();
+    }
+
+    /// <summary>Collapses the chrome when a mouse button is pressed on a window outside this application
+    /// (the bare desktop, another app) — a desktop-glued window may not register that as a focus loss.</summary>
+    private void OnGlobalMouseDown(object? sender, IntPtr hwnd)
+    {
+        if (!IsLoaded || hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        Win32Apis.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == _currentProcessId)
+        {
+            return; // a window of our own app; natural focus handling covers it
+        }
+
+        _keyboardFocused = false;
+        _mouseOver = false;
+        if (_isRenaming)
+        {
+            CommitRename();
+        }
+
+        UpdateChrome();
+    }
 
     private void ApplyTransparency()
     {
@@ -149,13 +263,24 @@ public partial class BoxContainerWindow : Window
     private void TitleArea_MouseMove(object sender, MouseEventArgs e)
     {
         _drag.TitleDrag(e);
-        UpdateMergeTargetDuringDrag();
+        if (_drag.IsDragging)
+        {
+            UpdateMergeTargetDuringDrag();
+        }
     }
 
     private void TitleArea_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        bool wasDragging = _drag.IsDragging;
         _drag.EndTitleDrag(e);
-        CompleteMergeIfAny();
+        if (wasDragging)
+        {
+            CompleteMergeIfAny();
+        }
+        else
+        {
+            _mergeTarget = null;
+        }
     }
 
     private void AddTab_Click(object sender, RoutedEventArgs e)
@@ -187,6 +312,7 @@ public partial class BoxContainerWindow : Window
     {
         if (e.ClickCount == 2 && _vm.ActiveBox != null)
         {
+            _isRenaming = true;
             TitleEdit.Text = _vm.ActiveBox.Name;
             TitleText.Visibility = Visibility.Collapsed;
             TitleEdit.Visibility = Visibility.Visible;
@@ -205,6 +331,7 @@ public partial class BoxContainerWindow : Window
         }
         else if (e.Key == Key.Escape)
         {
+            _isRenaming = false;
             TitleEdit.Visibility = Visibility.Collapsed;
             TitleText.Visibility = Visibility.Visible;
         }
@@ -212,6 +339,13 @@ public partial class BoxContainerWindow : Window
 
     private void CommitRename()
     {
+        if (!_isRenaming)
+        {
+            return;
+        }
+
+        _isRenaming = false;
+
         if (_vm.ActiveBox != null)
         {
             _vm.ActiveBox.Name = TitleEdit.Text;
@@ -388,6 +522,7 @@ public partial class BoxContainerWindow : Window
         _dropWindow?.RestoreTabStripTemp();
         _dropWindow = null;
         _tabDropIndex = -1;
+        UpdateChrome();
     }
 
     private void PerformTabDrop()
@@ -689,8 +824,8 @@ public partial class BoxContainerWindow : Window
     {
         if (_tabStripTempShown)
         {
-            TabStrip.ClearValue(VisibilityProperty); // drop the local override, let the binding decide
             _tabStripTempShown = false;
+            UpdateChrome(); // re-establish the hover/focus-driven visibility
         }
     }
 
