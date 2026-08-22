@@ -906,6 +906,11 @@ public partial class BoxContainerWindow : Window
 
     private BoxContainerWindow? FindContainerWindowAt(Point p)
     {
+        // A small tolerance lets a dragged tab "stick" to a container when the cursor is just outside
+        // its window edge (e.g. nudged past the right edge, or over a rolled container's collapsed body)
+        // instead of being treated as empty desktop — which would otherwise spawn a brand-new container.
+        const double tolerance = 50;
+
         BoxContainerWindow? self = null;
         BoxContainerWindow? other = null;
 
@@ -919,7 +924,10 @@ public partial class BoxContainerWindow : Window
             // Recompute the window's on-screen rectangle live (DIP, matching the screen mouse point)
             // rather than trusting a cached stored bounds value.
             var tl = w.PointToScreen(new Point(0, 0));
-            double x = tl.X, y = tl.Y, ww = w.ActualWidth, hh = w.ActualHeight;
+            double x = tl.X - tolerance;
+            double y = tl.Y - tolerance;
+            double ww = w.ActualWidth + tolerance * 2;
+            double hh = w.ActualHeight + tolerance * 2;
             if (p.X < x || p.X > x + ww || p.Y < y || p.Y > y + hh)
             {
                 continue;
@@ -940,38 +948,56 @@ public partial class BoxContainerWindow : Window
         return other ?? self;
     }
 
-    private int ComputeInsertionIndex(Point screenP)
+    /// <summary>
+    /// Returns the on-screen left/right edges of every visible tab except the one being dragged (which is
+    /// conceptually lifted out of the strip), in left-to-right order. Used to compute both the insertion
+    /// index and where to draw the drop indicator.
+    /// </summary>
+    private List<(double Left, double Right)> GetVisibleTabBounds()
     {
-        int index = 0;
+        var bounds = new List<(double, double)>();
+        if (TabItems.ItemContainerGenerator.Status != System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+        {
+            return bounds;
+        }
+
         int from = _dragTab != null && _vm.BoxContainerVm != null && _vm.BoxContainerVm.Tabs.Contains(_dragTab)
             ? _vm.BoxContainerVm.Tabs.IndexOf(_dragTab)
             : -1;
 
-        if (TabItems.ItemContainerGenerator.Status == System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
+        int count = TabItems.Items.Count;
+        for (int i = 0; i < count; i++)
         {
-            int count = TabItems.Items.Count;
-            for (int i = 0; i < count; i++)
+            if (i == from)
             {
-                if (i == from)
-                {
-                    continue; // the dragged tab doesn't define a gap
-                }
+                continue; // the dragged tab is lifted out; it defines no gap
+            }
 
-                if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is not UIElement container || !container.IsVisible)
-                {
-                    continue;
-                }
+            if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is not UIElement container || !container.IsVisible)
+            {
+                continue;
+            }
 
-                var topLeft = container.PointToScreen(new Point(0, 0));
-                double mid = topLeft.X + container.RenderSize.Width / 2;
-                if (screenP.X > mid)
-                {
-                    index++;
-                }
-                else
-                {
-                    break;
-                }
+            var topLeft = container.PointToScreen(new Point(0, 0));
+            bounds.Add((topLeft.X, topLeft.X + container.RenderSize.Width));
+        }
+
+        return bounds;
+    }
+
+    private int ComputeInsertionIndex(Point screenP)
+    {
+        var bounds = GetVisibleTabBounds();
+        int index = 0;
+        foreach (var (_, right) in bounds)
+        {
+            if (screenP.X > right)
+            {
+                index++;
+            }
+            else
+            {
+                break;
             }
         }
 
@@ -980,64 +1006,27 @@ public partial class BoxContainerWindow : Window
 
     private void ShowTabDropIndicator(int index)
     {
-        int from = _dragTab != null && _vm.BoxContainerVm != null && _vm.BoxContainerVm.Tabs.Contains(_dragTab)
-            ? _vm.BoxContainerVm.Tabs.IndexOf(_dragTab)
-            : -1;
-        int count = TabItems.Items.Count;
-
         double stripLeft = TabStrip.PointToScreen(new Point(0, 0)).X + TabStrip.Padding.Left;
-        double screenBoundaryX = stripLeft;
-        int gap = 0;
-        bool found = false;
+        var bounds = GetVisibleTabBounds();
 
-        for (int i = 0; i < count; i++)
+        double screenBoundaryX;
+        if (bounds.Count == 0)
         {
-            if (i == from)
-            {
-                continue;
-            }
-
-            if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is not UIElement c || !c.IsVisible)
-            {
-                continue;
-            }
-
-            var tl = c.PointToScreen(new Point(0, 0));
-            double left = tl.X;
-            double right = tl.X + c.RenderSize.Width;
-
-            if (gap == index)
-            {
-                screenBoundaryX = left;
-                found = true;
-                break;
-            }
-
-            gap++;
-            if (gap == index)
-            {
-                screenBoundaryX = right;
-                found = true;
-                break;
-            }
+            // Dragging the only visible tab: anchor the indicator at the strip's left edge.
+            screenBoundaryX = stripLeft;
         }
-
-        if (!found)
+        else if (index <= 0)
         {
-            // Index at/after the last non-dragged tab: drop at the end of the strip.
-            for (int i = 0; i < count; i++)
-            {
-                if (i == from)
-                {
-                    continue;
-                }
-
-                if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is UIElement c && c.IsVisible)
-                {
-                    var tl = c.PointToScreen(new Point(0, 0));
-                    screenBoundaryX = tl.X + c.RenderSize.Width;
-                }
-            }
+            screenBoundaryX = bounds[0].Left;
+        }
+        else if (index >= bounds.Count)
+        {
+            screenBoundaryX = bounds[^1].Right;
+        }
+        else
+        {
+            // Boundary between the two surrounding non-dragged tabs.
+            screenBoundaryX = bounds[index].Left;
         }
 
         double localX = screenBoundaryX - stripLeft;
