@@ -1,9 +1,9 @@
+using DesktopBoxesUI;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.NativeMethods;
-using DesktopBoxesUI;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -102,7 +102,14 @@ public partial class BoxControl : UserControl
 
         if (!_singleClick && e.ClickCount == 2)
         {
-            OpenItem(vm);
+            if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
+            {
+                ShowProperties(vm);
+            }
+            else
+            {
+                OpenItem(vm);
+            }
         }
 
         // Mark handled so the empty-area marquee handler on the UserControl does not also fire.
@@ -212,7 +219,14 @@ public partial class BoxControl : UserControl
     {
         if (_singleClick && !_moved && !_dragging && sender is Border { DataContext: BoxItemViewModel item } && !item.IsEditing)
         {
-            OpenItem(item);
+            if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
+            {
+                ShowProperties(item);
+            }
+            else
+            {
+                OpenItem(item);
+            }
         }
     }
 
@@ -223,12 +237,17 @@ public partial class BoxControl : UserControl
             return;
         }
 
-        if (e.Key == Key.F2)
+        // When a modifier such as Alt is held, the key arrives as a system key: e.Key is Key.System and
+        // the real key lives in e.SystemKey. Normalise so Alt+Enter (properties) and friends are recognised.
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        bool alt = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+
+        if (key == Key.F2)
         {
             StartRename(vm, border);
             e.Handled = true;
         }
-        else if (e.Key == Key.Delete)
+        else if (key == Key.Delete)
         {
             bool permanent = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
             if (Box is { } box)
@@ -249,9 +268,9 @@ public partial class BoxControl : UserControl
             _ = Host?.DeleteItem(vm, permanent);
             e.Handled = true;
         }
-        else if (e.Key == Key.Enter)
+        else if (key == Key.Enter)
         {
-            if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
+            if (alt)
             {
                 ShowProperties(vm);
             }
@@ -262,9 +281,9 @@ public partial class BoxControl : UserControl
 
             e.Handled = true;
         }
-        else if (e.Key == Key.Left || e.Key == Key.Right || e.Key == Key.Up || e.Key == Key.Down || e.Key == Key.Home || e.Key == Key.End)
+        else if (key == Key.Left || key == Key.Right || key == Key.Up || key == Key.Down || key == Key.Home || key == Key.End)
         {
-            HandleArrowKey(e.Key);
+            HandleArrowKey(key);
             e.Handled = true;
         }
     }
