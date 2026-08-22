@@ -1,13 +1,15 @@
+using DesktopBoxesUI;
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Core.Services;
+using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Win32.NativeMethods;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
-using DesktopBoxesUI;
-using DesktopBoxesUI.Core.Models;
-using DesktopBoxesUI.Core.Services;
-using DesktopBoxesUI.ViewModels;
-using DesktopBoxesUI.Win32.NativeMethods;
 
 namespace DesktopBoxesUI.Views;
 
@@ -90,29 +92,48 @@ internal static class DropHelper
             return null;
         }
 
+        var fileOps = App.Services.GetRequiredService<IFileOperationService>();
+        var watcher = App.Services.GetRequiredService<IShellWatcherService>();
+
         var entries = GetShellItems(e).ToArray();
 
-        int index = 0;
-        foreach (var entry in entries)
+        // The copy lands on the desktop, so pause the shell watcher while we add the item manually;
+        // otherwise the CREATE notification would also route the new file into a box (duplicate entry).
+        watcher.Pause();
+        try
         {
-            BoxItem? boxItem = null;
-            if (entry.FilePath != null)
+            foreach (var entry in entries)
             {
-                var resolved = ResolveDroppedFile(entry.FilePath);
-                boxItem = BoxItemFactory.FromPath(resolved);
-            }
-            else if (entry.Pidl != null)
-            {
-                var b64 = Convert.ToBase64String(entry.Pidl);
-                boxItem = BoxItemFactory.FromShellPidl(b64, Win32Apis.GetPidlDisplayName(b64));
-            }
+                BoxItem? boxItem = null;
+                if (entry.FilePath != null)
+                {
+                    var resolved = ResolveDroppedFile(entry.FilePath, fileOps);
+                    boxItem = BoxItemFactory.FromPath(resolved);
+                }
+                else if (entry.Pidl != null)
+                {
+                    var b64 = Convert.ToBase64String(entry.Pidl);
+                    var resolved = ResolveDroppedPidl(b64, fileOps);
+                    if (!string.IsNullOrEmpty(resolved))
+                    {
+                        boxItem = BoxItemFactory.FromPath(resolved);
+                    }
+                    else
+                    {
+                        // Virtual shell item with no materialisable file: keep a PIDL-only reference.
+                        boxItem = BoxItemFactory.FromShellPidl(b64, Win32Apis.GetPidlDisplayName(b64));
+                    }
+                }
 
-            if (boxItem is not null)
-            {
-                target.AddItem(boxItem);
+                if (boxItem is not null)
+                {
+                    target.AddItem(boxItem);
+                }
             }
-
-            index++;
+        }
+        finally
+        {
+            watcher.Resume();
         }
 
         if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(ShellIdListFormat))
@@ -168,7 +189,7 @@ internal static class DropHelper
     /// is a real desktop file, like Fences). If the source is already on the Desktop, the path is used
     /// as-is. Virtual/shell items (returned as PIDLs) are handled separately.
     /// </summary>
-    private static string ResolveDroppedFile(string source)
+    private static string ResolveDroppedFile(string source, IFileOperationService fileOps)
     {
         try
         {
@@ -191,21 +212,68 @@ internal static class DropHelper
 
             var dest = MakeUnique(Path.Combine(desktop, Path.GetFileName(source)));
 
-            if (File.Exists(source))
+            // Prefer the native shell copy (matches Explorer, handles links/dirs, supports Undo).
+            if (fileOps.Copy(source, dest))
             {
-                File.Copy(source, dest, false);
-            }
-            else
-            {
-                CopyDirectory(source, dest);
+                return dest;
             }
 
-            return dest;
+            // Fallback to a managed copy so the drop still materialises a desktop item.
+            try
+            {
+                if (File.Exists(source))
+                {
+                    File.Copy(source, dest, false);
+                }
+                else
+                {
+                    CopyDirectory(source, dest);
+                }
+
+                return dest;
+            }
+            catch
+            {
+                return source;
+            }
         }
         catch
         {
             return source;
         }
+    }
+
+    /// <summary>Resolves a dropped PIDL (e.g. a Start Menu shortcut) to a desktop file. When the PIDL points to a
+    /// real file it is copied; when it is a virtual shell item (no filesystem path) a <c>.lnk</c> that stores the
+    /// PIDL is materialised on the desktop (matching Explorer). Returns the desktop path, or <c>null</c> if nothing
+    /// could be materialised.</summary>
+    private static string? ResolveDroppedPidl(string pidlBase64, IFileOperationService fileOps)
+    {
+        var path = Win32Apis.GetPathFromPidl(pidlBase64);
+        if (!string.IsNullOrEmpty(path))
+        {
+            return ResolveDroppedFile(path, fileOps);
+        }
+
+        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (string.IsNullOrEmpty(desktop))
+        {
+            return null;
+        }
+
+        var name = Win32Apis.GetPidlDisplayName(pidlBase64);
+        if (string.IsNullOrEmpty(name))
+        {
+            name = "App";
+        }
+
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            name = name.Replace(c, '_');
+        }
+
+        var dest = MakeUnique(Path.Combine(desktop, name + ".lnk"));
+        return Win32Apis.CreateShortcutFromPidl(pidlBase64, dest) ? dest : null;
     }
 
     private static string MakeUnique(string path)

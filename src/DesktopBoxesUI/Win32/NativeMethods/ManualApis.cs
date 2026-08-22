@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
 using Windows.Win32.Foundation;
+using Windows.Win32.Graphics.Gdi;
 
 namespace DesktopBoxesUI.Win32.NativeMethods;
 
@@ -28,6 +29,9 @@ internal static class ManualApis
         ref SHFILEINFOW psfi,
         uint cbFileInfo,
         uint uFlags);
+
+    [DllImport("gdi32.dll")]
+    public static extern bool DeleteObject(IntPtr hObject);
 
     [DllImport("user32.dll")]
     public static extern IntPtr SetWinEventHook(

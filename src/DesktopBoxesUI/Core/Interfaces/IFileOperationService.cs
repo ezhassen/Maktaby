@@ -15,4 +15,8 @@ public interface IFileOperationService
     /// item is moved to the Recycle Bin silently; when true the native Explorer confirmation is shown and the
     /// item is deleted permanently. Returns false if cancelled or failed.</summary>
     bool Delete(string path, bool permanent);
+
+    /// <summary>Copies the item at <paramref name="source"/> to <paramref name="destination"/> (file or
+    /// directory), matching Explorer behaviour. Returns false if cancelled or failed.</summary>
+    bool Copy(string source, string destination);
 }

@@ -44,6 +44,17 @@ public sealed class IconImageService
                 source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
                 source.Freeze();
                 Win32Apis.DestroyIcon(hicon);
+                return;
+            }
+
+            // SHGetFileInfo couldn't resolve a PIDL-only link (e.g. a .lnk we created for a Start Menu app).
+            // IShellItemImageFactory follows the link and returns a proper alpha icon for the target.
+            IntPtr hbitmap = Win32Apis.GetIconBitmapForPath(path);
+            if (hbitmap != IntPtr.Zero)
+            {
+                source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze();
+                Win32Apis.DeleteObject(hbitmap);
             }
         }, cancellationToken);
 
@@ -51,8 +62,10 @@ public sealed class IconImageService
         return source;
     }
 
-    /// <summary>Loads an icon for a stored shell PIDL (virtual items such as UWP/Store apps).</summary>
-    public async Task<ImageSource?> GetIconFromPidlAsync(string pidlBase64, CancellationToken cancellationToken = default)
+    /// <summary>Loads an icon for a stored shell PIDL (virtual items such as UWP/Store apps). When
+    /// <paramref name="filePath"/> is supplied (a desktop <c>.lnk</c> we created for the item) it is used as
+    /// an additional resolution source so the icon follows PIDL-only link targets.</summary>
+    public async Task<ImageSource?> GetIconFromPidlAsync(string pidlBase64, string? filePath = null, CancellationToken cancellationToken = default)
     {
         if (_pidlCache.TryGetValue(pidlBase64, out var cached))
         {
@@ -62,6 +75,29 @@ public sealed class IconImageService
         ImageSource? source = null;
         await Task.Run(() =>
         {
+            // Preferred: IShellItemImageFactory yields a proper alpha icon for any shell item (incl. virtual
+            // Start Menu apps). Falls back to SHGetFileInfo for compatibility.
+            IntPtr hbitmap = Win32Apis.GetIconBitmapForPidl(pidlBase64);
+            if (hbitmap != IntPtr.Zero)
+            {
+                source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze();
+                Win32Apis.DeleteObject(hbitmap);
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                IntPtr hbmpPath = Win32Apis.GetIconBitmapForPath(filePath);
+                if (hbmpPath != IntPtr.Zero)
+                {
+                    source = Imaging.CreateBitmapSourceFromHBitmap(hbmpPath, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                    source.Freeze();
+                    Win32Apis.DeleteObject(hbmpPath);
+                    return;
+                }
+            }
+
             IntPtr hicon = Win32Apis.GetIconForPidl(pidlBase64);
             if (hicon != IntPtr.Zero)
             {

@@ -12,6 +12,7 @@ namespace DesktopBoxesUI.Shell.Interop;
 internal static class ShellNative
 {
     public static readonly Guid IID_IShellItem = new("43826D1E-E718-42EE-BC55-A1E261C37BFE");
+    public static readonly Guid CLSID_ShellLink = new("00021401-0000-0000-C000-000000000046");
 
     [DllImport("shell32.dll")]
     public static extern int SHGetDesktopFolder(out IShellFolder ppshf);
@@ -195,4 +196,42 @@ internal enum SFGAO : uint
     FOLDER = 0x20000000,
     FILESYSTEM = 0x40000000,
     STREAM = 0x00400000,
+}
+
+[ComImport]
+[Guid("000214F9-0000-0000-C000-000000000046")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IShellLink
+{
+    [PreserveSig] int GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cch, IntPtr pfd, uint fFlags);
+    [PreserveSig] int GetIDList(out IntPtr ppidl);
+    [PreserveSig] int SetIDList(IntPtr pidl);
+}
+
+[ComImport]
+[Guid("0000010B-0000-0000-C000-000000000046")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IPersistFile
+{
+    [PreserveSig] int GetClassID(out Guid pClassID);
+    [PreserveSig] int IsDirty();
+    [PreserveSig] int Load([MarshalAs(UnmanagedType.LPWStr)] string pszFileName, uint dwMode);
+    [PreserveSig] int Save([MarshalAs(UnmanagedType.LPWStr)] string? pszFileName, [MarshalAs(UnmanagedType.Bool)] bool fRemember);
+    [PreserveSig] int SaveCompleted([MarshalAs(UnmanagedType.LPWStr)] string pszFileName);
+    [PreserveSig] int GetCurFile(out IntPtr ppszFileName);
+}
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct SIZE
+{
+    public int cx;
+    public int cy;
+}
+
+[ComImport]
+[Guid("BCC6EEA8-5C45-44F0-8DF0-8B3B728B1728")]
+[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IShellItemImageFactory
+{
+    [PreserveSig] int GetImage(SIZE size, uint flags, out IntPtr phBitmap);
 }

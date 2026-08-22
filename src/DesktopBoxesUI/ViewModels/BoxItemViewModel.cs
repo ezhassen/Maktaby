@@ -87,7 +87,7 @@ public sealed class BoxItemViewModel : ViewModelBase
     {
         if (!string.IsNullOrEmpty(_model.Pidl))
         {
-            Icon = await _icons.GetIconFromPidlAsync(_model.Pidl);
+            Icon = await _icons.GetIconFromPidlAsync(_model.Pidl, _model.Path);
         }
         else
         {

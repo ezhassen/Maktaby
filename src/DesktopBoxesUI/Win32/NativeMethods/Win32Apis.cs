@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -48,6 +49,7 @@ internal static class Win32Apis
     public static int FileOperation(ref ManualApis.SHFILEOPSTRUCT op) => ManualApis.SHFileOperationW(ref op);
 
     public const uint FO_MOVE = 0x0001;
+    public const uint FO_COPY = 0x0002;
     public const uint FO_DELETE = 0x0003;
     public const ushort FOF_ALLOWUNDO = 0x0040;
     public const ushort FOF_NOCONFIRMATION = 0x0010;
@@ -61,6 +63,8 @@ internal static class Win32Apis
     public static uint GetDpiForWindow(HWND hWnd) => PInvoke.GetDpiForWindow(hWnd);
 
     public static BOOL DestroyIcon(IntPtr hIcon) => PInvoke.DestroyIcon((HICON)hIcon);
+
+    public static void DeleteObject(IntPtr hBitmap) => ManualApis.DeleteObject(hBitmap);
 
     public static HWND FindWindowEx(HWND hWndParent, HWND hWndChildAfter, string? lpClassName, string? lpWindowName)
         => PInvoke.FindWindowEx(hWndParent, hWndChildAfter, lpClassName, lpWindowName);
@@ -320,7 +324,7 @@ internal static class Win32Apis
         {
             var psfi = new SHFILEINFOW();
             uint cb = (uint)Marshal.SizeOf<SHFILEINFOW>();
-            if (SHGetFileInfo(ptr, 0, ref psfi, cb, SHGFI.Icon | SHGFI.SmallIcon | SHGFI.AddOverlays) != 0)
+            if (SHGetFileInfo(ptr, 0, ref psfi, cb, SHGFI.Icon | SHGFI.SmallIcon | SHGFI.AddOverlays | SHGFI.Pidl) != 0)
             {
                 return psfi.hIcon;
             }
@@ -335,6 +339,169 @@ internal static class Win32Apis
         }
 
         return IntPtr.Zero;
+    }
+
+    /// <summary>Resolves the icon for a stored PIDL as an <see cref="HBITMAP"/> (with alpha) using
+    /// <c>IShellItemImageFactory</c> — the same mechanism Explorer uses, so it works for virtual shell
+    /// items (Start Menu apps, This PC, ...) that <c>SHGetFileInfo</c> won't resolve. Returns
+    /// <see cref="IntPtr.Zero"/> on failure. Caller must <see cref="DeleteObject"/> the result.</summary>
+    public static IntPtr GetIconBitmapForPidl(string base64)
+    {
+        if (!TryPinPidl(base64, out _, out var handle, out var ptr))
+        {
+            return IntPtr.Zero;
+        }
+
+        try
+        {
+            if (ShellNative.SHCreateItemFromIDList(ptr, ShellNative.IID_IShellItem, out IShellItem item) != 0 || item is null)
+            {
+                return IntPtr.Zero;
+            }
+
+            try
+            {
+                if (item is IShellItemImageFactory factory)
+                {
+                    var size = new SIZE { cx = 32, cy = 32 };
+                    const uint SIIGBF_ICONONLY = 0x00000004;
+                    if (factory.GetImage(size, SIIGBF_ICONONLY, out IntPtr hbmp) == 0 && hbmp != IntPtr.Zero)
+                    {
+                        return hbmp;
+                    }
+                }
+
+                return IntPtr.Zero;
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(item);
+            }
+        }
+        catch
+        {
+            return IntPtr.Zero;
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
+    /// <summary>Resolves the icon for a filesystem path (e.g. a <c>.lnk</c> on the desktop) as an
+    /// <see cref="HBITMAP"/> using <c>IShellItemImageFactory</c>. Unlike <c>SHGetFileInfo</c>, this correctly
+    /// follows PIDL-only link targets (such as the shortcuts we create for Start Menu apps). Returns
+    /// <see cref="IntPtr.Zero"/> on failure. Caller must <see cref="DeleteObject"/> the result.</summary>
+    public static IntPtr GetIconBitmapForPath(string path)
+    {
+        try
+        {
+            if (ShellNative.SHCreateItemFromParsingName(path, IntPtr.Zero, ShellNative.IID_IShellItem, out IShellItem item) != 0 || item is null)
+            {
+                return IntPtr.Zero;
+            }
+
+            try
+            {
+                if (item is IShellItemImageFactory factory)
+                {
+                    var size = new SIZE { cx = 32, cy = 32 };
+                    const uint SIIGBF_ICONONLY = 0x00000004;
+                    if (factory.GetImage(size, SIIGBF_ICONONLY, out IntPtr hbmp) == 0 && hbmp != IntPtr.Zero)
+                    {
+                        return hbmp;
+                    }
+                }
+
+                return IntPtr.Zero;
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(item);
+            }
+        }
+        catch
+        {
+            return IntPtr.Zero;
+        }
+    }
+
+    /// <summary>Resolves a stored (base64) absolute PIDL to a filesystem path when the item has one
+    /// (e.g. a Start Menu <c>.lnk</c> shortcut). Returns <c>null</c> for pure virtual shell items.</summary>
+    public static string? GetPathFromPidl(string base64)
+    {
+        if (!TryPinPidl(base64, out _, out var handle, out var ptr))
+        {
+            return null;
+        }
+
+        try
+        {
+            var sb = new StringBuilder(260);
+            if (ManualApis.SHGetPathFromIDListW(ptr, sb) != 0 && sb.Length > 0)
+            {
+                return sb.ToString();
+            }
+
+            return null;
+        }
+        finally
+        {
+            handle.Free();
+        }
+    }
+
+    /// <summary>Creates a <c>.lnk</c> shortcut (storing the PIDL) at <paramref name="destinationLnkPath"/> for a
+    /// virtual shell item that has no filesystem path (e.g. a Start Menu app). Mirrors what Explorer does when
+    /// you drag such an item to the desktop. Returns false on failure.</summary>
+    public static bool CreateShortcutFromPidl(string pidlBase64, string destinationLnkPath)
+    {
+        if (!TryPinPidl(pidlBase64, out _, out var handle, out var ptr))
+        {
+            return false;
+        }
+
+        try
+        {
+            var linkType = Type.GetTypeFromCLSID(ShellNative.CLSID_ShellLink);
+            if (linkType == null)
+            {
+                return false;
+            }
+
+            if (Activator.CreateInstance(linkType) is not IShellLink link)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (link.SetIDList(ptr) != 0)
+                {
+                    return false;
+                }
+
+                if (link is IPersistFile pf)
+                {
+                    pf.Save(destinationLnkPath, true);
+                    return true;
+                }
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(link);
+            }
+        }
+        catch
+        {
+            return false;
+        }
+        finally
+        {
+            handle.Free();
+        }
+
+        return false;
     }
 
     /// <summary>Shows the Windows property sheet for a shell item (Alt+Enter behaviour).</summary>
