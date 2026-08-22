@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Linq;
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Core.Services;
 
 namespace DesktopBoxesUI.ViewModels;
 
@@ -20,7 +21,8 @@ public sealed class BoxViewModel : ViewModelBase
     {
         _box = box;
         _icons = icons;
-        Items = new ObservableCollection<BoxItemViewModel>(box.Items.Select(i => new BoxItemViewModel(i, icons)));
+        Items = new ObservableCollection<BoxItemViewModel>(
+            box.Items.Where(i => !ShellItemFilter.IsExcluded(i.Path)).Select(i => new BoxItemViewModel(i, icons)));
         _box.Items.CollectionChanged += OnBoxItemsChanged;
     }
 
@@ -89,7 +91,7 @@ public sealed class BoxViewModel : ViewModelBase
         {
             for (int k = 0; k < e.NewItems.Count; k++)
             {
-                if (e.NewItems[k] is BoxItem item)
+                if (e.NewItems[k] is BoxItem item && !ShellItemFilter.IsExcluded(item.Path))
                 {
                     int at = e.NewStartingIndex + k;
                     if (at >= 0 && at <= Items.Count)

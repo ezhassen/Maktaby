@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.Shell.Interop;
 
 namespace DesktopBoxesUI.Shell.Services;
@@ -64,6 +65,11 @@ public sealed class DesktopService : IDesktopService
 
                                 item.GetAttributes(SFGAO.FOLDER, out SFGAO attrs);
                                 var type = (attrs & SFGAO.FOLDER) != 0 ? BoxItemType.Folder : BoxItemType.File;
+
+                                if (ShellItemFilter.IsExcluded(parse))
+                                {
+                                    continue;
+                                }
 
                                 yield return new BoxItem
                                 {

@@ -187,6 +187,11 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
                 item.GetAttributes(SFGAO.FOLDER, out SFGAO attrs);
                 bool isFolder = (attrs & SFGAO.FOLDER) != 0;
 
+                if (ShellItemFilter.IsExcluded(parse))
+                {
+                    return null;
+                }
+
                 return new BoxItem
                 {
                     Path = parse,

@@ -16,6 +16,11 @@ public static class BoxItemFactory
             return null;
         }
 
+        if (ShellItemFilter.IsExcluded(path))
+        {
+            return null;
+        }
+
         bool isDir = Directory.Exists(path);
         var name = Path.GetFileNameWithoutExtension(path);
         if (string.IsNullOrEmpty(name))
