@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace DesktopBoxesUI.Core.Models;
 
 /// <summary>
@@ -8,7 +10,10 @@ public sealed class BoxItem
 {
     public Guid Id { get; init; } = Guid.NewGuid();
 
-    /// <summary>Full filesystem or shell path identifying this item.</summary>
+    /// <summary>Full filesystem or shell path identifying this item. Stored as a desktop-relative
+    /// token (see <see cref="DesktopBoxesUI.Core.Services.DesktopPathJsonConverter"/>) when the item
+    /// lives under the current or public desktop.</summary>
+    [JsonConverter(typeof(DesktopBoxesUI.Core.Services.DesktopPathJsonConverter))]
     public string Path { get; set; } = string.Empty;
 
     /// <summary>
