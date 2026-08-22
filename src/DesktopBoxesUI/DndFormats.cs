@@ -11,4 +11,7 @@ internal static class DndFormats
 
     /// <summary>The specific <see cref="Core.Models.Box"/> being dragged (tab move); absent for a whole-container merge.</summary>
     public const string Box = "DesktopBoxes/Box";
+
+    /// <summary>The list of <see cref="ViewModels.BoxItemViewModel"/> being dragged (internal item move).</summary>
+    public const string BoxItems = "DesktopBoxes/BoxItems";
 }

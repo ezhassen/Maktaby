@@ -28,6 +28,7 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     private ushort _atom;
     private IntPtr _hwnd;
     private uint _regId;
+    private bool _suppressed;
 
     public event Action<BoxItem>? ItemCreated;
     public event Action<BoxItem>? ItemDeleted;
@@ -148,7 +149,7 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
 
     private void RaiseCreated(BoxItem? item)
     {
-        if (item != null)
+        if (!_suppressed && item != null)
         {
             ItemCreated?.Invoke(item);
         }
@@ -156,7 +157,7 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
 
     private void RaiseDeleted(BoxItem? item)
     {
-        if (item != null)
+        if (!_suppressed && item != null)
         {
             ItemDeleted?.Invoke(item);
         }
@@ -229,4 +230,8 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     }
 
     public void Dispose() => Stop();
+
+    public void Pause() => _suppressed = true;
+
+    public void Resume() => _suppressed = false;
 }

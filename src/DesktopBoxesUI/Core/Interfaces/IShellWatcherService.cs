@@ -19,4 +19,11 @@ public interface IShellWatcherService
     void Start();
 
     void Stop();
+
+    /// <summary>Suppresses change notifications (used while the app itself mutates desktop items, so the
+    /// rule coordinator doesn't react to our own rename/delete). Resume restores normal behaviour.</summary>
+    void Pause();
+
+    /// <summary>Resumes change notifications after a <see cref="Pause"/>.</summary>
+    void Resume();
 }

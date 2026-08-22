@@ -17,12 +17,14 @@ public sealed class MainViewModel : ViewModelBase
     private readonly IContainerService _containers;
     private readonly IBoxService _boxService;
     private readonly IconImageService _icons;
+    private readonly IFileRuleCoordinator _coordinator;
 
-    public MainViewModel(IContainerService containers, IBoxService boxService, IconImageService icons)
+    public MainViewModel(IContainerService containers, IBoxService boxService, IconImageService icons, IFileRuleCoordinator coordinator)
     {
         _containers = containers;
         _boxService = boxService;
         _icons = icons;
+        _coordinator = coordinator;
         CreateBoxCommand = new RelayCommand(_ => CreateBox());
         CreateBoxContainerCommand = new RelayCommand(_ => CreateBoxContainer());
     }
@@ -206,5 +208,35 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         RemoveContainer(source);
+    }
+
+    /// <summary>Renames a tracked item. Updates the view-model (display name + icon) on success.</summary>
+    public async Task<bool> RenameItem(BoxItemViewModel vm, string newName)
+    {
+        if (vm is null)
+        {
+            return false;
+        }
+
+        bool ok = await _coordinator.RenameItemAsync(vm.Model, newName);
+        if (ok)
+        {
+            vm.DisplayName = vm.Model.DisplayName;
+            vm.ReloadIcon();
+        }
+
+        return ok;
+    }
+
+    /// <summary>Deletes a tracked item (Recycle Bin unless <paramref name="permanent"/>). The view-model is
+    /// removed from its box by the coordinator's model update.</summary>
+    public Task<bool> DeleteItem(BoxItemViewModel vm, bool permanent)
+    {
+        if (vm is null)
+        {
+            return Task.FromResult(false);
+        }
+
+        return _coordinator.DeleteItemAsync(vm.Model, permanent);
     }
 }

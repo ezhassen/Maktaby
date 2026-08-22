@@ -38,6 +38,25 @@ internal static class Win32Apis
 
     public static uint GetDpiForSystem() => PInvoke.GetDpiForSystem();
 
+    /// <summary>Gets the current cursor position in physical screen pixels (works during a drag operation,
+    /// unlike <see cref="Mouse.GetPosition"/> which is suppressed by the drag-drop capture).</summary>
+    public static bool GetCursorPos(out ManualApis.POINT pt) => ManualApis.GetCursorPos(out pt);
+
+    /// <summary>Shell file operation (rename / delete / recycle). Wraps the manual
+    /// <see cref="ManualApis.SHFileOperationW"/> so every native call flows through this wrapper.</summary>
+    public static int FileOperation(ref ManualApis.SHFILEOPSTRUCT op) => ManualApis.SHFileOperationW(ref op);
+
+    public const uint FO_MOVE = 0x0001;
+    public const uint FO_DELETE = 0x0003;
+    public const ushort FOF_ALLOWUNDO = 0x0040;
+    public const ushort FOF_NOCONFIRMATION = 0x0010;
+    public const ushort FOF_SILENT = 0x0004;
+    public const ushort FOF_NOERRORUI = 0x0400;
+    public const ushort FOF_WANTNUKEWARNING = 0x4000;
+
+    /// <summary>The foreground window handle (used as the owner for shell file-operation dialogs).</summary>
+    public static IntPtr GetForegroundWindow() => ManualApis.GetForegroundWindow();
+
     public static uint GetDpiForWindow(HWND hWnd) => PInvoke.GetDpiForWindow(hWnd);
 
     public static BOOL DestroyIcon(IntPtr hIcon) => PInvoke.DestroyIcon((HICON)hIcon);
@@ -303,6 +322,71 @@ internal static class Win32Apis
         }
 
         return IntPtr.Zero;
+    }
+
+    /// <summary>Shows the Windows property sheet for a shell item (Alt+Enter behaviour).</summary>
+    public static void ShowProperties(IntPtr hwnd, string? path, string? pidlBase64)
+    {
+        try
+        {
+            var info = new SHELLEXECUTEINFO
+            {
+                cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
+                fMask = SEE_MASK.NO_UI,
+                hwnd = hwnd,
+                lpVerb = "properties",
+                lpFile = path,
+                nShow = 1, // SW_SHOWNORMAL
+            };
+
+            // Prefer the absolute PIDL (handles .lnk and virtual shell items exactly like Explorer).
+            if (!string.IsNullOrEmpty(pidlBase64) && TryPinPidl(pidlBase64, out _, out var handle, out var relPtr))
+            {
+                try
+                {
+                    if (ManualApis.SHGetSpecialFolderLocation(IntPtr.Zero, 0 /* CSIDL_DESKTOP */, out IntPtr deskPidl) == 0 && deskPidl != IntPtr.Zero)
+                    {
+                        try
+                        {
+                            IntPtr absPidl = ManualApis.ILCombine(deskPidl, relPtr);
+                            if (absPidl != IntPtr.Zero)
+                            {
+                                try
+                                {
+                                    info.fMask = SEE_MASK.INVOKEIDLIST;
+                                    info.lpIDList = absPidl;
+                                    info.lpFile = null;
+                                    ManualApis.ShellExecuteEx(ref info);
+                                }
+                                finally
+                                {
+                                    ManualApis.ILFree(absPidl);
+                                }
+
+                                return;
+                            }
+                        }
+                        finally
+                        {
+                            ManualApis.ILFree(deskPidl);
+                        }
+                    }
+                }
+                finally
+                {
+                    handle.Free();
+                }
+
+                // Could not build an absolute PIDL; fall back to nothing rather than an invalid launch.
+                return;
+            }
+
+            ManualApis.ShellExecuteEx(ref info);
+        }
+        catch
+        {
+            // Never let a shell failure take down the app.
+        }
     }
 
     /// <summary>Launches a stored PIDL (works for files, folders and UWP/Store apps).</summary>

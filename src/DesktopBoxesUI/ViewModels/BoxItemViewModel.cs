@@ -32,6 +32,30 @@ public sealed class BoxItemViewModel : ViewModelBase
         set => SetField(ref _displayName, value);
     }
 
+    /// <summary>True while the user is renaming this item inline.</summary>
+    private bool _isEditing;
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set => SetField(ref _isEditing, value);
+    }
+
+    /// <summary>True when this item is part of the current selection (highlighted).</summary>
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set => SetField(ref _isSelected, value);
+    }
+
+    /// <summary>The in-progress name typed during an inline rename.</summary>
+    private string _renameText = string.Empty;
+    public string RenameText
+    {
+        get => _renameText;
+        set => SetField(ref _renameText, value);
+    }
+
     public ImageSource? Icon
     {
         // Lazily start the icon load on first access — i.e. when the binding realises the item in the
@@ -69,5 +93,14 @@ public sealed class BoxItemViewModel : ViewModelBase
         {
             Icon = await _icons.GetIconAsync(_model.Path);
         }
+    }
+
+    /// <summary>Forces the icon to reload from the (possibly changed) <see cref="BoxItem.Path"/> — used
+    /// after a rename where the extension (and thus the icon) may have changed.</summary>
+    public void ReloadIcon()
+    {
+        _icon = null;
+        _iconLoadRequested = false;
+        OnPropertyChanged(nameof(Icon));
     }
 }

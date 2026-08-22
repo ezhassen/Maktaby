@@ -9,48 +9,109 @@
     d:DesignWidth="240"
     AllowDrop="True"
     DragOver="BoxControl_DragOver"
+    DragLeave="BoxControl_DragLeave"
     Drop="BoxControl_Drop"
+    IsKeyboardFocusWithinChanged="BoxControl_IsKeyboardFocusWithinChanged"
+    MouseLeftButtonDown="BoxControl_MouseLeftButtonDown"
+    MouseLeftButtonUp="BoxControl_MouseLeftButtonUp"
+    MouseMove="BoxControl_MouseMove"
     mc:Ignorable="d">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    </UserControl.Resources>
     <ScrollViewer
         x:Name="Scroll"
+        Background="Transparent"
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto">
-        <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                    <WrapPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="vm:BoxItemViewModel">
-                    <Border
-                        x:Name="ItemBorder"
-                        Margin="4"
-                        Padding="4"
-                        Background="Transparent"
-                        ContextMenuOpening="ItemBorder_ContextMenuOpening"
-                        Cursor="Arrow"
-                        MouseLeftButtonDown="ItemBorder_MouseLeftButtonDown"
-                        MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp"
-                        MouseMove="ItemBorder_MouseMove"
-                        MouseRightButtonUp="ItemBorder_MouseRightButtonUp">
-                        <StackPanel Width="72" Orientation="Vertical">
-                            <Image
-                                Width="32"
-                                Height="32"
-                                RenderOptions.BitmapScalingMode="HighQuality"
-                                Source="{Binding Icon}" />
-                            <TextBlock
-                                Margin="0,4,0,0"
-                                FontSize="11"
-                                Foreground="White"
-                                Text="{Binding DisplayName}"
-                                TextAlignment="Center"
-                                TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <Grid x:Name="ItemsHost" Background="Transparent">
+            <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="vm:BoxItemViewModel">
+                        <Border
+                            x:Name="ItemBorder"
+                            Margin="4"
+                            Padding="4"
+                            ContextMenuOpening="ItemBorder_ContextMenuOpening"
+                            Cursor="Arrow"
+                            Focusable="True"
+                            FocusVisualStyle="{x:Null}"
+                            GotFocus="ItemBorder_GotFocus"
+                            KeyDown="ItemBorder_KeyDown"
+                            MouseLeftButtonDown="ItemBorder_MouseLeftButtonDown"
+                            MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp"
+                            MouseMove="ItemBorder_MouseMove"
+                            MouseRightButtonUp="ItemBorder_MouseRightButtonUp">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="Transparent" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter Property="Background" Value="#407FB2FF" />
+                                            <Setter Property="BorderBrush" Value="#FF7FB2FF" />
+                                            <Setter Property="BorderThickness" Value="1" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel Width="72" Orientation="Vertical">
+                                <Image
+                                    Width="32"
+                                    Height="32"
+                                    RenderOptions.BitmapScalingMode="HighQuality"
+                                    Source="{Binding Icon}" />
+                                <TextBlock
+                                    Margin="0,4,0,0"
+                                    FontSize="11"
+                                    Foreground="White"
+                                    Text="{Binding DisplayName}"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBox
+                                    x:Name="RenameBox"
+                                    Width="70"
+                                    Margin="0,4,0,0"
+                                    Background="#222222"
+                                    BorderBrush="DodgerBlue"
+                                    BorderThickness="1"
+                                    FontSize="11"
+                                    Foreground="White"
+                                    KeyDown="RenameBox_KeyDown"
+                                    LostFocus="RenameBox_LostFocus"
+                                    Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
+                                    TextAlignment="Center"
+                                    TextWrapping="Wrap"
+                                    Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Canvas x:Name="Overlay" IsHitTestVisible="False">
+                <Rectangle
+                    x:Name="Marquee"
+                    Visibility="Collapsed"
+                    Fill="#407FB2FF"
+                    IsHitTestVisible="False"
+                    Stroke="#FF7FB2FF"
+                    StrokeThickness="1" />
+            </Canvas>
+        </Grid>
     </ScrollViewer>
 </UserControl>

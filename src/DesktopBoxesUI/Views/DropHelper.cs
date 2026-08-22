@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using DesktopBoxesUI;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
@@ -36,7 +37,7 @@ internal static class DropHelper
             return DragDropEffects.None;
         }
 
-        if (e.Data.GetDataPresent("DesktopBoxesItem"))
+        if (e.Data.GetDataPresent(DndFormats.BoxItems))
         {
             return Pick(DragDropEffects.Move, DragDropEffects.Copy);
         }
@@ -49,23 +50,44 @@ internal static class DropHelper
         return DragDropEffects.None;
     }
 
-    /// <summary>Applies the dropped data to <paramref name="target"/>. Sets <see cref="DragEventArgs.Handled"/>.</summary>
-    public static void AddToBox(BoxViewModel target, MainViewModel? host, DragEventArgs e)
+    /// <summary>
+    /// Applies the dropped data to <paramref name="target"/>. Sets <see cref="DragEventArgs.Handled"/>.
+    /// <paramref name="insertIndex"/> (when &gt;= 0) reorders an internal item or inserts a moved item at
+    /// a specific slot instead of appending. Returns the moved <see cref="BoxItem"/> models when the drop
+    /// was an internal item move (so the caller can re-select them), otherwise <c>null</c>.
+    /// </summary>
+    public static List<BoxItem>? AddToBox(BoxViewModel target, MainViewModel? host, DragEventArgs e, int insertIndex = -1)
     {
-        if (e.Data.GetDataPresent("DesktopBoxesItem"))
+        if (e.Data.GetDataPresent(DndFormats.BoxItems))
         {
-            if (e.Data.GetData("DesktopBoxesItem") is BoxItemViewModel item)
+            if (e.Data.GetData(DndFormats.BoxItems) is List<BoxItemViewModel> items && items.Count > 0)
             {
-                var source = host?.FindBoxContaining(item);
-                if (source != null && source != target)
+                var source = host?.FindBoxContaining(items[0]);
+                if (source != null)
                 {
-                    source.RemoveItem(item.Model);
-                    target.AddItem(item.Model);
-                }
+                    // Move every dragged model in order. Remove all first (so a same-box reorder doesn't
+                    // shift indices mid-loop), then (re)insert them at the target slot preserving order.
+                    var movedModels = items.Select(i => i.Model).ToList();
+                    foreach (var m in movedModels)
+                    {
+                        source.RemoveItem(m);
+                    }
 
-                e.Handled = true;
-                return;
+                    int at = insertIndex < 0 ? target.Items.Count : Math.Min(insertIndex, target.Items.Count);
+                    foreach (var m in movedModels)
+                    {
+                        target.InsertItem(m, at);
+                        at++;
+                    }
+
+                    e.Handled = true;
+                    return movedModels;
+                }
             }
+
+            // Our format but nothing we could move: claim it so external handling doesn't misfire.
+            e.Handled = true;
+            return null;
         }
 
         var entries = GetShellItems(e).ToArray();
@@ -97,6 +119,8 @@ internal static class DropHelper
         {
             e.Handled = true;
         }
+
+        return null;
     }
 
     private static IEnumerable<Win32Apis.ShellItemEntry> GetShellItems(DragEventArgs e)

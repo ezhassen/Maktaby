@@ -119,6 +119,28 @@ internal static class ManualApis
     [DllImport("user32.dll")]
     public static extern IntPtr WindowFromPoint(POINT pt);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetForegroundWindow();
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int SHFileOperationW(ref SHFILEOPSTRUCT lpFileOp);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct SHFILEOPSTRUCT
+    {
+        public IntPtr hwnd;
+        public uint wFunc;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string? pFrom;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string? pTo;
+        public uint fFlags;
+        public int fAnyOperationsAborted;
+        public IntPtr hNameMappings;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string? lpszProgressTitle;
+    }
+
     // Low-level mouse hook (declared manually: CsWin32's strongly-typed wrappers fight the raw
     // IntPtr-based callback signature we need).
     public delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -247,6 +269,7 @@ internal enum SEE_MASK : uint
 {
     IDLIST = 0x00000004,
     NO_UI = 0x00000400,
+    INVOKEIDLIST = 0x0000000C,
 }
 
 /// <summary>Used by <see cref="ManualApis.ShellExecuteEx"/> to launch a shell item by PIDL.</summary>

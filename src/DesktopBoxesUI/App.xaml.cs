@@ -83,7 +83,10 @@ public partial class App : Application
             serv.GetRequiredService<IRuleService>(),
             serv.GetRequiredService<IBoxService>(),
             serv.GetRequiredService<IDispatcher>(),
+            serv.GetRequiredService<IFileOperationService>(),
             () => serv.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget()));
+
+        services.AddSingleton<IFileOperationService, FileOperationService>();
 
         // Win32 platform services
         services.AddSingleton<IMonitorService, MonitorService>();

@@ -63,6 +63,23 @@ public sealed class BoxViewModel : ViewModelBase
     /// <summary>Adds an item to the underlying model; the <see cref="Items"/> view collection mirrors it.</summary>
     public void AddItem(BoxItem item) => _box.Items.Add(item);
 
+    /// <summary>Inserts an item at <paramref name="index"/> in the underlying model (used for drag-reordering).</summary>
+    public void InsertItem(BoxItem item, int index)
+    {
+        int count = _box.Items.Count;
+        if (index < 0)
+        {
+            index = 0;
+        }
+
+        if (index > count)
+        {
+            index = count;
+        }
+
+        _box.Items.Insert(index, item);
+    }
+
     /// <summary>Removes an item from the underlying model; the <see cref="Items"/> view collection mirrors it.</summary>
     public void RemoveItem(BoxItem item) => _box.Items.Remove(item);
 
@@ -70,9 +87,20 @@ public sealed class BoxViewModel : ViewModelBase
     {
         if (e.NewItems != null)
         {
-            foreach (BoxItem item in e.NewItems)
+            for (int k = 0; k < e.NewItems.Count; k++)
             {
-                Items.Add(new BoxItemViewModel(item, _icons));
+                if (e.NewItems[k] is BoxItem item)
+                {
+                    int at = e.NewStartingIndex + k;
+                    if (at >= 0 && at <= Items.Count)
+                    {
+                        Items.Insert(at, new BoxItemViewModel(item, _icons));
+                    }
+                    else
+                    {
+                        Items.Add(new BoxItemViewModel(item, _icons));
+                    }
+                }
             }
         }
 
