@@ -28,6 +28,8 @@ public sealed class TrayIconService : IDisposable
 
     public event EventHandler? NewBoxRequested;
     public event EventHandler? ResetRequested;
+    public event EventHandler? SettingsRequested;
+    public event EventHandler<string?>? ThemeRequested;
     public event EventHandler? ExitRequested;
 
     public TrayIconService()
@@ -105,6 +107,13 @@ public sealed class TrayIconService : IDisposable
         return IntPtr.Zero;
     }
 
+    private void AddThemeItem(MenuItem parent, string header, string? storedTheme)
+    {
+        var item = new MenuItem { Header = header };
+        item.Click += (_, _) => ThemeRequested?.Invoke(this, storedTheme);
+        parent.Items.Add(item);
+    }
+
     private void ShowMenu()
     {
         var menu = new ContextMenu();
@@ -115,11 +124,21 @@ public sealed class TrayIconService : IDisposable
         var reset = new MenuItem { Header = "Reset" };
         reset.Click += (_, _) => ResetRequested?.Invoke(this, EventArgs.Empty);
 
+        var settings = new MenuItem { Header = "Settings" };
+        settings.Click += (_, _) => SettingsRequested?.Invoke(this, EventArgs.Empty);
+
+        var themeMenu = new MenuItem { Header = "Theme" };
+        AddThemeItem(themeMenu, "System", null);
+        AddThemeItem(themeMenu, "Dark", "dark");
+        AddThemeItem(themeMenu, "Light", "light");
+
         var exit = new MenuItem { Header = "Exit" };
         exit.Click += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
         menu.Items.Add(newBox);
         menu.Items.Add(reset);
+        menu.Items.Add(settings);
+        menu.Items.Add(themeMenu);
         menu.Items.Add(new Separator());
         menu.Items.Add(exit);
 

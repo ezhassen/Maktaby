@@ -48,18 +48,20 @@ public class AppJSettings
             return;
         }
 
-        _Instance = JsonHelper.DeserializeFromFile<AppJSettings>(FilePath);
+        var _appJS = JsonHelper.DeserializeFromFile<AppJSettings>(FilePath);
+        if (_appJS is null) throw new InvalidOperationException("Cannot load AppJSettings");
         bool save = false;
-        if (_Instance.AppIdentity == Guid.Empty)
+        if (_appJS.AppIdentity == Guid.Empty)
         {
-            _Instance.AppIdentity = Guid.NewGuid();//Generate a New guid for current app user
+            _appJS.AppIdentity = Guid.NewGuid();//Generate a New guid for current app user
             save = true;
         }
-        if (!_Instance.LogEventLevel.HasValue)
+        if (!_appJS.LogEventLevel.HasValue)
         {
-            _Instance.LogEventLevel = Logging.DefaultLogEventLevel; //Default log level
+            _appJS.LogEventLevel = Logging.DefaultLogEventLevel; //Default log level
             save = true;
         }
+        _Instance = _appJS;
         if (save) _Instance.Save();
     }
 

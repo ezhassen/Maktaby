@@ -109,7 +109,7 @@ public partial class BoxContainerWindow : Window
         DragLeave += Window_DragLeave;
         Drop += Window_Drop;
 
-        ApplyTransparency();
+        ApplyAppearance();
 
         Left = vm.Left;
         Top = vm.Top;
@@ -269,14 +269,20 @@ public partial class BoxContainerWindow : Window
         UpdateChrome();
     }
 
-    private void ApplyTransparency()
+    internal void ApplyAppearance()
     {
-        var settings = App.Services.GetRequiredService<ISettingsService>();
-        double effective = _vm.Transparency ?? settings.UserSettings.DefaultBoxTransparencyValue;
-        var opacity = System.Math.Clamp(1.0 - effective, 0.0, 1.0);
-        RootBorder.Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x30)) { Opacity = opacity };
-        HeaderBorder.Background = new SolidColorBrush(Color.FromRgb(0x3F, 0x3F, 0x46)) { Opacity = opacity };
-        TabStrip.Background = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x37)) { Opacity = opacity };
+        var settings = App.Services.GetRequiredService<ISettingsService>().UserSettings;
+        var palette = BoxAppearance.Resolve(settings, _vm.Transparency);
+
+        RootBorder.Background = palette.Back;
+        RootBorder.BorderBrush = palette.Border;
+        RootBorder.BorderThickness = palette.Thickness;
+        HeaderBorder.Background = palette.HeaderBack;
+        TitleText.Foreground = palette.HeaderFore;
+        MenuButton.Foreground = palette.HeaderFore;
+        RollButton.Foreground = palette.HeaderFore;
+        TabStrip.Background = palette.TabBack;
+        TabStrip.BorderBrush = palette.Border;
     }
 
     private void UpdateBody()

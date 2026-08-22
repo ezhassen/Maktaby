@@ -123,7 +123,7 @@ public static class JsonHelper
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation. Use System.Text.Json source generation for native AOT applications.")]
-    public static T DeserializeFromFile<T>(string filePath)
+    public static T? DeserializeFromFile<T>(string filePath)
     {
         //using var fStream = File.OpenRead(filePath);
         using var fStream = new FileStream(
@@ -133,7 +133,7 @@ public static class JsonHelper
                                 FileShare.ReadWrite);  // critical
         return JsonSerializer.Deserialize<T>(fStream, DefaultJsonSerializerOptions);
     }
-    public static TValue DeserializeFromFile<TValue>(string filePath, Func<JsonSerializerOptions, JsonTypeInfo<TValue>> jsonTypeInfoFactory)
+    public static TValue? DeserializeFromFile<TValue>(string filePath, Func<JsonSerializerOptions, JsonTypeInfo<TValue>> jsonTypeInfoFactory)
     {
         //using var fStream = File.OpenRead(filePath);
         using var fStream = new FileStream(
@@ -146,7 +146,7 @@ public static class JsonHelper
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation. Use System.Text.Json source generation for native AOT applications.")]
-    public static async ValueTask<T> DeserializeFromFileAsync<T>(string filePath)
+    public static async ValueTask<T?> DeserializeFromFileAsync<T>(string filePath)
     {
         //using var fStream = File.OpenRead(filePath);
         using var fStream = new FileStream(
@@ -157,7 +157,7 @@ public static class JsonHelper
         return await JsonSerializer.DeserializeAsync<T>(fStream, DefaultJsonSerializerOptions);
     }
 
-    public static async ValueTask<T> DeserializeFromFileAsync<T>(string filePath, Func<JsonSerializerOptions, JsonTypeInfo<T>> jsonTypeInfoFactory)
+    public static async ValueTask<T?> DeserializeFromFileAsync<T>(string filePath, Func<JsonSerializerOptions, JsonTypeInfo<T>> jsonTypeInfoFactory)
     {
         //using var fStream = File.OpenRead(filePath);
         using var fStream = new FileStream(
@@ -170,24 +170,24 @@ public static class JsonHelper
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation. Use System.Text.Json source generation for native AOT applications.")]
-    public static TValue Deserialize<TValue>(Stream stream)
+    public static TValue? Deserialize<TValue>(Stream stream)
     {
         return JsonSerializer.Deserialize<TValue>(stream, DefaultJsonSerializerOptions);
     }
 
-    public static TValue Deserialize<TValue>(Stream stream, Func<JsonSerializerOptions, JsonTypeInfo<TValue>> jsonTypeInfoFactory)
+    public static TValue? Deserialize<TValue>(Stream stream, Func<JsonSerializerOptions, JsonTypeInfo<TValue>> jsonTypeInfoFactory)
     {
         return JsonSerializer.Deserialize<TValue>(stream, jsonTypeInfoFactory(DefaultJsonSerializerOptions));
     }
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation. Use System.Text.Json source generation for native AOT applications.")]
-    public static ValueTask<TValue> DeserializeAsync<TValue>(Stream stream)
+    public static ValueTask<TValue?> DeserializeAsync<TValue>(Stream stream)
     {
         return JsonSerializer.DeserializeAsync<TValue>(stream, DefaultJsonSerializerOptions);
     }
 
-    public static ValueTask<TValue> DeserializeAsync<TValue>(Stream stream, Func<JsonSerializerOptions, JsonTypeInfo<TValue>> jsonTypeInfoFactory)
+    public static ValueTask<TValue?> DeserializeAsync<TValue>(Stream stream, Func<JsonSerializerOptions, JsonTypeInfo<TValue>> jsonTypeInfoFactory)
     {
         return JsonSerializer.DeserializeAsync<TValue>(stream, jsonTypeInfoFactory(DefaultJsonSerializerOptions));
     }
@@ -195,12 +195,12 @@ public static class JsonHelper
 
     [RequiresUnreferencedCode("JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.")]
     [RequiresDynamicCode("JSON serialization and deserialization might require types that cannot be statically analyzed and might need runtime code generation. Use System.Text.Json source generation for native AOT applications.")]
-    public static TValue Deserialize<TValue>(string json)
+    public static TValue? Deserialize<TValue>(string json)
     {
         return JsonSerializer.Deserialize<TValue>(json, DefaultJsonSerializerOptions);
     }
 
-    public static TValue Deserialize<TValue>(string json, Func<JsonSerializerOptions, JsonTypeInfo<TValue>> jsonTypeInfoFactory)
+    public static TValue? Deserialize<TValue>(string json, Func<JsonSerializerOptions, JsonTypeInfo<TValue>> jsonTypeInfoFactory)
     {
         return JsonSerializer.Deserialize<TValue>(json, jsonTypeInfoFactory(DefaultJsonSerializerOptions));
     }
@@ -335,7 +335,7 @@ public static class JsonHelper
         return false;
     }
 
-    internal static object GetEnumObjectFromNumberFromReader(Utf8JsonReader reader, Type typeToConvert)
+    internal static object? GetEnumObjectFromNumberFromReader(Utf8JsonReader reader, Type typeToConvert)
     {
         if (reader.TokenType == JsonTokenType.Number)
         {
@@ -392,7 +392,7 @@ public class LogEventLevelJsonEnumConverter : FlexibleJsonEnumConverter<LogEvent
     {
         if (reader.TokenType == JsonTokenType.String)
         {
-            return JsonHelper.GetLogEventLevelFromString(reader.GetString());
+            return JsonHelper.GetLogEventLevelFromString(reader.GetString() ?? string.Empty);
         }
         var rEnumVal = JsonHelper.GetEnumFromNumberFromReader<LogEventLevel>(reader);
         if (rEnumVal.HasValue) return rEnumVal.Value;
@@ -408,7 +408,7 @@ public class LogEventLevelJsonEnumConverter : FlexibleJsonEnumConverter<LogEvent
 public class FlexibleJsonEnumConverter<T> : JsonConverter<T> where T : struct, Enum
 {
     public bool WriteEnumToString { get; set; } = true;
-    public EnumValueAlias<T> EnumValueAlias { get; set; }
+    public EnumValueAlias<T>? EnumValueAlias { get; set; }
 
     public FlexibleJsonEnumConverter() { }
     public FlexibleJsonEnumConverter(EnumValueAlias<T> enumValueAlias)
@@ -428,7 +428,7 @@ public class FlexibleJsonEnumConverter<T> : JsonConverter<T> where T : struct, E
     {
         if (reader.TokenType == JsonTokenType.String)
         {
-            var str = reader.GetString();
+            var str = reader.GetString() ?? string.Empty;
             if (this.EnumValueAlias is not null && this.EnumValueAlias.TryRead(str, out var enumValue)) return enumValue;
 
             if (Enum.TryParse<T>(str, ignoreCase: true, out var value)) return value;

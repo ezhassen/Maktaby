@@ -137,8 +137,8 @@
             <Border
                 x:Name="TabStrip"
                 Padding="4,2"
-                Background="#333337"
-                BorderBrush="#3f3f46"
+                Background="Transparent"
+                BorderBrush="Transparent"
                 BorderThickness="0,0,0,1"
                 DockPanel.Dock="Top">
                 <Grid>

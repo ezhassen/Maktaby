@@ -68,7 +68,7 @@
                                 <TextBlock
                                     Margin="0,4,0,0"
                                     FontSize="11"
-                                    Foreground="White"
+                                    Foreground="{DynamicResource BoxForeground}"
                                     Text="{Binding DisplayName}"
                                     TextAlignment="Center"
                                     TextWrapping="Wrap">
@@ -87,11 +87,11 @@
                                     x:Name="RenameBox"
                                     Width="70"
                                     Margin="0,4,0,0"
-                                    Background="#222222"
-                                    BorderBrush="DodgerBlue"
+                                    Background="{DynamicResource BoxBackground}"
+                                    BorderBrush="{DynamicResource BoxBorder}"
                                     BorderThickness="1"
                                     FontSize="11"
-                                    Foreground="White"
+                                    Foreground="{DynamicResource BoxForeground}"
                                     KeyDown="RenameBox_KeyDown"
                                     LostFocus="RenameBox_LostFocus"
                                     Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"

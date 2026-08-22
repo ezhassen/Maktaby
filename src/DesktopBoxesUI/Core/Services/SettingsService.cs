@@ -1,4 +1,5 @@
 using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.Settings;
 using System.IO;
 using System.Text.Json;
@@ -31,7 +32,7 @@ public sealed class SettingsService : ISettingsService
         //try
         //{
         using var stream = File.OpenRead(_filePath);
-        var desRes = JsonSerializer.Deserialize<UserSettings>(stream, _options);
+        var desRes = JsonHelper.Deserialize<UserSettings>(stream);
         if (desRes is not null) UserSettings = desRes;
         //}
         //catch
@@ -44,8 +45,7 @@ public sealed class SettingsService : ISettingsService
     {
         var dir = Path.GetDirectoryName(_filePath);
         if (!Directory.Exists(dir)) Directory.CreateDirectory(dir!);
-        using var stream = new FileStream(_filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
-        JsonSerializer.Serialize(UserSettings, options: _options);
+        JsonHelper.SerializeToFile(_filePath, UserSettings);
     }
 
     //public T? GetValue<T>(string key) where T : struct
