@@ -7,6 +7,7 @@ using DesktopBoxesUI.Win32.Services;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
+using Windows.Win32.UI.Shell;
 using Windows.Win32.UI.WindowsAndMessaging;
 
 namespace DesktopBoxesUI.Win32.NativeMethods;
@@ -125,6 +126,18 @@ internal static class Win32Apis
 
     public static bool ShellNotifyIcon(uint dwMessage, ref NOTIFYICONDATAW data)
         => ManualApis.Shell_NotifyIcon(dwMessage, ref data);
+
+    /// <summary>Returns the bounding rectangle of the tray icon in physical screen pixels (S_OK on success).</summary>
+    public static bool ShellNotifyIconGetRect(IntPtr hWnd, uint uID, out RECT rect)
+    {
+        var id = new ManualApis.NOTIFYICONIDENTIFIER
+        {
+            cbSize = (uint)Marshal.SizeOf<ManualApis.NOTIFYICONIDENTIFIER>(),
+            hWnd = hWnd,
+            uID = uID,
+        };
+        return ManualApis.Shell_NotifyIconGetRect(ref id, out rect) == 0;
+    }
 
     public static short GetAsyncKeyState(int vKey) => ManualApis.GetAsyncKeyState(vKey);
 

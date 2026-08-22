@@ -4,7 +4,9 @@ using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Interop;
+using Windows.Win32.Foundation;
 using Wpf.Ui;
 
 namespace DesktopBoxesUI;
@@ -15,12 +17,16 @@ namespace DesktopBoxesUI;
 /// receives the shell callback message. Native calls flow through <see cref="Win32Apis"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
+[Obsolete("Use TrayIconUI instead")]
 public sealed class TrayIconService : IDisposable
 {
     private const int WM_TRAY_ICON = 0x8001; // WM_APP + 1
     private const uint NIM_ADD = 0, NIM_DELETE = 2;
     private const uint NIF_MESSAGE = 0x1, NIF_ICON = 0x2, NIF_TIP = 0x4;
     private const int WM_LBUTTONUP = 0x0202, WM_RBUTTONUP = 0x0205, WM_CONTEXTMENU = 0x007B;
+
+    /// <summary>How many DIPs the tray menu overlaps the icon vertically (closes the gap, slight overlap).</summary>
+    private const double IconVerticalOverlap = 3.0;
 
     private readonly HwndSource _host;
     private readonly IntPtr _iconHandle;
@@ -136,13 +142,49 @@ public sealed class TrayIconService : IDisposable
         exit.Click += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
         menu.Items.Add(newBox);
+        menu.Items.Add(new Separator());
         menu.Items.Add(reset);
+        menu.Items.Add(new Separator());
         menu.Items.Add(settings);
         menu.Items.Add(themeMenu);
         menu.Items.Add(new Separator());
         menu.Items.Add(exit);
 
-        menu.Placement = PlacementMode.MousePoint;
+        // Anchor the menu to the actual tray-icon rectangle. Because the app is DPI-aware, the shell
+        // returns this rect already in logical (DIP) coordinates that match WPF's space — so it must NOT
+        // be run through TransformFromDevice (that double-converts and flings the menu to the screen
+        // center). The WPF input system doesn't track the cursor over the taskbar shell anyway, so the
+        // icon rect is the reliable anchor. Fall back to the cursor only if the rect can't be read.
+        Point anchor = new Point(double.NaN, double.NaN);
+        if (Win32Apis.ShellNotifyIconGetRect(_host.Handle, _data.uID, out RECT icon))
+        {
+            anchor = new Point(icon.right, icon.top);
+        }
+
+        if (double.IsNaN(anchor.X))
+        {
+            Win32Apis.GetCursorPos(out ManualApis.POINT physical);
+            anchor = new Point(physical.X, physical.Y);
+            if (_host.CompositionTarget is { } ct)
+            {
+                anchor = ct.TransformFromDevice.Transform(anchor);
+            }
+        }
+
+        // A ContextMenu overrides CustomPopupPlacementCallback with its own menu-placement logic, so the
+        // custom callback is unreliable here (X only looked right because it lands near the cursor). Instead
+        // use AbsolutePoint (screen coordinates) and set the offsets directly; refine them in Opened once
+        // the menu is measured so we can right-align to the icon and overlap it by a few pixels.
+        menu.Placement = PlacementMode.AbsolutePoint;
+        menu.PlacementTarget = null;
+        menu.HorizontalOffset = anchor.X;
+        menu.VerticalOffset = anchor.Y;
+
+        menu.Opened += (_, _) =>
+        {
+            menu.HorizontalOffset = anchor.X - menu.ActualWidth;
+            menu.VerticalOffset = anchor.Y - menu.ActualHeight + IconVerticalOverlap;
+        };
 
         // Open on the next dispatcher pass so it isn't dismissed by the same mouse message.
         Application.Current.Dispatcher.BeginInvoke(() => menu.IsOpen = true);

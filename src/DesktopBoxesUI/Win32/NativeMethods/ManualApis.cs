@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using Windows.Win32.Foundation;
 
 namespace DesktopBoxesUI.Win32.NativeMethods;
 
@@ -112,6 +113,9 @@ internal static class ManualApis
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int Shell_NotifyIconGetRect(ref NOTIFYICONIDENTIFIER identifier, out RECT iconLocation);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetCursorPos(out POINT lpPoint);
@@ -207,6 +211,17 @@ internal static class ManualApis
     public const int WsChild = 0x40000000;
 
     public const int WM_USER = 0x0400;
+
+    /// <summary>NOTIFYICONIDENTIFIER used by <see cref="ManualApis.Shell_NotifyIconGetRect"/> (declared
+    /// manually because CsWin32 refuses to emit it under the AnyCPU WPF "temporary target assembly" build).</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct NOTIFYICONIDENTIFIER
+    {
+        public uint cbSize;
+        public IntPtr hWnd;
+        public uint uID;
+        public Guid guidItem;
+    }
 
     /// <summary>Window class for the message-only window used by the Shell desktop watcher.</summary>
     public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);

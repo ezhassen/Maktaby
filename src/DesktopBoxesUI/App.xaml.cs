@@ -1,3 +1,4 @@
+using DesktopBoxesUI.Controls;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.Settings;
@@ -17,7 +18,7 @@ namespace DesktopBoxesUI;
 /// <summary>
 /// Application entry point. Builds the composition root (dependency injection) so that all
 /// platform-specific services are injected behind Core interfaces, then starts the desktop
-/// Boxes via <see cref="DesktopManager"/> and lives in the system tray (see <see cref="TrayIconService"/>).
+/// Boxes via <see cref="DesktopManager"/> and lives in the system tray (see <see cref="Controls.TrayIconUI"/>).
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
 public partial class App : Application
@@ -166,19 +167,13 @@ public partial class App : Application
 
     private void BuildTrayAndMenuItems(IServiceProvider services)
     {
-        TrayIconService _tray = new();
-        _tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
-        _tray.ResetRequested += async (_, _) =>
+        var tray = new TrayIconUI();
+        tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
+        tray.ResetRequested += async (_, _) =>
         {
-            // try
-            // {
             await Services.GetRequiredService<DesktopManager>().ResetAsync();
-            // }
-            // catch
-            // {
-            // }
         };
-        _tray.SettingsRequested += (_, _) =>
+        tray.SettingsRequested += (_, _) =>
         {
             var vm = Services.GetRequiredService<SettingsViewModel>();
             Application.Current.Dispatcher.BeginInvoke(() =>
@@ -196,7 +191,7 @@ public partial class App : Application
                 new SettingsView(vm).Show();
             });
         };
-        _tray.ThemeRequested += (_, theme) =>
+        tray.ThemeRequested += (_, theme) =>
         {
             var settings = Services.GetRequiredService<ISettingsService>();
             settings.UserSettings.SelectedTheme = theme;
@@ -204,10 +199,24 @@ public partial class App : Application
             ApplyTheme(theme);
             ApplyBoxAppearance();
         };
-        _tray.ExitRequested += (_, _) =>
+        tray.ExitRequested += (_, _) =>
         {
-            _tray?.Dispose();
             Shutdown();
         };
+
+        // WPF-UI's NotifyIcon must live inside a visual tree, so host it in a hidden, always-on window.
+        // The window is never shown visibly (Visibility=Hidden) but stays loaded for the app's lifetime.
+        var host = new Window
+        {
+            Width = 0,
+            Height = 0,
+            WindowStyle = WindowStyle.None,
+            ShowInTaskbar = false,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+            Visibility = Visibility.Hidden,
+            Content = tray,
+        };
+        host.Show();
     }
 }
