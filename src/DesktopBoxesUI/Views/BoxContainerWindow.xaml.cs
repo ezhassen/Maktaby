@@ -272,9 +272,8 @@ public partial class BoxContainerWindow : Window
     private void ApplyTransparency()
     {
         var settings = App.Services.GetRequiredService<ISettingsService>();
-        double? global = settings.GetValue<double>(SettingsKeys.DefaultBoxTransparency);
-        double? effective = _vm.Transparency ?? global;
-        var opacity = System.Math.Clamp(1.0 - (effective ?? SettingsKeys.DefaultBoxTransparencyValue), 0.0, 1.0);
+        double effective = _vm.Transparency ?? settings.UserSettings.DefaultBoxTransparencyValue;
+        var opacity = System.Math.Clamp(1.0 - effective, 0.0, 1.0);
         RootBorder.Background = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x30)) { Opacity = opacity };
         HeaderBorder.Background = new SolidColorBrush(Color.FromRgb(0x3F, 0x3F, 0x46)) { Opacity = opacity };
         TabStrip.Background = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x37)) { Opacity = opacity };

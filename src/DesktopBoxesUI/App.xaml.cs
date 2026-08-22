@@ -1,10 +1,13 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Services;
+using DesktopBoxesUI.Settings;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using Serilog.Core;
 using System.Runtime.Versioning;
 using System.Windows;
 
@@ -20,58 +23,49 @@ public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
 
-    private TrayIconService? _tray;
-
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        //
+        AppJSettings.Reload();
+        //
 
         var services = new ServiceCollection();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
+        BuildTrayAndMenuItems(Services);
 
         Services.GetRequiredService<ISettingsService>().Load();
         Services.GetRequiredService<IMouseMonitor>().Start();
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        _tray = new TrayIconService();
-        _tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
-        _tray.ResetRequested += async (_, _) =>
-        {
-            // try
-            // {
-            await Services.GetRequiredService<DesktopManager>().ResetAsync();
-            // }
-            // catch
-            // {
-            // }
-        };
-        _tray.ExitRequested += (_, _) =>
-        {
-            _tray?.Dispose();
-            Shutdown();
-        };
-
-        Exit += (_, _) =>
-        {
-            var mang = Services.GetRequiredService<DesktopManager>();
-            //RestoreIcons first.
-            mang.RestoreIcons();
-            Services.GetRequiredService<IMouseMonitor>().Stop();
-            //async is not ok in app exit
-            //await mang.SaveAsync();
-            mang.SaveSync();
-        };
         // The splash runs initialization itself once it is first shown (see LoadingWindow),
         // so the Box windows are created under a fully-rendered WPF context.
         var loading = new LoadingWindow(Services.GetRequiredService<DesktopManager>());
         loading.Show();
     }
 
+    protected override void OnExit(ExitEventArgs e)
+    {
+        var mang = Services.GetRequiredService<DesktopManager>();
+        //RestoreIcons first.
+        mang.RestoreIcons();
+        Services.GetRequiredService<IMouseMonitor>().Stop();
+        //async is not ok in app exit
+        //await mang.SaveAsync();
+        mang.SaveSync();
+        //
+        Logging.DisposeAllDefaultLoggers();
+        base.OnExit(e);
+    }
+
     [SupportedOSPlatform("windows10.0.14393")]
     private static void ConfigureServices(IServiceCollection services)
     {
+        services.AddSingleton<ILogger, Logger>((serv) => Logging.Log);
+        //
+
         // Core (pure .NET, no platform dependencies)
         services.AddSingleton<IBoxService, BoxService>();
         services.AddSingleton<IContainerService, ContainerService>();
@@ -112,5 +106,26 @@ public partial class App : Application
 
         // Win32 watchers
         services.AddSingleton<IMouseMonitor, MouseMonitor>();
+    }
+
+    private void BuildTrayAndMenuItems(IServiceProvider services)
+    {
+        TrayIconService _tray = new();
+        _tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
+        _tray.ResetRequested += async (_, _) =>
+        {
+            // try
+            // {
+            await Services.GetRequiredService<DesktopManager>().ResetAsync();
+            // }
+            // catch
+            // {
+            // }
+        };
+        _tray.ExitRequested += (_, _) =>
+        {
+            _tray?.Dispose();
+            Shutdown();
+        };
     }
 }

@@ -14,10 +14,7 @@ namespace DesktopBoxesUI.Core.Services;
 /// </summary>
 public sealed class JsonSnapshotPersistenceService : IPersistenceService
 {
-    private static readonly string FilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "DesktopBoxes",
-        "boxes.snapshot.json");
+    private static readonly string FilePath = Path.Combine(SettingsService.AppDataDir, "boxes.snapshot.json");
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 

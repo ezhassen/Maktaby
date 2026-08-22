@@ -59,6 +59,7 @@ public sealed class DesktopManager
 
     public async Task InitializeAsync()
     {
+        await _explorer.SetDesktopIconsVisibleAsync(false);
         var snapshot = await _persistence.LoadSnapshotAsync();
         if (snapshot is not { Containers.Count: > 0 })
         {
@@ -113,7 +114,6 @@ public sealed class DesktopManager
         _appliedResolution = GetPrimaryWorkAreaDip();
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
-        await _explorer.SetDesktopIconsVisibleAsync(false);
 
         _coordinator.Start();
     }
