@@ -210,6 +210,7 @@ public partial class App : Application
         {
             Width = 0,
             Height = 0,
+            WindowState = WindowState.Minimized,
             WindowStyle = WindowStyle.None,
             ShowInTaskbar = false,
             AllowsTransparency = true,

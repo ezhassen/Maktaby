@@ -4,6 +4,7 @@
     <SolidColorBrush x:Key="AppBackgroundBrush" Color="#1e1e1e" />
     <SolidColorBrush x:Key="BoxBackgroundBrush" Color="#2d2d30" />
     <SolidColorBrush x:Key="BoxBorderBrush" Color="#3f3f46" />
+    <SolidColorBrush x:Key="BoxHeaderBorderBrush" Color="#3f3f46" />
     <SolidColorBrush x:Key="BoxHeaderBrush" Color="#3f3f46" />
     <SolidColorBrush x:Key="BoxForegroundBrush" Color="White" />
 

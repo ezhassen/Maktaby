@@ -281,8 +281,8 @@ public partial class BoxContainerWindow : Window
         TitleText.Foreground = palette.HeaderFore;
         MenuButton.Foreground = palette.HeaderFore;
         RollButton.Foreground = palette.HeaderFore;
-        TabStrip.Background = palette.TabBack;
-        TabStrip.BorderBrush = palette.Border;
+        //TabStrip.Background = palette.TabBack;
+        TabStrip.BorderBrush = palette.HeaderBorder;
     }
 
     private void UpdateBody()

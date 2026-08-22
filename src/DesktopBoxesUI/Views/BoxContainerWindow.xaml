@@ -24,6 +24,62 @@
     mc:Ignorable="d">
     <Window.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <conv:TabSelectedConverter x:Key="TabSelectedConverter" />
+
+        <!--
+            A tab button: unselected = borderless text on the box surface; selected = filled with the
+            box background in a Chrome-style tab shape (rounded top, sides that flare OUT into little
+            feet at the bottom that hug the strip) and no bottom border so it reads as connected.
+        -->
+        <ControlTemplate x:Key="TabButtonTemplate" TargetType="Button">
+            <Grid Margin="3,1">
+                <Path
+                    x:Name="Fill"
+                    Data="M0,30 L0,10 Q0,0 10,0 L90,0 Q100,0 100,10 L100,30 L0,30 Z"
+                    Fill="{TemplateBinding Background}"
+                    Stretch="Fill" />
+                <!--  Data="M0,10 Q0,0 10,0 L90,0 Q100,0 100,10 C100,16 128,26 128,34 Q128,40 118,40 L-18,40 Q-28,40 -28,34 C-28,26 0,16 0,10 Z"  -->
+                <Path
+                    x:Name="Outline"
+                    Data="M0,30 L0,10 Q0,0 10,0 L90,0 Q100,0 100,10 L100,30"
+                    Stretch="Fill"
+                    Stroke="{TemplateBinding BorderBrush}"
+                    StrokeThickness="1" />
+                <ContentPresenter
+                    Margin="15,6,15,12"
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    Content="{TemplateBinding Content}"
+                    ContentTemplate="{TemplateBinding ContentTemplate}" />
+            </Grid>
+        </ControlTemplate>
+
+        <Style x:Key="TabButtonStyle" TargetType="Button">
+            <Setter Property="Template" Value="{StaticResource TabButtonTemplate}" />
+            <Setter Property="Margin" Value="4,0" />
+            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#A6FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Style.Triggers>
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <MultiBinding Converter="{StaticResource TabSelectedConverter}">
+                            <Binding Path="." />
+                            <Binding Path="DataContext.BoxContainerVm.SelectedBox" RelativeSource="{RelativeSource AncestorType=Window}" />
+                        </MultiBinding>
+                    </DataTrigger.Binding>
+                    <Setter Property="Background" Value="{DynamicResource BoxBackground}" />
+                    <Setter Property="Foreground" Value="{DynamicResource BoxForeground}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BoxBorder}" />
+                    <Setter Property="BorderThickness" Value="1,1,1,0" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
     </Window.Resources>
     <Border
         x:Name="RootBorder"
@@ -136,12 +192,15 @@
             <!--  Tab strip: only shown for more than one tab AND when the container is active/hovered  -->
             <Border
                 x:Name="TabStrip"
+                MaxHeight="36"
                 Padding="4,2"
                 Background="Transparent"
-                BorderBrush="Transparent"
-                BorderThickness="0,0,0,1"
+                BorderThickness="0"
                 DockPanel.Dock="Top">
                 <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
                     <ItemsControl x:Name="TabItems" ItemsSource="{Binding BoxContainerVm.Tabs}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -151,19 +210,13 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="vm:BoxViewModel">
                                 <Button
-                                    Margin="2,0"
-                                    Padding="8,2"
-                                    HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"
-                                    Background="Transparent"
-                                    BorderBrush="#3f3f46"
-                                    BorderThickness="1"
                                     Content="{Binding Name}"
                                     Cursor="Hand"
-                                    Foreground="White"
                                     PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
                                     PreviewMouseLeftButtonUp="Tab_PreviewMouseLeftButtonUp"
                                     PreviewMouseMove="Tab_PreviewMouseMove"
+                                    Style="{StaticResource TabButtonStyle}"
                                     Tag="{Binding}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

@@ -16,7 +16,8 @@ internal sealed class BoxPalette
 {
     public Brush Back { get; init; } = Brushes.Transparent;
     public Brush HeaderBack { get; init; } = Brushes.Transparent;
-    public Brush TabBack { get; init; } = Brushes.Transparent;
+    public Brush HeaderBorder { get; init; } = Brushes.Transparent;
+    //public Brush TabBack { get; init; } = Brushes.Transparent;
     public Brush Fore { get; init; } = Brushes.White;
     public Brush HeaderFore { get; init; } = Brushes.White;
     public Brush Border { get; init; } = Brushes.Transparent;
@@ -35,7 +36,8 @@ internal static class BoxAppearance
         Color border = dark ? Color.FromRgb(0x3F, 0x3F, 0x46) : Color.FromRgb(0xCC, 0xCC, 0xCC);
         Color headerBack = dark ? Color.FromRgb(0x25, 0x25, 0x25) : Color.FromRgb(0xE5, 0xE5, 0xE5);
         Color headerFore = fore;
-        Color tabBack = dark ? Color.FromRgb(0x25, 0x25, 0x25) : Color.FromRgb(0xDD, 0xDD, 0xDD);
+        Color headerBorder = border;
+        //Color tabBack = dark ? Color.FromRgb(0x25, 0x25, 0x25) : Color.FromRgb(0xDD, 0xDD, 0xDD);
 
         // Explicit box colors override the theme palette.
         if (TryColor(s.DefaultBoxBackColor, out var c))
@@ -58,6 +60,7 @@ internal static class BoxAppearance
             // The header is painted on top of the box background, so making it transparent lets the
             // (single) box background show through — identical to the body, even when translucent.
             headerBack = Colors.Transparent;
+            headerBorder = Colors.Transparent;
             headerFore = fore;
         }
         else
@@ -84,10 +87,11 @@ internal static class BoxAppearance
         {
             Back = new SolidColorBrush(back) { Opacity = alpha },
             HeaderBack = new SolidColorBrush(headerBack),// { Opacity = titleBarColorsSameAsBox ? 1.0 : alpha },
-            TabBack = new SolidColorBrush(tabBack) { Opacity = alpha },
+            //TabBack = new SolidColorBrush(tabBack) { Opacity = alpha },
             Fore = new SolidColorBrush(fore),
             HeaderFore = new SolidColorBrush(headerFore),
             Border = new SolidColorBrush(border),
+            HeaderBorder = new SolidColorBrush(headerBorder),
             Thickness = new Thickness(s.DefaultBoxBorderThickness ?? 1),
         };
     }

@@ -42,6 +42,7 @@ public sealed class BoxContainerViewModel : ViewModelBase
             _selectedIndex = value;
             _model.SelectedIndex = value;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedBox));
             SelectedIndexChanged?.Invoke();
         }
     }
@@ -99,6 +100,7 @@ public sealed class BoxContainerViewModel : ViewModelBase
         }
 
         OnPropertyChanged(nameof(SelectedIndex));
+        OnPropertyChanged(nameof(SelectedBox));
         OnPropertyChanged(nameof(ShowTabs));
         SelectedIndexChanged?.Invoke();
     }
@@ -146,6 +148,7 @@ public sealed class BoxContainerViewModel : ViewModelBase
 
         _selectedIndex = insert;
         OnPropertyChanged(nameof(SelectedIndex));
+        OnPropertyChanged(nameof(SelectedBox));
         OnPropertyChanged(nameof(ShowTabs));
         SelectedIndexChanged?.Invoke();
     }
