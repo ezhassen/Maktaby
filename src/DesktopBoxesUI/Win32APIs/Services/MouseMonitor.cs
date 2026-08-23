@@ -164,8 +164,10 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
         _lastClickY = pt.Y;
         _lastClickHwnd = hwnd;
 
-        if (isDouble && Win32Apis.IsDesktopListView(hwnd))
+        if (isDouble && Win32Apis.IsDesktopChild(hwnd) && !Win32Apis.IsBoxWindow(hwnd))
         {
+            // hwnd is the Explorer desktop (list-view, or our transparent surface when icons are hidden).
+            bool isListView = Win32Apis.IsSysListView32(hwnd);
             var handler = DesktopDoubleClick;
             if (handler != null && Application.Current != null)
             {
@@ -173,7 +175,9 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
                 // the low-level hook thread never stalls on a cross-process SendMessage.
                 Application.Current.Dispatcher.BeginInvoke(new Action(() =>
                 {
-                    if (Win32Apis.IsDesktopEmptyPoint(hwnd, pt))
+                    // For the Explorer list-view only, confirm the point is not on an icon (so an icon
+                    // double-click still opens it). The transparent surface is always empty.
+                    if (!isListView || Win32Apis.IsDesktopEmptyPoint(hwnd, pt))
                     {
                         handler(this, EventArgs.Empty);
                     }

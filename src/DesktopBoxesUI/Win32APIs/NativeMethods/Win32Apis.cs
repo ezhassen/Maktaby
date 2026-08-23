@@ -899,53 +899,72 @@ internal static class Win32Apis
 
     public static IntPtr WindowFromPoint(ManualApis.POINT pt) => ManualApis.WindowFromPoint(pt);
 
-    /// <summary>
-    /// True when <paramref name="hwnd"/> is the Explorer desktop list-view (the <c>SysListView32</c>
-    /// inside <c>SHELLDLL_DefView</c> under <c>Progman</c>/<c>WorkerW</c>) — i.e. the bare desktop,
-    /// as opposed to a File Explorer window or another application. Works across all monitors.
-    /// </summary>
-    public static bool IsDesktopListView(IntPtr hwnd)
+    /// <summary>True when <paramref name="hwnd"/> is a <c>SysListView32</c> (the desktop list-view among others).</summary>
+    public static bool IsSysListView32(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero)
         {
             return false;
         }
 
-        const int nMax = 256;
-        var sb = new StringBuilder(nMax);
-        if (ManualApis.GetClassName(hwnd, sb, nMax) == 0)
-        {
-            return false;
-        }
+        var sb = new StringBuilder(256);
+        return ManualApis.GetClassName(hwnd, sb, 256) != 0 && sb.ToString() == "SysListView32";
+    }
 
-        if (sb.ToString() != "SysListView32")
+    /// <summary>
+    /// True when <paramref name="hwnd"/> belongs to the Explorer desktop — i.e. it is a descendant of
+    /// <c>Progman</c> or <c>WorkerW</c>. This reliably covers the desktop list-view AND the app's own
+    /// transparent <see cref="Views.DesktopSurface"/> (a child of <c>SHELLDLL_DefView</c>), regardless of
+    /// whether desktop icons are shown or hidden, and without depending on a specific class hierarchy.
+    /// File Explorer windows are excluded because their ancestry stops at <c>CabinetWClass</c>, not Progman/WorkerW.
+    /// </summary>
+    public static bool IsDesktopChild(IntPtr hwnd)
+    {
+        IntPtr h = hwnd;
+        for (int i = 0; i < 16 && h != IntPtr.Zero; i++)
         {
-            return false;
-        }
-
-        IntPtr parent = ManualApis.GetParent(hwnd);
-        if (parent == IntPtr.Zero || ManualApis.GetClassName(parent, sb, nMax) == 0)
-        {
-            return false;
-        }
-
-        if (sb.ToString() != "SHELLDLL_DefView")
-        {
-            return false;
-        }
-
-        IntPtr grand = ManualApis.GetParent(parent);
-        if (grand != IntPtr.Zero)
-        {
-            ManualApis.GetClassName(grand, sb, nMax);
-            string g = sb.ToString();
-            if (g != "Progman" && g != "WorkerW")
+            var sb = new StringBuilder(256);
+            if (ManualApis.GetClassName(h, sb, 256) != 0)
             {
-                return false;
+                string cls = sb.ToString();
+                if (cls == "Progman" || cls == "WorkerW")
+                {
+                    return true;
+                }
             }
+
+            h = ManualApis.GetParent(h);
         }
 
-        return true;
+        return false;
+    }
+
+    private static readonly HashSet<IntPtr> _boxWindows = new();
+
+    /// <summary>Registers/unregisters a <see cref="Views.BoxContainerWindow"/> handle so the low-level
+    /// mouse hook can exclude our own boxes from "empty desktop" detection.</summary>
+    public static void RegisterBoxWindow(IntPtr hwnd)
+    {
+        lock (_boxWindows)
+        {
+            _boxWindows.Add(hwnd);
+        }
+    }
+
+    public static void UnregisterBoxWindow(IntPtr hwnd)
+    {
+        lock (_boxWindows)
+        {
+            _boxWindows.Remove(hwnd);
+        }
+    }
+
+    public static bool IsBoxWindow(IntPtr hwnd)
+    {
+        lock (_boxWindows)
+        {
+            return _boxWindows.Contains(hwnd);
+        }
     }
 
     /// <summary>
@@ -955,7 +974,7 @@ internal static class Win32Apis
     /// </summary>
     public static bool IsDesktopEmptyPoint(IntPtr listViewHwnd, ManualApis.POINT screenPt)
     {
-        if (listViewHwnd == IntPtr.Zero || !Win32Apis.IsDesktopListView(listViewHwnd))
+        if (listViewHwnd == IntPtr.Zero || !Win32Apis.IsSysListView32(listViewHwnd))
         {
             return false;
         }

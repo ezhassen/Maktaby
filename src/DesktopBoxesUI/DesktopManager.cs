@@ -524,6 +524,7 @@ public sealed class DesktopManager
         Window window = new BoxContainerWindow(vm, _mainVm, _positioning, SaveAsyncFireAndForget);
 
         _windows[vm.Id] = window;
+        Win32Apis.RegisterBoxWindow(new WindowInteropHelper(window).Handle);
         window.Show();
     }
 
@@ -621,6 +622,7 @@ public sealed class DesktopManager
     {
         if (_windows.TryGetValue(id, out var window))
         {
+            Win32Apis.UnregisterBoxWindow(new WindowInteropHelper(window).Handle);
             window.Close();
             _windows.Remove(id);
         }
@@ -673,7 +675,6 @@ public sealed class DesktopManager
     private void EnsureSurface()
     {
         _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
-        _surface.DesktopDoubleClickAction = ToggleHideAllBoxes;
         if (!_surface.IsVisible)
         {
             _surface.Show();
