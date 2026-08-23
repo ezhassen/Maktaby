@@ -52,7 +52,7 @@
 	<ItemGroup>
 		<!-- CsWin32 auto-discovers NativeMethods.txt only at the project root, so register our
          isolated copy explicitly. All raw Win32 declarations live in this one file. -->
-		<AdditionalFiles Include="Win32\NativeMethods\NativeMethods.txt" />
+		<AdditionalFiles Include="Win32APIs\NativeMethods\NativeMethods.txt" />
 	</ItemGroup>
 
 </Project>

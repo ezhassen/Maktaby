@@ -12,9 +12,9 @@
     DragOver="BoxControl_DragOver"
     Drop="BoxControl_Drop"
     IsKeyboardFocusWithinChanged="BoxControl_IsKeyboardFocusWithinChanged"
-    PreviewMouseLeftButtonDown="BoxControl_PreviewMouseLeftButtonDown"
     MouseLeftButtonUp="BoxControl_MouseLeftButtonUp"
     MouseMove="BoxControl_MouseMove"
+    PreviewMouseLeftButtonDown="BoxControl_PreviewMouseLeftButtonDown"
     mc:Ignorable="d">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
