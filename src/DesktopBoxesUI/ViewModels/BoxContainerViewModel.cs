@@ -152,4 +152,19 @@ public sealed class BoxContainerViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowTabs));
         SelectedIndexChanged?.Invoke();
     }
+
+    /// <summary>
+    /// Selects the tab at <paramref name="index"/>, always raising change notifications. Used after an
+    /// insertion (e.g. a dropped tab) has shifted existing indices — the selected *box* can change even
+    /// when the numeric index is unchanged, so we must notify regardless of the prior value.
+    /// </summary>
+    public void SelectIndex(int index)
+    {
+        int clamped = System.Math.Clamp(index, 0, Tabs.Count - 1);
+        _selectedIndex = clamped;
+        _model.SelectedIndex = clamped;
+        OnPropertyChanged(nameof(SelectedIndex));
+        OnPropertyChanged(nameof(SelectedBox));
+        SelectedIndexChanged?.Invoke();
+    }
 }

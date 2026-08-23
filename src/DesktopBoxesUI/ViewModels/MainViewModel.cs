@@ -146,10 +146,12 @@ public sealed class MainViewModel : ViewModelBase
         source.BoxContainerVm.RemoveTab(idx, allowDefault: true);
         target.BoxContainerVm.InsertBox(box, index);
 
-        // Make the moved box the active tab in its new container.
+        // Make the moved box the active tab in its new container. Insertion shifts existing indices,
+        // so the selected box may change even when the numeric index is unchanged — SelectIndex always
+        // notifies (the plain setter would early-return and leave the old tab highlighted).
         var tvm = target.BoxContainerVm;
         int active = index >= 0 && index < tvm.Tabs.Count ? index : tvm.Tabs.Count - 1;
-        tvm.SelectedIndex = System.Math.Clamp(active, 0, tvm.Tabs.Count - 1);
+        tvm.SelectIndex(active);
 
         if (source.BoxContainerVm.Tabs.Count == 0)
         {

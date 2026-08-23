@@ -18,6 +18,9 @@
     MouseLeave="Window_MouseLeave"
     MouseLeftButtonUp="TitleArea_MouseLeftButtonUp"
     MouseMove="TitleArea_MouseMove"
+    PreviewKeyDown="Window_PreviewKeyDown"
+    PreviewMouseLeftButtonUp="Tab_PreviewMouseLeftButtonUp"
+    PreviewMouseMove="Tab_PreviewMouseMove"
     ResizeMode="CanResize"
     ShowInTaskbar="False"
     WindowStyle="None"
@@ -214,8 +217,6 @@
                                     Content="{Binding Name}"
                                     Cursor="Hand"
                                     PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
-                                    PreviewMouseLeftButtonUp="Tab_PreviewMouseLeftButtonUp"
-                                    PreviewMouseMove="Tab_PreviewMouseMove"
                                     Style="{StaticResource TabButtonStyle}"
                                     Tag="{Binding}" />
                             </DataTemplate>

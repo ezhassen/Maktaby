@@ -5,9 +5,12 @@ using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -66,8 +69,13 @@ public partial class BoxContainerWindow : Window
 
         foreach (var w in Application.Current.Windows.OfType<BoxContainerWindow>())
         {
+            if (w._dragTab is not null)
+            {
+                w.CancelTabDrag();
+            }
             w.TryCommitRename(e.OriginalSource);
         }
+
     }
 
     private void TryCommitRename(object? originalSource)
@@ -267,6 +275,7 @@ public partial class BoxContainerWindow : Window
         }
 
         UpdateChrome();
+
     }
 
     internal void ApplyAppearance()
@@ -747,18 +756,26 @@ public partial class BoxContainerWindow : Window
     private bool _tabDragging;
     private Point _dragStart;
     private Point _lastDragPoint;
+    private Point _lastWindowRel;           // last window-relative cursor point, for the debug A/B compare
     private BoxContainerWindow? _dropWindow;    // container currently under the cursor (owns the drop visuals)
     private int _tabDropIndex = -1;             // insertion index within _dropWindow
     private ContainerViewModel? _mergeTarget;
     private Brush? _origBorderBrush;
     private Thickness _origBorderThickness;
     private bool _tabStripTempShown;
+    private Button? _dragButton;            // the tab button being dragged; hidden while dragging
+
+    /// <summary>When true, a click-through overlay draws the computed drop-target rectangles and cursor
+    /// point during a tab drag, so the coordinate maths can be verified visually. Set to false to disable.</summary>
+    public static bool DragDebugEnabled = false;
+    private DragDebugOverlay? _debugOverlay;
 
     private void Tab_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is Button { Tag: BoxViewModel box })
         {
             _dragTab = box;
+            _dragButton = (Button)sender;
             _tabDragging = false;
             _dragStart = e.GetPosition(this);
         }
@@ -785,14 +802,41 @@ public partial class BoxContainerWindow : Window
 
             _tabDragging = true;
             Mouse.OverrideCursor = Cursors.SizeAll;
-            ((UIElement)sender).CaptureMouse();
+            // Capture on the always-visible root so the drag survives the dragged tab being hidden.
+            //if (_dragButton != null)
+            //{
+            //    _dragButton.Visibility = Visibility.Collapsed;
+            //}
+
+            // Drop one column so the remaining tabs fill the strip (the hidden tab no longer reserves space).
+            //SetTabColumnsForDrag();
+
+            RootBorder.CaptureMouse();
+
+            if (DragDebugEnabled)
+            {
+                _debugOverlay ??= new DragDebugOverlay();
+                if (!_debugOverlay.IsVisible)
+                {
+                    _debugOverlay.Show();
+                }
+            }
         }
 
-        // GetPosition(null) under capture is window-relative; convert to true screen coordinates
-        // so the live-bounds hit-test (FindContainerWindowAt) and the indicator maths line up.
-        _lastDragPoint = this.PointToScreen(e.GetPosition(this));
+        _lastWindowRel = e.GetPosition(this);
+        _lastDragPoint = GetScreenDragPoint(e);
         UpdateTabDropTarget(_lastDragPoint);
     }
+
+    /// <summary>
+    /// Screen (DIP) cursor position used for hit-testing in <c>FindContainerWindowAt</c>.
+    /// <c>e.GetPosition(this)</c> stays accurate while the tab button holds mouse capture (and even when
+    /// the cursor is over another window), and <c>PointToScreen</c> maps it to the same DIP screen space
+    /// that every <c>w.PointToScreen</c> / <c>FindContainerWindowAt</c> comparison uses. We deliberately
+    /// avoid converting <c>GetCursorPos</c>'s device pixels, because that requires the primary-monitor DPI
+    /// while <c>VisualTreeHelper.GetDpi(this)</c> may report a different (non-primary) monitor's DPI.
+    /// </summary>
+    private Point GetScreenDragPoint(MouseEventArgs e) => this.PointToScreen(e.GetPosition(this));
 
     private void Tab_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
@@ -803,13 +847,24 @@ public partial class BoxContainerWindow : Window
 
         if (_tabDragging)
         {
+            // Restore the tab button before any model change regenerates the strip.
+            //if (_dragButton != null)
+            //{
+            //    _dragButton.Visibility = Visibility.Visible;
+            //}
+
             // Recompute from the release point so a stale last-move position can't drive the drop.
-            _lastDragPoint = this.PointToScreen(e.GetPosition(this));
+            _lastWindowRel = e.GetPosition(this);
+            _lastDragPoint = GetScreenDragPoint(e);
             UpdateTabDropTarget(_lastDragPoint);
-            ((UIElement)sender).ReleaseMouseCapture();
+
+            Mouse.Capture(null);
             Mouse.OverrideCursor = null;
             PerformTabDrop();
+            _dropWindow?.UpdateChrome();
             ClearTabDropVisuals();
+            _debugOverlay?.Hide();
+            this.UpdateChrome();
         }
         else if (_vm.BoxContainerVm != null)
         {
@@ -822,8 +877,94 @@ public partial class BoxContainerWindow : Window
             }
         }
 
+        _dragButton = null;
         _dragTab = null;
         _tabDragging = false;
+        //SetTabColumnsForDrag();
+    }
+
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (_tabDragging && e.Key == Key.Escape)
+        {
+            CancelTabDrag();
+            e.Handled = true;
+        }
+    }
+
+    private void CancelTabDrag()
+    {
+        if (_dragTab is null)
+        {
+            return;
+        }
+
+        //if (_dragButton != null)
+        //{
+        //    _dragButton.Visibility = Visibility.Visible;
+        //}
+
+        _dragTab = null;
+        _tabDragging = false;
+        _dragButton = null;
+        Mouse.OverrideCursor = null;
+        Mouse.Capture(null);
+        ClearTabDropVisuals();
+        _debugOverlay?.Hide();
+        //SetTabColumnsForDrag();
+    }
+
+    /// <summary>
+    /// The tab strip uses a <see cref="UniformGrid"/> whose column count is bound to the tab count. While a
+    /// tab is dragged (and collapsed) we drop the column count by one so the remaining tabs fill the strip
+    /// instead of leaving a gap. The binding reasserts the real count once the model changes on drop.
+    /// </summary>
+    private void SetTabColumnsForDrag()
+    {
+        if (_vm.BoxContainerVm == null)
+        {
+            return;
+        }
+
+        var ug = FindVisualChild<UniformGrid>(TabItems);
+        if (ug != null)
+        {
+            if (_tabDragging)
+            {
+                // A local value overrides the XAML binding during the drag so the remaining tabs fill
+                // the strip (the dragged tab's column would otherwise stay reserved/empty).
+                int count = _vm.BoxContainerVm.Tabs.Count;
+                ug.Columns = Math.Max(1, count - 1);
+            }
+            else
+            {
+                // Restore the binding so future tab-count changes keep the strip in sync.
+                BindingOperations.SetBinding(
+                    ug,
+                    UniformGrid.ColumnsProperty,
+                    new Binding("BoxContainerVm.Tabs.Count") { Source = this.DataContext, Mode = BindingMode.OneWay });
+            }
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T t)
+            {
+                return t;
+            }
+
+            var inner = FindVisualChild<T>(child);
+            if (inner != null)
+            {
+                return inner;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -858,6 +999,94 @@ public partial class BoxContainerWindow : Window
         // Always show the vertical drop indicator while the cursor is over a container.
         _tabDropIndex = target.ComputeInsertionIndex(p);
         target.ShowTabDropIndicator(_tabDropIndex);
+
+        DrawTabDragDebug(p);
+    }
+
+    private void DrawTabDragDebug(Point p)
+    {
+        if (_debugOverlay is not { IsVisible: true })
+        {
+            return;
+        }
+
+        _debugOverlay.Clear();
+
+        // Cursor markers: red computed dot, blue WPF reference dot (should coincide), a full crosshair,
+        // and a live coordinate read-out, so the exact cursor position can be read against the rectangles.
+        var oldScreen = this.PointToScreen(_lastWindowRel);
+        _debugOverlay.DrawPoint(p.X, p.Y, Brushes.Red, "cursor (calc)");
+        _debugOverlay.DrawPoint(oldScreen.X, oldScreen.Y, Brushes.Blue, "cursor (ref)");
+        _debugOverlay.DrawCrosshair(p.X, p.Y, Brushes.Red);
+        _debugOverlay.DrawTextAt(p.X, p.Y, $"cursor {p.X:0},{p.Y:0}", Brushes.Red);
+
+        const double tolerance = 50;
+
+        // Each container: actual window bounds (white), tolerance hit area (yellow/cyan), and every
+        // visible tab rectangle with its index, so gaps and misalignment are easy to spot.
+        foreach (var w in Application.Current.Windows.OfType<BoxContainerWindow>())
+        {
+            if (w._vm?.BoxContainerVm == null)
+            {
+                continue;
+            }
+
+            var tl = w.PointToScreen(new Point(0, 0));
+            bool isSelf = w == this;
+            Brush boundsStroke = isSelf ? Brushes.Yellow : Brushes.Cyan;
+
+            _debugOverlay.DrawRect(tl.X, tl.Y, w.ActualWidth, w.ActualHeight, Brushes.White, isSelf ? "SELF" : "OTHER");
+            _debugOverlay.DrawRect(tl.X - tolerance, tl.Y - tolerance, w.ActualWidth + tolerance * 2, w.ActualHeight + tolerance * 2, boundsStroke);
+
+            var bounds = w.GetVisibleTabBounds();
+            for (int i = 0; i < bounds.Count; i++)
+            {
+                _debugOverlay.DrawRect(bounds[i].Left, tl.Y, bounds[i].Right - bounds[i].Left, 30, boundsStroke, $"{(isSelf ? "S" : "O")}{i}");
+            }
+        }
+
+        // The gap left by the hidden dragged tab in the source window — visualises the "tabs not filling
+        // width" problem by outlining exactly where the collapsed tab used to sit. Computed from the
+        // uniform-grid cell geometry so it stays valid even before the strip has fully laid out.
+        //if (_dragTab != null && _vm.BoxContainerVm != null)
+        //{
+        //    int from = _vm.BoxContainerVm.Tabs.IndexOf(_dragTab);
+        //    int count = _vm.BoxContainerVm.Tabs.Count;
+        //    if (from >= 0 && count > 0)
+        //    {
+        //        var stripTl = TabStrip.PointToScreen(new Point(0, 0));
+        //        double innerLeft = stripTl.X + TabStrip.Padding.Left;
+        //        double innerRight = TabStrip.PointToScreen(new Point(TabStrip.ActualWidth, 0)).X - TabStrip.Padding.Right;
+        //        double innerW = innerRight - innerLeft;
+        //        double cell = innerW / count;
+        //        double gapLeft = innerLeft + from * cell;
+
+        //        _debugOverlay.DrawRect(gapLeft, stripTl.Y, cell, TabStrip.ActualHeight, Brushes.Magenta, "GAP");
+        //    }
+        //}
+
+        var target = FindContainerWindowAt(p);
+        if (target != null)
+        {
+            var itl = target.PointToScreen(new Point(0, 0));
+            _debugOverlay.DrawRect(itl.X, itl.Y, target.ActualWidth, target.ActualHeight, Brushes.Lime, "TARGET");
+
+            foreach (var (l, r) in target.GetVisibleTabBounds())
+            {
+                _debugOverlay.DrawRect(l, itl.Y, r - l, 30, Brushes.Orange);
+            }
+
+            _debugOverlay.DrawText(
+                $"cursor p        = {p.X:0},{p.Y:0}\n" +
+                $"target          = {(target == this ? "SELF" : target.TitleText?.Text ?? "?")}\n" +
+                $"insertion index = {_tabDropIndex}");
+        }
+        else
+        {
+            _debugOverlay.DrawText(
+                $"cursor p        = {p.X:0},{p.Y:0}\n" +
+                $"target          = NONE (empty desktop, would spawn new container)");
+        }
     }
 
     private void ClearTabDropVisuals()
@@ -904,12 +1133,12 @@ public partial class BoxContainerWindow : Window
         }
     }
 
+    const double tolerance = 5;
     private BoxContainerWindow? FindContainerWindowAt(Point p)
     {
         // A small tolerance lets a dragged tab "stick" to a container when the cursor is just outside
         // its window edge (e.g. nudged past the right edge, or over a rolled container's collapsed body)
         // instead of being treated as empty desktop — which would otherwise spawn a brand-new container.
-        const double tolerance = 50;
 
         BoxContainerWindow? self = null;
         BoxContainerWindow? other = null;
@@ -920,21 +1149,19 @@ public partial class BoxContainerWindow : Window
             {
                 continue; // Custom widgets are not tab targets.
             }
+            //checks using local point instead (works)
+            var localPoint = w.PointFromScreen(p);
 
-            // Recompute the window's on-screen rectangle live (DIP, matching the screen mouse point)
-            // rather than trusting a cached stored bounds value.
-            var tl = w.PointToScreen(new Point(0, 0));
-            double x = tl.X - tolerance;
-            double y = tl.Y - tolerance;
-            double ww = w.ActualWidth + tolerance * 2;
-            double hh = w.ActualHeight + tolerance * 2;
-            if (p.X < x || p.X > x + ww || p.Y < y || p.Y > y + hh)
+            if (localPoint.X < -tolerance ||
+                localPoint.Y < -tolerance ||
+                localPoint.X > w.ActualWidth + tolerance ||
+                localPoint.Y > w.ActualHeight + tolerance)
             {
                 continue;
             }
 
             // Prefer another container over the source when both contain the point (e.g. stacked
-            // containers), so dragging onto an overlapping neighbour merges into it.
+            // containers), so dragging onto an overlapping neighbor merges into it.
             if (w == this)
             {
                 self = w;
@@ -953,7 +1180,7 @@ public partial class BoxContainerWindow : Window
     /// conceptually lifted out of the strip), in left-to-right order. Used to compute both the insertion
     /// index and where to draw the drop indicator.
     /// </summary>
-    private List<(double Left, double Right)> GetVisibleTabBounds()
+    private List<(double Left, double Right)> GetVisibleTabBounds(bool includeDraggingTap = true)
     {
         var bounds = new List<(double, double)>();
         if (TabItems.ItemContainerGenerator.Status != System.Windows.Controls.Primitives.GeneratorStatus.ContainersGenerated)
@@ -968,7 +1195,7 @@ public partial class BoxContainerWindow : Window
         int count = TabItems.Items.Count;
         for (int i = 0; i < count; i++)
         {
-            if (i == from)
+            if (!includeDraggingTap && i == from)
             {
                 continue; // the dragged tab is lifted out; it defines no gap
             }
@@ -978,8 +1205,10 @@ public partial class BoxContainerWindow : Window
                 continue;
             }
 
-            var topLeft = container.PointToScreen(new Point(0, 0));
-            bounds.Add((topLeft.X, topLeft.X + container.RenderSize.Width));
+            var sLeft = container.PointToScreen(new Point(0, 0)).X;
+            var sRight = container.PointToScreen(new Point(container.RenderSize.Width, 0)).X;
+            bounds.Add((sLeft, sRight));
+            //bounds.Add((topLeft.X, topLeft.X + container.RenderSize.Width));
         }
 
         return bounds;
@@ -989,9 +1218,12 @@ public partial class BoxContainerWindow : Window
     {
         var bounds = GetVisibleTabBounds();
         int index = 0;
-        foreach (var (_, right) in bounds)
+        //calculate using half
+        foreach (var (left, right) in bounds)
         {
-            if (screenP.X > right)
+            var tWidth = right - left;
+            var rHalf = right - (tWidth / 2);
+            if (screenP.X > rHalf)
             {
                 index++;
             }
@@ -1006,30 +1238,63 @@ public partial class BoxContainerWindow : Window
 
     private void ShowTabDropIndicator(int index)
     {
-        double stripLeft = TabStrip.PointToScreen(new Point(0, 0)).X + TabStrip.Padding.Left;
-        var bounds = GetVisibleTabBounds();
+        var localX = 0d;
+        int count = TabItems.Items.Count;
+        var bwidth = 30d;
+        if (count > 0)
+        {
+            if (TabItems.ItemContainerGenerator.ContainerFromIndex(0) is UIElement container)
+            {
+                bwidth = container.RenderSize.Width;
+            }
+        }
+        if (index + 1 == count)
+        {
+            localX = (bwidth * count) - 4;//last so show in right
+        }
+        else if (index == 0)
+        {
+            localX = TabStrip.Padding.Left;
+        }
+        else //if (index != 0)
+        {
+            localX = TabStrip.Padding.Left;
+            for (int i = 1; i < count; i++)
+            {
+                if (index >= i)
+                {
+                    localX += bwidth;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
 
-        double screenBoundaryX;
-        if (bounds.Count == 0)
-        {
-            // Dragging the only visible tab: anchor the indicator at the strip's left edge.
-            screenBoundaryX = stripLeft;
-        }
-        else if (index <= 0)
-        {
-            screenBoundaryX = bounds[0].Left;
-        }
-        else if (index >= bounds.Count)
-        {
-            screenBoundaryX = bounds[^1].Right;
-        }
-        else
-        {
-            // Boundary between the two surrounding non-dragged tabs.
-            screenBoundaryX = bounds[index].Left;
-        }
+        ////double stripLeft = TabStrip.PointToScreen(new Point(0, 0)).X + TabStrip.Padding.Left;
+        //var bounds = GetVisibleTabBounds();
 
-        double localX = screenBoundaryX - stripLeft;
+        //double screenBoundaryX;
+        //if (bounds.Count == 0)
+        //{
+        //    screenBoundaryX = 0;
+        //}
+        //else if (index <= 0)
+        //{
+        //    screenBoundaryX = bounds[0].Left;
+        //}
+        //else if (index >= bounds.Count)
+        //{
+        //    screenBoundaryX = bounds[^1].Right;
+        //}
+        //else
+        //{
+        //    screenBoundaryX = bounds[index].Left;
+        //}
+        //var localpaddX = TabStrip.PointFromScreen(new Point(screenBoundaryX, 0)).X;
+        ////double localX = screenBoundaryX - stripLeft;
+        //double localX = localpaddX + TabStrip.Padding.Left;
         TabDropIndicator.Margin = new Thickness(localX, 0, 0, 0);
         TabDropIndicator.Visibility = Visibility.Visible;
     }
