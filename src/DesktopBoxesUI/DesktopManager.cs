@@ -1,18 +1,13 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
-using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
-using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
-using System.Linq;
 using System.Runtime.Versioning;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
 
@@ -29,6 +24,8 @@ namespace DesktopBoxesUI;
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class DesktopManager
 {
+    #region fields
+
     private readonly MainViewModel _mainVm;
     private readonly IContainerService _containers;
     private readonly IPersistenceService _persistence;
@@ -38,6 +35,7 @@ public sealed class DesktopManager
     private readonly IRuleService _rules;
     private readonly IBoxService _boxRegistry;
     private readonly IFileRuleCoordinator _coordinator;
+    private readonly IMouseMonitor _mouseMonitor;
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
     private DesktopSurface? _surface;
@@ -46,6 +44,10 @@ public sealed class DesktopManager
     /// <summary>The work-area resolution the current container layout was computed against. When the
     /// display settings change we rescale every container proportionally against this baseline.</summary>
     private RectD _appliedResolution;
+
+    #endregion
+
+    #region Init
 
     public DesktopManager(IServiceProvider provider)
     {
@@ -58,11 +60,15 @@ public sealed class DesktopManager
         _rules = provider.GetRequiredService<IRuleService>();
         _boxRegistry = provider.GetRequiredService<IBoxService>();
         _coordinator = provider.GetRequiredService<IFileRuleCoordinator>();
+        _mouseMonitor = provider.GetRequiredService<IMouseMonitor>();
     }
 
     public async Task InitializeAsync()
     {
+        //the init can be called multiple times so
         _coordinator.Stop();
+        _mouseMonitor.Stop();
+        //
         await _explorer.SetDesktopIconsVisibleAsync(false);
         var snapshot = await _persistence.LoadSnapshotAsync();
         if (snapshot is not { Containers.Count: > 0 })
@@ -120,71 +126,15 @@ public sealed class DesktopManager
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
-
+        //
         _coordinator.Start();
+        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface) _mouseMonitor.Start();
     }
 
-    /// <summary>
-    /// Resolves the id of the default box (the one the default rule feeds). Falls back to the first
-    /// box found if no box is flagged.
-    /// </summary>
-    private System.Guid? DefaultBoxId()
-    {
-        foreach (var container in _containers.GetContainers())
-        {
-            if (container.ChildContainer is null)
-            {
-                continue;
-            }
+    #endregion
 
-            foreach (var box in container.ChildContainer.Boxes)
-            {
-                if (box.IsDefault)
-                {
-                    return box.Id;
-                }
-            }
-        }
 
-        foreach (var container in _containers.GetContainers())
-        {
-            if (container.ChildContainer is { Boxes.Count: > 0 })
-            {
-                return container.ChildContainer.Boxes[0].Id;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Makes sure a default rule exists and that the box it targets is flagged as the default box
-    /// (so it cannot be deleted).
-    /// </summary>
-    private void EnsureDefaultRuleAndBox()
-    {
-        var id = DefaultBoxId();
-        _rules.EnsureDefaultRule(id);
-
-        if (id is { } boxId)
-        {
-            foreach (var container in _containers.GetContainers())
-            {
-                if (container.ChildContainer is null)
-                {
-                    continue;
-                }
-
-                foreach (var box in container.ChildContainer.Boxes)
-                {
-                    if (box.Id == boxId)
-                    {
-                        box.IsDefault = true;
-                    }
-                }
-            }
-        }
-    }
+    #region Scale
 
     /// <summary>
     /// If the saved desktop resolution differs from the current one, proportionally rescale every
@@ -247,6 +197,74 @@ public sealed class DesktopManager
     }
 
     /// <summary>
+    /// Reacts to a screen/DPI/resolution change by proportionally rescaling the container layout against the
+    /// previously applied work area, pushing the new geometry to the live windows and re-laying the surface.
+    /// Runs on the UI thread (marshalled via the dispatcher if the system event arrives off-thread).
+    /// </summary>
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    {
+        var app = Application.Current;
+        if (app is null)
+        {
+            return;
+        }
+
+        if (app.Dispatcher.CheckAccess())
+        {
+            RescaleToCurrent();
+        }
+        else
+        {
+            app.Dispatcher.InvokeAsync(RescaleToCurrent);
+        }
+    }
+
+    private void RescaleToCurrent()
+    {
+        var current = GetPrimaryWorkAreaDip();
+        if (current.Width <= 0 || current.Height <= 0 ||
+            _appliedResolution.Width <= 0 || _appliedResolution.Height <= 0)
+        {
+            return;
+        }
+
+        if (current.Width == _appliedResolution.Width && current.Height == _appliedResolution.Height)
+        {
+            return;
+        }
+
+        double sx = current.Width / _appliedResolution.Width;
+        double sy = current.Height / _appliedResolution.Height;
+
+        foreach (var vm in _mainVm.Containers)
+        {
+            vm.Left *= sx;
+            vm.Top *= sy;
+            vm.Width *= sx;
+            vm.Height *= sy;
+        }
+
+        _appliedResolution = current;
+
+        foreach (var window in _windows.Values)
+        {
+            if (window is BoxContainerWindow boxWindow)
+            {
+                boxWindow.ApplyGeometry();
+            }
+        }
+
+        _surface?.Relayout();
+
+        _ = SaveAsync();
+    }
+
+    #endregion
+
+    #region Items management
+
+
+    /// <summary>
     /// Enumerates the live desktop on a dedicated STA thread. The Shell COM walk
     /// (<c>IShellFolder.EnumObjects</c>, <c>IShellItem</c> display names) must run on an STA thread and is
     /// CPU/IO heavy, so running it off the WPF UI thread keeps startup responsive. Only plain
@@ -285,6 +303,68 @@ public sealed class DesktopManager
         thread.IsBackground = true;
         thread.Start();
         return tcs.Task;
+    }
+
+    /// <summary>
+    /// Resolves the id of the default box (the one the default rule feeds). Falls back to the first
+    /// box found if no box is flagged.
+    /// </summary>
+    private System.Guid? DefaultBoxId()
+    {
+        foreach (var container in _containers.GetContainers())
+        {
+            if (container.ChildContainer is null)
+            {
+                continue;
+            }
+
+            foreach (var box in container.ChildContainer.Boxes)
+            {
+                if (box.IsDefault)
+                {
+                    return box.Id;
+                }
+            }
+        }
+
+        foreach (var container in _containers.GetContainers())
+        {
+            if (container.ChildContainer is { Boxes.Count: > 0 })
+            {
+                return container.ChildContainer.Boxes[0].Id;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Makes sure a default rule exists and that the box it targets is flagged as the default box
+    /// (so it cannot be deleted).
+    /// </summary>
+    private void EnsureDefaultRuleAndBox()
+    {
+        var id = DefaultBoxId();
+        _rules.EnsureDefaultRule(id);
+
+        if (id is { } boxId)
+        {
+            foreach (var container in _containers.GetContainers())
+            {
+                if (container.ChildContainer is null)
+                {
+                    continue;
+                }
+
+                foreach (var box in container.ChildContainer.Boxes)
+                {
+                    if (box.Id == boxId)
+                    {
+                        box.IsDefault = true;
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -389,68 +469,6 @@ public sealed class DesktopManager
         return false;
     }
 
-    /// <summary>
-    /// Reacts to a screen/DPI/resolution change by proportionally rescaling the container layout against the
-    /// previously applied work area, pushing the new geometry to the live windows and re-laying the surface.
-    /// Runs on the UI thread (marshalled via the dispatcher if the system event arrives off-thread).
-    /// </summary>
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
-    {
-        var app = Application.Current;
-        if (app is null)
-        {
-            return;
-        }
-
-        if (app.Dispatcher.CheckAccess())
-        {
-            RescaleToCurrent();
-        }
-        else
-        {
-            app.Dispatcher.InvokeAsync(RescaleToCurrent);
-        }
-    }
-
-    private void RescaleToCurrent()
-    {
-        var current = GetPrimaryWorkAreaDip();
-        if (current.Width <= 0 || current.Height <= 0 ||
-            _appliedResolution.Width <= 0 || _appliedResolution.Height <= 0)
-        {
-            return;
-        }
-
-        if (current.Width == _appliedResolution.Width && current.Height == _appliedResolution.Height)
-        {
-            return;
-        }
-
-        double sx = current.Width / _appliedResolution.Width;
-        double sy = current.Height / _appliedResolution.Height;
-
-        foreach (var vm in _mainVm.Containers)
-        {
-            vm.Left *= sx;
-            vm.Top *= sy;
-            vm.Width *= sx;
-            vm.Height *= sy;
-        }
-
-        _appliedResolution = current;
-
-        foreach (var window in _windows.Values)
-        {
-            if (window is BoxContainerWindow boxWindow)
-            {
-                boxWindow.ApplyGeometry();
-            }
-        }
-
-        _surface?.Relayout();
-
-        _ = SaveAsync();
-    }
 
     private async Task BuildDefaultContainerAsync()
     {
@@ -491,6 +509,10 @@ public sealed class DesktopManager
 
         _containers.CreateContainer(DesktopItemContainerType.BoxContainer, 60, 60, 300, 460, childContainer: boxContainer);
     }
+
+    #endregion
+
+    #region Window Management
 
     private void Containers_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -627,11 +649,16 @@ public sealed class DesktopManager
         {
             var handle = new WindowInteropHelper(window).Handle;
             Win32Apis.UnregisterBoxWindow(handle);
-            Win32Apis.AllowHide(handle);
-            window.Close();
+            //Win32Apis.AllowHide(handle);
+            //window.Close();
+            window.CloseWindowEx(handle);
             _windows.Remove(id);
         }
     }
+    #endregion
+
+
+    #region Boxes
 
     public async Task ResetAsync()
     {
@@ -663,6 +690,27 @@ public sealed class DesktopManager
         //await SaveAsync();
     }
 
+    public void CloseAll()
+    {
+        _coordinator.Stop();
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+
+        foreach (var window in _windows)
+        {
+            //Win32Apis.AllowHide(new WindowInteropHelper(window).Handle);
+            //window.Close();
+            RemoveWindow(window.Key);
+        }
+
+        _windows.Clear();
+        if (_surface is not null)
+        {
+            //Win32Apis.AllowHide(new WindowInteropHelper(_surface).Handle);
+            _surface?.CloseWindowEx();
+            _surface = null;
+        }
+    }
+
     /// <summary>Registers every box from every container into <see cref="IBoxService"/> so the rule
     /// coordinator can resolve a box by id (snapshot-loaded boxes are not created via the service).</summary>
     private void RegisterAllBoxes()
@@ -681,15 +729,6 @@ public sealed class DesktopManager
         }
     }
 
-    private void EnsureSurface()
-    {
-        //TODO: _surface is not used for now
-        //_surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
-        //if (!_surface.IsVisible)
-        //{
-        //    _surface.Show();
-        //}
-    }
 
     public void NewBox()
     {
@@ -715,6 +754,10 @@ public sealed class DesktopManager
         };
     }
 
+    #endregion
+
+    #region Snapshot Save
+
     /// <summary>
     /// Sync save for app exit and other sync only operations. (No Task)
     /// </summary>
@@ -732,26 +775,49 @@ public sealed class DesktopManager
     /// </summary>
     public void SaveAsyncFireAndForget() => _ = SaveAsync();
 
-    public void CloseAll()
+    #endregion
+
+    #region Surface
+
+    private void EnsureSurface()
     {
-        _coordinator.Stop();
-        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
-
-        foreach (var window in _windows)
+        //TODO: _surface EnsureSurface
+        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface)
         {
-            //Win32Apis.AllowHide(new WindowInteropHelper(window).Handle);
-            //window.Close();
-            RemoveWindow(window.Key);
+            if (_surface is not null)
+            {
+                //Win32Apis.AllowHide(new WindowInteropHelper(_surface).Handle);
+                //_surface.Close();
+                _surface.CloseWindowEx();
+                _surface = null;
+            }
         }
-
-        _windows.Clear();
-        if (_surface is not null)
+        else
         {
-            Win32Apis.AllowHide(new WindowInteropHelper(_surface).Handle);
-            _surface?.Close();
-            _surface = null;
+            _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
+            if (!_surface.IsVisible)
+            {
+                _surface.Show();
+            }
         }
     }
+    #endregion
 
+    #region Desktop Manage
+
+    /// <summary>
+    /// Show Desktop icons
+    /// </summary>
     public void RestoreIcons() => _explorer.SetDesktopIconsVisible(true);
+
+    #endregion
+}
+public static class DesktopManagerExtensions
+{
+    public static void CloseWindowEx(this Window window, nint? handle = null)
+    {
+        if (handle is null) handle = new WindowInteropHelper(window).Handle;
+        window.Close();
+    }
+
 }

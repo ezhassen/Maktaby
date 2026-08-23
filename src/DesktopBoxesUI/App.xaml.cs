@@ -41,7 +41,6 @@ public partial class App : Application
         ApplyTheme(Services.GetRequiredService<ISettingsService>().UserSettings.SelectedTheme);
         ApplyBoxAppearance();
         ApplicationThemeManager.Changed += (_, _) => ApplyBoxAppearance();
-        Services.GetRequiredService<IMouseMonitor>().Start();
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
