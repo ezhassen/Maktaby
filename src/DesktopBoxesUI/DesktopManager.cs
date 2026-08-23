@@ -13,6 +13,8 @@ using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Interop;
+using DesktopBoxesUI.Win32.NativeMethods;
 
 namespace DesktopBoxesUI;
 
@@ -39,6 +41,7 @@ public sealed class DesktopManager
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
     private DesktopSurface? _surface;
+    private bool _allBoxesHidden;
 
     /// <summary>The work-area resolution the current container layout was computed against. When the
     /// display settings change we rescale every container proportionally against this baseline.</summary>
@@ -524,6 +527,58 @@ public sealed class DesktopManager
         window.Show();
     }
 
+    /// <summary>True when every open <see cref="BoxContainerWindow"/> is currently hidden via
+    /// <see cref="HideAllBoxes"/>. Session-only (not persisted across restarts).</summary>
+    public bool AllBoxesHidden => _allBoxesHidden;
+
+    /// <summary>Raised whenever the all-boxes-hidden state changes (argument is the new state), so the
+    /// tray menu check box stays in sync no matter which trigger performed the toggle.</summary>
+    public event EventHandler<bool>? AllBoxesHiddenChanged;
+
+    /// <summary>Toggles between hiding and showing all open box windows.</summary>
+    public void ToggleHideAllBoxes()
+    {
+        if (_allBoxesHidden)
+        {
+            ShowAllBoxes();
+        }
+        else
+        {
+            HideAllBoxes();
+        }
+    }
+
+    /// <summary>
+    /// Temporarily hides every open box window. The <see cref="Win32Apis.MinimizePreventionHook"/> would
+    /// otherwise re-show them, so each hide is wrapped in <see cref="Win32Apis.AllowHide"/>. The desktop
+    /// surface and tray host are deliberately left visible so the toggle can be reversed.
+    /// </summary>
+    public void HideAllBoxes()
+    {
+        foreach (var window in Application.Current.Windows.OfType<BoxContainerWindow>())
+        {
+            var hwnd = new WindowInteropHelper(window).Handle;
+            Win32Apis.AllowHide(hwnd);
+            window.Hide();
+            Win32Apis.DisallowHide(hwnd);
+        }
+
+        _allBoxesHidden = true;
+        AllBoxesHiddenChanged?.Invoke(this, true);
+    }
+
+    /// <summary>Re-shows every box window previously hidden by <see cref="HideAllBoxes"/>.</summary>
+    public void ShowAllBoxes()
+    {
+        foreach (var window in Application.Current.Windows.OfType<BoxContainerWindow>())
+        {
+            window.Show();
+        }
+
+        _allBoxesHidden = false;
+        AllBoxesHiddenChanged?.Invoke(this, false);
+    }
+
     /// <summary>
     /// Shows every container window, yielding to the dispatcher between each so the UI thread stays
     /// responsive while a potentially large number of <see cref="BoxContainerWindow"/>s is constructed.
@@ -618,6 +673,7 @@ public sealed class DesktopManager
     private void EnsureSurface()
     {
         _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
+        _surface.DesktopDoubleClickAction = ToggleHideAllBoxes;
         if (!_surface.IsVisible)
         {
             _surface.Show();

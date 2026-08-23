@@ -1,4 +1,5 @@
 using DesktopBoxesUI.Win32.NativeMethods;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -22,11 +23,23 @@ public partial class TrayIconUI
     public event EventHandler? SettingsRequested;
     public event EventHandler<string?>? ThemeRequested;
     public event EventHandler? ExitRequested;
+    public event EventHandler? ToggleHideAllRequested;
 
     public TrayIconUI()
     {
         InitializeComponent();
         Icon = LoadTrayIcon()!;
+        contextMenu.Opened += ContextMenu_Opened;
+    }
+
+    private void ContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        var dtMan = App.Services.GetRequiredService<DesktopManager>();
+        MenuHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
+    }
+
+    private void ContextMenu_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
     }
 
     /// <summary>Loads the desktop folder icon (same glyph the old tray used) as an ImageSource.</summary>
@@ -58,6 +71,11 @@ public partial class TrayIconUI
     private void Settings_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
 
     private void Exit_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke(this, EventArgs.Empty);
+
+    private void HideAll_Click(object sender, RoutedEventArgs e) => ToggleHideAllRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Reflects the current "all boxes hidden" state in the tray menu's check box.</summary>
+    public void SetHideAllChecked(bool hidden) => MenuHideAll.IsChecked = hidden;
 
     private void Theme_Click(object sender, RoutedEventArgs e)
     {

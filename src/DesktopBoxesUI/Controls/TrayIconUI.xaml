@@ -126,6 +126,11 @@
             </ContextMenu.Resources>
             <MenuItem Click="NewBox_Click" Header="New Box" />
             <MenuItem Click="Reset_Click" Header="Reset" />
+            <MenuItem
+                x:Name="MenuHideAll"
+                Click="HideAll_Click"
+                Header="Hide All Boxes"
+                IsCheckable="True" />
             <Separator />
             <MenuItem Click="Settings_Click" Header="Settings" />
             <MenuItem Header="Theme">

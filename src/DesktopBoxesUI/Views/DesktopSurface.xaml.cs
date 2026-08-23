@@ -21,6 +21,7 @@ public sealed partial class DesktopSurface : Window
     private readonly System.Action _save;
     private bool _dragging;
     private IntPtr _listView;
+    private System.Action? _onDesktopDoubleClick;
 
     public DesktopSurface(MainViewModel host, System.Action save)
     {
@@ -35,6 +36,12 @@ public sealed partial class DesktopSurface : Window
         Height = SystemParameters.WorkArea.Height;
 
         Loaded += OnLoaded;
+    }
+
+    /// <summary>Action invoked when the user double-clicks empty desktop area (set by <see cref="DesktopManager"/>).</summary>
+    internal System.Action? DesktopDoubleClickAction
+    {
+        set => _onDesktopDoubleClick = value;
     }
 
     /// <summary>Re-covers the (possibly changed) primary work area after a display/DPI/resolution change.</summary>
@@ -81,6 +88,16 @@ public sealed partial class DesktopSurface : Window
 
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        // Double-click on the empty desktop: the app hides Explorer's icons by default, so this
+        // transparent surface (not the hidden list-view) is the actual hit target. Toggle hide-all and
+        // swallow the event so it is not also forwarded to the (hidden) list-view.
+        if (msg == 0x0203) // WM_LBUTTONDBLCLK
+        {
+            _onDesktopDoubleClick?.Invoke();
+            handled = true;
+            return IntPtr.Zero;
+        }
+
         if (msg == 0x0084) // WM_NCHITTEST
         {
             handled = true;

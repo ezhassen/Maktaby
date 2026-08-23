@@ -113,6 +113,9 @@ internal static class ManualApis
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern int SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, ref LVHITTESTINFO lParam);
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -126,6 +129,23 @@ internal static class ManualApis
 
     [DllImport("user32.dll")]
     public static extern IntPtr WindowFromPoint(POINT pt);
+
+    [DllImport("user32.dll")]
+    public static extern int GetDoubleClickTime();
+
+    [DllImport("user32.dll")]
+    public static extern int GetSystemMetrics(int nIndex);
+
+    public const int SM_CXDOUBLECLK = 36;
+    public const int SM_CYDOUBLECLK = 37;
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
+
+    public const int LVM_FIRST = 0x1000;
+    public const int LVM_HITTEST = LVM_FIRST + 1;
+    public const uint LVHT_NOWHERE = 0x0001;
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
@@ -279,6 +299,18 @@ internal static class ManualApis
     {
         public int X;
         public int Y;
+    }
+
+    /// <summary>Hit-test info for <see cref="LVM_HITTEST"/>, used to tell empty desktop area from a
+    /// desktop icon. Declared manually so every native call stays inside <see cref="ManualApis"/>.</summary>
+    [StructLayout(LayoutKind.Sequential)]
+    public struct LVHITTESTINFO
+    {
+        public POINT pt;
+        public uint flags;
+        public int iItem;
+        public int iSubItem;
+        public int iGroup;
     }
 }
 

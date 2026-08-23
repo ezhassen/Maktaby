@@ -203,6 +203,19 @@ public partial class App : Application
         {
             Shutdown();
         };
+        tray.ToggleHideAllRequested += (_, _) =>
+        {
+            Services.GetRequiredService<DesktopManager>().ToggleHideAllBoxes();
+        };
+
+        // Double-clicking empty desktop area toggles the same hide-all state (icon double-clicks still open).
+        Services.GetRequiredService<IMouseMonitor>().DesktopDoubleClick += (_, _) =>
+        {
+            Services.GetRequiredService<DesktopManager>().ToggleHideAllBoxes();
+        };
+
+        // Keep the tray's "Hide All Boxes" check box in sync with the real state, whichever trigger fired.
+        Services.GetRequiredService<DesktopManager>().AllBoxesHiddenChanged += (_, hidden) => tray.SetHideAllChecked(hidden);
 
         // WPF-UI's NotifyIcon must live inside a visual tree, so host it in a hidden, always-on window.
         // The window is never shown visibly (Visibility=Hidden) but stays loaded for the app's lifetime.

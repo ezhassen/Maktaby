@@ -898,4 +898,76 @@ internal static class Win32Apis
     public static IntPtr GetModuleHandle(string? moduleName) => ManualApis.GetModuleHandle(moduleName);
 
     public static IntPtr WindowFromPoint(ManualApis.POINT pt) => ManualApis.WindowFromPoint(pt);
+
+    /// <summary>
+    /// True when <paramref name="hwnd"/> is the Explorer desktop list-view (the <c>SysListView32</c>
+    /// inside <c>SHELLDLL_DefView</c> under <c>Progman</c>/<c>WorkerW</c>) — i.e. the bare desktop,
+    /// as opposed to a File Explorer window or another application. Works across all monitors.
+    /// </summary>
+    public static bool IsDesktopListView(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        const int nMax = 256;
+        var sb = new StringBuilder(nMax);
+        if (ManualApis.GetClassName(hwnd, sb, nMax) == 0)
+        {
+            return false;
+        }
+
+        if (sb.ToString() != "SysListView32")
+        {
+            return false;
+        }
+
+        IntPtr parent = ManualApis.GetParent(hwnd);
+        if (parent == IntPtr.Zero || ManualApis.GetClassName(parent, sb, nMax) == 0)
+        {
+            return false;
+        }
+
+        if (sb.ToString() != "SHELLDLL_DefView")
+        {
+            return false;
+        }
+
+        IntPtr grand = ManualApis.GetParent(parent);
+        if (grand != IntPtr.Zero)
+        {
+            ManualApis.GetClassName(grand, sb, nMax);
+            string g = sb.ToString();
+            if (g != "Progman" && g != "WorkerW")
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// True when <paramref name="screenPt"/> (physical screen pixels) falls on empty desktop area
+    /// within the given desktop list-view — i.e. not on a desktop icon. Uses <c>LVM_HITTEST</c> so a
+    /// double-click that hits an icon leaves the icon's own open behaviour intact.
+    /// </summary>
+    public static bool IsDesktopEmptyPoint(IntPtr listViewHwnd, ManualApis.POINT screenPt)
+    {
+        if (listViewHwnd == IntPtr.Zero || !Win32Apis.IsDesktopListView(listViewHwnd))
+        {
+            return false;
+        }
+
+        var client = screenPt;
+        if (!ManualApis.ScreenToClient(listViewHwnd, ref client))
+        {
+            return false;
+        }
+
+        var info = new ManualApis.LVHITTESTINFO { pt = client };
+        ManualApis.SendMessage(listViewHwnd, ManualApis.LVM_HITTEST, IntPtr.Zero, ref info);
+        return (info.flags & ManualApis.LVHT_NOWHERE) != 0 || info.iItem < 0;
+    }
 }

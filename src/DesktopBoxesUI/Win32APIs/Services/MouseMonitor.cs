@@ -1,3 +1,4 @@
+using System;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows;
@@ -33,9 +34,24 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
 
     public event EventHandler<IntPtr>? MouseButtonDown;
 
+    /// <summary>Raised when a double left-click on empty desktop area is detected (see <see cref="TryDetectDesktopDoubleClick"/>).</summary>
+    public event EventHandler? DesktopDoubleClick;
+
+    // Double-click tracking (single hook thread, so no synchronization needed).
+    private int _lastClickTime;
+    private int _lastClickX;
+    private int _lastClickY;
+    private IntPtr _lastClickHwnd;
+    private readonly int _doubleClickTime;
+    private readonly int _doubleClickX;
+    private readonly int _doubleClickY;
+
     public MouseMonitor()
     {
         _proc = HookCallback;
+        _doubleClickTime = ManualApis.GetDoubleClickTime();
+        _doubleClickX = ManualApis.GetSystemMetrics(ManualApis.SM_CXDOUBLECLK);
+        _doubleClickY = ManualApis.GetSystemMetrics(ManualApis.SM_CYDOUBLECLK);
     }
 
     public void Start()
@@ -109,10 +125,61 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
                     // Defer WPF work to the UI thread so the hook thread never blocks on it.
                     Application.Current.Dispatcher.BeginInvoke(new Action(() => handler(this, hwnd)));
                 }
+
+                if (msg == ManualApis.WM_LBUTTONDOWN && Application.Current != null)
+                {
+                    TryDetectDesktopDoubleClick(info.pt, hwnd);
+                }
             }
         }
 
         return Win32Apis.CallNextHookEx(_hook, nCode, wParam, lParam);
+    }
+
+    /// <summary>
+    /// Recognizes a double left-click on empty desktop area (so a desktop icon double-click still
+    /// opens the icon) and raises <see cref="DesktopDoubleClick"/> on the UI thread. Only left-button
+    /// downs whose previous click landed on the same desktop list-view within the OS double-click
+    /// time/distance count; an <c>LVM_HITTEST</c> then confirms the point is not on an icon.
+    /// </summary>
+    private void TryDetectDesktopDoubleClick(ManualApis.POINT pt, IntPtr hwnd)
+    {
+        bool isDouble = false;
+        if (_lastClickHwnd == hwnd && _lastClickTime != 0)
+        {
+            int now = Environment.TickCount;
+            int dt = unchecked(now - _lastClickTime);
+            int dx = pt.X - _lastClickX;
+            int dy = pt.Y - _lastClickY;
+            if (dt >= 0 && dt <= _doubleClickTime &&
+                Math.Abs(dx) <= _doubleClickX && Math.Abs(dy) <= _doubleClickY)
+            {
+                isDouble = true;
+            }
+        }
+
+        // Record this click as the baseline for the next potential double-click.
+        _lastClickTime = Environment.TickCount;
+        _lastClickX = pt.X;
+        _lastClickY = pt.Y;
+        _lastClickHwnd = hwnd;
+
+        if (isDouble && Win32Apis.IsDesktopListView(hwnd))
+        {
+            var handler = DesktopDoubleClick;
+            if (handler != null && Application.Current != null)
+            {
+                // Defer the (potentially blocking) ListView hit-test and the event to the UI thread so
+                // the low-level hook thread never stalls on a cross-process SendMessage.
+                Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (Win32Apis.IsDesktopEmptyPoint(hwnd, pt))
+                    {
+                        handler(this, EventArgs.Empty);
+                    }
+                }));
+            }
+        }
     }
 
     public void Dispose() => Stop();
