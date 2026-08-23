@@ -655,8 +655,26 @@ public partial class BoxControl : UserControl
         }
 
         _marqueeBase = additive ? new HashSet<BoxItemViewModel>(Box?.Items.Where(i => i.IsSelected) ?? Enumerable.Empty<BoxItemViewModel>()) : null;
-        _marqueeActive = true;
         _marqueeStart = e.GetPosition(ItemsList);
+        if (!_marqueeActive)
+        {
+            //ignore scrollBar if visible
+            //var horizontalScrollBar = scrollViewer.Template.FindName("PART_HorizontalScrollBar", scrollViewer) as ScrollBar;
+
+            var verticalScrollBar = Scroll.Template.FindName("PART_VerticalScrollBar", Scroll) as System.Windows.Controls.Primitives.ScrollBar;
+            double scrollBarWidth = verticalScrollBar?.ActualWidth ?? 0;
+            bool hasVerticalScroller = verticalScrollBar is { ActualWidth: > 0, Visibility: Visibility.Visible };
+            if (hasVerticalScroller)
+            {
+                if (_marqueeStart.X > this.RenderSize.Width - scrollBarWidth)
+                {
+                    return;
+                }
+
+            }
+
+        }
+        _marqueeActive = true;
         Marquee.Visibility = Visibility.Visible;
         UpdateMarquee(_marqueeStart);
         CaptureMouse();
