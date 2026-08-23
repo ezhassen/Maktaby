@@ -396,6 +396,22 @@ public partial class BoxControl : UserControl
         return null;
     }
 
+    private static Border? FindItemBorder(DependencyObject source)
+    {
+        DependencyObject? current = source;
+        while (current is not null)
+        {
+            if (current is Border { DataContext: BoxItemViewModel })
+            {
+                return (Border)current;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
     private static void FocusItem(Border? border)
     {
         if (border is null)
@@ -621,9 +637,16 @@ public partial class BoxControl : UserControl
 
     // ---- Selection / marquee -------------------------------------------------
 
-    private void BoxControl_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void BoxControl_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        // Only reached for empty-area clicks: item clicks set Handled in ItemBorder_MouseLeftButtonDown.
+        // Tunneling handler: it runs before the ScrollViewer/ItemsControl class handlers that would
+        // otherwise swallow the bubbling MouseLeftButtonDown, so empty-area marquee selection works.
+        // Clicks that land on an item are handled by ItemBorder_MouseLeftButtonDown, so skip those.
+        if (e.OriginalSource is DependencyObject src && FindItemBorder(src) is not null)
+        {
+            return;
+        }
+
         bool additive = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
 
         if (!additive)

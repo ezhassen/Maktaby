@@ -8,11 +8,11 @@
     d:DesignHeight="200"
     d:DesignWidth="240"
     AllowDrop="True"
-    DragOver="BoxControl_DragOver"
     DragLeave="BoxControl_DragLeave"
+    DragOver="BoxControl_DragOver"
     Drop="BoxControl_Drop"
     IsKeyboardFocusWithinChanged="BoxControl_IsKeyboardFocusWithinChanged"
-    MouseLeftButtonDown="BoxControl_MouseLeftButtonDown"
+    PreviewMouseLeftButtonDown="BoxControl_PreviewMouseLeftButtonDown"
     MouseLeftButtonUp="BoxControl_MouseLeftButtonUp"
     MouseMove="BoxControl_MouseMove"
     mc:Ignorable="d">
@@ -21,10 +21,10 @@
     </UserControl.Resources>
     <ScrollViewer
         x:Name="Scroll"
-        Background="Transparent"
+        Background="{DynamicResource BoxBackground}"
         HorizontalScrollBarVisibility="Disabled"
         VerticalScrollBarVisibility="Auto">
-        <Grid x:Name="ItemsHost" Background="Transparent">
+        <Grid x:Name="ItemsHost" Background="{DynamicResource BoxBackground}">
             <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -39,8 +39,8 @@
                             Padding="4"
                             ContextMenuOpening="ItemBorder_ContextMenuOpening"
                             Cursor="Arrow"
-                            Focusable="True"
                             FocusVisualStyle="{x:Null}"
+                            Focusable="True"
                             GotFocus="ItemBorder_GotFocus"
                             KeyDown="ItemBorder_KeyDown"
                             MouseLeftButtonDown="ItemBorder_MouseLeftButtonDown"
@@ -106,11 +106,11 @@
             <Canvas x:Name="Overlay" IsHitTestVisible="False">
                 <Rectangle
                     x:Name="Marquee"
-                    Visibility="Collapsed"
                     Fill="#407FB2FF"
                     IsHitTestVisible="False"
                     Stroke="#FF7FB2FF"
-                    StrokeThickness="1" />
+                    StrokeThickness="1"
+                    Visibility="Collapsed" />
             </Canvas>
         </Grid>
     </ScrollViewer>
