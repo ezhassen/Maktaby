@@ -302,30 +302,33 @@ public partial class BoxControl : UserControl
         {
             if (e.Key == Key.Enter)
             {
-                _ = CommitRename(vm);
+                _ = CommitRename(vm, GetItemBorderFromTextBox(tb));
                 e.Handled = true;
             }
             else if (e.Key == Key.Escape)
             {
                 vm.IsEditing = false;
                 e.Handled = true;
+                FocusItem(GetItemBorderFromTextBox(tb));
             }
         }
     }
 
     private void RenameBox_LostFocus(object sender, RoutedEventArgs e)
     {
+        // Commit when focus leaves the rename box (e.g. click-away), but do not force focus back into
+        // the box — let focus follow the click. Enter/Escape handle their own focus restore.
         if (sender is TextBox { DataContext: BoxItemViewModel vm } && vm.IsEditing)
         {
-            _ = CommitRename(vm);
+            _ = CommitRename(vm, null);
         }
     }
 
     private void StartRename(BoxItemViewModel vm, Border border)
     {
-        // Edit the real filename (with extension) so links/files keep their extension; the displayed
-        // name is shown without it.
-        vm.RenameText = (!string.IsNullOrEmpty(vm.Path) && System.IO.Path.GetFileName(vm.Path) is { } full) ? full : vm.DisplayName;
+        // Start editing with exactly the visible name, so the extension is hidden when (and only when) the
+        // display hides it (e.g. .lnk). The original extension is re-attached on commit.
+        vm.RenameText = vm.DisplayName;
         vm.IsEditing = true;
 
         // Focus the rename TextBox (inside the item template) once it has become visible.
@@ -339,30 +342,73 @@ public partial class BoxControl : UserControl
         }), System.Windows.Threading.DispatcherPriority.Input);
     }
 
-    private async Task CommitRename(BoxItemViewModel vm)
+    private async Task CommitRename(BoxItemViewModel vm, Border? focusTarget = null)
     {
         string newName = vm.RenameText.Trim();
         if (string.IsNullOrWhiteSpace(newName))
         {
             vm.IsEditing = false;
+            FocusItem(focusTarget);
             return;
         }
 
-        // Compare against the full current filename (which includes the extension), not the friendly display name.
+        // Compare against the base name (extension hidden in the box), not the full filename.
         string currentFull = (!string.IsNullOrEmpty(vm.Path) && System.IO.Path.GetFileName(vm.Path) is { } c) ? c : vm.DisplayName;
-        if (newName.Equals(currentFull, System.StringComparison.OrdinalIgnoreCase))
+        string currentBase = System.IO.Path.GetFileNameWithoutExtension(currentFull);
+        if (newName.Equals(currentBase, System.StringComparison.OrdinalIgnoreCase))
         {
             vm.IsEditing = false;
+            FocusItem(focusTarget);
             return;
+        }
+
+        // Re-attach the original extension unless the user explicitly typed one (matching Explorer when
+        // extensions are hidden), so files/links keep their extension on disk.
+        string ext = System.IO.Path.GetExtension(currentFull);
+        if (!string.IsNullOrEmpty(ext) && !System.IO.Path.HasExtension(newName))
+        {
+            newName = newName + ext;
         }
 
         bool ok = await (Host?.RenameItem(vm, newName) ?? Task.FromResult(false));
         // On success MainViewModel updated the display name + icon; on failure we stay in edit mode so the
-        // user can correct the name.
+        // user can correct the name. Only restore focus to the item when we actually leave edit mode.
         if (ok)
         {
             vm.IsEditing = false;
         }
+        FocusItem(focusTarget);
+    }
+
+    private static Border? GetItemBorderFromTextBox(TextBox tb)
+    {
+        DependencyObject? current = tb;
+        while (current is not null)
+        {
+            if (current is Border { Name: "ItemBorder" } border)
+            {
+                return border;
+            }
+
+            current = VisualTreeHelper.GetParent(current);
+        }
+
+        return null;
+    }
+
+    private static void FocusItem(Border? border)
+    {
+        if (border is null)
+        {
+            return;
+        }
+
+        // The rename (SHFileOperation) can momentarily hand focus to the desktop/explorer, so re-activate
+        // the box window first, then drive keyboard focus back onto the item.
+        var window = Window.GetWindow(border);
+        window?.Activate();
+        Keyboard.Focus(border);
+        border.Focus();
     }
 
     private void ShowProperties(BoxItemViewModel vm)
