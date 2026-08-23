@@ -129,7 +129,9 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
                 if (msg == ManualApis.WM_LBUTTONDOWN && Application.Current != null)
                 {
                     TryDetectDesktopDoubleClick(info.pt, hwnd);
-                    MaybeDefocusOnDesktopClick(hwnd);
+                    // TODO: Revisit whether a global WH_MOUSE_LL hook observing every click is acceptable
+                    // for other apps/games. Disabled pending that review.
+                    // MaybeDefocusOnDesktopClick(hwnd);
                 }
             }
         }
