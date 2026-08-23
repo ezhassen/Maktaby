@@ -38,10 +38,6 @@ public partial class TrayIconUI
         MenuHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
     }
 
-    private void ContextMenu_ContextMenuOpening(object sender, ContextMenuEventArgs e)
-    {
-    }
-
     /// <summary>Loads the desktop folder icon (same glyph the old tray used) as an ImageSource.</summary>
     private static ImageSource? LoadTrayIcon()
     {

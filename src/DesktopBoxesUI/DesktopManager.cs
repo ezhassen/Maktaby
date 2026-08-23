@@ -3,6 +3,7 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
+using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using System.Collections.Generic;
@@ -14,7 +15,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Interop;
-using DesktopBoxesUI.Win32.NativeMethods;
 
 namespace DesktopBoxesUI;
 
@@ -62,6 +62,7 @@ public sealed class DesktopManager
 
     public async Task InitializeAsync()
     {
+        _coordinator.Stop();
         await _explorer.SetDesktopIconsVisibleAsync(false);
         var snapshot = await _persistence.LoadSnapshotAsync();
         if (snapshot is not { Containers.Count: > 0 })
@@ -92,6 +93,7 @@ public sealed class DesktopManager
         // so the splash keeps animating, then add the already-built VMs on the UI thread. The
         // CollectionChanged handler is detached so we don't synchronously spin up windows during the load.
         _mainVm.Containers.CollectionChanged -= Containers_CollectionChanged;
+        _mainVm.Containers.Clear();
         var builtVms = await Task.Run(() => _mainVm.BuildContainerViewModels(_containers.GetContainers()));
         foreach (var vm in builtVms)
         {
@@ -115,6 +117,7 @@ public sealed class DesktopManager
         await ReconcileItemsAsync();
 
         _appliedResolution = GetPrimaryWorkAreaDip();
+        SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
 
 
@@ -622,7 +625,9 @@ public sealed class DesktopManager
     {
         if (_windows.TryGetValue(id, out var window))
         {
-            Win32Apis.UnregisterBoxWindow(new WindowInteropHelper(window).Handle);
+            var handle = new WindowInteropHelper(window).Handle;
+            Win32Apis.UnregisterBoxWindow(handle);
+            Win32Apis.AllowHide(handle);
             window.Close();
             _windows.Remove(id);
         }
@@ -631,27 +636,31 @@ public sealed class DesktopManager
     public async Task ResetAsync()
     {
         CloseAll();
+        //
         foreach (var container in _containers.GetContainers().ToList())
         {
             _containers.RemoveContainer(container.Id);
         }
+        _persistence.DeleteSnapshotFile();
 
         _boxRegistry.Clear();
-        await BuildDefaultContainerAsync();
-        RegisterAllBoxes();
-        EnsureSurface();
 
-        _mainVm.Containers.CollectionChanged -= Containers_CollectionChanged;
-        var builtVms = await Task.Run(() => _mainVm.BuildContainerViewModels(_containers.GetContainers()));
-        foreach (var vm in builtVms)
-        {
-            _mainVm.Containers.Add(vm);
-        }
+        await InitializeAsync();
+        //await BuildDefaultContainerAsync();
+        //RegisterAllBoxes();
+        //EnsureSurface();
 
-        _mainVm.Containers.CollectionChanged += Containers_CollectionChanged;
+        //_mainVm.Containers.CollectionChanged -= Containers_CollectionChanged;
+        //var builtVms = await Task.Run(() => _mainVm.BuildContainerViewModels(_containers.GetContainers()));
+        //foreach (var vm in builtVms)
+        //{
+        //    _mainVm.Containers.Add(vm);
+        //}
 
-        await AddWindowsAsync();
-        await SaveAsync();
+        //_mainVm.Containers.CollectionChanged += Containers_CollectionChanged;
+
+        //await AddWindowsAsync();
+        //await SaveAsync();
     }
 
     /// <summary>Registers every box from every container into <see cref="IBoxService"/> so the rule
@@ -674,11 +683,12 @@ public sealed class DesktopManager
 
     private void EnsureSurface()
     {
-        _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
-        if (!_surface.IsVisible)
-        {
-            _surface.Show();
-        }
+        //TODO: _surface is not used for now
+        //_surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
+        //if (!_surface.IsVisible)
+        //{
+        //    _surface.Show();
+        //}
     }
 
     public void NewBox()
@@ -727,14 +737,20 @@ public sealed class DesktopManager
         _coordinator.Stop();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
 
-        foreach (var window in _windows.Values)
+        foreach (var window in _windows)
         {
-            window.Close();
+            //Win32Apis.AllowHide(new WindowInteropHelper(window).Handle);
+            //window.Close();
+            RemoveWindow(window.Key);
         }
 
         _windows.Clear();
-        _surface?.Close();
-        _surface = null;
+        if (_surface is not null)
+        {
+            Win32Apis.AllowHide(new WindowInteropHelper(_surface).Handle);
+            _surface?.Close();
+            _surface = null;
+        }
     }
 
     public void RestoreIcons() => _explorer.SetDesktopIconsVisible(true);

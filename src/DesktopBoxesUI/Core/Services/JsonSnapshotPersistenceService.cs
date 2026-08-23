@@ -18,6 +18,11 @@ public sealed class JsonSnapshotPersistenceService : IPersistenceService
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
+    public void DeleteSnapshotFile()
+    {
+        if (File.Exists(FilePath)) File.Delete(FilePath);
+    }
+
     public async Task<DesktopSnapshot?> LoadSnapshotAsync(CancellationToken cancellationToken = default)
     {
         if (!File.Exists(FilePath))

@@ -12,7 +12,10 @@ namespace DesktopBoxesUI.Core.Interfaces;
 public interface IPersistenceService
 {
     Task<DesktopSnapshot?> LoadSnapshotAsync(CancellationToken cancellationToken = default);
-
+    /// <summary>
+    /// Delete the snapshot file
+    /// </summary>
+    void DeleteSnapshotFile();
     /// <summary>
     /// Sync save for app exit
     /// </summary>

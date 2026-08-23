@@ -1,10 +1,10 @@
+using DesktopBoxesUI.Shell.Interop;
+using DesktopBoxesUI.Win32.Services;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
-using DesktopBoxesUI.Shell.Interop;
-using DesktopBoxesUI.Win32.Services;
 using Windows.Win32;
 using Windows.Win32.Foundation;
 using Windows.Win32.Graphics.Gdi;
@@ -912,7 +912,7 @@ internal static class Win32Apis
         }
 
         var sb = new StringBuilder(256);
-        return ManualApis.GetClassName(hwnd, sb, 256) != 0 && sb.ToString() == "SysListView32";
+        return ManualApis.GetClassName(hwnd, sb, 256) != 0 && sb.ToString() == ShellWindowClasses.SysListView32; //"SysListView32";
     }
 
     /// <summary>
@@ -931,7 +931,7 @@ internal static class Win32Apis
             if (ManualApis.GetClassName(h, sb, 256) != 0)
             {
                 string cls = sb.ToString();
-                if (cls == "Progman" || cls == "WorkerW")
+                if (cls == ShellWindowClasses.ShellDefView || cls == ShellWindowClasses.Progman || cls == ShellWindowClasses.WorkerW || cls == ShellWindowClasses.SysListView32)
                 {
                     return true;
                 }

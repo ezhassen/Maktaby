@@ -59,6 +59,7 @@ public sealed partial class DesktopSurface : Window
         Win32Apis.GlueToDesktopSurface(helper.Handle);
         Win32Apis.PreventMinimize(helper.Handle);
         _listView = ExplorerDesktopService.FindDesktopListView();
+        //SetAboveList(true);
     }
 
     private IntPtr GetListView()
