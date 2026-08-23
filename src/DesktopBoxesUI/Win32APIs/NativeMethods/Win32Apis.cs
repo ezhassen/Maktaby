@@ -899,6 +899,10 @@ internal static class Win32Apis
 
     public static IntPtr WindowFromPoint(ManualApis.POINT pt) => ManualApis.WindowFromPoint(pt);
 
+    /// <summary>Moves focus to <paramref name="hWnd"/> (e.g. the desktop shell window) so a previously
+    /// focused window loses focus. Used to defocus the active box when the user clicks empty desktop.</summary>
+    public static bool SetForegroundWindow(IntPtr hWnd) => ManualApis.SetForegroundWindow(hWnd);
+
     /// <summary>True when <paramref name="hwnd"/> is a <c>SysListView32</c> (the desktop list-view among others).</summary>
     public static bool IsSysListView32(IntPtr hwnd)
     {

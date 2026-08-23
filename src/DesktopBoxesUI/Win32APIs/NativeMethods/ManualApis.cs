@@ -131,6 +131,10 @@ internal static class ManualApis
     public static extern IntPtr WindowFromPoint(POINT pt);
 
     [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
     public static extern int GetDoubleClickTime();
 
     [DllImport("user32.dll")]

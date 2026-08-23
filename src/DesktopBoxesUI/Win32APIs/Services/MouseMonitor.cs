@@ -129,6 +129,7 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
                 if (msg == ManualApis.WM_LBUTTONDOWN && Application.Current != null)
                 {
                     TryDetectDesktopDoubleClick(info.pt, hwnd);
+                    MaybeDefocusOnDesktopClick(hwnd);
                 }
             }
         }
@@ -183,6 +184,31 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
                     }
                 }));
             }
+        }
+    }
+
+    /// <summary>
+    /// When a single left-click lands on the desktop while one of our box windows is foreground, move
+    /// focus to the desktop shell window so the box is deactivated (un-focused). We only act when our
+    /// own box is foreground, never stealing focus from another application.
+    /// </summary>
+    private void MaybeDefocusOnDesktopClick(IntPtr hwnd)
+    {
+        if (!Win32Apis.IsDesktopChild(hwnd) || Win32Apis.IsBoxWindow(hwnd))
+        {
+            return;
+        }
+
+        IntPtr foreground = Win32Apis.GetForegroundWindow();
+        if (!Win32Apis.IsBoxWindow(foreground))
+        {
+            return;
+        }
+
+        IntPtr shell = Win32Apis.GetShellWindow();
+        if (shell != IntPtr.Zero)
+        {
+            Application.Current.Dispatcher.BeginInvoke(new Action(() => Win32Apis.SetForegroundWindow(shell)));
         }
     }
 
