@@ -111,6 +111,9 @@ public partial class App : Application
 
         // Win32 watchers
         services.AddSingleton<IMouseMonitor, MouseMonitor>();
+
+        // Debug overlay (single instance; toggled from the tray "Debug Desktop Tree" menu).
+        services.AddSingleton<DesktopTreeDebugOverlay>();
     }
 
     /// <summary>
@@ -210,6 +213,21 @@ public partial class App : Application
         tray.ToggleHideAllRequested += (_, _) =>
         {
             Services.GetRequiredService<DesktopManager>().ToggleHideAllBoxes();
+        };
+
+        tray.DebugTreeRequested += (_, _) =>
+        {
+            var overlay = Services.GetRequiredService<DesktopTreeDebugOverlay>();
+            if (overlay.IsVisible)
+            {
+                overlay.Stop();
+                overlay.Hide();
+            }
+            else
+            {
+                overlay.Show();
+                overlay.Start();
+            }
         };
 
         // Double-clicking empty desktop area toggles the same hide-all state (icon double-clicks still open).

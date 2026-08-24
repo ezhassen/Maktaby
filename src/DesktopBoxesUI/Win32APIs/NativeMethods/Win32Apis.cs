@@ -73,6 +73,21 @@ internal static class Win32Apis
 
     public static bool IsWindowVisible(IntPtr hWnd) => ManualApis.IsWindowVisible(hWnd);
 
+    /// <summary>Makes a layered window click-through (mouse hits the window beneath it) for debugging
+    /// overlays that must not steal input while they visualize the desktop.</summary>
+    public static void MakeClickThrough(IntPtr hwnd)
+    {
+        try
+        {
+            int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
+            ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_TRANSPARENT);
+        }
+        catch (Exception)
+        {
+            // Non-critical; ignore.
+        }
+    }
+
     /// <summary>
     /// Toggles desktop icon visibility the same way Explorer's "Show desktop icons" context-menu item
     /// does: it sends <c>WM_COMMAND</c> 0x7402 to the desktop's <c>SHELLDLL_DefView</c> window. This
@@ -680,23 +695,23 @@ internal static class Win32Apis
     /// </summary>
     public static void MakeToolWindow(IntPtr hwnd)
     {
-        try
-        {
-            int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
-            ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_TOOLWINDOW);
-            ManualApis.SetWindowPos(
-                hwnd,
-                IntPtr.Zero,
-                0,
-                0,
-                0,
-                0,
-                ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOZORDER | ManualApis.SWP_FRAMECHANGED | ManualApis.SWP_NOACTIVATE);
-        }
-        catch
-        {
-            // ignore — cosmetic if it fails
-        }
+        //try
+        //{
+        int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
+        ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_TOOLWINDOW);
+        ManualApis.SetWindowPos(
+            hwnd,
+            IntPtr.Zero,
+            0,
+            0,
+            0,
+            0,
+            ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOZORDER | ManualApis.SWP_FRAMECHANGED | ManualApis.SWP_NOACTIVATE);
+        //}
+        //catch
+        //{
+        //    // ignore — cosmetic if it fails
+        //}
     }
 
     /// <summary>
@@ -708,86 +723,145 @@ internal static class Win32Apis
     /// </summary>
     public static void GlueToDesktop(IntPtr hwnd)
     {
-        try
+        //try
+        //{
+        var progman = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
+        if (progman == IntPtr.Zero)
         {
-            var progman = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", null);
-            if (progman == IntPtr.Zero)
+            return;
+        }
+
+        ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, progman);
+
+        // Raise the window above the Explorer desktop listview (SysListView32) within the desktop
+        // layer. Without this, OLE drag/drop over empty desktop is delivered to Explorer instead of
+        // our surface, so drops onto empty space never reach us. It stays below the real top-level
+        // app windows (and below the BoxContainer windows, which are created after it and also
+        // glued to the desktop), preserving click-through and per-container drops.
+        ManualApis.SetWindowPos(hwnd, ManualApis.HWND_TOP, 0, 0, 0, 0,
+            ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+        //}
+        //catch (Exception)
+        //{
+        //    // Non-critical window setup; ignore failures.
+        //}
+    }
+
+    /// <summary>The live HWND of the desktop surface, published so debug tooling can locate it even
+    /// when it is reparented (and thus invisible to <c>EnumWindows</c>).</summary>
+    public static IntPtr DesktopSurfaceHandle;
+
+    /// <summary>
+    /// Returns the real desktop root window (the Progman / WorkerW that actually hosts the Explorer
+    /// <c>SHELLDLL_DefView</c>). We use <c>GetParent(DefView)</c> rather than a blind
+    /// <c>FindWindowEx("Progman")</c>, because there can be several vestigial Progman windows and only
+    /// the one parenting DefView is the one whose content we must sit above.
+    /// </summary>
+    public static IntPtr GetDesktopRootHandle()
+    {
+        // Prefer the parent of the live Explorer DefView: that is the exact Progman/WorkerW whose content
+        // we must sit above. (GetParent of a DefView returns Progman or the WorkerW that hosts it.)
+        var defView = ExplorerDesktopService.FindDesktopSHELLDLL_DefView();
+        if (defView != IntPtr.Zero)
+        {
+            var parent = ManualApis.GetParent(defView);
+            if (parent != IntPtr.Zero)
             {
-                return;
+                return parent;
             }
-
-            ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, progman);
-
-            // Raise the window above the Explorer desktop listview (SysListView32) within the desktop
-            // layer. Without this, OLE drag/drop over empty desktop is delivered to Explorer instead of
-            // our surface, so drops onto empty space never reach us. It stays below the real top-level
-            // app windows (and below the BoxContainer windows, which are created after it and also
-            // glued to the desktop), preserving click-through and per-container drops.
-            ManualApis.SetWindowPos(hwnd, ManualApis.HWND_TOP, 0, 0, 0, 0,
-                ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
         }
-        catch (Exception)
+
+        // Fallback: any Progman window.
+        var progman = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
+        if (progman != IntPtr.Zero)
         {
-            // Non-critical window setup; ignore failures.
+            return progman;
         }
+
+        // Fallback: the WorkerW that actually hosts a DefView (iterate if the simple search missed it).
+        var worker = ExplorerDesktopService.FindDesktopWorkerW();
+        if (worker != IntPtr.Zero)
+        {
+            return worker;
+        }
+
+        // Last resort: the desktop window itself. It is always non-zero, and inserting the surface just
+        // above it still keeps us above the Explorer list-view and below every real application window.
+        // Never return IntPtr.Zero here — a zero root would make GlueToDesktopSurface and the z-order
+        // override no-op, leaving the surface as a normal top-level window that floats above app windows.
+        return GetDesktopWindow();
     }
 
     /// <summary>
-    /// Glues the desktop overlay surface to the Explorer desktop, but places it directly ABOVE the
-    /// desktop list-view (SysListView32) so that OLE drag/drop over empty desktop is delivered to the
-    /// surface instead of to Explorer (which rejects our custom format and shows a "no-drop" cursor).
-    /// The surface stays below the real top-level app windows and below the box container windows
-    /// (which are glued to Progman and created afterwards), so per-container drops and normal window
-    /// interaction are unaffected. Falls back to <see cref="GlueToDesktop"/> if the list-view can't be
-    /// located.
+    /// Glues the desktop overlay surface to the shell: it becomes a top-level (layered) window owned by
+    /// the real desktop root (Progman / the WorkerW that hosts the Explorer <c>SHELLDLL_DefView</c>) and
+    /// is inserted just ABOVE that root in the z-order — so it sits above the Explorer list-view yet
+    /// below every real application window. A top-level layered window with a non-zero-alpha background
+    /// reliably receives input when it is the topmost window at a point, becoming the hit target for
+    /// empty-desktop input without ever covering other apps. <see cref="PreventMinimize"/> keeps the
+    /// shell's "Show Desktop" from dismissing it.
     /// </summary>
     public static void GlueToDesktopSurface(IntPtr hwnd)
     {
-        try
+        var root = GetDesktopRootHandle();
+        if (root == IntPtr.Zero)
         {
-            var listView = ExplorerDesktopService.FindDesktopListView();
-            var parent = listView != IntPtr.Zero ? ManualApis.GetParent(listView) : IntPtr.Zero;
-            if (parent == IntPtr.Zero)
-            {
-                parent = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", null);
-            }
-
-            if (parent == IntPtr.Zero)
-            {
-                return;
-            }
-
-            ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, parent);
-
-            // Sit BELOW the list-view by default so Explorer's own drag/drop (moving icons, dropping
-            // files) is delivered to Explorer as normal. It is raised above the list-view only for the
-            // duration of our own tab drag (see RaiseDesktopSurface) to show the correct drop cursor.
-            ManualApis.SetWindowPos(hwnd, ManualApis.HWND_BOTTOM, 0, 0, 0, 0,
-                ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+            return;
         }
-        catch (Exception)
-        {
-            // Non-critical window setup; ignore failures.
-        }
+
+        // A child window can never be the hit target here: a WS_EX_LAYERED child is always painted
+        // BEHIND its non-layered siblings (the Explorer DefView/list-view). So we stay a top-level layered
+        // window, own it to the desktop root, stop it being minimised, and finally insert it just above
+        // that root — so the final z-order (below every real app) is the one we want.
+        ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, root);
+        PreventMinimize(hwnd);
+
+        // Never let a click on the empty-desktop surface activate/raise it above application windows.
+        // WS_EX_NOACTIVATE keeps it receiving mouse input while telling Windows not to bring it forward.
+        int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
+        ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_NOACTIVATE);
+
+        PositionSurfaceOverDesktop(hwnd, root);
     }
 
     /// <summary>
-    /// Temporarily raises the desktop surface above the Explorer list-view (so OLE delivers our
-    /// in-process tab drag to it and the correct drop cursor shows) or restores it below the list-view
-    /// (so Explorer's native drag/drop keeps working). Used only for the duration of a tab drag.
+    /// Positions the (top-level) surface over the primary work area and inserts it just ABOVE the desktop
+    /// root in the z-order. Because it is a top-level window — not a child — it escapes the layered-child
+    /// "always behind non-layered siblings" rule, so it ends up above the Explorer list-view while staying
+    /// below every real application window (apps sit above the desktop). Used on first glue and on
+    /// display/DPI changes.
     /// </summary>
-    public static void RaiseDesktopSurface(IntPtr surfaceHwnd, IntPtr listViewHwnd, bool above)
+    public static void PositionSurfaceOverDesktop(IntPtr hwnd, IntPtr? progmanHandle = null)
     {
-        try
+        var root = progmanHandle ?? ExplorerDesktopService.FindDesktopProgman();
+        if (root == IntPtr.Zero)
         {
-            var insertAfter = above && listViewHwnd != IntPtr.Zero ? listViewHwnd : ManualApis.HWND_BOTTOM;
-            ManualApis.SetWindowPos(surfaceHwnd, insertAfter, 0, 0, 0, 0,
-                ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+            root = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
         }
-        catch (Exception)
+
+        if (root == IntPtr.Zero)
         {
-            // Non-critical; ignore.
+            return;
         }
+
+        var hmon = PInvoke.MonitorFromWindow((HWND)hwnd, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO mi = default;
+        mi.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
+        if (!PInvoke.GetMonitorInfo(hmon, ref mi))
+        {
+            return;
+        }
+
+        RECT wa = mi.rcWork;
+        // Top-level window: screen coordinates, inserted just above the desktop root.
+        ManualApis.SetWindowPos(
+            hwnd,
+            root,
+            wa.left,
+            wa.top,
+            wa.right - wa.left,
+            wa.bottom - wa.top,
+            ManualApis.SWP_NOACTIVATE);
     }
 
     /// <summary>
@@ -796,25 +870,20 @@ internal static class Win32Apis
     /// </summary>
     public static void PreventMinimize(IntPtr hwnd)
     {
-        try
-        {
-            int style = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_STYLE);
-            style = (style & ~ManualApis.WS_MAXIMIZEBOX) & ~ManualApis.WS_MINIMIZEBOX;
-            ManualApis.SetWindowLong(hwnd, ManualApis.GWL_STYLE, style);
+        int style = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_STYLE);
+        style = (style & ~ManualApis.WS_MAXIMIZEBOX) & ~ManualApis.WS_MINIMIZEBOX;
+        ManualApis.SetWindowLong(hwnd, ManualApis.GWL_STYLE, style);
 
-            ManualApis.SetWindowPos(
-                hwnd,
-                ManualApis.HWND_TOP,
-                0,
-                0,
-                0,
-                0,
-                ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_FRAMECHANGED | ManualApis.SWP_NOACTIVATE);
-        }
-        catch (Exception)
-        {
-            // Non-critical window setup; ignore failures.
-        }
+        // Flush the style change without disturbing the z-order (SWP_NOZORDER keeps whatever position the
+        // caller established) so this never bumps the surface above application windows.
+        ManualApis.SetWindowPos(
+            hwnd,
+            ManualApis.HWND_TOP,
+            0,
+            0,
+            0,
+            0,
+            ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_FRAMECHANGED | ManualApis.SWP_NOACTIVATE | ManualApis.SWP_NOZORDER);
     }
 
     private static readonly HashSet<IntPtr> _allowHide = new();

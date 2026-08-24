@@ -1,4 +1,5 @@
 using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Shell.Interop;
 using DesktopBoxesUI.Win32.NativeMethods;
 using System;
 using System.Runtime.Versioning;
@@ -40,28 +41,71 @@ public sealed class ExplorerDesktopService : IExplorerDesktopService
         await Task.Run(() => SetDesktopIconsVisible(visible));
     }
 
+    internal static IntPtr FindDesktopProgman()
+    {
+        return Win32Apis.FindWindowEx(HWND.Null, HWND.Null, ShellWindowClasses.Progman, null);
+    }
+    internal static IntPtr FindDesktopSHELLDLL_DefView()
+    {
+        HWND progman = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, ShellWindowClasses.Progman, null);
+        HWND defView = Win32Apis.FindWindowEx(progman, HWND.Null, ShellWindowClasses.ShellDefView, null);
+        if ((IntPtr)defView == IntPtr.Zero)
+        {
+            HWND worker = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, ShellWindowClasses.WorkerW, null);
+            while ((IntPtr)worker != IntPtr.Zero)
+            {
+                defView = Win32Apis.FindWindowEx(worker, HWND.Null, ShellWindowClasses.ShellDefView, null);
+                if ((IntPtr)defView != IntPtr.Zero)
+                {
+                    break;
+                }
+
+                worker = Win32Apis.FindWindowEx(HWND.Null, worker, ShellWindowClasses.WorkerW, null);
+            }
+        }
+        return (IntPtr)defView;
+    }
     internal static IntPtr FindDesktopListView()
     {
-        HWND progman = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, "Progman", null);
-        HWND defView = Win32Apis.FindWindowEx(progman, HWND.Null, "SHELLDLL_DefView", null);
-        HWND listView = Win32Apis.FindWindowEx(defView, HWND.Null, "SysListView32", null);
+        HWND progman = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, ShellWindowClasses.Progman, null);
+        HWND defView = Win32Apis.FindWindowEx(progman, HWND.Null, ShellWindowClasses.ShellDefView, null);
+        HWND listView = Win32Apis.FindWindowEx(defView, HWND.Null, ShellWindowClasses.SysListView32, null);
 
         if ((IntPtr)listView == IntPtr.Zero)
         {
-            HWND worker = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, "WorkerW", null);
+            HWND worker = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, ShellWindowClasses.WorkerW, null);
             while ((IntPtr)worker != IntPtr.Zero)
             {
-                defView = Win32Apis.FindWindowEx(worker, HWND.Null, "SHELLDLL_DefView", null);
-                listView = Win32Apis.FindWindowEx(defView, HWND.Null, "SysListView32", null);
+                defView = Win32Apis.FindWindowEx(worker, HWND.Null, ShellWindowClasses.ShellDefView, null);
+                listView = Win32Apis.FindWindowEx(defView, HWND.Null, ShellWindowClasses.SysListView32, null);
                 if ((IntPtr)listView != IntPtr.Zero)
                 {
                     break;
                 }
 
-                worker = Win32Apis.FindWindowEx(HWND.Null, worker, "WorkerW", null);
+                worker = Win32Apis.FindWindowEx(HWND.Null, worker, ShellWindowClasses.WorkerW, null);
             }
         }
 
         return (IntPtr)listView;
+    }
+
+    /// <summary>Returns the <c>WorkerW</c> window that hosts the Explorer <c>SHELLDLL_DefView</c>, or
+    /// <see cref="IntPtr.Zero"/> if none is found.</summary>
+    internal static IntPtr FindDesktopWorkerW()
+    {
+        HWND worker = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, ShellWindowClasses.WorkerW, null);
+        while ((IntPtr)worker != IntPtr.Zero)
+        {
+            HWND defView = Win32Apis.FindWindowEx(worker, HWND.Null, ShellWindowClasses.ShellDefView, null);
+            if ((IntPtr)defView != IntPtr.Zero)
+            {
+                return (IntPtr)worker;
+            }
+
+            worker = Win32Apis.FindWindowEx(HWND.Null, worker, ShellWindowClasses.WorkerW, null);
+        }
+
+        return IntPtr.Zero;
     }
 }

@@ -128,7 +128,7 @@ public sealed class DesktopManager
 
         //
         _coordinator.Start();
-        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface) _mouseMonitor.Start();
+        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == true) _mouseMonitor.Start();
     }
 
     #endregion
@@ -782,7 +782,15 @@ public sealed class DesktopManager
     private void EnsureSurface()
     {
         //TODO: _surface EnsureSurface
-        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface)
+        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == false)
+        {
+            _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
+            if (!_surface.IsVisible)
+            {
+                _surface.Show();
+            }
+        }
+        else
         {
             if (_surface is not null)
             {
@@ -790,14 +798,6 @@ public sealed class DesktopManager
                 //_surface.Close();
                 _surface.CloseWindowEx();
                 _surface = null;
-            }
-        }
-        else
-        {
-            _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
-            if (!_surface.IsVisible)
-            {
-                _surface.Show();
             }
         }
     }

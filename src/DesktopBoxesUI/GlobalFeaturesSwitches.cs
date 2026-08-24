@@ -7,6 +7,11 @@ namespace DesktopBoxesUI;
 public static class GlobalFeaturesSwitches
 {
 
-    public static bool UseGlobalMouseHookInsteadOfCustomSurface { get; } = false;
+    /// <summary>
+    /// null means do nothing
+    /// </summary>
+    public static bool? UseGlobalMouseHookInsteadOfCustomSurface { get; } = true;
+
+    public static bool ShowDebugTree { get; } = false;
 
 }

@@ -14,7 +14,7 @@
     <Grid
         x:Name="Root"
         AllowDrop="True"
-        Background="Transparent"
+        Background="#01000000"
         DragLeave="Surface_DragLeave"
         DragOver="Surface_DragOver"
         Drop="Surface_Drop" />

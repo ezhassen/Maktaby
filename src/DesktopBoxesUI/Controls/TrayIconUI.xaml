@@ -148,6 +148,11 @@
                     Tag="light" />
             </MenuItem>
             <Separator />
+            <MenuItem
+                x:Name="ToggleDebugTree"
+                Click="DebugTree_Click"
+                Header="Debug Desktop Tree"
+                IsCheckable="True" />
             <MenuItem Click="Exit_Click" Header="Exit" />
         </ContextMenu>
     </tray:NotifyIcon.Menu>

@@ -2,6 +2,7 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
+using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Interop;
 
@@ -22,6 +23,17 @@ public sealed partial class DesktopSurface : Window
     private bool _dragging;
     private IntPtr _listView;
 
+    // Desktop root we must stay just above (Progman / the WorkerW hosting the shell). Set once the
+    // window is glued; until then the WM_WINDOWPOSCHANGING guard leaves WPF's initial layout alone.
+    private IntPtr _desktopRoot;
+
+    // WPF windows are not created with CS_DBLCLKS, so WM_LBUTTONDBLCLK is never delivered. We detect a
+    // double-click ourselves from two consecutive WM_LBUTTONDOWNs on empty desktop.
+    private const int DoubleClickMs = 500;
+    private int _lastDownTick;
+    private int _lastDownX;
+    private int _lastDownY;
+
     public DesktopSurface(MainViewModel host, System.Action save)
     {
         InitializeComponent();
@@ -40,10 +52,7 @@ public sealed partial class DesktopSurface : Window
     /// <summary>Re-covers the (possibly changed) primary work area after a display/DPI/resolution change.</summary>
     internal void Relayout()
     {
-        Left = SystemParameters.WorkArea.Left;
-        Top = SystemParameters.WorkArea.Top;
-        Width = SystemParameters.WorkArea.Width;
-        Height = SystemParameters.WorkArea.Height;
+        Win32Apis.PositionSurfaceOverDesktop(new WindowInteropHelper(this).Handle);
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -56,10 +65,10 @@ public sealed partial class DesktopSurface : Window
             source.AddHook(Win32Apis.MinimizePreventionHook);
         }
 
+        Win32Apis.DesktopSurfaceHandle = helper.Handle;
         Win32Apis.GlueToDesktopSurface(helper.Handle);
-        Win32Apis.PreventMinimize(helper.Handle);
+        _desktopRoot = Win32Apis.GetDesktopRootHandle();
         _listView = ExplorerDesktopService.FindDesktopListView();
-        //SetAboveList(true);
     }
 
     private IntPtr GetListView()
@@ -71,54 +80,138 @@ public sealed partial class DesktopSurface : Window
 
         return _listView;
     }
+    private const int WM_NCHITTEST = 0x0084;
+    private const int WM_MOUSEMOVE = 0x0200;
+    private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_LBUTTONUP = 0x0202;
+    private const int WM_LBUTTONDBLCLK = 0x0203;
+    private const int WM_MOUSEWHEEL = 0x020A;
+    private const int WM_WINDOWPOSCHANGING = 0x0046;
+    private const int WM_MOUSEACTIVATE = 0x0021;
+    private const int MA_NOACTIVATE = 3;
+    private const int VK_RBUTTON = 0x02;
+    private const int HTTRANSPARENT = -1;
+    private const int HTCLIENT = 1;
 
-    /// <summary>Raises/lowers this surface above the Explorer list-view so it becomes (or stops being)
-    /// the OLE drop target during our own tab drag.</summary>
-    internal void SetAboveList(bool above)
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WINDOWPOS
     {
-        var hwnd = new WindowInteropHelper(this).Handle;
-        Win32Apis.RaiseDesktopSurface(hwnd, GetListView(), above);
+        public IntPtr hwnd;
+        public IntPtr hwndInsertAfter;
+        public int x;
+        public int y;
+        public int cx;
+        public int cy;
+        public uint flags;
     }
 
+    /// <summary>
+    /// The surface sits above the Explorer list-view and owns every mouse event on the empty desktop.
+    /// It forwards that input to the real shell list-view (so icon selection, marquee, wheel and
+    /// double-click-to-open keep working) and only intercepts it for itself when the gesture is a
+    /// double-click on EMPTY desktop (toggle hide-all). The right button is reported transparent so
+    /// Explorer's context menu still reaches the desktop. While our own tab drag is over the surface
+    /// the events are not forwarded so OLE drop handling proceeds.
+    /// </summary>
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (msg == 0x0084) // WM_NCHITTEST
+        if (msg == WM_NCHITTEST)
         {
-            handled = true;
-
-            // While the right mouse button is held, become transparent to hits so the click falls
-            // through to the real desktop and its context menu is shown. For every other case (hover,
-            // left-drag, drops) we must report HTCLIENT explicitly: because this is a layered,
-            // fully-transparent window, the default hit-test would otherwise return HTTRANSPARENT and
-            // the surface would never be the drop target.
-            if ((Win32Apis.GetAsyncKeyState(0x02) & 0x8000) != 0)
+            // Right button passes through to Explorer so its context menu is shown.
+            if ((Win32Apis.GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0)
             {
-                return (IntPtr)(-1); // HTTRANSPARENT
+                handled = true;
+                return (IntPtr)HTTRANSPARENT;
             }
 
-            return (IntPtr)1; // HTCLIENT
+            handled = true;
+            return (IntPtr)HTCLIENT;
         }
 
-        // Forward genuine mouse interaction to the real desktop shell view so the surface behaves as if
-        // the click penetrated: icon selection, double-click-to-open, rubber-band marquee selection and
-        // wheel scrolling all keep working even though we sit above the list-view. The right button is
-        // not forwarded because WM_NCHITTEST already reports HTTRANSPARENT for it, letting the context
-        // menu reach Explorer directly. Skipped while an external drag is over us so drops are not
-        // disturbed.
-        if (!_dragging)
+        // Decline activation when a plain click lands on the surface. This is the real cause of the
+        // surface jumping above app windows: a click activates it and promotes it to the foreground.
+        // We only decline when we are NOT in the middle of our own drag — during an OLE drag the surface
+        // must be allowed to activate so drag/drop can complete (returning MA_NOACTIVATE while dragging
+        // previously broke drops). WS_EX_NOACTIVATE in glue covers the same case as a style, this is the
+        // message-level backstop.
+        if (msg == WM_MOUSEACTIVATE && !_dragging)
         {
-            uint m = (uint)msg;
-            if (m is 0x0200 or 0x0201 or 0x0202 or 0x0203 or 0x020A) // MOUSEMOVE / LBUTTONDOWN / LBUTTONUP / LBUTTONDBLCLK / MOUSEWHEEL
-            {
-                var listView = GetListView();
-                if (listView != IntPtr.Zero)
-                {
-                    ManualApis.PostMessage(listView, m, wParam, lParam);
-                }
+            handled = true;
+            return (IntPtr)MA_NOACTIVATE;
+        }
 
-                handled = true;
+        // WPF keeps trying to re-assert a normal top-level z-order and, on click/activation, raises the
+        // surface above application windows. Intercept every reposition and force the insert-after back to
+        // the real desktop root so we always stay just above the Explorer list-view and below app windows.
+        // Lazily resolve _desktopRoot (it may be 0 if glue ran before the desktop was ready) and never
+        // force with a zero handle — that previously produced HWND_TOP and broke the ordering.
+        if (msg == WM_WINDOWPOSCHANGING)
+        {
+            if (_desktopRoot == IntPtr.Zero)
+            {
+                _desktopRoot = Win32Apis.GetDesktopRootHandle();
+            }
+
+            if (_desktopRoot != IntPtr.Zero)
+            {
+                var wp = System.Runtime.InteropServices.Marshal.PtrToStructure<WINDOWPOS>(lParam);
+                wp.hwndInsertAfter = _desktopRoot;
+                System.Runtime.InteropServices.Marshal.StructureToPtr(wp, lParam, true);
+            }
+
+            return IntPtr.Zero;
+        }
+
+        // Our own tab drag is over the surface: let OLE drop handling proceed, don't forward.
+        if (_dragging)
+        {
+            return IntPtr.Zero;
+        }
+
+        uint m = (uint)msg;
+        if (m is WM_MOUSEMOVE or WM_LBUTTONDOWN or WM_LBUTTONUP or WM_LBUTTONDBLCLK or WM_MOUSEWHEEL)
+        {
+            var listView = GetListView();
+            if (listView == IntPtr.Zero)
+            {
                 return IntPtr.Zero;
             }
+
+            // Double-click on EMPTY desktop toggles hide-all. WPF never sends WM_LBUTTONDBLCLK, so we
+            // recognise it from two WM_LBUTTONDOWNs close in time and space. The first click is forwarded
+            // (harmless on empty desktop); the second is intercepted so Explorer never sees it.
+            if (m == WM_LBUTTONDOWN)
+            {
+                if (Win32Apis.GetCursorPos(out ManualApis.POINT pt)
+                    && Win32Apis.IsDesktopEmptyPoint(listView, pt))
+                {
+                    int now = Environment.TickCount;
+                    bool isDouble = _lastDownTick != 0
+                        && now - _lastDownTick <= DoubleClickMs
+                        && Math.Abs(_lastDownX - pt.X) <= 4
+                        && Math.Abs(_lastDownY - pt.Y) <= 4;
+                    if (isDouble)
+                    {
+                        _lastDownTick = 0;
+                        handled = true;
+                        App.Services.GetRequiredService<DesktopBoxesUI.DesktopManager>().ToggleHideAllBoxes();
+                        return IntPtr.Zero;
+                    }
+
+                    _lastDownTick = now;
+                    _lastDownX = pt.X;
+                    _lastDownY = pt.Y;
+                }
+                else
+                {
+                    // A click on an icon (or elsewhere) must not pair with a later empty-desktop click.
+                    _lastDownTick = 0;
+                }
+            }
+
+            ManualApis.PostMessage(listView, m, wParam, lParam);
+            handled = true;
+            return IntPtr.Zero;
         }
 
         return IntPtr.Zero;

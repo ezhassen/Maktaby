@@ -24,6 +24,7 @@ public partial class TrayIconUI
     public event EventHandler<string?>? ThemeRequested;
     public event EventHandler? ExitRequested;
     public event EventHandler? ToggleHideAllRequested;
+    public event EventHandler? DebugTreeRequested;
 
     public TrayIconUI()
     {
@@ -36,6 +37,7 @@ public partial class TrayIconUI
     {
         var dtMan = App.Services.GetRequiredService<DesktopManager>();
         MenuHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
+        ToggleDebugTree.Visibility = GlobalFeaturesSwitches.ShowDebugTree ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Loads the desktop folder icon (same glyph the old tray used) as an ImageSource.</summary>
@@ -69,6 +71,8 @@ public partial class TrayIconUI
     private void Exit_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
     private void HideAll_Click(object sender, RoutedEventArgs e) => ToggleHideAllRequested?.Invoke(this, EventArgs.Empty);
+
+    private void DebugTree_Click(object sender, RoutedEventArgs e) => DebugTreeRequested?.Invoke(this, EventArgs.Empty);
 
     /// <summary>Reflects the current "all boxes hidden" state in the tray menu's check box.</summary>
     public void SetHideAllChecked(bool hidden) => MenuHideAll.IsChecked = hidden;
