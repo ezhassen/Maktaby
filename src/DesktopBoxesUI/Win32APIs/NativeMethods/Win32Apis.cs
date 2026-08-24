@@ -865,6 +865,29 @@ internal static class Win32Apis
     }
 
     /// <summary>
+    /// Returns the work-area rectangle (physical screen pixels) of the monitor that contains
+    /// <paramref name="hwnd"/>, or <see langword="null"/> if it cannot be determined. Used to place
+    /// dialog/surface windows on the same monitor as the window that triggered them.
+    /// </summary>
+    public static (int left, int top, int right, int bottom)? GetMonitorWorkArea(IntPtr hwnd)
+    {
+        var hmon = PInvoke.MonitorFromWindow((HWND)hwnd, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+        if (hmon == HWND.Null)
+        {
+            return null;
+        }
+
+        MONITORINFO mi = default;
+        mi.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
+        if (!PInvoke.GetMonitorInfo(hmon, ref mi))
+        {
+            return null;
+        }
+
+        return (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom);
+    }
+
+    /// <summary>
     /// Removes the minimize/maximize boxes so the window cannot be minimized (by Win+D / Show Desktop
     /// or by the user). The style change is flushed with SWP_FRAMECHANGED so it takes effect immediately.
     /// </summary>
