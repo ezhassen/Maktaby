@@ -12,8 +12,8 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
-using Wpf.Ui;
 using Wpf.Ui.Controls;
+using DesktopBoxesUI.Services;
 
 namespace DesktopBoxesUI.Views;
 
@@ -23,7 +23,7 @@ namespace DesktopBoxesUI.Views;
 /// the WPF-UI application theme. The left vertical list navigates a single scrollable column of
 /// sections (Appearance / Boxes / General / Snapshot).
 /// </summary>
-public partial class SettingsView : FluentWindow
+public partial class SettingsView : FluentWindow, IContentDialogHostProvider
 {
     public SettingsView(SettingsViewModel vm)
     {
@@ -33,15 +33,15 @@ public partial class SettingsView : FluentWindow
         ApplyDesktopBackground();
         BuildPreviewItems();
 
-        // Host the WPF-UI content dialogs on this window.
-        _dialogService.SetDialogHost(RootContentDialogHost);
-
         // Keep the preview in sync with every edit (the VM raises PropertyChanged per field).
         vm.PropertyChanged += (_, _) => UpdatePreview();
         UpdatePreview();
     }
 
-    private readonly ContentDialogService _dialogService = new();
+    // The global dialog service renders WPF-UI content dialogs on this host.
+    public ContentDialogHost DialogHost => RootContentDialogHost;
+
+    private readonly IDialogService _dialogs = App.Services!.GetRequiredService<IDialogService>();
 
     private static readonly string[] _sectionNames =
         { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionGeneral", "SectionSnapshot" };
@@ -395,32 +395,16 @@ public partial class SettingsView : FluentWindow
 
     private static DesktopManager? Manager => App.Services?.GetRequiredService<DesktopManager>();
 
-    private async Task ShowMessageAsync(string content, string title)
-    {
-        var dialog = new ContentDialog
-        {
-            Title = title,
-            Content = content,
-            CloseButtonText = "OK",
-            DefaultButton = ContentDialogButton.Close
-        };
-        await _dialogService.ShowAsync(dialog, CancellationToken.None);
-    }
+    private Task ShowMessageAsync(string content, string title)
+        => _dialogs.ShowMessageAsync(content, new DialogOptions { Title = title });
 
-    private async Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info)
-    {
-        var dialog = new ContentDialog
+    private Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info)
+        => _dialogs.ShowConfirmAsync(content, new DialogOptions
         {
             Title = title,
-            Content = content,
             PrimaryButtonText = confirmText,
-            CloseButtonText = "Cancel",
-            PrimaryButtonAppearance = primaryButtonAppearance,
-            DefaultButton = ContentDialogButton.Close
-        };
-        var result = await _dialogService.ShowAsync(dialog, CancellationToken.None);
-        return result == ContentDialogResult.Primary;
-    }
+            PrimaryButtonAppearance = primaryButtonAppearance
+        });
 
     private async void Backup_Click(object sender, RoutedEventArgs e)
     {

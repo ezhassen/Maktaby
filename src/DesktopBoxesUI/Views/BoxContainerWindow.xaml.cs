@@ -1,5 +1,6 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,7 +26,7 @@ namespace DesktopBoxesUI.Views;
 /// <see cref="WindowDragController"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
-public partial class BoxContainerWindow : Window
+public partial class BoxContainerWindow : Window, IContentDialogHostProvider
 {
     private readonly ContainerViewModel _vm;
     private readonly MainViewModel _host;
@@ -35,6 +36,10 @@ public partial class BoxContainerWindow : Window
     private readonly IMouseMonitor _mouseMonitor;
     private readonly IZOrderService _zOrder = App.Services.GetRequiredService<IZOrderService>();
     private readonly uint _currentProcessId = (uint)System.Environment.ProcessId;
+    private readonly IDialogService _dialogs = App.Services!.GetRequiredService<IDialogService>();
+
+    // The global dialog service renders WPF-UI content dialogs on this host.
+    public Wpf.Ui.Controls.ContentDialogHost DialogHost => RootContentDialogHost;
 
     // Chrome (header buttons, tab strip, scrollbar) is shown only when the container is hovered or focused.
     private bool _mouseOver;
@@ -384,26 +389,20 @@ public partial class BoxContainerWindow : Window
         UpdateBody();
     }
 
-    private void RemoveTab_Click(object sender, RoutedEventArgs e)
+    private async void RemoveTab_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.ActiveBox is { IsDefault: true })
         {
-            MessageBox.Show(
-                "The default box cannot be deleted.",
-                "Cannot delete",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            await _dialogs.ShowMessageAsync("The default box cannot be deleted.", new DialogOptions { Title = "Cannot delete" });
             return;
         }
 
         if (_vm.ActiveBox is { Items.Count: > 0 })
         {
-            var result = MessageBox.Show(
+            var confirmed = await _dialogs.ShowConfirmAsync(
                 "This box contains items. Delete it anyway?",
-                "Confirm delete",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (result != MessageBoxResult.Yes)
+                new DialogOptions { Title = "Confirm delete", PrimaryButtonText = "Delete", PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Danger });
+            if (!confirmed)
             {
                 return;
             }
@@ -717,16 +716,20 @@ public partial class BoxContainerWindow : Window
         BoxMenu.IsOpen = true;
     }
 
-    private void MenuDelete_Click(object sender, RoutedEventArgs e)
+    private async void MenuDelete_Click(object sender, RoutedEventArgs e)
     {
         if (_vm.BoxContainerVm != null && _vm.BoxContainerVm.Tabs.Any(t => t.Items.Count > 0))
         {
-            var result = MessageBox.Show(
+            if (_vm.BoxContainerVm.Tabs.Any(t => t.IsDefault == true))
+            {
+                await _dialogs.ShowMessageAsync("The default box cannot be deleted.", new DialogOptions { Title = "Cannot delete" });
+                return;
+            }
+
+            var confirmed = await _dialogs.ShowConfirmAsync(
                 "This container contains items. Delete it anyway?",
-                "Confirm delete",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
-            if (result != MessageBoxResult.Yes)
+                new DialogOptions { Title = "Confirm delete", PrimaryButtonText = "Delete", PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Danger });
+            if (!confirmed)
             {
                 return;
             }

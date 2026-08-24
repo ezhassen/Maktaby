@@ -6,6 +6,7 @@ using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.Services;
+using DesktopBoxesUI.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -108,6 +109,7 @@ public partial class App : Application
         services.AddSingleton<IconImageService>();
         services.AddSingleton<MainViewModel>();
         services.AddTransient<SettingsViewModel>();
+        services.AddSingleton<IDialogService, DialogService>();
 
         // Win32 watchers
         services.AddSingleton<IMouseMonitor, MouseMonitor>();
@@ -173,12 +175,10 @@ public partial class App : Application
         tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
         tray.ResetRequested += async (_, _) =>
         {
-            var result = MessageBox.Show(
+            var confirmed = await Services.GetRequiredService<IDialogService>().ShowConfirmAsync(
                 "This will delete all the boxes and create default one, continue?",
-                "Confirm delete",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning, defaultResult: MessageBoxResult.No);
-            if (result == MessageBoxResult.Yes) await Services.GetRequiredService<DesktopManager>().ResetAsync();
+                new DialogOptions { Title = "Confirm delete", PrimaryButtonText = "Reset" });
+            if (confirmed) await Services.GetRequiredService<DesktopManager>().ResetAsync();
         };
         tray.SettingsRequested += (_, _) =>
         {

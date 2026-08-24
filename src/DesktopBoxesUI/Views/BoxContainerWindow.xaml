@@ -90,7 +90,8 @@
         BorderBrush="#3f3f46"
         BorderThickness="1"
         CornerRadius="8">
-        <DockPanel LastChildFill="True">
+        <Grid>
+            <DockPanel LastChildFill="True">
             <Border
                 x:Name="HeaderBorder"
                 Padding="6,4"
@@ -252,5 +253,7 @@
                 </Border>
             </Grid>
         </DockPanel>
+            <ui:ContentDialogHost x:Name="RootContentDialogHost" />
+        </Grid>
     </Border>
 </Window>
