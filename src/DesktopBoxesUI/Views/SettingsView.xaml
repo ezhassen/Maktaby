@@ -401,5 +401,10 @@
                 Click="Save_Click"
                 Content="Save" />
         </StackPanel>
+
+        <ui:ContentDialogHost
+            x:Name="RootContentDialogHost"
+            Grid.Row="0"
+            Grid.RowSpan="3" />
     </Grid>
 </ui:FluentWindow>

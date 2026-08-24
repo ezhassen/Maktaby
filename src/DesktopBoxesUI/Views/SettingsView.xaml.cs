@@ -10,8 +10,9 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
-using System.Windows.Media.Imaging;
 using System.Windows.Media.Effects;
+using System.Windows.Media.Imaging;
+using Wpf.Ui;
 using Wpf.Ui.Controls;
 
 namespace DesktopBoxesUI.Views;
@@ -32,10 +33,15 @@ public partial class SettingsView : FluentWindow
         ApplyDesktopBackground();
         BuildPreviewItems();
 
+        // Host the WPF-UI content dialogs on this window.
+        _dialogService.SetDialogHost(RootContentDialogHost);
+
         // Keep the preview in sync with every edit (the VM raises PropertyChanged per field).
         vm.PropertyChanged += (_, _) => UpdatePreview();
         UpdatePreview();
     }
+
+    private readonly ContentDialogService _dialogService = new();
 
     private static readonly string[] _sectionNames =
         { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionGeneral", "SectionSnapshot" };
@@ -389,6 +395,33 @@ public partial class SettingsView : FluentWindow
 
     private static DesktopManager? Manager => App.Services?.GetRequiredService<DesktopManager>();
 
+    private async Task ShowMessageAsync(string content, string title)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = content,
+            CloseButtonText = "OK",
+            DefaultButton = ContentDialogButton.Close
+        };
+        await _dialogService.ShowAsync(dialog, CancellationToken.None);
+    }
+
+    private async Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = content,
+            PrimaryButtonText = confirmText,
+            CloseButtonText = "Cancel",
+            PrimaryButtonAppearance = primaryButtonAppearance,
+            DefaultButton = ContentDialogButton.Close
+        };
+        var result = await _dialogService.ShowAsync(dialog, CancellationToken.None);
+        return result == ContentDialogResult.Primary;
+    }
+
     private async void Backup_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new SaveFileDialog
@@ -413,11 +446,12 @@ public partial class SettingsView : FluentWindow
         try
         {
             await manager.BackupAsync(dlg.FileName);
-            System.Windows.MessageBox.Show("Snapshot backed up.", "Backup", System.Windows.MessageBoxButton.OK, MessageBoxImage.Information);
+            await ShowMessageAsync("Snapshot backed up.", "Backup");
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show($"Backup failed: {ex.Message}", "Backup", System.Windows.MessageBoxButton.OK, MessageBoxImage.Error);
+            ex.Log_Error();
+            await ShowMessageAsync($"Backup failed: {ex.Message}", "Backup");
         }
     }
 
@@ -444,24 +478,21 @@ public partial class SettingsView : FluentWindow
         try
         {
             await manager.RestoreAsync(dlg.FileName);
-            System.Windows.MessageBox.Show("Snapshot restored.", "Restore", System.Windows.MessageBoxButton.OK, MessageBoxImage.Information);
+            await ShowMessageAsync("Snapshot restored.", "Restore");
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show($"Restore failed: {ex.Message}", "Restore", System.Windows.MessageBoxButton.OK, MessageBoxImage.Error);
+            ex.Log_Error();
+            await ShowMessageAsync($"Restore failed: {ex.Message}", "Restore");
         }
     }
 
     private async void ResetSnapshot_Click(object sender, RoutedEventArgs e)
     {
-        var result = System.Windows.MessageBox.Show(
+        if (!await ShowConfirmAsync(
             "This will delete all boxes and rebuild from scratch. Continue?",
             "Confirm reset",
-            System.Windows.MessageBoxButton.YesNo,
-            MessageBoxImage.Warning,
-            System.Windows.MessageBoxResult.No);
-
-        if (result != System.Windows.MessageBoxResult.Yes)
+            "Reset", primaryButtonAppearance: ControlAppearance.Danger))
         {
             return;
         }
@@ -475,11 +506,12 @@ public partial class SettingsView : FluentWindow
         try
         {
             await manager.ResetAsync();
-            System.Windows.MessageBox.Show("Snapshot reset.", "Reset", System.Windows.MessageBoxButton.OK, MessageBoxImage.Information);
+            await ShowMessageAsync("Snapshot reset.", "Reset");
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show($"Reset failed: {ex.Message}", "Reset", System.Windows.MessageBoxButton.OK, MessageBoxImage.Error);
+            ex.Log_Error();
+            await ShowMessageAsync($"Reset failed: {ex.Message}", "Reset");
         }
     }
 
