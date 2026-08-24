@@ -12,7 +12,12 @@ namespace DesktopBoxesUI.Core.Services;
 /// </summary>
 public sealed class SettingsService : ISettingsService
 {
+#if DEBUG
+    //Use def app dir to store data for debugging.
+    public static string AppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DesktopBoxes\\Debug");
+#else
     public static string AppDataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DesktopBoxes");
+#endif
 
     private static readonly string _filePath = Path.Combine(AppDataDir, "UserSettings.json");
     private static readonly JsonSerializerOptions _options = new() { WriteIndented = true };
