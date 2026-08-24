@@ -76,3 +76,58 @@ After editing:
 - Use event-driven APIs (monitor/DPI/Explorer/filesystem notifications) wherever possible.
 - Cache icons and load them lazily. Don't retain Shell/COM objects longer than needed.
 - Avoid per-frame or per-item allocations in hot paths.
+
+## Feature flags & desktop input detection
+There are two implementations of "detect a double-click on empty desktop" (the trigger for
+**Temp Hide All boxes**). The active one is selected by `GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface`
+(`bool?`, defined in `GlobalFeaturesSwitches.cs`). **It is currently `true`** — the global mouse hook is the
+supported path; the custom `DesktopSurface` is experimental and has unresolved issues (see Known issues).
+
+- **Global low-level hook (`true`)** — `DesktopManager` calls `_mouseMonitor.Start()` which spins up
+  `MouseMonitor` (`Win32/Services/MouseMonitor.cs`), a `WH_MOUSE_LL` hook on a **dedicated STA background
+  thread with its own `Dispatcher` message pump** (so a busy UI thread never delays input to other apps).
+  It raises `MouseButtonDown` (the `HWND` under the cursor) and, after its own double-click logic,
+  `DesktopDoubleClick`. Double-click confirmation uses `Win32Apis.IsDesktopChild` (descendant of
+  `Progman`/`WorkerW`) + `Win32Apis.IsBoxWindow` (our own registered boxes, via `RegisterBoxWindow`/
+  `UnregisterBoxWindow`) + `Win32Apis.IsDesktopEmptyPoint` (an `LVM_HITTEST` that confirms the point is
+  not on an icon). `DesktopDoubleClick` is wired in `App.xaml.cs` to `DesktopManager.ToggleHideAllBoxes()`.
+  **This path only observes input; it never captures or swallows it, so it does not interfere with other
+  apps/games.** Prefer this path.
+- **Custom surface (`false`)** — `DesktopManager.EnsureSurface()` shows `Views/DesktopSurface.xaml`, a
+  top-level layered WPF window glued to the desktop root that forwards mouse input to the Explorer
+  list-view and detects the double-click itself (`WM_NCHITTEST` + two `WM_LBUTTONDOWN`s). See Known issues
+  before touching this path.
+
+`ToggleHideAllBoxes` (in `DesktopManager`) toggles `HideAllBoxes`/`ShowAllBoxes`; hides wrap each window
+in `Win32Apis.AllowHide` so `MinimizePreventionHook` doesn't re-show it, and the surface/tray stay visible
+so the toggle is reversible. This is **session-only** (not persisted).
+
+`GlobalFeaturesSwitches.ShowDebugTree` (currently `false`) enables `DesktopTreeDebugOverlay` — a diagnostic
+that draws, at the cursor, the hit-test result, z-order, and the surface's style/ex-style. Use it (and the
+`DesktopSurface`'s published `Win32Apis.DesktopSurfaceHandle`) when debugging desktop/surface layering.
+
+## Known issues
+- **Custom `DesktopSurface` (flag `false`) is a work-in-progress and currently broken.** Recurring,
+  hard-to-fix problems from past attempts:
+  - A fully transparent (`AllowsTransparency`, alpha `0`) WPF window is skipped by `WindowFromPoint`, so it
+    is never the hit target. The background must use a **non-zero alpha** (`#01000000`) to be hit-testable
+    while visually invisible.
+  - A `WS_EX_LAYERED` **child** window is always painted *behind* its non-layered siblings (the Explorer
+    list-view), so the surface must stay a **top-level** window — reparenting it to `Progman`/`WorkerW`
+    via `SetParent` does not work.
+  - The surface keeps getting raised **above application windows** on click/activation. Mitigations tried:
+    `WM_WINDOWPOSCHANGING` z-order override (root must be resolved via `Win32Apis.GetDesktopRootHandle`,
+    which must never return `0` or glue silently no-ops), `WS_EX_NOACTIVATE`, and `WM_MOUSEACTIVATE` →
+    `MA_NOACTIVATE` (which **broke OLE drag/drop** because it suppressed the activation the drop target
+    needs; gating it on `!_dragging` was the next attempt). **Bottom line: keep the global hook enabled;
+    do not invest more in the surface unless the user explicitly asks.**
+  - WPF windows are created without `CS_DBLCLKS`, so `WM_LBUTTONDBLCLK` is never delivered; double-click is
+    detected manually from two `WM_LBUTTONDOWN`s.
+- **`BoxContainerWindow` custom tab-drag** (moving a box tab between containers) has two unfixed bugs:
+  1. A dropped tab is not visible after drop when the target container is on a different monitor / a
+     different `BoxContainerWindow` than the source.
+  2. The drag crosshair / drag-image is offset on **multi-DPI** setups because `GetScreenDragPoint()`
+     (around `BoxContainerWindow.xaml.cs:824`) uses `PointToScreen` instead of `GetCursorPos` combined with
+     per-monitor DPI. `GetDpiForMonitor` + `MonitorFromPoint` are already declared in `NativeMethods.txt`
+     but are not yet wrapped in `Win32Apis`.
+
