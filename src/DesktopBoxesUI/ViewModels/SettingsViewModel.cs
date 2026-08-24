@@ -1,7 +1,7 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Settings;
 using DesktopBoxesUI.ViewModels;
-using DesktopBoxesUI.Win32.Services;
+using DesktopBoxesUI.Win32APIs.Services;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Reflection;

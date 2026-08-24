@@ -32,7 +32,7 @@ public class AppJSettings
 
     /// <summary>
     /// When true the app registers itself in the current user's Run key so it launches on Windows
-    /// startup. The actual Run-key entry is managed by <see cref="Win32.Services.StartupManager"/>;
+    /// startup. The actual Run-key entry is managed by <see cref="Win32APIs.Services.StartupManager"/>;
     /// this only persists the user's preference.
     /// </summary>
     public bool LaunchOnStartup { get; set; }
