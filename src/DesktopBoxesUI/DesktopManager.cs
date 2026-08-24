@@ -775,6 +775,39 @@ public sealed class DesktopManager
     /// </summary>
     public void SaveAsyncFireAndForget() => _ = SaveAsync();
 
+    /// <summary>
+    /// Copies the current live snapshot file to <paramref name="destinationPath"/> (the "Backup" action
+    /// in Settings). The live state is flushed first so the backup is up to date.
+    /// </summary>
+    public async Task BackupAsync(string destinationPath)
+    {
+        await SaveAsync();
+        var src = _persistence.SnapshotFilePath;
+        if (File.Exists(src))
+        {
+            var dir = Path.GetDirectoryName(destinationPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+            File.Copy(src, destinationPath, overwrite: true);
+        }
+    }
+
+    /// <summary>
+    /// Loads a snapshot from <paramref name="sourcePath"/>, replaces the live snapshot with it, and
+    /// re-initializes the boxes (the "Restore" action in Settings).
+    /// </summary>
+    public async Task RestoreAsync(string sourcePath)
+    {
+        var snapshot = await _persistence.LoadFromFileAsync(sourcePath);
+        if (snapshot is null)
+        {
+            return;
+        }
+
+        await _persistence.SaveSnapshotAsync(snapshot);
+        CloseAll();
+        await InitializeAsync();
+    }
+
     #endregion
 
     #region Surface

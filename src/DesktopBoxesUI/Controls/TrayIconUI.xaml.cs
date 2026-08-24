@@ -38,6 +38,7 @@ public partial class TrayIconUI
         var dtMan = App.Services.GetRequiredService<DesktopManager>();
         MenuHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
         ToggleDebugTree.Visibility = GlobalFeaturesSwitches.ShowDebugTree ? Visibility.Visible : Visibility.Collapsed;
+        resetMenuItem.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowReset ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>Loads the desktop folder icon (same glyph the old tray used) as an ImageSource.</summary>

@@ -18,6 +18,8 @@ public sealed class JsonSnapshotPersistenceService : IPersistenceService
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
+    public string SnapshotFilePath => FilePath;
+
     public void DeleteSnapshotFile()
     {
         if (File.Exists(FilePath)) File.Delete(FilePath);
@@ -51,5 +53,23 @@ public sealed class JsonSnapshotPersistenceService : IPersistenceService
         Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
         await using var stream = File.Create(FilePath);
         await JsonSerializer.SerializeAsync(stream, snapshot, Options, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<DesktopSnapshot?> LoadFromFileAsync(string path, CancellationToken cancellationToken = default)
+    {
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        try
+        {
+            await using var stream = File.OpenRead(path);
+            return await JsonSerializer.DeserializeAsync<DesktopSnapshot>(stream, Options, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

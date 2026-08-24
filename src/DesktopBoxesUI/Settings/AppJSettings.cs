@@ -30,6 +30,13 @@ public class AppJSettings
     /// </summary>
     public Guid AppIdentity { get; set; }
 
+    /// <summary>
+    /// When true the app registers itself in the current user's Run key so it launches on Windows
+    /// startup. The actual Run-key entry is managed by <see cref="Win32.Services.StartupManager"/>;
+    /// this only persists the user's preference.
+    /// </summary>
+    public bool LaunchOnStartup { get; set; }
+
     //public string? Notes { get; set; }
 
     public Serilog.Events.LogEventLevel? LogEventLevel { get; set; }

@@ -1,7 +1,10 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Settings;
 using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Win32.Services;
 using System.Collections.Generic;
+using System.ComponentModel;
+using System.Reflection;
 using System.Windows.Input;
 
 namespace DesktopBoxesUI.ViewModels;
@@ -9,7 +12,9 @@ namespace DesktopBoxesUI.ViewModels;
 /// <summary>
 /// Drives <see cref="Views.SettingsView"/>. Edits the persisted <see cref="Settings.UserSettings"/>
 /// (app theme, default box appearance and colors) and applies them live via
-/// <see cref="App.ApplyTheme"/> and <see cref="App.ApplyBoxAppearance"/>.
+/// <see cref="App.ApplyTheme"/> and <see cref="App.ApplyBoxAppearance"/>. Also exposes the launch-on-startup
+/// toggle (mirrored to <see cref="StartupManager"/>) and a per-setting "reset to default" command that
+/// reads each property's <see cref="DefaultValueAttribute"/>.
 /// </summary>
 public sealed class SettingsViewModel : ViewModelBase
 {
@@ -20,6 +25,28 @@ public sealed class SettingsViewModel : ViewModelBase
 
     // Box theme: "App" inherits the app theme (stored as null); otherwise an explicit dark/light override.
     public IReadOnlyList<string> BoxThemeOptions { get; } = new[] { "App", "Dark", "Light" };
+
+    /// <summary>True when the app is registered to launch on Windows startup.</summary>
+    private bool _launchOnStartup;
+    public bool LaunchOnStartup
+    {
+        get => _launchOnStartup;
+        set
+        {
+            if (!SetField(ref _launchOnStartup, value))
+            {
+                return;
+            }
+
+            if (value) StartupManager.Enable();
+            else StartupManager.Disable();
+            AppJSettings.Instance.LaunchOnStartup = value;
+            AppJSettings.Instance.Save();
+        }
+    }
+
+    /// <summary>Resets a single editable setting to its <see cref="DefaultValueAttribute"/> value.</summary>
+    public ICommand ResetToDefaultCommand { get; }
 
     private string _selectedThemeOption = "System";
     public string SelectedThemeOption
@@ -35,11 +62,11 @@ public sealed class SettingsViewModel : ViewModelBase
         set => SetField(ref _defaultBoxThemeOption, value);
     }
 
-    private double _defaultBoxTransparency;
-    public double DefaultBoxTransparency
+    private double _defaultBoxTransparencyValue;
+    public double DefaultBoxTransparencyValue
     {
-        get => _defaultBoxTransparency;
-        set => SetField(ref _defaultBoxTransparency, value);
+        get => _defaultBoxTransparencyValue;
+        set => SetField(ref _defaultBoxTransparencyValue, value);
     }
 
     private string? _defaultBoxBackColor;
@@ -111,7 +138,7 @@ public sealed class SettingsViewModel : ViewModelBase
             _ => "App"
         };
 
-        _defaultBoxTransparency = s.DefaultBoxTransparencyValue;
+        _defaultBoxTransparencyValue = s.DefaultBoxTransparencyValue;
         _defaultBoxBackColor = s.DefaultBoxBackColor;
         _defaultBoxForeColor = s.DefaultBoxForeColor;
         _defaultBoxBorderColor = s.DefaultBoxBorderColor;
@@ -120,7 +147,63 @@ public sealed class SettingsViewModel : ViewModelBase
         _defaultBoxBorderThickness = s.DefaultBoxBorderThickness;
         _defaultBoxTitleBarColorsSameAsBox = s.DefaultBoxTitleBarColorsSameAsBox;
 
+        _launchOnStartup = StartupManager.IsEnabled;
+
         SaveCommand = new RelayCommand(_ => Save());
+        ResetToDefaultCommand = new RelayCommand(ResetToDefault);
+    }
+
+    /// <summary>
+    /// Resets the setting named by <paramref name="parameter"/> to the value declared on the matching
+    /// <see cref="UserSettings"/> property via <see cref="DefaultValueAttribute"/>. The two theme option
+    /// properties are special-cased ("System" / "App") because the model stores them as null.
+    /// </summary>
+    private void ResetToDefault(object? parameter)
+    {
+        if (parameter is not string name)
+        {
+            return;
+        }
+
+        if (name == nameof(SelectedThemeOption))
+        {
+            SelectedThemeOption = "System";
+            return;
+        }
+
+        if (name == nameof(DefaultBoxThemeOption))
+        {
+            DefaultBoxThemeOption = "App";
+            return;
+        }
+
+        var modelProp = typeof(UserSettings).GetProperty(name);
+        if (modelProp is null)
+        {
+            return;
+        }
+
+        var defAttr = modelProp.GetCustomAttribute<DefaultValueAttribute>();
+        if (defAttr is null)
+        {
+            return;
+        }
+
+        var vmProp = GetType().GetProperty(name);
+        if (vmProp is null || !vmProp.CanWrite)
+        {
+            return;
+        }
+
+        var value = defAttr.Value;
+        if (value is null)
+        {
+            vmProp.SetValue(this, null);
+            return;
+        }
+
+        var underlying = Nullable.GetUnderlyingType(vmProp.PropertyType) ?? vmProp.PropertyType;
+        vmProp.SetValue(this, Convert.ChangeType(value, underlying));
     }
 
     // "System"/"App" -> null; "Dark" -> "dark"; "Light" -> "light".
@@ -139,7 +222,7 @@ public sealed class SettingsViewModel : ViewModelBase
     {
         SelectedTheme = OptionToStored(_selectedThemeOption),
         DefaultBoxTheme = OptionToStored(_defaultBoxThemeOption),
-        DefaultBoxTransparencyValue = _defaultBoxTransparency,
+        DefaultBoxTransparencyValue = _defaultBoxTransparencyValue,
         DefaultBoxBackColor = _defaultBoxBackColor,
         DefaultBoxForeColor = _defaultBoxForeColor,
         DefaultBoxBorderColor = _defaultBoxBorderColor,
@@ -154,7 +237,7 @@ public sealed class SettingsViewModel : ViewModelBase
         var s = _settingsService.UserSettings;
         s.SelectedTheme = OptionToStored(_selectedThemeOption);
         s.DefaultBoxTheme = OptionToStored(_defaultBoxThemeOption);
-        s.DefaultBoxTransparencyValue = _defaultBoxTransparency;
+        s.DefaultBoxTransparencyValue = _defaultBoxTransparencyValue;
         s.DefaultBoxBackColor = _defaultBoxBackColor;
         s.DefaultBoxForeColor = _defaultBoxForeColor;
         s.DefaultBoxBorderColor = _defaultBoxBorderColor;

@@ -11,7 +11,13 @@ namespace DesktopBoxesUI.Core.Interfaces;
 /// </summary>
 public interface IPersistenceService
 {
+    /// <summary>The on-disk path of the live snapshot file.</summary>
+    string SnapshotFilePath { get; }
+
     Task<DesktopSnapshot?> LoadSnapshotAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>Loads a snapshot from an arbitrary file (used by Settings "Restore" from a backup).</summary>
+    Task<DesktopSnapshot?> LoadFromFileAsync(string path, CancellationToken cancellationToken = default);
     /// <summary>
     /// Delete the snapshot file
     /// </summary>

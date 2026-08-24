@@ -14,4 +14,6 @@ public static class GlobalFeaturesSwitches
 
     public static bool ShowDebugTree { get; } = false;
 
+    public static bool TrayIcon_ShowReset { get; } = false;
+
 }
