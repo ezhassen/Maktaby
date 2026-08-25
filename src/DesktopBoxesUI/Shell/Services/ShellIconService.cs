@@ -17,11 +17,9 @@ namespace DesktopBoxesUI.Shell.Services;
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class ShellIconService : IShellIconService
 {
-    // NOTE: no SHGFI.AddOverlays. That flag intermittently makes SHGetFileInfo fail outright when the
-    // process is not the foreground shell context — which differs between VS debugging (shell-attached)
-    // and running the exe directly, producing "random missing icons". Shortcut shields are not worth
-    // blank icons; drop the flag entirely.
-    private const SHGFI IconFlags = SHGFI.Icon | SHGFI.SmallIcon;
+    // NOTE: LargeIcon (32px class) — tiles render icons at 32px, and SmallIcon returned 16px bitmaps
+    // that WPF had to upscale (soft/blurry). No AddOverlays: see history below.
+    private const SHGFI IconFlags = SHGFI.Icon | SHGFI.LargeIcon;
 
     public async ValueTask<object?> GetIconAsync(string path, int size = 32, CancellationToken cancellationToken = default)
     {

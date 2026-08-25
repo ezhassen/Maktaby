@@ -35,8 +35,10 @@
                     <DataTemplate DataType="vm:BoxItemViewModel">
                         <Border
                             x:Name="ItemBorder"
-                            Margin="4"
-                            Padding="4"
+                            Width="68"
+                            Height="68"
+                            Margin="2"
+                            Padding="0"
                             ContextMenuOpening="ItemBorder_ContextMenuOpening"
                             Cursor="Arrow"
                             FocusVisualStyle="{x:Null}"
@@ -46,31 +48,39 @@
                             MouseLeftButtonDown="ItemBorder_MouseLeftButtonDown"
                             MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp"
                             MouseMove="ItemBorder_MouseMove"
-                            MouseRightButtonUp="ItemBorder_MouseRightButtonUp">
+                            MouseRightButtonUp="ItemBorder_MouseRightButtonUp"
+                            ToolTip="{Binding DisplayName}">
                             <Border.Style>
                                 <Style TargetType="Border">
+                                    <!--  Constant thickness: selection must never change the tile size.  -->
+                                    <Setter Property="BorderThickness" Value="1" />
+                                    <Setter Property="BorderBrush" Value="Transparent" />
                                     <Setter Property="Background" Value="Transparent" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsSelected}" Value="True">
                                             <Setter Property="Background" Value="#407FB2FF" />
                                             <Setter Property="BorderBrush" Value="#FF7FB2FF" />
-                                            <Setter Property="BorderThickness" Value="1" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
                             </Border.Style>
-                            <StackPanel Width="72" Orientation="Vertical">
+                            <StackPanel Orientation="Vertical">
                                 <Image
                                     Width="32"
                                     Height="32"
+                                    Margin="0,2,0,0"
+                                    HorizontalAlignment="Center"
                                     RenderOptions.BitmapScalingMode="HighQuality"
                                     Source="{Binding Icon}" />
+                                <!--  Two-line clamp keeps every tile identical; the full name is in the ToolTip.  -->
                                 <TextBlock
+                                    MaxHeight="32"
                                     Margin="0,4,0,0"
                                     FontSize="11"
                                     Foreground="{DynamicResource BoxForeground}"
                                     Text="{Binding DisplayName}"
                                     TextAlignment="Center"
+                                    TextTrimming="CharacterEllipsis"
                                     TextWrapping="Wrap">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
@@ -85,7 +95,6 @@
                                 </TextBlock>
                                 <TextBox
                                     x:Name="RenameBox"
-                                    Width="70"
                                     Margin="0,4,0,0"
                                     Background="{DynamicResource BoxBackground}"
                                     BorderBrush="{DynamicResource BoxBorder}"
