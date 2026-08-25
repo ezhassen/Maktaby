@@ -85,14 +85,37 @@ public sealed class BoxItemViewModel : ViewModelBase
 
     private async Task LoadIconAsync()
     {
-        if (!string.IsNullOrEmpty(_model.Pidl))
+        var icon = await ResolveIconAsync();
+
+        // Retry/log only when there was actually something to resolve — an item with neither a PIDL
+        // nor a path simply has no icon source.
+        bool hasSource = !string.IsNullOrEmpty(_model.Pidl) || !string.IsNullOrEmpty(_model.Path);
+
+        if (icon is null && hasSource)
         {
-            Icon = await _icons.GetIconFromPidlAsync(_model.Pidl, _model.Path);
+            // Transient shell failures are common right at startup (Explorer busy, icon cache cold);
+            // give it a moment and try once more before surfacing a blank icon.
+            await Task.Delay(750);
+            icon = await ResolveIconAsync();
         }
-        else
+
+        if (icon is null && hasSource)
         {
-            Icon = await _icons.GetIconAsync(_model.Path);
+            // Final failure: un-arm the one-shot guard so a later EnsureIconLoaded (container
+            // refresh, re-template) retries the item instead of staying blank forever.
+            _iconLoadRequested = false;
+            Serilog.Log.Warning("Icon resolution failed for {Path} (pidl-backed: {HasPidl})",
+                _model.Path, !string.IsNullOrEmpty(_model.Pidl));
         }
+
+        Icon = icon;
+    }
+
+    private Task<ImageSource?> ResolveIconAsync()
+    {
+        return string.IsNullOrEmpty(_model.Pidl)
+            ? (string.IsNullOrEmpty(_model.Path) ? Task.FromResult((ImageSource?)null) : _icons.GetIconAsync(_model.Path))
+            : _icons.GetIconFromPidlAsync(_model.Pidl, _model.Path);
     }
 
     /// <summary>Forces the icon to reload from the (possibly changed) <see cref="BoxItem.Path"/> — used

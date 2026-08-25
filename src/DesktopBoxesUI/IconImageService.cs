@@ -58,7 +58,13 @@ public sealed class IconImageService
             }
         }, cancellationToken);
 
-        _cache[path] = source;
+        // Only cache successes: a transient failure (shell busy, overlay handler glitch, startup race)
+        // must stay retryable instead of being frozen as a permanent blank icon.
+        if (source is not null)
+        {
+            _cache[path] = source;
+        }
+
         return source;
     }
 
@@ -108,7 +114,12 @@ public sealed class IconImageService
         }, cancellationToken);
 
 
-        _pidlCache[pidlBase64] = source;
+        // Successes only — see GetIconAsync.
+        if (source is not null)
+        {
+            _pidlCache[pidlBase64] = source;
+        }
+
         return source;
     }
 }
