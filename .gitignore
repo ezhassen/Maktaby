@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 icon/*.*
 tools/make-icon.ps1
+Installer/*.*
