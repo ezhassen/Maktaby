@@ -3,6 +3,13 @@
     <Platform Name="Any CPU" />
     <Platform Name="x64" />
   </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path="agents.md" />
+    <File Path="build.ps1" />
+    <File Path="build_bump.ps1" />
+    <File Path="installer.iss" />
+    <File Path="README.md" />
+  </Folder>
   <Project Path="src/DesktopBoxesUI/DesktopBoxesUI.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>

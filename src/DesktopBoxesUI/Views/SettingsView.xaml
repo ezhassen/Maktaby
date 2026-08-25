@@ -5,6 +5,7 @@
     xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Settings"
+    Icon="pack://application:,,,/Assets/app.ico"
     Width="720"
     Height="640"
     MinWidth="560"

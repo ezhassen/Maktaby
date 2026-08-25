@@ -11,6 +11,10 @@
 		<LangVersion>latest</LangVersion>
 		<RootNamespace>DesktopBoxesUI</RootNamespace>
 		<AssemblyName>DesktopBoxesUI</AssemblyName>
+		<Description>Desktop Boxes - organize your desktop into resizable boxes that pin files, folders and app shortcuts above the Windows desktop.</Description>
+		<AssemblyTitle>Desktop Boxes - desktop organizer</AssemblyTitle>
+		<Product>Desktop Boxes</Product>
+		<ApplicationIcon>Assets\app.ico</ApplicationIcon>		
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<EnableDefaultPageItems>true</EnableDefaultPageItems>
 		<GenerateDocumentationFile>false</GenerateDocumentationFile>
@@ -30,6 +34,11 @@
       uncatchable native fault, so disable CET marking for this binary.
     -->
 		<CETCompat>false</CETCompat>
+
+		<Authors>Ezz Hassan</Authors>
+		<Company>Ezz Hassan</Company>
+		<Copyright>Copyright ©  2026</Copyright>
+		<Version>1.0.0</Version>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -53,6 +62,12 @@
 		<!-- CsWin32 auto-discovers NativeMethods.txt only at the project root, so register our
          isolated copy explicitly. All raw Win32 declarations live in this one file. -->
 		<AdditionalFiles Include="Win32APIs\NativeMethods\NativeMethods.txt" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Embedded WPF resource so windows/tray can load it via pack URI (ApplicationIcon only
+         embeds it into the exe header). -->
+		<Resource Include="Assets\app.ico" />
 	</ItemGroup>
 
 </Project>

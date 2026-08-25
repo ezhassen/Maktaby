@@ -1,6 +1,7 @@
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using System;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -41,9 +42,21 @@ public partial class TrayIconUI
         resetMenuItem.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowReset ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    /// <summary>Loads the desktop folder icon (same glyph the old tray used) as an ImageSource.</summary>
+    /// <summary>Loads the app's own icon (largest embedded size) for the tray; falls back to the
+    /// desktop folder glyph if the resource is unavailable.</summary>
     private static ImageSource? LoadTrayIcon()
     {
+        try
+        {
+            var uri = new Uri("pack://application:,,,/Assets/app.ico");
+            var decoder = new IconBitmapDecoder(uri, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+            return decoder.Frames.OrderByDescending(f => f.PixelHeight).First();
+        }
+        catch
+        {
+            // Fall through to the legacy desktop-folder icon.
+        }
+
         var path = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
         var psfi = new SHFILEINFOW();
         uint cb = (uint)Marshal.SizeOf<SHFILEINFOW>();
