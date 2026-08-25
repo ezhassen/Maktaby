@@ -92,221 +92,233 @@
         CornerRadius="8">
         <Grid>
             <DockPanel LastChildFill="True">
-            <Border
-                x:Name="HeaderBorder"
-                Padding="6,4"
-                Background="#3f3f46"
-                CornerRadius="8,8,0,0"
-                DockPanel.Dock="Top">
-                <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto">
-                    <Button
-                        x:Name="MenuButton"
-                        Grid.Column="0"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Click="MenuButton_Click"
-                        Cursor="Arrow"
-                        DockPanel.Dock="Left"
-                        Style="{StaticResource BorderlesButtonStyle}"
-                        ToolTip="Menu">
-                        <ui:SymbolIcon Symbol="Navigation24" />
-                        <Button.ContextMenu>
-                            <ContextMenu x:Name="BoxMenu">
-                                <MenuItem Click="MenuDelete_Click" Header="Delete" />
-                                <MenuItem Click="MenuHide_Click" Header="Hide" />
-                                <MenuItem Click="MenuLock_Click" Header="Lock / Unlock" />
-                                <Separator />
-                                <MenuItem
-                                    x:Name="MenuAddTab"
-                                    Click="AddTab_Click"
-                                    Header="Add Tab" />
-                                <MenuItem
-                                    x:Name="MenuRemoveTab"
-                                    Click="RemoveTab_Click"
-                                    Header="Remove Tab" />
-                                <Separator />
-                                <MenuItem x:Name="MenuRollDir" Header="Roll Direction">
-                                    <MenuItem
-                                        Click="MenuSetRollDir_Click"
-                                        Header="Auto (snap)"
-                                        Tag="Auto" />
-                                    <Separator />
-                                    <MenuItem
-                                        Click="MenuSetRollDir_Click"
-                                        Header="Top"
-                                        Tag="Top" />
-                                    <MenuItem
-                                        Click="MenuSetRollDir_Click"
-                                        Header="Bottom"
-                                        Tag="Bottom" />
-                                    <MenuItem
-                                        Click="MenuSetRollDir_Click"
-                                        Header="Left"
-                                        Tag="Left" />
-                                    <MenuItem
-                                        Click="MenuSetRollDir_Click"
-                                        Header="Right"
-                                        Tag="Right" />
-                                </MenuItem>
-                                <MenuItem x:Name="MenuIconSize" Header="Icon Size">
-                                    <MenuItem
-                                        x:Name="MenuIconSizeAuto"
-                                        Click="MenuSetIconSize_Click"
-                                        Header="Auto / Default"
-                                        IsCheckable="True"
-                                        Tag="Auto" />
-                                    <Separator />
-                                    <MenuItem
-                                        x:Name="MenuIconSizeSmall"
-                                        Click="MenuSetIconSize_Click"
-                                        Header="Small"
-                                        IsCheckable="True"
-                                        Tag="Small" />
-                                    <MenuItem
-                                        x:Name="MenuIconSizeMid"
-                                        Click="MenuSetIconSize_Click"
-                                        Header="Mid"
-                                        IsCheckable="True"
-                                        Tag="Mid" />
-                                    <MenuItem
-                                        x:Name="MenuIconSizeLarge"
-                                        Click="MenuSetIconSize_Click"
-                                        Header="Large"
-                                        IsCheckable="True"
-                                        Tag="Large" />
-                                    <Separator />
-                                    <!-- Custom pixel size: stays open while dragging (no Click on this
-                                         item), value applied + saved from code-behind. -->
-                                    <MenuItem Focusable="False" StaysOpenOnClick="True">
-                                        <MenuItem.Header>
-                                            <StackPanel Orientation="Horizontal">
-                                                <TextBlock
-                                                    Width="30"
-                                                    VerticalAlignment="Center"
-                                                    Text="Px" />
-                                                <Slider
-                                                    x:Name="MenuIconSizeSlider"
-                                                    Width="132"
-                                                    IsMoveToPointEnabled="True"
-                                                    IsSnapToTickEnabled="True"
-                                                    Maximum="128"
-                                                    Minimum="16"
-                                                    TickFrequency="4"
-                                                    ValueChanged="MenuIconSizeSlider_ValueChanged" />
-                                                <TextBlock
-                                                    Width="44"
-                                                    Margin="6,0,0,0"
-                                                    VerticalAlignment="Center"
-                                                    Text="{Binding Value, ElementName=MenuIconSizeSlider, StringFormat={}{0:0}px}" />
-                                            </StackPanel>
-                                        </MenuItem.Header>
-                                    </MenuItem>
-                                </MenuItem>
-                            </ContextMenu>
-                        </Button.ContextMenu>
-                    </Button>
-
-                    <Grid
-                        x:Name="TitleArea"
-                        Grid.Column="1"
-                        HorizontalAlignment="Stretch"
-                        Cursor="SizeAll"
-                        MouseLeftButtonDown="TitleArea_MouseLeftButtonDown">
-                        <TextBlock
-                            x:Name="TitleText"
-                            MinWidth="120"
-                            HorizontalAlignment="Stretch"
-                            VerticalAlignment="Center"
-                            Foreground="White"
-                            MouseLeftButtonDown="TitleText_MouseLeftButtonDown"
-                            Text="{Binding Title}"
-                            TextAlignment="Center" />
-                        <TextBox
-                            x:Name="TitleEdit"
-                            MinWidth="120"
+                <Border
+                    x:Name="HeaderBorder"
+                    Padding="6,4"
+                    Background="#3f3f46"
+                    CornerRadius="8,8,0,0"
+                    DockPanel.Dock="Top">
+                    <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto">
+                        <Button
+                            x:Name="MenuButton"
+                            Grid.Column="0"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            KeyDown="TitleEdit_KeyDown"
-                            LostFocus="TitleEdit_LostFocus"
-                            Text="{Binding ActiveBox.Name, UpdateSourceTrigger=PropertyChanged}"
-                            TextAlignment="Center"
+                            Click="MenuButton_Click"
+                            Cursor="Arrow"
+                            DockPanel.Dock="Left"
+                            Style="{StaticResource BorderlesButtonStyle}"
+                            ToolTip="Menu">
+                            <ui:SymbolIcon Symbol="Navigation24" />
+                            <Button.ContextMenu>
+                                <ContextMenu x:Name="BoxMenu">
+                                    <MenuItem Click="MenuDelete_Click" Header="Delete" />
+                                    <MenuItem Click="MenuHide_Click" Header="Hide" />
+                                    <MenuItem Click="MenuLock_Click" Header="Lock / Unlock" />
+                                    <Separator />
+                                    <MenuItem
+                                        x:Name="MenuAddTab"
+                                        Click="AddTab_Click"
+                                        Header="Add Tab" />
+                                    <MenuItem
+                                        x:Name="MenuRemoveTab"
+                                        Click="RemoveTab_Click"
+                                        Header="Remove Tab" />
+                                    <Separator />
+                                    <MenuItem x:Name="MenuRollDir" Header="Roll Direction">
+                                        <MenuItem
+                                            x:Name="MenuSetRollDirAuto"
+                                            Click="MenuSetRollDir_Click"
+                                            Header="Auto (snap)"
+                                            IsCheckable="True"
+                                            Tag="Auto" />
+                                        <Separator />
+                                        <MenuItem
+                                            x:Name="MenuSetRollDirTop"
+                                            Click="MenuSetRollDir_Click"
+                                            Header="Top"
+                                            IsCheckable="True"
+                                            Tag="Top" />
+                                        <MenuItem
+                                            x:Name="MenuSetRollDirBottom"
+                                            Click="MenuSetRollDir_Click"
+                                            Header="Bottom"
+                                            IsCheckable="True"
+                                            Tag="Bottom" />
+                                        <MenuItem
+                                            x:Name="MenuSetRollDirLeft"
+                                            Click="MenuSetRollDir_Click"
+                                            Header="Left"
+                                            IsCheckable="True"
+                                            Tag="Left" />
+                                        <MenuItem
+                                            x:Name="MenuSetRollDirRight"
+                                            Click="MenuSetRollDir_Click"
+                                            Header="Right"
+                                            IsCheckable="True"
+                                            Tag="Right" />
+                                    </MenuItem>
+                                    <MenuItem x:Name="MenuIconSize" Header="Icon Size">
+                                        <MenuItem
+                                            x:Name="MenuIconSizeAuto"
+                                            Click="MenuSetIconSize_Click"
+                                            Header="Auto / Default"
+                                            IsCheckable="True"
+                                            Tag="Auto" />
+                                        <Separator />
+                                        <MenuItem
+                                            x:Name="MenuIconSizeSmall"
+                                            Click="MenuSetIconSize_Click"
+                                            Header="Small"
+                                            IsCheckable="True"
+                                            Tag="Small" />
+                                        <MenuItem
+                                            x:Name="MenuIconSizeMid"
+                                            Click="MenuSetIconSize_Click"
+                                            Header="Mid"
+                                            IsCheckable="True"
+                                            Tag="Mid" />
+                                        <MenuItem
+                                            x:Name="MenuIconSizeLarge"
+                                            Click="MenuSetIconSize_Click"
+                                            Header="Large"
+                                            IsCheckable="True"
+                                            Tag="Large" />
+                                        <Separator />
+                                        <!--
+                                            Custom pixel size: stays open while dragging (no Click on this
+                                            item), value applied + saved from code-behind.
+                                        -->
+                                        <MenuItem Focusable="False" StaysOpenOnClick="True">
+                                            <MenuItem.Header>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock
+                                                        Width="30"
+                                                        VerticalAlignment="Center"
+                                                        Text="Px" />
+                                                    <Slider
+                                                        x:Name="MenuIconSizeSlider"
+                                                        Width="132"
+                                                        IsMoveToPointEnabled="True"
+                                                        IsSnapToTickEnabled="True"
+                                                        Maximum="128"
+                                                        Minimum="16"
+                                                        TickFrequency="4"
+                                                        ValueChanged="MenuIconSizeSlider_ValueChanged" />
+                                                    <TextBlock
+                                                        Width="44"
+                                                        Margin="6,0,0,0"
+                                                        VerticalAlignment="Center"
+                                                        Text="{Binding Value, ElementName=MenuIconSizeSlider, StringFormat={}{0:0}px}" />
+                                                </StackPanel>
+                                            </MenuItem.Header>
+                                        </MenuItem>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Button.ContextMenu>
+                        </Button>
+
+                        <Grid
+                            x:Name="TitleArea"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            Cursor="SizeAll"
+                            MouseLeftButtonDown="TitleArea_MouseLeftButtonDown">
+                            <TextBlock
+                                x:Name="TitleText"
+                                MinWidth="120"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Center"
+                                Foreground="White"
+                                MouseLeftButtonDown="TitleText_MouseLeftButtonDown"
+                                Text="{Binding Title}"
+                                TextAlignment="Center" />
+                            <TextBox
+                                x:Name="TitleEdit"
+                                MinWidth="120"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                KeyDown="TitleEdit_KeyDown"
+                                LostFocus="TitleEdit_LostFocus"
+                                Text="{Binding ActiveBox.Name, UpdateSourceTrigger=PropertyChanged}"
+                                TextAlignment="Center"
+                                Visibility="Collapsed" />
+                        </Grid>
+
+                        <Button
+                            x:Name="RollButton"
+                            Grid.Column="2"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Click="RollButton_Click"
+                            Cursor="Arrow"
+                            Style="{StaticResource BorderlesButtonStyle}"
+                            ToolTip="Roll up">
+                            <ui:SymbolIcon x:Name="RollIcon" Symbol="ChevronUp24" />
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!--  Tab strip: only shown for more than one tab AND when the container is active/hovered  -->
+                <Border
+                    x:Name="TabStrip"
+                    MaxHeight="36"
+                    Padding="4,2"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    DockPanel.Dock="Top">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <ItemsControl x:Name="TabItems" ItemsSource="{Binding BoxContainerVm.Tabs}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <UniformGrid Columns="{Binding BoxContainerVm.Tabs.Count}" Rows="1" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="vm:BoxViewModel">
+                                    <Button
+                                        HorizontalContentAlignment="Center"
+                                        Content="{Binding Name}"
+                                        Cursor="Hand"
+                                        PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
+                                        Style="{StaticResource TabButtonStyle}"
+                                        Tag="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Rectangle
+                            x:Name="TabDropIndicator"
+                            Width="3"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Stretch"
+                            Fill="#4EC9B0"
                             Visibility="Collapsed" />
                     </Grid>
-
-                    <Button
-                        x:Name="RollButton"
-                        Grid.Column="2"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Click="RollButton_Click"
-                        Cursor="Arrow"
-                        Style="{StaticResource BorderlesButtonStyle}"
-                        ToolTip="Roll up">
-                        <ui:SymbolIcon x:Name="RollIcon" Symbol="ChevronUp24" />
-                    </Button>
-                </Grid>
-            </Border>
-
-            <!--  Tab strip: only shown for more than one tab AND when the container is active/hovered  -->
-            <Border
-                x:Name="TabStrip"
-                MaxHeight="36"
-                Padding="4,2"
-                Background="Transparent"
-                BorderThickness="0"
-                DockPanel.Dock="Top">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <ItemsControl x:Name="TabItems" ItemsSource="{Binding BoxContainerVm.Tabs}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Columns="{Binding BoxContainerVm.Tabs.Count}" Rows="1" />
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="vm:BoxViewModel">
-                                <Button
-                                    HorizontalContentAlignment="Center"
-                                    Content="{Binding Name}"
-                                    Cursor="Hand"
-                                    PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
-                                    Style="{StaticResource TabButtonStyle}"
-                                    Tag="{Binding}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Rectangle
-                        x:Name="TabDropIndicator"
-                        Width="3"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Stretch"
-                        Fill="#4EC9B0"
-                        Visibility="Collapsed" />
-                </Grid>
-            </Border>
-
-            <Grid x:Name="BodyContent">
-                <controls:BoxControl x:Name="BoxContent" DataContext="{Binding ActiveBox}" />
-                <Border
-                    x:Name="Placeholder"
-                    Padding="16"
-                    Visibility="Collapsed">
-                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock
-                            FontSize="14"
-                            Foreground="White"
-                            Text="Custom Widget"
-                            TextAlignment="Center" />
-                        <TextBlock
-                            Foreground="#cccccc"
-                            Text="{Binding CustomTypeName}"
-                            TextAlignment="Center" />
-                    </StackPanel>
                 </Border>
-            </Grid>
-        </DockPanel>
+
+                <Grid x:Name="BodyContent">
+                    <controls:BoxControl x:Name="BoxContent" DataContext="{Binding ActiveBox}" />
+                    <Border
+                        x:Name="Placeholder"
+                        Padding="16"
+                        Visibility="Collapsed">
+                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <TextBlock
+                                FontSize="14"
+                                Foreground="White"
+                                Text="Custom Widget"
+                                TextAlignment="Center" />
+                            <TextBlock
+                                Foreground="#cccccc"
+                                Text="{Binding CustomTypeName}"
+                                TextAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </DockPanel>
             <ui:ContentDialogHost x:Name="RootContentDialogHost" />
         </Grid>
     </Border>

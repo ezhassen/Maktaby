@@ -143,6 +143,18 @@ public partial class BoxContainerWindow : Window, IContentDialogHostProvider
 
         Loaded += OnLoaded;
         Closed += OnClosed;
+        BoxMenu.Opened += BoxMenu_Opened;
+    }
+
+    private void BoxMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        SyncIconSizeChecks();
+        //
+        MenuSetRollDirAuto.IsChecked = _vm.RollDirection is null;
+        MenuSetRollDirTop.IsChecked = _vm.RollDirection == RollDirection.Top;
+        MenuSetRollDirLeft.IsChecked = _vm.RollDirection == RollDirection.Left;
+        MenuSetRollDirRight.IsChecked = _vm.RollDirection == RollDirection.Right;
+        MenuSetRollDirBottom.IsChecked = _vm.RollDirection == RollDirection.Bottom;
     }
 
     /// <summary>Re-applies the window geometry from the view-model bounds (handles both the rolled and
@@ -225,7 +237,7 @@ public partial class BoxContainerWindow : Window, IContentDialogHostProvider
 
         BoxContent.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
 
-        SyncIconSizeChecks();
+        //SyncIconSizeChecks();
     }
 
     /// <summary>Per-box icon size override from the menu: Auto/Default (null = follow the user
