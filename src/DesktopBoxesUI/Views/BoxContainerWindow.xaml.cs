@@ -1114,7 +1114,20 @@ public partial class BoxContainerWindow : Window, IContentDialogHostProvider
         if (_dropWindow == null)
         {
             // Released over empty desktop: create a new container at the cursor.
-            var p = _lastDragPoint;
+            // GetCursorPos (device px) divided by THIS window's DPI gives true screen DIPs.
+            // The old PointToScreen value is device-pixel space and was fed straight into the DIP
+            // WorkArea math — on any scaled display the container landed far from the cursor.
+            Point p;
+            var dpi = VisualTreeHelper.GetDpi(this);
+            if (Win32Apis.GetCursorPos(out ManualApis.POINT cp))
+            {
+                p = new Point(cp.X / dpi.DpiScaleX, cp.Y / dpi.DpiScaleY);
+            }
+            else
+            {
+                p = new Point(_lastDragPoint.X / dpi.DpiScaleX, _lastDragPoint.Y / dpi.DpiScaleY);
+            }
+
             var wa = SystemParameters.WorkArea;
             double left = Math.Max(wa.Left, Math.Min(p.X, wa.Right - 240));
             double top = Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - 200));
