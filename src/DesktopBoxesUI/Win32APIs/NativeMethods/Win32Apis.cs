@@ -1077,6 +1077,10 @@ internal static class Win32Apis
     private const int SW_PARENTCLOSING = 1;
     private const int SW_SHOWNOACTIVATE = 4;
 
+    /// <summary>Set while the app/session is tearing down (logoff, shutdown, explicit Exit): the
+    /// minimize-prevention hook stops countering hides so Windows can close our windows freely.</summary>
+    public static bool SystemTeardown;
+
     /// <summary>
     /// HwndSource hook that keeps our desktop windows from being minimized/hidden by Show Desktop /
     /// Win+D. Blocks SC_MINIMIZE and counters a shell-initiated WM_SHOWWINDOW hide (lParam
@@ -1085,6 +1089,13 @@ internal static class Win32Apis
     /// </summary>
     public static IntPtr MinimizePreventionHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        // Teardown in progress (shutdown/logoff/app exit): owner chains are collapsing by design —
+        // countering those hides would fight Windows and delay the session from ending.
+        if (SystemTeardown)
+        {
+            return IntPtr.Zero;
+        }
+
         if (msg == WM_SYSCOMMAND && (wParam.ToInt32() & 0xFFF0) == SC_MINIMIZE)
         {
             handled = true;

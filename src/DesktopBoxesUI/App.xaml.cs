@@ -55,6 +55,10 @@ public partial class App : Application
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        // Windows shutdown / user logoff: disarm the minimize-prevention hooks BEFORE the session
+        // starts collapsing our owned window chains, so teardown is not fought.
+        SessionEnding += (_, _) => Win32Apis.SystemTeardown = true;
+
         // The splash runs initialization itself once it is first shown (see LoadingWindow),
         // so the Box windows are created under a fully-rendered WPF context.
         var loading = new LoadingWindow(Services.GetRequiredService<DesktopManager>());
@@ -63,9 +67,21 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Stop the minimize-prevention hooks from fighting window teardown (owned chains collapsing
+        // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
+        Win32Apis.SystemTeardown = true;
+
         var mang = Services.GetRequiredService<DesktopManager>();
-        //RestoreIcons first.
-        mang.RestoreIcons();
+        //RestoreIcons first. Guarded: Explorer may already be terminating during a system shutdown.
+        try
+        {
+            mang.RestoreIcons();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "RestoreIcons during exit failed (shell likely gone)");
+        }
+
         Services.GetRequiredService<IMouseMonitor>().Stop();
         //async is not ok in app exit
         //await mang.SaveAsync();
