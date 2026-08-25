@@ -847,6 +847,67 @@ public sealed class DesktopManager
             }
         }
     }
+
+    /// <summary>
+    /// Rebuilds the desktop-layer bindings after Explorer crashed/restarted: the old Progman/WorkerW
+    /// windows (and every handle we cached against them) are gone, so the surface must be recreated
+    /// or re-glued above the NEW anchor and every box re-owned. Triggered from App's
+    /// "TaskbarCreated" broadcast listener.
+    /// </summary>
+    public void RecoverAfterShellRestart()
+    {
+        Serilog.Log.Information("Explorer restarted — recovering desktop layer");
+
+        var customSurface = GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == false;
+
+        // Surface: it may have died together with its old owner window — recreate when needed,
+        // otherwise just re-glue (owner + NOACTIVATE + insert-above-anchor) and refresh caches.
+        if (customSurface)
+        {
+            if (_surface is not null)
+            {
+                var old = new WindowInteropHelper(_surface).Handle;
+                if (old == IntPtr.Zero || !Win32Apis.IsWindow(old))
+                {
+                    Serilog.Log.Information("Desktop surface died with Explorer — recreating");
+                    _surface = null;
+                }
+            }
+
+            _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
+            if (!_surface.IsVisible)
+            {
+                _surface.Show();
+            }
+
+            var sHwnd = new WindowInteropHelper(_surface).Handle;
+            _surface.InvalidateShellHandles();
+            if (sHwnd != IntPtr.Zero && Win32Apis.IsWindow(sHwnd))
+            {
+                Win32Apis.GlueToDesktopSurface(sHwnd);
+                _surface.Relayout();
+            }
+        }
+        else
+        {
+            Win32Apis.DesktopSurfaceHandle = IntPtr.Zero;
+        }
+
+        // Boxes: their owner handle pointed at the dead explorer/surface window — re-own them all
+        // (to the surface in custom-surface mode, Progman otherwise) so owned-above-owner holds again.
+        IntPtr owner = customSurface ? Win32Apis.DesktopSurfaceHandle : IntPtr.Zero;
+        foreach (var window in _windows.Values)
+        {
+            if (window is BoxContainerWindow box)
+            {
+                var hwnd = new WindowInteropHelper(box).Handle;
+                if (hwnd != IntPtr.Zero && Win32Apis.IsWindow(hwnd))
+                {
+                    Win32Apis.GlueToDesktop(hwnd, owner);
+                }
+            }
+        }
+    }
     #endregion
 
     #region Desktop Manage

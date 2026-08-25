@@ -81,6 +81,9 @@ internal static class Win32Apis
 
     public static IntPtr SetCursor(IntPtr hCursor) => ManualApis.SetCursor(hCursor);
 
+    /// <summary>Registers a system broadcast message (e.g. "TaskbarCreated" after Explorer restarts).</summary>
+    public static uint RegisterWindowMessage(string message) => ManualApis.RegisterWindowMessage(message);
+
     /// <summary>Returns the window's class name, or <see cref="string.Empty"/> if it cannot be read.</summary>
     public static string GetWindowClass(IntPtr hwnd)
     {
@@ -781,6 +784,12 @@ internal static class Win32Apis
 
         ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, ownerHwnd);
 
+        // Enforce tool-window semantics on every glue: after an Explorer restart the new taskbar can
+        // briefly classify re-owned boxes as regular windows (stale-owner / WPF style churn), which
+        // put some of them into the taskbar. WS_EX_TOOLWINDOW excludes a window from the taskbar and
+        // Alt-Tab permanently; FRAMECHANGED flushes it immediately.
+        MakeToolWindow(hwnd);
+
         // Raise the window above the Explorer desktop listview (SysListView32) within the desktop
         // layer. Without this, OLE drag/drop over empty desktop is delivered to Explorer instead of
         // our surface, so drops onto empty space never reach us. Box windows stay above the
@@ -916,6 +925,11 @@ internal static class Win32Apis
         // that root — so the final z-order (below every real app) is the one we want.
         ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, root);
         PreventMinimize(hwnd);
+
+        // Same self-healing as GlueToDesktop: after an Explorer restart the new taskbar may classify
+        // the re-glued surface as a regular window and give it a taskbar button. WS_EX_TOOLWINDOW
+        // excludes it permanently.
+        MakeToolWindow(hwnd);
 
         // WS_EX_NOACTIVATE stays despite boxes being OWNED by this surface (ownership guarantees
         // Z-ORDER, not FOCUS policy). Experiment conclusion: with the style removed the surface CAN

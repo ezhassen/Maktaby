@@ -149,6 +149,15 @@ public sealed partial class DesktopSurface : Window
         return _listView;
     }
 
+    /// <summary>Clears cached shell handles (list-view, DefView, anchor) after an Explorer
+    /// crash/restart so they are re-resolved against the NEW shell windows on next use.</summary>
+    internal void InvalidateShellHandles()
+    {
+        _listView = IntPtr.Zero;
+        _defView = IntPtr.Zero;
+        _anchor = IntPtr.Zero;
+    }
+
     // The SHELLDLL_DefView hosting the list-view — the window that owns the desktop context menu.
     private IntPtr _defView;
 

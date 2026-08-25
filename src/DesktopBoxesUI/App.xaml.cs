@@ -5,6 +5,7 @@ using DesktopBoxesUI.Settings;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
+using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
 using DesktopBoxesUI.Services;
 using Microsoft.Extensions.DependencyInjection;
@@ -12,6 +13,7 @@ using Serilog;
 using Serilog.Core;
 using System.Runtime.Versioning;
 using System.Windows;
+using System.Windows.Interop;
 using Wpf.Ui.Appearance;
 
 namespace DesktopBoxesUI;
@@ -25,6 +27,14 @@ namespace DesktopBoxesUI;
 public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
+
+    // Tray infrastructure: the NotifyIcon must live in a visual tree, so it is hosted in a hidden
+    // always-on window. When Explorer restarts the shell broadcasts "TaskbarCreated"; we then swap in
+    // a fresh tray icon and re-glue the desktop layer (see TrayHostHook).
+    private Window? _trayHost;
+    private Controls.TrayIconUI? _tray;
+    private uint _taskbarCreatedMsg;
+    private bool _shellRecoveryPending;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
@@ -171,6 +181,75 @@ public partial class App : Application
 
     private void BuildTrayAndMenuItems(IServiceProvider services)
     {
+        // WPF-UI's NotifyIcon must live inside a visual tree, so host it in a hidden, always-on window.
+        // The window is never shown visibly (Visibility=Hidden) but stays loaded for the app's lifetime.
+        _trayHost = new Window
+        {
+            Width = 0,
+            Height = 0,
+            WindowState = WindowState.Minimized,
+            WindowStyle = WindowStyle.None,
+            ShowInTaskbar = false,
+            AllowsTransparency = true,
+            Background = System.Windows.Media.Brushes.Transparent,
+            Visibility = Visibility.Hidden,
+        };
+
+        ReplaceTrayIcon(services);
+        _trayHost.Show();
+
+        // Keep the tray's "Hide All Boxes" check box in sync with the real state — subscribed once,
+        // targeting whichever tray instance is current (it is recreated after Explorer restarts).
+        Services.GetRequiredService<DesktopManager>().AllBoxesHiddenChanged += (_, hidden) => _tray?.SetHideAllChecked(hidden);
+
+        // Double-clicking empty desktop area toggles the same hide-all state (icon double-clicks still open).
+        Services.GetRequiredService<IMouseMonitor>().DesktopDoubleClick += OnDesktopDoubleClick;
+
+        // Explorer restarts broadcast "TaskbarCreated" (registered message). React by re-registering
+        // the tray icon and re-gluing surface/boxes to the new desktop layer.
+        _taskbarCreatedMsg = Win32Apis.RegisterWindowMessage("TaskbarCreated");
+        if (_taskbarCreatedMsg != 0)
+        {
+            HwndSource.FromHwnd(new WindowInteropHelper(_trayHost).Handle)?.AddHook(TrayHostHook);
+        }
+    }
+
+    private IntPtr TrayHostHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (_taskbarCreatedMsg != 0 && msg == (int)_taskbarCreatedMsg && !_shellRecoveryPending)
+        {
+            _shellRecoveryPending = true;
+            Dispatcher.BeginInvoke(() =>
+            {
+                try
+                {
+                    ReplaceTrayIcon(Services);
+                    Services.GetRequiredService<DesktopManager>().RecoverAfterShellRestart();
+                    Log.Information("Shell restarted — tray icon and desktop layer recovered");
+                }
+                catch (System.Exception ex)
+                {
+                    Log.Error(ex, "Shell-restart recovery failed");
+                }
+                finally
+                {
+                    _shellRecoveryPending = false;
+                }
+            });
+        }
+
+        return IntPtr.Zero;
+    }
+
+    /// <summary>Creates a fresh TrayIconUI with all event wiring and swaps it into the host window.
+    /// Called once at startup and again after every Explorer restart.</summary>
+    private void ReplaceTrayIcon(IServiceProvider services)
+    {
+        if (_tray is not null && ReferenceEquals(_trayHost?.Content, _tray))
+        {
+            _trayHost!.Content = null;
+        }
+
         var tray = new TrayIconUI();
         tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
         tray.ResetRequested += async (_, _) =>
@@ -230,29 +309,12 @@ public partial class App : Application
             }
         };
 
-        // Double-clicking empty desktop area toggles the same hide-all state (icon double-clicks still open).
-        Services.GetRequiredService<IMouseMonitor>().DesktopDoubleClick += (_, _) =>
-        {
-            Services.GetRequiredService<DesktopManager>().ToggleHideAllBoxes();
-        };
+        _trayHost!.Content = tray;
+        _tray = tray;
+    }
 
-        // Keep the tray's "Hide All Boxes" check box in sync with the real state, whichever trigger fired.
-        Services.GetRequiredService<DesktopManager>().AllBoxesHiddenChanged += (_, hidden) => tray.SetHideAllChecked(hidden);
-
-        // WPF-UI's NotifyIcon must live inside a visual tree, so host it in a hidden, always-on window.
-        // The window is never shown visibly (Visibility=Hidden) but stays loaded for the app's lifetime.
-        var host = new Window
-        {
-            Width = 0,
-            Height = 0,
-            WindowState = WindowState.Minimized,
-            WindowStyle = WindowStyle.None,
-            ShowInTaskbar = false,
-            AllowsTransparency = true,
-            Background = System.Windows.Media.Brushes.Transparent,
-            Visibility = Visibility.Hidden,
-            Content = tray,
-        };
-        host.Show();
+    private void OnDesktopDoubleClick(object? sender, EventArgs e)
+    {
+        Services.GetRequiredService<DesktopManager>().ToggleHideAllBoxes();
     }
 }
