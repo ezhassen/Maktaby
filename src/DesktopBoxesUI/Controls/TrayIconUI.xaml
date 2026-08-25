@@ -28,16 +28,22 @@
             <MenuItem Click="Settings_Click" Header="Settings" />
             <MenuItem Header="Theme">
                 <MenuItem
+                    x:Name="menu_theme_system"
                     Click="Theme_Click"
                     Header="System"
+                    IsCheckable="True"
                     Tag="{x:Null}" />
                 <MenuItem
+                    x:Name="menu_theme_dark"
                     Click="Theme_Click"
                     Header="Dark"
+                    IsCheckable="True"
                     Tag="dark" />
                 <MenuItem
+                    x:Name="menu_theme_light"
                     Click="Theme_Click"
                     Header="Light"
+                    IsCheckable="True"
                     Tag="light" />
             </MenuItem>
             <Separator />

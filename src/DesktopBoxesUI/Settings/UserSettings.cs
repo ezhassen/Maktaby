@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Text;
+using Wpf.Ui.Appearance;
 
 namespace DesktopBoxesUI.Settings;
 
@@ -13,6 +14,45 @@ public class UserSettings
     [Category("Appearance"), DefaultValue(null)]
     public string? SelectedTheme { get; set; }
 
+    public ApplicationTheme GetSelectedTheme()
+    {
+        switch (SelectedTheme?.Trim().ToLowerInvariant())
+        {
+            case "light":
+                return ApplicationTheme.Light;
+            case "dark":
+                return ApplicationTheme.Dark;
+            default:
+                return ApplicationTheme.Unknown;
+        }
+    }
+
+    public bool SelectedTheme_IsSystem()
+    {
+        return GetSelectedTheme() switch
+        {
+            ApplicationTheme.Light or ApplicationTheme.Dark => false,
+            _ => true
+        };
+    }
+
+    public bool SelectedTheme_IsLight()
+    {
+        return GetSelectedTheme() switch
+        {
+            ApplicationTheme.Light => true,
+            _ => false
+        };
+    }
+
+    public bool SelectedTheme_IsDark()
+    {
+        return GetSelectedTheme() switch
+        {
+            ApplicationTheme.Dark => true,
+            _ => false
+        };
+    }
 
     /// <summary>
     /// Global default box transparency, 0 = fully opaque .. 1 = fully transparent.

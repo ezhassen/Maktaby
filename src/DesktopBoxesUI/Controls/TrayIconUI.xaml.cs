@@ -1,3 +1,4 @@
+using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -37,9 +38,13 @@ public partial class TrayIconUI
     private void ContextMenu_Opened(object sender, RoutedEventArgs e)
     {
         var dtMan = App.Services.GetRequiredService<DesktopManager>();
+        ISettingsService _settingsService = App.Services.GetRequiredService<ISettingsService>();
         MenuHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
         ToggleDebugTree.Visibility = GlobalFeaturesSwitches.ShowDebugTree ? Visibility.Visible : Visibility.Collapsed;
         resetMenuItem.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowReset ? Visibility.Visible : Visibility.Collapsed;
+        menu_theme_system.IsChecked = _settingsService.UserSettings.SelectedTheme_IsSystem();
+        menu_theme_light.IsChecked = _settingsService.UserSettings.SelectedTheme_IsLight();
+        menu_theme_dark.IsChecked = _settingsService.UserSettings.SelectedTheme_IsDark();
     }
 
     /// <summary>Loads the app's own icon (largest embedded size) for the tray; falls back to the
