@@ -224,6 +224,73 @@ public partial class BoxContainerWindow : Window, IContentDialogHostProvider
             : Visibility.Collapsed;
 
         BoxContent.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+
+        SyncIconSizeChecks();
+    }
+
+    /// <summary>Per-box icon size override from the menu: Auto/Default (null = follow the user
+    /// default), Small (24), Mid (48), Large (96), or the custom slider. Applies immediately and
+    /// persists.</summary>
+    private void MenuSetIconSize_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.ActiveBox is not { } active)
+        {
+            return;
+        }
+
+        var tag = (sender as FrameworkElement)?.Tag as string;
+        active.Model.IconSize = tag switch
+        {
+            "Small" => 24,
+            "Mid" => 48,
+            "Large" => 96,
+            _ => null, // Auto / Default
+        };
+
+        ApplyIconSize(active);
+    }
+
+    private void MenuIconSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        // Programmatic positioning during sync must not re-apply/persist.
+        if (_suppressIconSizeSlider || !IsLoaded || _vm.ActiveBox is not { } active)
+        {
+            return;
+        }
+
+        int value = (int)Math.Round(e.NewValue);
+        if (active.Model.IconSize == value)
+        {
+            return;
+        }
+
+        active.Model.IconSize = value;
+        ApplyIconSize(active);
+    }
+
+    private void ApplyIconSize(BoxViewModel active)
+    {
+        BoxContent.RefreshIconSize();
+        SyncIconSizeChecks();
+        _save();
+    }
+
+    /// <summary>Guards programmatic slider positioning from re-applying/persisting icon size.</summary>
+    private bool _suppressIconSizeSlider;
+
+    /// <summary>Reflects which icon-size mode is active on the current box in the menu checkmarks,
+    /// and positions the custom slider at the EFFECTIVE rendered size (so Auto shows the real px).</summary>
+    private void SyncIconSizeChecks()
+    {
+        int? size = _vm.ActiveBox?.Model.IconSize;
+        MenuIconSizeAuto.IsChecked = size is null;
+        MenuIconSizeSmall.IsChecked = size == 24;
+        MenuIconSizeMid.IsChecked = size == 48;
+        MenuIconSizeLarge.IsChecked = size == 96;
+
+        _suppressIconSizeSlider = true;
+        MenuIconSizeSlider.Value = BoxContent.IconSize; // effective: resolves Auto/default fallbacks
+        _suppressIconSizeSlider = false;
     }
 
     private void Window_MouseEnter(object sender, MouseEventArgs e)
@@ -298,6 +365,9 @@ public partial class BoxContainerWindow : Window, IContentDialogHostProvider
         RollButton.Foreground = palette.HeaderFore;
         //TabStrip.Background = palette.TabBack;
         TabStrip.BorderBrush = palette.HeaderBorder;
+
+        // Re-resolve per-box/default icon size (user may have changed DefaultBoxIconSize).
+        BoxContent.RefreshIconSize();
     }
 
     private void UpdateBody()

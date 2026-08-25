@@ -118,6 +118,14 @@ public sealed class SettingsViewModel : ViewModelBase
         set => SetField(ref _defaultBoxTitleBarColorsSameAsBox, value);
     }
 
+    /// <summary>Null = follow the desktop's current icon size (shown as "Auto" in the slider readout).</summary>
+    private int? _defaultBoxIconSize;
+    public int? DefaultBoxIconSize
+    {
+        get => _defaultBoxIconSize;
+        set => SetField(ref _defaultBoxIconSize, value);
+    }
+
     public ICommand SaveCommand { get; }
 
     public SettingsViewModel(ISettingsService settingsService)
@@ -146,6 +154,7 @@ public sealed class SettingsViewModel : ViewModelBase
         _defaultBoxTitleBarForeColor = s.DefaultBoxTitleBarForeColor;
         _defaultBoxBorderThickness = s.DefaultBoxBorderThickness;
         _defaultBoxTitleBarColorsSameAsBox = s.DefaultBoxTitleBarColorsSameAsBox;
+        _defaultBoxIconSize = s.DefaultBoxIconSize;
 
         _launchOnStartup = StartupManager.IsEnabled;
 
@@ -174,6 +183,13 @@ public sealed class SettingsViewModel : ViewModelBase
         if (name == nameof(DefaultBoxThemeOption))
         {
             DefaultBoxThemeOption = "App";
+            return;
+        }
+
+        // Nullable slider: reset means "follow the desktop" (null), not a numeric default.
+        if (name == nameof(DefaultBoxIconSize))
+        {
+            DefaultBoxIconSize = null;
             return;
         }
 
@@ -230,6 +246,7 @@ public sealed class SettingsViewModel : ViewModelBase
         DefaultBoxTitleBarForeColor = _defaultBoxTitleBarForeColor,
         DefaultBoxBorderThickness = _defaultBoxBorderThickness,
         DefaultBoxTitleBarColorsSameAsBox = _defaultBoxTitleBarColorsSameAsBox,
+        DefaultBoxIconSize = _defaultBoxIconSize,
     };
 
     public void Save()
@@ -245,8 +262,11 @@ public sealed class SettingsViewModel : ViewModelBase
         s.DefaultBoxTitleBarForeColor = _defaultBoxTitleBarForeColor;
         s.DefaultBoxBorderThickness = _defaultBoxBorderThickness;
         s.DefaultBoxTitleBarColorsSameAsBox = _defaultBoxTitleBarColorsSameAsBox;
+        s.DefaultBoxIconSize = _defaultBoxIconSize;
         _settingsService.Save();
         App.ApplyTheme(s.SelectedTheme);
         App.ApplyBoxAppearance();
+        // Start/suspend the live desktop icon-size watcher to match the new setting.
+        App.SyncDesktopIconSizeWatcher();
     }
 }

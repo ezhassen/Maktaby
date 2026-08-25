@@ -219,6 +219,7 @@ internal static class ManualApis
 
     public const int SM_CXDOUBLECLK = 36;
     public const int SM_CYDOUBLECLK = 37;
+    public const int SM_CXICON = 11;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -229,6 +230,22 @@ internal static class ManualApis
     // commctrl.h: #define LVM_HITTEST (LVM_FIRST + 18). It was previously declared as LVM_FIRST + 1,
     // which is LVM_SETBKCOLOR — the hit-test never executed and LVHITTESTINFO came back zeroed.
     public const int LVM_HITTEST = LVM_FIRST + 18;
+
+    /// <summary>LVM_GETIMAGELIST (LVM_FIRST + 2) with LVSIL_NORMAL returns the view's icon image list.</summary>
+    public const int LVM_GETIMAGELIST = LVM_FIRST + 2;
+    public const int LVSIL_NORMAL = 0;
+
+    /// <summary>LVM_GETITEMCOUNT (LVM_FIRST + 4) — no pointer params, safe cross-process.</summary>
+    public const int LVM_GETITEMCOUNT = LVM_FIRST + 4;
+
+    /// <summary>LVM_GETITEMRECT (LVM_FIRST + 14): lParam = RECT*, wParam = item index; the RECT's
+    /// LEFT field must be preset with the LVIR_* code (1 = LVIR_ICON).</summary>
+    public const int LVM_GETITEMRECT = LVM_FIRST + 14;
+    public const int LVIR_ICON = 1;
+
+    [DllImport("comctl32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ImageList_GetIconSize(IntPtr himl, ref int cx, ref int cy);
     public const uint LVHT_NOWHERE = 0x0001;
 
     [DllImport("user32.dll")]

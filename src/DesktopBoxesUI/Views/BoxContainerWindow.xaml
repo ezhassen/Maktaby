@@ -148,6 +148,60 @@
                                         Header="Right"
                                         Tag="Right" />
                                 </MenuItem>
+                                <MenuItem x:Name="MenuIconSize" Header="Icon Size">
+                                    <MenuItem
+                                        x:Name="MenuIconSizeAuto"
+                                        Click="MenuSetIconSize_Click"
+                                        Header="Auto / Default"
+                                        IsCheckable="True"
+                                        Tag="Auto" />
+                                    <Separator />
+                                    <MenuItem
+                                        x:Name="MenuIconSizeSmall"
+                                        Click="MenuSetIconSize_Click"
+                                        Header="Small"
+                                        IsCheckable="True"
+                                        Tag="Small" />
+                                    <MenuItem
+                                        x:Name="MenuIconSizeMid"
+                                        Click="MenuSetIconSize_Click"
+                                        Header="Mid"
+                                        IsCheckable="True"
+                                        Tag="Mid" />
+                                    <MenuItem
+                                        x:Name="MenuIconSizeLarge"
+                                        Click="MenuSetIconSize_Click"
+                                        Header="Large"
+                                        IsCheckable="True"
+                                        Tag="Large" />
+                                    <Separator />
+                                    <!-- Custom pixel size: stays open while dragging (no Click on this
+                                         item), value applied + saved from code-behind. -->
+                                    <MenuItem Focusable="False" StaysOpenOnClick="True">
+                                        <MenuItem.Header>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock
+                                                    Width="30"
+                                                    VerticalAlignment="Center"
+                                                    Text="Px" />
+                                                <Slider
+                                                    x:Name="MenuIconSizeSlider"
+                                                    Width="132"
+                                                    IsMoveToPointEnabled="True"
+                                                    IsSnapToTickEnabled="True"
+                                                    Maximum="128"
+                                                    Minimum="16"
+                                                    TickFrequency="4"
+                                                    ValueChanged="MenuIconSizeSlider_ValueChanged" />
+                                                <TextBlock
+                                                    Width="44"
+                                                    Margin="6,0,0,0"
+                                                    VerticalAlignment="Center"
+                                                    Text="{Binding Value, ElementName=MenuIconSizeSlider, StringFormat={}{0:0}px}" />
+                                            </StackPanel>
+                                        </MenuItem.Header>
+                                    </MenuItem>
+                                </MenuItem>
                             </ContextMenu>
                         </Button.ContextMenu>
                     </Button>

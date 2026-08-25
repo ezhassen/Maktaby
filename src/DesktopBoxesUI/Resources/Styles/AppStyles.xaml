@@ -6,4 +6,164 @@
     <!--  Shared converters and application-wide styles live here.  -->
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 
+    <!--
+        Fixed WPF-UI menu item templates.
+
+        The stock WPF-UI MenuItem.SubmenuHeaderTemplate applies a template-local DropShadowEffect and
+        offsets that make submenus OVERLAP their parent item instead of opening beside it whenever the
+        menu opens upward (bottom-anchored). These app-wide replacements remove the shadow, anchor the
+        submenu Popup to the RIGHT of its parent row, and ADD what the stock templates lack: a check
+        gutter so IsCheckable items (tray "Hide All Boxes", per-box "Icon Size" presets, ...) render
+        their checked state.
+    -->
+    <ControlTemplate x:Key="FixedSubmenuItemTemplate" TargetType="MenuItem">
+        <Border
+            x:Name="Border"
+            Margin="4,1,4,1"
+            Background="Transparent"
+            CornerRadius="4">
+            <Grid Margin="8,6,8,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="14" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Check gutter: visible only on checkable/checked items. -->
+                <Path
+                    x:Name="CheckGlyph"
+                    Grid.Column="0"
+                    Width="10"
+                    Height="9"
+                    VerticalAlignment="Center"
+                    Data="M0,5 L3.5,8.5 L10,2"
+                    Stretch="None"
+                    Stroke="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Foreground}"
+                    StrokeThickness="1.6"
+                    Visibility="Collapsed" />
+
+                <ContentPresenter
+                    x:Name="IconPresenter"
+                    Grid.Column="1"
+                    Margin="0,0,6,0"
+                    VerticalAlignment="Center"
+                    Content="{TemplateBinding Icon}" />
+
+                <ContentPresenter
+                    x:Name="Header"
+                    Grid.Column="2"
+                    ContentSource="Header"
+                    RecognizesAccessKey="True" />
+            </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuBarItemBackgroundSelected}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CheckGlyph" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Icon" Value="{x:Null}">
+                <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="IconPresenter" Property="Margin" Value="0" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="FixedSubmenuHeaderTemplate" TargetType="MenuItem">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Border
+                x:Name="Border"
+                Grid.Row="1"
+                Margin="4,1,4,1"
+                Background="Transparent"
+                CornerRadius="4">
+                <Grid Margin="8,6,8,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <ContentPresenter
+                        x:Name="IconPresenter"
+                        Grid.Column="0"
+                        Margin="0,0,6,0"
+                        VerticalAlignment="Center"
+                        Content="{TemplateBinding Icon}" />
+
+                    <ContentPresenter
+                        x:Name="Header"
+                        Grid.Column="1"
+                        ContentSource="Header"
+                        RecognizesAccessKey="True" />
+
+                    <Path
+                        Grid.Column="2"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Data="M0,0 L5,4 L0,8 Z"
+                        Fill="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Foreground}" />
+                </Grid>
+            </Border>
+
+            <!-- Anchored RIGHT of the parent row: fixes the bottom-open overlap bug. No DropShadowEffect. -->
+            <Popup
+                x:Name="Popup"
+                Grid.Row="1"
+                AllowsTransparency="True"
+                Focusable="False"
+                IsOpen="{TemplateBinding IsSubmenuOpen}"
+                Placement="Right"
+                PlacementTarget="{Binding ElementName=Border}"
+                PopupAnimation="None">
+                <Border
+                    Padding="12,6,12,6"
+                    Background="{DynamicResource FlyoutBackground}"
+                    BorderBrush="{DynamicResource FlyoutBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    SnapsToDevicePixels="True">
+                    <ScrollViewer CanContentScroll="True">
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuBarItemBackgroundSelected}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+            </Trigger>
+            <Trigger Property="Icon" Value="{x:Null}">
+                <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="IconPresenter" Property="Margin" Value="0" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!--
+        Role-routed application of the fixed templates. Only Submenu* roles are replaced; top-level
+        roles keep the WPF-UI defaults (context menus never use them anyway).
+    -->
+    <Style TargetType="MenuItem">
+        <Style.Triggers>
+            <Trigger Property="Role" Value="SubmenuHeader">
+                <Setter Property="Template" Value="{StaticResource FixedSubmenuHeaderTemplate}" />
+            </Trigger>
+            <Trigger Property="Role" Value="SubmenuItem">
+                <Setter Property="Template" Value="{StaticResource FixedSubmenuItemTemplate}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
 </ResourceDictionary>

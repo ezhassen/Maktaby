@@ -1,5 +1,6 @@
 namespace DesktopBoxesUI.Core.Models;
 
+using DesktopBoxesUI.Settings;
 using System.Collections.ObjectModel;
 
 /// <summary>
@@ -21,6 +22,11 @@ public sealed class Box
     /// deleted (nor its tab removed by the user).
     /// </summary>
     public bool IsDefault { get; set; }
+
+    /// <summary>
+    /// Box icon size min 16 to 128 max. if null use <see cref="UserSettings.DefaultBoxIconSize"/>
+    /// </summary>
+    public int? IconSize { get; set; }
 
     /// <summary>The items contained in this Box, in display order.</summary>
     public ObservableCollection<BoxItem> Items { get; set; } = new();

@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
+    xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
     d:DesignHeight="200"
     d:DesignWidth="240"
     AllowDrop="True"
@@ -18,6 +19,9 @@
     mc:Ignorable="d">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <!-- Tile = resolved icon size + chrome offsets (hand-tuned at the 32px baseline: 68×64). -->
+        <conv:AdaptiveTileSizeConverter x:Key="TileWidth" />
+        <conv:AdaptiveTileSizeConverter x:Key="TileHeight" />
     </UserControl.Resources>
     <ScrollViewer
         x:Name="Scroll"
@@ -35,8 +39,8 @@
                     <DataTemplate DataType="vm:BoxItemViewModel">
                         <Border
                             x:Name="ItemBorder"
-                            Width="68"
-                            Height="68"
+                            Width="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
+                            Height="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
                             Margin="2"
                             Padding="0"
                             ContextMenuOpening="ItemBorder_ContextMenuOpening"
@@ -66,8 +70,8 @@
                             </Border.Style>
                             <StackPanel Orientation="Vertical">
                                 <Image
-                                    Width="32"
-                                    Height="32"
+                                    Width="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    Height="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                     Margin="0,2,0,0"
                                     HorizontalAlignment="Center"
                                     RenderOptions.BitmapScalingMode="HighQuality"

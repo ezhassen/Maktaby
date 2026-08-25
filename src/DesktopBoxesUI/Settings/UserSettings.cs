@@ -55,7 +55,11 @@ public class UserSettings
 
     #endregion
 
-
+    /// <summary>
+    /// Default box item icon size min is 16 max 128. if null use desktop current icon size
+    /// </summary>
+    [Category("Appearance_Boxes"), DefaultValue(null)]
+    public int? DefaultBoxIconSize { get; set; }
 
 }
 

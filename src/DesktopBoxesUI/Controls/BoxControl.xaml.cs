@@ -4,6 +4,7 @@ using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.NativeMethods;
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -42,10 +43,37 @@ public partial class BoxControl : UserControl
 
     private static readonly bool _singleClick = ShellSettings.IsSingleClickToOpen();
 
-    public BoxControl() => InitializeComponent();
+    public BoxControl()
+    {
+        InitializeComponent();
+        // Tab switches re-assign DataContext (UpdateBody) — re-resolve the icon size with it.
+        DataContextChanged += (_, _) => RefreshIconSize();
+    }
 
     /// <summary>The Box whose items are rendered by this control.</summary>
     private BoxViewModel? Box => DataContext as BoxViewModel;
+
+    /// <summary>Resolved icon pixel size for this box's tiles: Box.IconSize when set, otherwise
+    /// UserSettings.DefaultBoxIconSize, otherwise 32. Drives tile + image sizing via bindings.</summary>
+    public static readonly DependencyProperty IconSizeProperty = DependencyProperty.Register(
+        nameof(IconSize), typeof(double), typeof(BoxControl), new PropertyMetadata(32.0));
+
+    public double IconSize
+    {
+        get => (double)GetValue(IconSizeProperty);
+        private set => SetValue(IconSizeProperty, value);
+    }
+
+    /// <summary>Re-resolves the icon size from the current Box model and user defaults. Null default
+    /// falls back to the LIVE desktop icon size (watched by DesktopIconSizeService).</summary>
+    public void RefreshIconSize()
+    {
+        int resolved = Box?.Model.IconSize
+            ?? App.Services.GetRequiredService<Core.Interfaces.ISettingsService>().UserSettings.DefaultBoxIconSize
+            ?? App.Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>().Current;
+
+        IconSize = System.Math.Clamp(resolved, 16, 128);
+    }
 
     public MainViewModel? Host { get; set; }
 

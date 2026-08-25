@@ -198,6 +198,37 @@
                                 </StackPanel>
                             </StackPanel>
 
+                            <StackPanel Margin="0,0,0,12">
+                                <TextBlock FontWeight="Bold" Text="Default box icon size" />
+                                <TextBlock
+                                    Margin="0,0,0,4"
+                                    FontSize="11"
+                                    Foreground="#999999"
+                                    Text="Shortcut icon pixels inside boxes (16–128). Auto follows the desktop. Per-box override via Box.IconSize." />
+                                <StackPanel Orientation="Horizontal">
+                                    <Slider
+                                        Width="320"
+                                        HorizontalAlignment="Left"
+                                        IsMoveToPointEnabled="True"
+                                        IsSnapToTickEnabled="True"
+                                        Maximum="128"
+                                        Minimum="16"
+                                        TickFrequency="8"
+                                        Value="{Binding DefaultBoxIconSize}" />
+                                    <TextBlock
+                                        Width="64"
+                                        Margin="8,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding DefaultBoxIconSize, TargetNullValue=Auto, StringFormat={}{0:0} px}" />
+                                    <ui:Button
+                                        Command="{Binding ResetToDefaultCommand}"
+                                        CommandParameter="DefaultBoxIconSize"
+                                        Style="{StaticResource ResetButton}">
+                                        <ui:SymbolIcon Symbol="ArrowCounterclockwise24" />
+                                    </ui:Button>
+                                </StackPanel>
+                            </StackPanel>
+
                             <GroupBox Margin="0,4,0,8" Header="Default box colors (override theme when set)">
                                 <StackPanel Margin="8">
                                     <StackPanel Margin="0,0,0,8" Orientation="Horizontal">

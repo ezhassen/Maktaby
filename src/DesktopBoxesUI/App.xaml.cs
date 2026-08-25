@@ -35,7 +35,6 @@ public partial class App : Application
     private Controls.TrayIconUI? _tray;
     private uint _taskbarCreatedMsg;
     private bool _shellRecoveryPending;
-
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -58,6 +57,22 @@ public partial class App : Application
         // Windows shutdown / user logoff: disarm the minimize-prevention hooks BEFORE the session
         // starts collapsing our owned window chains, so teardown is not fought.
         SessionEnding += (_, _) => Win32Apis.SystemTeardown = true;
+
+        // Watch the live desktop icon size ONLY while it is actually used (DefaultBoxIconSize is
+        // Auto/null). With an explicit value pinned, monitoring is suspended.
+        SyncDesktopIconSizeWatcher();
+        var iconSizes = Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>();
+        iconSizes.Changed += size =>
+        {
+            Log.Information("Desktop icon size changed to {Size}px", size);
+            Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var w in Windows.OfType<BoxContainerWindow>())
+                {
+                    w.BoxContent.RefreshIconSize();
+                }
+            });
+        };
 
         // The splash runs initialization itself once it is first shown (see LoadingWindow),
         // so the Box windows are created under a fully-rendered WPF context.
@@ -139,6 +154,7 @@ public partial class App : Application
 
         // Win32 watchers
         services.AddSingleton<IMouseMonitor, MouseMonitor>();
+        services.AddSingleton<Core.Interfaces.IDesktopIconSizeService, Win32.Services.DesktopIconSizeService>();
 
         // Debug overlay (single instance; toggled from the tray "Debug Desktop Tree" menu).
         services.AddSingleton<DesktopTreeDebugOverlay>();
@@ -241,6 +257,9 @@ public partial class App : Application
                 {
                     ReplaceTrayIcon(Services);
                     Services.GetRequiredService<DesktopManager>().RecoverAfterShellRestart();
+                    // New list-view => re-bind the icon-size hook to it and resolve immediately
+                    // (only while the watcher is relevant: DefaultBoxIconSize is Auto).
+                    SyncDesktopIconSizeWatcher();
                     Log.Information("Shell restarted — tray icon and desktop layer recovered");
                 }
                 catch (System.Exception ex)
@@ -332,5 +351,22 @@ public partial class App : Application
     private void OnDesktopDoubleClick(object? sender, EventArgs e)
     {
         Services.GetRequiredService<DesktopManager>().ToggleHideAllBoxes();
+    }
+
+    /// <summary>Starts or suspends the desktop-icon-size watcher to match the current
+    /// DefaultBoxIconSize setting (Auto/null = watch; explicit value = suspend).</summary>
+    [SupportedOSPlatform("windows10.0.14393")]
+    public static void SyncDesktopIconSizeWatcher()
+    {
+        var svc = Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>();
+        var isAuto = Services.GetRequiredService<ISettingsService>().UserSettings.DefaultBoxIconSize is null;
+        if (isAuto)
+        {
+            svc.Start();
+        }
+        else
+        {
+            svc.Stop();
+        }
     }
 }

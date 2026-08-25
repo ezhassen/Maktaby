@@ -542,6 +542,13 @@ public sealed partial class DesktopSurface : Window
             // CLIENT coords (desktop list-view client origin = virtual-screen origin, non-zero on
             // multi-monitor). Converting via ScreenToClient fixed phantom icon selections when icons
             // are SHOWN but broke other input when icons are HIDDEN — reverted pending investigation.
+            // Ctrl+wheel over empty desktop is the icon-size gesture: Explorer applies it right
+            // after this forwarded message, so nudge the watcher (debounced inside).
+            if (m == WM_MOUSEWHEEL && (Win32Apis.GetAsyncKeyState(0x11 /*VK_CONTROL*/) & 0x8000) != 0)
+            {
+                App.Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>().NotifyPossibleChange();
+            }
+
             ManualApis.PostMessage(listView, m, wParam, lParam);
             handled = true;
             return IntPtr.Zero;

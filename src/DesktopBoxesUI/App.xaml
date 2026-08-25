@@ -8,6 +8,12 @@
             <ResourceDictionary.MergedDictionaries>
                 <ui:ThemesDictionary />
                 <ui:ControlsDictionary />
+
+                <!--
+                    App-wide overrides. Merged AFTER WPF-UI so the fixed menu item templates
+                    (submenu positioning + checkable state) win over the stock ones.
+                -->
+                <ResourceDictionary Source="Resources/Styles/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
             <!--

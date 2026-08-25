@@ -231,20 +231,56 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         PreviewHeader.Background = palette.HeaderBack;
         PreviewTitle.Foreground = palette.HeaderFore;
 
-        // Re-apply the resolved foreground to every dynamically-built preview item (real icons keep
-        // their own bitmap; only the fallback rectangles/label text are tinted to match the theme).
+        // Tiles follow the resolved icon size (explicit value, or the live desktop size on Auto).
+        double iconSize = ResolvedPreviewIconSize();
+
+        // Re-apply resolved colors AND geometry to every dynamically-built preview item (real icons
+        // keep their own bitmap; only the fallback rectangles/label text are tinted to match theme).
         foreach (var child in PreviewBody.Children.OfType<StackPanel>())
         {
+            // Same chrome offset the real tiles use (68 = 32 + 36 at baseline).
+            child.Width = iconSize + 36;
+
+            foreach (var img in child.Children.OfType<System.Windows.Controls.Image>())
+            {
+                img.Width = iconSize;
+                img.Height = iconSize;
+            }
+
             foreach (var tb in child.Children.OfType<System.Windows.Controls.TextBlock>())
             {
                 tb.Foreground = palette.Fore;
+                tb.MaxWidth = iconSize + 28;
             }
 
             foreach (var rc in child.Children.OfType<System.Windows.Shapes.Rectangle>())
             {
+                rc.Width = iconSize;
+                rc.Height = iconSize;
                 rc.Fill = palette.Fore;
             }
         }
+    }
+
+    /// <summary>Resolved preview icon size: explicit DefaultBoxIconSize, else the live desktop size
+    /// from the watcher, else 32.</summary>
+    private double ResolvedPreviewIconSize()
+    {
+        int? v = (DataContext as SettingsViewModel)?.DefaultBoxIconSize;
+
+        if (v is null)
+        {
+            try
+            {
+                v = App.Services?.GetService<DesktopBoxesUI.Core.Interfaces.IDesktopIconSizeService>()?.Current;
+            }
+            catch
+            {
+                // Services not ready (design-time): fall back below.
+            }
+        }
+
+        return Math.Clamp(v ?? 32, 16, 128);
     }
 
     // Paints the area behind the preview box with the user's actual desktop background (wallpaper
@@ -301,6 +337,7 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
     private void BuildPreviewItems()
     {
         PreviewBody.Children.Clear();
+        double iconSize = ResolvedPreviewIconSize();
 
         var mainVm = App.Services?.GetService<MainViewModel>();
         BoxViewModel? source = null;
@@ -321,7 +358,7 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         {
             foreach (var item in source.Items.Take(8))
             {
-                PreviewBody.Children.Add(MakePreviewItem(item, item.DisplayName));
+                PreviewBody.Children.Add(MakePreviewItem(item, item.DisplayName, iconSize));
             }
         }
 
@@ -329,22 +366,22 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         {
             for (int i = 0; i < 3; i++)
             {
-                PreviewBody.Children.Add(MakePreviewItem(null, "Item"));
+                PreviewBody.Children.Add(MakePreviewItem(null, "Item", iconSize));
             }
         }
     }
 
-    private static UIElement MakePreviewItem(BoxItemViewModel? item, string name)
+    private static UIElement MakePreviewItem(BoxItemViewModel? item, string name, double iconSize)
     {
-        var sp = new StackPanel { Width = 64, Margin = new Thickness(4) };
+        var sp = new StackPanel { Width = iconSize + 36, Margin = new Thickness(4) };
 
         if (item is not null)
         {
             // Bind to Icon so the image updates once the (asynchronously loaded) icon arrives.
             var img = new System.Windows.Controls.Image
             {
-                Width = 32,
-                Height = 32,
+                Width = iconSize,
+                Height = iconSize,
                 HorizontalAlignment = HorizontalAlignment.Center
             };
             img.SetBinding(System.Windows.Controls.Image.SourceProperty, new Binding(nameof(BoxItemViewModel.Icon)) { Source = item });
@@ -354,8 +391,8 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         {
             sp.Children.Add(new System.Windows.Shapes.Rectangle
             {
-                Width = 32,
-                Height = 32,
+                Width = iconSize,
+                Height = iconSize,
                 RadiusX = 4,
                 RadiusY = 4,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -370,7 +407,7 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
             Text = name,
             TextAlignment = TextAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
-            MaxWidth = 60
+            MaxWidth = iconSize + 28
         });
 
         return sp;
