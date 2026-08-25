@@ -55,18 +55,24 @@ public sealed partial class DesktopSurface : Window
     private static string Describe(IntPtr hwnd)
         => hwnd == IntPtr.Zero ? "<none>" : $"{Win32Apis.GetWindowClass(hwnd)}(0x{hwnd.ToInt64():X})";
 
-    // --- Right-drag marquee: drag on empty surface, release to get the [Create New Box] menu ---
-    // Mirrors the shell's own right-drag convention (release shows a context menu). Left-button
-    // input is untouched so native icon marquee selection keeps working.
-    private bool _rightDragActive;
-    private bool _marqueeCancelled; // set when aborted (Esc/left-click/capture loss); UP then swallows silently
+    // --- Marquee: drag (left OR right button) on empty surface, release to get [Create New Box] ---
+    // Right-drag mirrors the shell's own right-drag convention. Left-drag starts ONLY on empty
+    // points (presses on icons keep native forwarding/selection); a left press released below the
+    // movement threshold is replayed as a plain click so icon deselection keeps working.
+    private bool _marqueeActive;
+    private bool _marqueeIsLeftButton; // which button started the active drag
+    private bool _marqueePendingClick; // left-only: not yet past the threshold, may still be a plain click
+    private bool _marqueeCancelled; // set when aborted (Esc/other-button/capture loss); UP then swallows silently
+    private IntPtr _pendingDownWParam;  // stored original LEFT down for plain-click replay
+    private IntPtr _pendingDownLParam;
     private ManualApis.POINT _marqueeStart;
     private ManualApis.POINT _marqueeEnd;
     private Border? _marqueeBorder;
-    private const int MarqueeMinDeltaPx = 10; // physical pixels before a right-drag counts as a marquee
+    private const int MarqueeMinDeltaPx = 10; // physical pixels before a drag counts as a marquee
     private const int WM_CAPTURECHANGED = 0x0215;
     private const int VK_ESCAPE = 0x1B;
     private const int VK_LBUTTON = 0x01;
+    private const int VK_RBUTTON = 0x02;
 
     public DesktopSurface(MainViewModel host, System.Action save)
     {
@@ -195,9 +201,9 @@ public sealed partial class DesktopSurface : Window
         // active flag is already cleared, so the band survives for the menu.
         if (msg == WM_CAPTURECHANGED)
         {
-            if (_rightDragActive)
+            if (_marqueeActive)
             {
-                _rightDragActive = false;
+                _marqueeActive = false;
                 _marqueeCancelled = true;
                 HideMarquee();
             }
@@ -285,19 +291,21 @@ public sealed partial class DesktopSurface : Window
         if (m is WM_MOUSEMOVE or WM_LBUTTONDOWN or WM_LBUTTONUP or WM_LBUTTONDBLCLK
             or WM_RBUTTONDOWN or WM_RBUTTONUP or WM_MOUSEWHEEL)
         {
-            // Live marquee tracking: while the right button is down we own the moves (no forwarding,
+            // Live marquee tracking: while a marquee drag is active we own the moves (no forwarding,
             // so Explorer's list-view never reacts to the drag). Keyboard messages can NEVER reach
-            // this WS_EX_NOACTIVATE window, so Esc / left-button aborts are polled from the async key
+            // this WS_EX_NOACTIVATE window, so Esc / other-button aborts are polled from the async key
             // state while captured moves stream in — that covers "any input while dragging".
-            if (_rightDragActive && m == WM_MOUSEMOVE)
+            if (_marqueeActive && m == WM_MOUSEMOVE)
             {
                 bool escape = (Win32Apis.GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
-                bool leftPressed = (Win32Apis.GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-                if (escape || leftPressed)
+                bool otherPressed = _marqueeIsLeftButton
+                    ? (Win32Apis.GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0
+                    : (Win32Apis.GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+                if (escape || otherPressed)
                 {
-                    // Abort but KEEP capture: the matching WM_RBUTTONUP must still arrive here so it
+                    // Abort but KEEP capture: the matching button-up must still arrive here so it
                     // can be swallowed silently instead of leaking to whatever sits under the cursor.
-                    _rightDragActive = false;
+                    _marqueeActive = false;
                     _marqueeCancelled = true;
                     HideMarquee();
                     handled = true;
@@ -307,19 +315,29 @@ public sealed partial class DesktopSurface : Window
                 if (Win32Apis.GetCursorPos(out ManualApis.POINT movePt))
                 {
                     _marqueeEnd = movePt;
-                    UpdateMarqueeVisual();
+
+                    // Left-button stays invisible until past the threshold so plain clicks never flash.
+                    if (!_marqueePendingClick)
+                    {
+                        UpdateMarqueeVisual();
+                    }
+                    else if (Math.Abs(_marqueeEnd.X - _marqueeStart.X) >= MarqueeMinDeltaPx
+                        || Math.Abs(_marqueeEnd.Y - _marqueeStart.Y) >= MarqueeMinDeltaPx)
+                    {
+                        _marqueePendingClick = false; // committed: it is a real marquee now
+                        UpdateMarqueeVisual();
+                    }
                 }
 
                 handled = true;
                 return IntPtr.Zero;
             }
 
-            // Left-click while a marquee is pending: cancel it and swallow the click (a stray press on
-            // some other surface should not also change icon selection). Capture is kept for the
-            // matching UP, which the cancelled branch above then swallows.
-            if (_rightDragActive && m == WM_LBUTTONDOWN)
+            // The OTHER mouse button going down mid-drag cancels it (and is swallowed). Capture is
+            // kept so its matching UP lands here and dies too.
+            if (_marqueeActive && !_marqueeIsLeftButton && m == WM_LBUTTONDOWN)
             {
-                _rightDragActive = false;
+                _marqueeActive = false;
                 _marqueeCancelled = true;
                 HideMarquee();
                 handled = true;
@@ -332,6 +350,32 @@ public sealed partial class DesktopSurface : Window
                 return IntPtr.Zero;
             }
 
+            // LEFT button on an EMPTY point also starts a marquee. Presses on icons fall through to
+            // the generic forward so native press/selection feedback stays intact.
+            if (m == WM_LBUTTONDOWN)
+            {
+                var hitList = GetListView();
+                if (hitList != IntPtr.Zero
+                    && Win32Apis.GetCursorPos(out ManualApis.POINT ldownPt)
+                    && Win32Apis.IsDesktopEmptyPoint(hitList, ldownPt))
+                {
+                    _marqueeActive = true;
+                    _marqueeIsLeftButton = true;
+                    _marqueePendingClick = true; // may still turn out to be a plain click
+                    _marqueeCancelled = false;
+                    _pendingDownWParam = wParam;
+                    _pendingDownLParam = lParam;
+                    _marqueeStart = ldownPt;
+                    _marqueeEnd = ldownPt;
+
+                    // Explicit capture so the drag keeps streaming across boxes/apps/monitors.
+                    ManualApis.SetCapture(hwnd);
+
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+            }
+
             // Right-click is handled entirely here, NOT forwarded. Reason: a forwarded
             // WM_RBUTTONDOWN makes the list-view SetCapture(), which reroutes the matching
             // WM_RBUTTONUP straight to SysListView32 — it never returns to us, and Explorer pairs our
@@ -340,7 +384,19 @@ public sealed partial class DesktopSurface : Window
             // show the [Create New Box] marquee menu (drag) or the desktop context menu (click).
             if (m == WM_RBUTTONDOWN)
             {
-                _rightDragActive = true;
+                if (_marqueeActive && _marqueeIsLeftButton)
+                {
+                    // Right press during an active LEFT marquee: cancel it and swallow.
+                    _marqueeActive = false;
+                    _marqueeCancelled = true;
+                    HideMarquee();
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
+                _marqueeActive = true;
+                _marqueeIsLeftButton = false;
+                _marqueePendingClick = false;
                 _marqueeCancelled = false;
                 if (Win32Apis.GetCursorPos(out ManualApis.POINT downPt))
                 {
@@ -357,21 +413,20 @@ public sealed partial class DesktopSurface : Window
                 return IntPtr.Zero;
             }
 
-            if (m == WM_RBUTTONUP)
+            if (_marqueeActive && !_marqueeIsLeftButton && m == WM_RBUTTONUP)
             {
                 // Clear the active flag BEFORE releasing: ReleaseCapture synchronously raises
                 // WM_CAPTURECHANGED, and that handler must not treat our own release as a theft
                 // (it would hide the band the menu is supposed to keep visible).
-                bool wasActive = _rightDragActive;
-                _rightDragActive = false;
+                _marqueeActive = false;
                 ManualApis.ReleaseCapture();
 
-                if (wasActive && Win32Apis.GetCursorPos(out ManualApis.POINT upPt))
+                if (Win32Apis.GetCursorPos(out ManualApis.POINT upPt))
                 {
                     _marqueeEnd = upPt;
                 }
 
-                bool isMarquee = wasActive && !_marqueeCancelled
+                bool isMarquee = !_marqueeCancelled
                     && (Math.Abs(_marqueeEnd.X - _marqueeStart.X) >= MarqueeMinDeltaPx
                         || Math.Abs(_marqueeEnd.Y - _marqueeStart.Y) >= MarqueeMinDeltaPx);
 
@@ -380,7 +435,7 @@ public sealed partial class DesktopSurface : Window
                     // Cancelled drags and plain clicks: no [Create New Box] menu. A cancelled drag is
                     // swallowed entirely; a plain click keeps the native desktop context menu.
                     HideMarquee();
-                    if (_marqueeCancelled || !wasActive)
+                    if (_marqueeCancelled)
                     {
                         handled = true;
                         return IntPtr.Zero;
@@ -406,6 +461,38 @@ public sealed partial class DesktopSurface : Window
                 }
 
                 ShowCreateBoxMenu();
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            if (_marqueeActive && _marqueeIsLeftButton && m == WM_LBUTTONUP)
+            {
+                _marqueeActive = false;
+                ManualApis.ReleaseCapture();
+
+                if (Win32Apis.GetCursorPos(out ManualApis.POINT lupPt))
+                {
+                    _marqueeEnd = lupPt;
+                }
+
+                // A left drag that never passed the threshold was a PLAIN CLICK: replay the stored
+                // DOWN + this UP so native empty-desktop click behaviour (icon deselection) survives.
+                if (!_marqueeCancelled && !_marqueePendingClick)
+                {
+                    ShowCreateBoxMenu();
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
+                HideMarquee();
+                if (_marqueeCancelled)
+                {
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
+                ManualApis.PostMessage(listView, WM_LBUTTONDOWN, _pendingDownWParam, _pendingDownLParam);
+                ManualApis.PostMessage(listView, WM_LBUTTONUP, wParam, lParam);
                 handled = true;
                 return IntPtr.Zero;
             }
