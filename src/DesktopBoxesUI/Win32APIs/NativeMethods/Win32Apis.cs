@@ -991,6 +991,28 @@ internal static class Win32Apis
         return (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom);
     }
 
+    /// <summary>Work area (physical screen pixels) of the monitor containing a point, taskbar excluded.
+    /// Used to keep popups anchored at raw points inside visible desktop space.</summary>
+    public static (int left, int top, int right, int bottom)? GetMonitorWorkAreaAtPoint(ManualApis.POINT pt)
+    {
+        var hmon = PInvoke.MonitorFromRect(
+            new RECT { left = pt.X, top = pt.Y, right = pt.X + 1, bottom = pt.Y + 1 },
+            MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
+        if (hmon == HWND.Null)
+        {
+            return null;
+        }
+
+        MONITORINFO mi = default;
+        mi.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
+        if (!PInvoke.GetMonitorInfo(hmon, ref mi))
+        {
+            return null;
+        }
+
+        return (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom);
+    }
+
     /// <summary>
     /// Removes the minimize/maximize boxes so the window cannot be minimized (by Win+D / Show Desktop
     /// or by the user). The style change is flushed with SWP_FRAMECHANGED so it takes effect immediately.

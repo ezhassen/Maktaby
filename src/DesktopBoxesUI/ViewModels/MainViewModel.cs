@@ -72,8 +72,14 @@ public sealed class MainViewModel : ViewModelBase
     /// <summary>Creates a BoxContainer (single box) at an exact position (used when dropping onto empty desktop).</summary>
     public ContainerViewModel CreateBoxAt(double left, double top)
     {
-        var box = _boxService.CreateBox("New Box", left, top, 240, 200);
-        return RegisterContainer(new BoxContainer { Boxes = { box }, SelectedIndex = 0 }, left, top);
+        return CreateBoxAt(left, top, 240, 200);
+    }
+
+    /// <summary>Creates a single-box container of an explicit size (right-drag marquee creation).</summary>
+    public ContainerViewModel CreateBoxAt(double left, double top, double width, double height)
+    {
+        var box = _boxService.CreateBox("New Box", left, top, width, height);
+        return RegisterContainer(new BoxContainer { Boxes = { box }, SelectedIndex = 0 }, left, top, width, height);
     }
 
     /// <summary>Creates a BoxContainer pre-seeded with two tabs (so the tab strip is visible).</summary>
@@ -90,9 +96,9 @@ public sealed class MainViewModel : ViewModelBase
         return CreateBoxContainerAt(left + offset, top + offset);
     }
 
-    private ContainerViewModel RegisterContainer(BoxContainer boxContainer, double left, double top)
+    private ContainerViewModel RegisterContainer(BoxContainer boxContainer, double left, double top, double width = 240, double height = 200)
     {
-        var container = _containers.CreateContainer(DesktopItemContainerType.BoxContainer, left, top, 240, 200, childContainer: boxContainer);
+        var container = _containers.CreateContainer(DesktopItemContainerType.BoxContainer, left, top, width, height, childContainer: boxContainer);
         var vm = MakeVm(container);
         Containers.Add(vm);
         return vm;

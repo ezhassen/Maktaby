@@ -105,6 +105,13 @@ internal static class ManualApis
     [DllImport("user32.dll", EntryPoint = "SetCursor")]
     public static extern IntPtr SetCursor(IntPtr hCursor);
 
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetCapture(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ReleaseCapture();
+
     public const int GCL_STYLE = -26;
     public const int CS_DBLCLKS = 0x0008;
 

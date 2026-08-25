@@ -55,33 +55,34 @@ public partial class BoxContainerWindow : Window, IContentDialogHostProvider
     // header is rotated and fills the full window height, so its measured height can no longer be used.
     private double _headerThickness = 30;
 
-    static BoxContainerWindow()
-    {
-        // Commit any active inline rename when a mouse button is pressed anywhere in the app
-        // (covers clicks on the desktop, other containers, etc., where LostFocus may not fire).
-        EventManager.RegisterClassHandler(
-            typeof(Window),
-            PreviewMouseDownEvent,
-            new MouseButtonEventHandler(OnAnyPreviewMouseDown));
-    }
+    //static BoxContainerWindow()
+    //{
+    //      //Not needed any more when using surface 
+    //    // Commit any active inline rename when a mouse button is pressed anywhere in the app
+    //    // (covers clicks on the desktop, other containers, etc., where LostFocus may not fire).
+    //    EventManager.RegisterClassHandler(
+    //        typeof(Window),
+    //        PreviewMouseDownEvent,
+    //        new MouseButtonEventHandler(OnAnyPreviewMouseDown));
+    //}
 
-    private static void OnAnyPreviewMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (Application.Current == null)
-        {
-            return;
-        }
+    //private static void OnAnyPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    //{
+    //    if (Application.Current == null)
+    //    {
+    //        return;
+    //    }
 
-        foreach (var w in Application.Current.Windows.OfType<BoxContainerWindow>())
-        {
-            if (w._dragTab is not null)
-            {
-                w.CancelTabDrag();
-            }
-            w.TryCommitRename(e.OriginalSource);
-        }
+    //    foreach (var w in Application.Current.Windows.OfType<BoxContainerWindow>())
+    //    {
+    //        if (w._dragTab is not null)
+    //        {
+    //            w.CancelTabDrag();
+    //        }
+    //        w.TryCommitRename(e.OriginalSource);
+    //    }
 
-    }
+    //}
 
     private void TryCommitRename(object? originalSource)
     {

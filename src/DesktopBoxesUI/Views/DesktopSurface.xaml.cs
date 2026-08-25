@@ -6,7 +6,9 @@ using Microsoft.Extensions.DependencyInjection;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace DesktopBoxesUI.Views;
 
@@ -52,6 +54,19 @@ public sealed partial class DesktopSurface : Window
 
     private static string Describe(IntPtr hwnd)
         => hwnd == IntPtr.Zero ? "<none>" : $"{Win32Apis.GetWindowClass(hwnd)}(0x{hwnd.ToInt64():X})";
+
+    // --- Right-drag marquee: drag on empty surface, release to get the [Create New Box] menu ---
+    // Mirrors the shell's own right-drag convention (release shows a context menu). Left-button
+    // input is untouched so native icon marquee selection keeps working.
+    private bool _rightDragActive;
+    private bool _marqueeCancelled; // set when aborted (Esc/left-click/capture loss); UP then swallows silently
+    private ManualApis.POINT _marqueeStart;
+    private ManualApis.POINT _marqueeEnd;
+    private Border? _marqueeBorder;
+    private const int MarqueeMinDeltaPx = 10; // physical pixels before a right-drag counts as a marquee
+    private const int WM_CAPTURECHANGED = 0x0215;
+    private const int VK_ESCAPE = 0x1B;
+    private const int VK_LBUTTON = 0x01;
 
     public DesktopSurface(MainViewModel host, System.Action save)
     {
@@ -174,6 +189,22 @@ public sealed partial class DesktopSurface : Window
     /// </summary>
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        // Capture lost (stolen by another window/process) mid-drag: the drag can no longer be
+        // completed reliably — abort it so the rubber band never stays frozen on screen. During a
+        // NORMAL release this message also fires (from our own ReleaseCapture), but by then the
+        // active flag is already cleared, so the band survives for the menu.
+        if (msg == WM_CAPTURECHANGED)
+        {
+            if (_rightDragActive)
+            {
+                _rightDragActive = false;
+                _marqueeCancelled = true;
+                HideMarquee();
+            }
+
+            return IntPtr.Zero;
+        }
+
         if (msg == WM_NCHITTEST)
         {
             // Always claim the hit (HTCLIENT). The old HTTRANSPARENT-on-right-button trick cannot work:
@@ -254,6 +285,47 @@ public sealed partial class DesktopSurface : Window
         if (m is WM_MOUSEMOVE or WM_LBUTTONDOWN or WM_LBUTTONUP or WM_LBUTTONDBLCLK
             or WM_RBUTTONDOWN or WM_RBUTTONUP or WM_MOUSEWHEEL)
         {
+            // Live marquee tracking: while the right button is down we own the moves (no forwarding,
+            // so Explorer's list-view never reacts to the drag). Keyboard messages can NEVER reach
+            // this WS_EX_NOACTIVATE window, so Esc / left-button aborts are polled from the async key
+            // state while captured moves stream in — that covers "any input while dragging".
+            if (_rightDragActive && m == WM_MOUSEMOVE)
+            {
+                bool escape = (Win32Apis.GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
+                bool leftPressed = (Win32Apis.GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+                if (escape || leftPressed)
+                {
+                    // Abort but KEEP capture: the matching WM_RBUTTONUP must still arrive here so it
+                    // can be swallowed silently instead of leaking to whatever sits under the cursor.
+                    _rightDragActive = false;
+                    _marqueeCancelled = true;
+                    HideMarquee();
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
+                if (Win32Apis.GetCursorPos(out ManualApis.POINT movePt))
+                {
+                    _marqueeEnd = movePt;
+                    UpdateMarqueeVisual();
+                }
+
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            // Left-click while a marquee is pending: cancel it and swallow the click (a stray press on
+            // some other surface should not also change icon selection). Capture is kept for the
+            // matching UP, which the cancelled branch above then swallows.
+            if (_rightDragActive && m == WM_LBUTTONDOWN)
+            {
+                _rightDragActive = false;
+                _marqueeCancelled = true;
+                HideMarquee();
+                handled = true;
+                return IntPtr.Zero;
+            }
+
             var listView = GetListView();
             if (listView == IntPtr.Zero)
             {
@@ -264,32 +336,81 @@ public sealed partial class DesktopSurface : Window
             // WM_RBUTTONDOWN makes the list-view SetCapture(), which reroutes the matching
             // WM_RBUTTONUP straight to SysListView32 — it never returns to us, and Explorer pairs our
             // stale-position posted DOWN with the real UP, placing the menu via that stale
-            // GetMessagePos (the wrong-monitor bug). Instead: swallow the press; on the release post
-            // an explicit WM_CONTEXTMENU with the exact cursor point.
+            // GetMessagePos (the wrong-monitor bug). Instead: swallow the press; on the release either
+            // show the [Create New Box] marquee menu (drag) or the desktop context menu (click).
             if (m == WM_RBUTTONDOWN)
             {
+                _rightDragActive = true;
+                _marqueeCancelled = false;
+                if (Win32Apis.GetCursorPos(out ManualApis.POINT downPt))
+                {
+                    _marqueeStart = downPt;
+                    _marqueeEnd = downPt;
+                }
+
+                // Explicit capture: without it, moves stop arriving the moment the cursor crosses onto
+                // a Box/application window (marquee freezes) and an off-surface release is lost.
+                // With it, every mouse event streams here until ReleaseCapture.
+                ManualApis.SetCapture(hwnd);
+
                 handled = true;
                 return IntPtr.Zero;
             }
 
             if (m == WM_RBUTTONUP)
             {
-                // The shell shows a popup only while its thread is foreground (mirrors a physical
-                // desktop right-click, where the desktop takes foreground); without this the menu can
-                // refuse to open or dismiss instantly.
-                //Win32Apis.SetForegroundWindow(listView);//SetForegroundWindow is not needed
+                // Clear the active flag BEFORE releasing: ReleaseCapture synchronously raises
+                // WM_CAPTURECHANGED, and that handler must not treat our own release as a theft
+                // (it would hide the band the menu is supposed to keep visible).
+                bool wasActive = _rightDragActive;
+                _rightDragActive = false;
+                ManualApis.ReleaseCapture();
 
-                var defView = GetDefView();
-                bool havePt = Win32Apis.GetCursorPos(out ManualApis.POINT pt);
-                Trace($"RBUTTONUP -> CONTEXTMENU defView={Describe(defView)} pt=({pt.X},{pt.Y})");
-                if (defView != IntPtr.Zero && havePt)
+                if (wasActive && Win32Apis.GetCursorPos(out ManualApis.POINT upPt))
                 {
-                    ManualApis.PostMessage(defView, WM_CONTEXTMENU, listView, (IntPtr)(pt.X | (pt.Y << 16)));
+                    _marqueeEnd = upPt;
                 }
 
+                bool isMarquee = wasActive && !_marqueeCancelled
+                    && (Math.Abs(_marqueeEnd.X - _marqueeStart.X) >= MarqueeMinDeltaPx
+                        || Math.Abs(_marqueeEnd.Y - _marqueeStart.Y) >= MarqueeMinDeltaPx);
+
+                if (!isMarquee)
+                {
+                    // Cancelled drags and plain clicks: no [Create New Box] menu. A cancelled drag is
+                    // swallowed entirely; a plain click keeps the native desktop context menu.
+                    HideMarquee();
+                    if (_marqueeCancelled || !wasActive)
+                    {
+                        handled = true;
+                        return IntPtr.Zero;
+                    }
+
+                    // NOTE: no SetForegroundWindow here. Verified empirically that the posted
+                    // WM_CONTEXTMENU opens the desktop menu without forcing Explorer foreground.
+                    // If this ever regresses (menu refusing to open / dismissing instantly, dependent
+                    // on which app was foreground at click time), re-adding
+                    // Win32Apis.SetForegroundWindow(listView) before the PostMessage is the known fix —
+                    // TrackPopupMenu-class popups normally require their thread to be foreground.
+
+                    var defView = GetDefView();
+                    bool havePt = Win32Apis.GetCursorPos(out ManualApis.POINT pt);
+                    Trace($"RBUTTONUP -> CONTEXTMENU defView={Describe(defView)} pt=({pt.X},{pt.Y})");
+                    if (defView != IntPtr.Zero && havePt)
+                    {
+                        ManualApis.PostMessage(defView, WM_CONTEXTMENU, listView, (IntPtr)(pt.X | (pt.Y << 16)));
+                    }
+
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
+                ShowCreateBoxMenu();
                 handled = true;
                 return IntPtr.Zero;
-            }            // Double-click on EMPTY desktop toggles hide-all. CS_DBLCLKS is enabled on our window
+            }
+
+            // Double-click on EMPTY desktop toggles hide-all. CS_DBLCLKS is enabled on our window
             // class (see OnLoaded), so the system synthesizes this message with proper timing. A
             // double-click over an ICON falls through to the generic forward below, keeping the
             // native open behaviour intact.
@@ -322,6 +443,107 @@ public sealed partial class DesktopSurface : Window
         _dragging = true;
         e.Effects = DropHelper.GetEffect(e);
         e.Handled = true;
+    }
+
+    /// <summary>Draws the rubber-band rectangle for the active right-drag (screen-DIP → client-DIP).</summary>
+    private void UpdateMarqueeVisual()
+    {
+        if (_marqueeBorder is null)
+        {
+            _marqueeBorder = new Border
+            {
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0xB0, 0x70, 0xA0, 0xFF)),
+                Background = new SolidColorBrush(Color.FromArgb(0x28, 0x70, 0xA0, 0xFF)),
+                BorderThickness = new Thickness(1),
+                IsHitTestVisible = false,
+                Visibility = Visibility.Collapsed,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Top,
+            };
+            Root.Children.Add(_marqueeBorder);
+        }
+
+        GetMarqueeRectDip(out double scale, out double x, out double y, out double w, out double h);
+        _marqueeBorder.Margin = new Thickness(x - Left, y - Top, 0, 0);
+        _marqueeBorder.Width = w;
+        _marqueeBorder.Height = h;
+        _marqueeBorder.Visibility = Visibility.Visible;
+    }
+
+    private void HideMarquee()
+    {
+        _marqueeBorder?.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>Normalized marquee rectangle in screen DIPs plus the surface's DPI scale.</summary>
+    private void GetMarqueeRectDip(out double scale, out double x, out double y, out double w, out double h)
+    {
+        var hwnd = new WindowInteropHelper(this).Handle;
+        scale = hwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow((Windows.Win32.Foundation.HWND)hwnd) / 96.0 : 1.0;
+        x = Math.Min(_marqueeStart.X, _marqueeEnd.X) / scale;
+        y = Math.Min(_marqueeStart.Y, _marqueeEnd.Y) / scale;
+        w = Math.Abs(_marqueeEnd.X - _marqueeStart.X) / scale;
+        h = Math.Abs(_marqueeEnd.Y - _marqueeStart.Y) / scale;
+    }
+
+    private void ShowCreateBoxMenu()
+    {
+        var menu = new ContextMenu();
+        var createItem = new MenuItem { Header = "Create New Box" };
+        createItem.Click += (_, _) => CreateBoxFromMarquee();
+        menu.Items.Add(createItem);
+
+        // NOT PlacementMode.MousePoint: our hook marks every WM_MOUSEMOVE handled, so WPF's cached
+        // mouse position is stale by release time. Place absolutely at the tracked release point,
+        // then clamp into the WORK AREA of the monitor under that point so the menu never hangs off
+        // an edge or behind the taskbar (AbsolutePoint alone only respects screen bounds).
+        GetMarqueeRectDip(out double scale, out _, out _, out _, out _);
+        menu.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double menuW = menu.DesiredSize.Width;
+        double menuH = menu.DesiredSize.Height;
+
+        double x = _marqueeEnd.X / scale;
+        double y = _marqueeEnd.Y / scale;
+
+        if (Win32Apis.GetMonitorWorkAreaAtPoint(_marqueeEnd) is { } wa)
+        {
+            // Physical work-area px -> DIPs via the same scale as the point itself.
+            double waLeft = wa.left / scale;
+            double waTop = wa.top / scale;
+            double waRight = wa.right / scale;
+            double waBottom = wa.bottom / scale;
+            const double margin = 2;
+
+            x = Math.Max(waLeft + margin, Math.Min(x, waRight - menuW - margin));
+            y = Math.Max(waTop + margin, Math.Min(y, waBottom - menuH - margin));
+        }
+
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.AbsolutePoint;
+        menu.HorizontalOffset = x;
+        menu.VerticalOffset = y;
+
+        // Keep the rubber band visible while the user decides; it disappears with the menu
+        // (both when "Create New Box" is clicked and when the menu is dismissed).
+        menu.Closed += (_, _) => HideMarquee();
+        menu.IsOpen = true;
+    }
+
+    private void CreateBoxFromMarquee()
+    {
+        GetMarqueeRectDip(out _, out double x, out double y, out double w, out double h);
+
+        // A tiny drag still yields a usable default-sized box.
+        const double minWidth = 220;
+        const double minHeight = 160;
+        w = Math.Max(w, minWidth);
+        h = Math.Max(h, minHeight);
+
+        var wa = SystemParameters.WorkArea;
+        x = Math.Max(wa.Left, Math.Min(x, wa.Right - w));
+        y = Math.Max(wa.Top, Math.Min(y, wa.Bottom - h));
+
+        _host.CreateBoxAt(x, y, w, h);
+        _save();
     }
 
     private void Surface_DragLeave(object sender, DragEventArgs e)
