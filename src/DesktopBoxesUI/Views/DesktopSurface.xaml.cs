@@ -3,8 +3,6 @@ using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
 using Microsoft.Extensions.DependencyInjection;
-using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
@@ -38,19 +36,19 @@ public sealed partial class DesktopSurface : Window
     private bool _wasTopmost;
     private int _lastFightLogTick;
 
-    private static void Trace(string message)
-    {
-        try
-        {
-            File.AppendAllText(
-                Path.Combine(Path.GetTempPath(), "dbx_surface.log"),
-                $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}");
-        }
-        catch
-        {
-            // Diagnostics must never break the surface.
-        }
-    }
+    //private static void Trace(string message)
+    //{
+    //    try
+    //    {
+    //        File.AppendAllText(
+    //            Path.Combine(Path.GetTempPath(), "dbx_surface.log"),
+    //            $"[{DateTime.Now:HH:mm:ss.fff}] {message}{Environment.NewLine}");
+    //    }
+    //    catch
+    //    {
+    //        // Diagnostics must never break the surface.
+    //    }
+    //}
 
     private static string Describe(IntPtr hwnd)
         => hwnd == IntPtr.Zero ? "<none>" : $"{Win32Apis.GetWindowClass(hwnd)}(0x{hwnd.ToInt64():X})";
@@ -132,11 +130,13 @@ public sealed partial class DesktopSurface : Window
                 }
             }
         }
-
-        Trace($"glued: surface={Describe(helper.Handle)} anchor={Describe(_anchor)} "
-            + $"prev={Describe(Win32Apis.GetWindow(helper.Handle, ManualApis.GW_HWNDPREV))} "
-            + $"next={Describe(Win32Apis.GetWindow(helper.Handle, ManualApis.GW_HWNDNEXT))} "
-            + $"topmost={(ManualApis.GetWindowLong(helper.Handle, ManualApis.GWL_EXSTYLE) & ManualApis.WS_EX_TOPMOST) != 0}");
+        if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+        {
+            Logging.Log.Debug($"glued: surface={Describe(helper.Handle)} anchor={Describe(_anchor)} "
+                + $"prev={Describe(Win32Apis.GetWindow(helper.Handle, ManualApis.GW_HWNDPREV))} "
+                + $"next={Describe(Win32Apis.GetWindow(helper.Handle, ManualApis.GW_HWNDNEXT))} "
+                + $"topmost={(ManualApis.GetWindowLong(helper.Handle, ManualApis.GWL_EXSTYLE) & ManualApis.WS_EX_TOPMOST) != 0}");
+        }
     }
 
     private IntPtr GetListView()
@@ -256,7 +256,10 @@ public sealed partial class DesktopSurface : Window
             if (topmost != _wasTopmost)
             {
                 _wasTopmost = topmost;
-                Trace($"WS_EX_TOPMOST is now {topmost}");
+                if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+                {
+                    Logging.Log.Debug($"WS_EX_TOPMOST is now {topmost}");
+                }
             }
 
             if (_anchor != IntPtr.Zero)
@@ -270,7 +273,11 @@ public sealed partial class DesktopSurface : Window
                     if (now - _lastFightLogTick > 1000)
                     {
                         _lastFightLogTick = now;
-                        Trace($"z-fight: requested insertAfter={Describe(wp.hwndInsertAfter)} -> pinning above {Describe(_anchor)}");
+
+                        if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+                        {
+                            Logging.Log.Debug($"z-fight: requested insertAfter={Describe(wp.hwndInsertAfter)} -> pinning above {Describe(_anchor)}");
+                        }
                     }
                 }
 
@@ -450,7 +457,12 @@ public sealed partial class DesktopSurface : Window
 
                     var defView = GetDefView();
                     bool havePt = Win32Apis.GetCursorPos(out ManualApis.POINT pt);
-                    Trace($"RBUTTONUP -> CONTEXTMENU defView={Describe(defView)} pt=({pt.X},{pt.Y})");
+
+                    if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+                    {
+                        Logging.Log.Debug($"RBUTTONUP -> CONTEXTMENU defView={Describe(defView)} pt=({pt.X},{pt.Y})");
+                    }
+
                     if (defView != IntPtr.Zero && havePt)
                     {
                         ManualApis.PostMessage(defView, WM_CONTEXTMENU, listView, (IntPtr)(pt.X | (pt.Y << 16)));
@@ -506,7 +518,11 @@ public sealed partial class DesktopSurface : Window
                 if (Win32Apis.GetCursorPos(out ManualApis.POINT pt)
                     && Win32Apis.IsDesktopEmptyPoint(listView, pt))
                 {
-                    Trace("empty-desktop double-click -> ToggleHideAllBoxes");
+
+                    if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+                    {
+                        Logging.Log.Debug("empty-desktop double-click -> ToggleHideAllBoxes");
+                    }
                     App.Services.GetRequiredService<DesktopBoxesUI.DesktopManager>().ToggleHideAllBoxes();
                     handled = true;
                     return IntPtr.Zero;
@@ -667,7 +683,11 @@ public sealed partial class DesktopSurface : Window
         catch (Exception ex)
         {
             _dragging = false;
-            Trace($"Surface_Drop EXCEPTION: {ex}");
+
+            if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+            {
+                Logging.Log.Debug($"Surface_Drop EXCEPTION: {ex}");
+            }
         }
     }
 
@@ -677,7 +697,10 @@ public sealed partial class DesktopSurface : Window
 
         try
         {
-            Trace($"drop: formats=[{string.Join(", ", e.Data.GetFormats())}]");
+            if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+            {
+                Logging.Log.Debug($"drop: formats=[{string.Join(", ", e.Data.GetFormats())}]");
+            }
         }
         catch
         {
@@ -694,7 +717,10 @@ public sealed partial class DesktopSurface : Window
             double left = Math.Max(wa.Left, Math.Min(p.X, wa.Right - NewBoxWidth));
             double top = Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - NewBoxHeight));
 
-            Trace("drop: internal box tab move");
+            if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+            {
+                Logging.Log.Debug("drop: internal box tab move");
+            }
             _host.MoveBoxToNewContainer(box, source, left, top);
             e.Handled = true;
             _save();
@@ -706,7 +732,11 @@ public sealed partial class DesktopSurface : Window
         double left2 = Math.Max(wa2.Left, Math.Min(p2.X, wa2.Right - NewBoxWidth));
         double top2 = Math.Max(wa2.Top, Math.Min(p2.Y, wa2.Bottom - NewBoxHeight));
 
-        Trace("drop: external item -> new box");
+
+        if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+        {
+            Logging.Log.Debug("drop: external item -> new box");
+        }
         var container = _host.CreateBoxAt(left2, top2);
         if (container.ActiveBox != null)
         {
