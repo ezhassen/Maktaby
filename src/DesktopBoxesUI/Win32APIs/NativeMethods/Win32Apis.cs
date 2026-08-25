@@ -73,6 +73,43 @@ internal static class Win32Apis
 
     public static bool IsWindowVisible(IntPtr hWnd) => ManualApis.IsWindowVisible(hWnd);
 
+    public static bool IsWindow(IntPtr hWnd) => PInvoke.IsWindow((HWND)hWnd);
+
+    public static IntPtr GetWindow(IntPtr hWnd, uint uCmd) => ManualApis.GetWindow(hWnd, uCmd);
+
+    public static IntPtr LoadArrowCursor() => ManualApis.LoadCursor(IntPtr.Zero, (IntPtr)32512 /* IDC_ARROW */);
+
+    public static IntPtr SetCursor(IntPtr hCursor) => ManualApis.SetCursor(hCursor);
+
+    /// <summary>Returns the window's class name, or <see cref="string.Empty"/> if it cannot be read.</summary>
+    public static string GetWindowClass(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+        {
+            return string.Empty;
+        }
+
+        var sb = new StringBuilder(256);
+        return ManualApis.GetClassName(hwnd, sb, 256) != 0 ? sb.ToString() : string.Empty;
+    }
+
+    /// <summary>
+    /// True when <paramref name="hwnd"/> is a top-level window of the desktop shell layer
+    /// (<c>Progman</c> / <c>WorkerW</c>) or the desktop window itself. Used to validate a cached
+    /// anchor before forcing it as an insert-after handle, so a stale or rogue handle can never pin
+    /// the surface at a high z-position.
+    /// </summary>
+    public static bool IsDesktopLayerTopLevel(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || hwnd == GetDesktopWindow())
+        {
+            return hwnd != IntPtr.Zero;
+        }
+
+        string cls = GetWindowClass(hwnd);
+        return cls == ShellWindowClasses.Progman || cls == ShellWindowClasses.WorkerW;
+    }
+
     /// <summary>Makes a layered window click-through (mouse hits the window beneath it) for debugging
     /// overlays that must not steal input while they visualize the desktop.</summary>
     public static void MakeClickThrough(IntPtr hwnd)
@@ -716,28 +753,39 @@ internal static class Win32Apis
 
     /// <summary>
     /// "Glues" a window to the desktop without turning it into a child window. Setting the window's
-    /// owner (<c>GWL_HWNDPARENT</c>) to Progman keeps it a top-level window — so WPF layered
-    /// (AllowsTransparency) rendering still works — while tying it to the desktop so Show Desktop /
-    /// Win+D does not minimize it. The minimize/maximize boxes are also removed so the window cannot
-    /// be dispatched into the taskbar by accident.
+    /// owner (<c>GWL_HWNDPARENT</c>) keeps it a top-level window — so WPF layered (AllowsTransparency)
+    /// rendering still works — while tying it to the desktop layer so Show Desktop / Win+D does not
+    /// minimize it; the minimize/maximize boxes are also removed so the window cannot be dispatched
+    /// into the taskbar by accident.
+    /// When the custom <see cref="Views.DesktopSurface"/> is live, its handle can be passed as
+    /// <paramref name="owner"/>: Windows guarantees an owned window always sits ABOVE its owner in the
+    /// z-order, so a box owned by the surface can never sink below it (and never lose clicks/activation
+    /// to it), while remaining a real top-level window (multi-monitor geometry, keyboard focus and OLE
+    /// drag/drop keep working — unlike a true WS_CHILD SetParent). Falls back to Progman when no owner
+    /// is given (or the surface handle is no longer valid).
     /// </summary>
-    public static void GlueToDesktop(IntPtr hwnd)
+    public static void GlueToDesktop(IntPtr hwnd, IntPtr? owner = null)
     {
         //try
         //{
-        var progman = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
-        if (progman == IntPtr.Zero)
+        var ownerHwnd = owner ?? IntPtr.Zero;
+        if (ownerHwnd == IntPtr.Zero || !IsWindow(ownerHwnd))
+        {
+            ownerHwnd = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
+        }
+
+        if (ownerHwnd == IntPtr.Zero)
         {
             return;
         }
 
-        ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, progman);
+        ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, ownerHwnd);
 
         // Raise the window above the Explorer desktop listview (SysListView32) within the desktop
         // layer. Without this, OLE drag/drop over empty desktop is delivered to Explorer instead of
-        // our surface, so drops onto empty space never reach us. It stays below the real top-level
-        // app windows (and below the BoxContainer windows, which are created after it and also
-        // glued to the desktop), preserving click-through and per-container drops.
+        // our surface, so drops onto empty space never reach us. Box windows stay above the
+        // DesktopSurface — structurally, because they are OWNED by it (owned windows always float
+        // above their owner) — preserving click-through and per-container drops.
         ManualApis.SetWindowPos(hwnd, ManualApis.HWND_TOP, 0, 0, 0, 0,
             ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
         //}
@@ -793,9 +841,62 @@ internal static class Win32Apis
     }
 
     /// <summary>
+    /// Resolves the top-level window the desktop surface must be inserted just above. The live "inner"
+    /// topmost window of the desktop layer is the Explorer list-view (<c>SysListView32</c>) while desktop
+    /// icons are shown, or its parent <c>SHELLDLL_DefView</c> once icons are hidden. Z-order placement is
+    /// only well defined within a band, so that inner window is resolved UP to its nearest TOP-LEVEL
+    /// ancestor — the exact Progman / WorkerW that hosts it — instead of a blind (possibly vestigial)
+    /// Progman lookup. Never returns <see cref="IntPtr.Zero"/>.
+    /// </summary>
+    public static IntPtr GetDesktopAnchorHandle()
+    {
+        IntPtr inner = IntPtr.Zero;
+
+        var listView = ExplorerDesktopService.FindDesktopListView();
+        if (listView != IntPtr.Zero && IsWindowVisible(listView))
+        {
+            // Icons shown: the list-view is the live desktop content.
+            inner = listView;
+        }
+
+        if (inner == IntPtr.Zero)
+        {
+            var defView = ExplorerDesktopService.FindDesktopSHELLDLL_DefView();
+            if (defView != IntPtr.Zero && IsWindowVisible(defView))
+            {
+                // Icons hidden: the list-view is hidden and DefView is the live desktop content.
+                inner = defView;
+            }
+        }
+
+        // Walk up while the window is still a child (WS_CHILD); the first non-child ancestor of the
+        // inner window is its hosting top-level root.
+        IntPtr h = inner;
+        while (h != IntPtr.Zero && (ManualApis.GetWindowLong(h, ManualApis.GWL_STYLE) & ManualApis.WS_CHILD) != 0)
+        {
+            var parent = ManualApis.GetParent(h);
+            if (parent == IntPtr.Zero)
+            {
+                break;
+            }
+
+            h = parent;
+        }
+
+        if (h != IntPtr.Zero && (ManualApis.GetWindowLong(h, ManualApis.GWL_STYLE) & ManualApis.WS_CHILD) == 0
+            && IsDesktopLayerTopLevel(h))
+        {
+            return h;
+        }
+
+        return GetDesktopRootHandle();
+    }
+
+    /// <summary>
     /// Glues the desktop overlay surface to the shell: it becomes a top-level (layered) window owned by
-    /// the real desktop root (Progman / the WorkerW that hosts the Explorer <c>SHELLDLL_DefView</c>) and
-    /// is inserted just ABOVE that root in the z-order — so it sits above the Explorer list-view yet
+    /// the resolved desktop anchor (the top-level Progman / WorkerW that hosts the live desktop content —
+    /// the <c>SysListView32</c> list-view or, when icons are hidden, its <c>SHELLDLL_DefView</c>) and is
+    /// inserted just ABOVE that anchor in the z-order — so it sits above the Explorer desktop content yet
     /// below every real application window. A top-level layered window with a non-zero-alpha background
     /// reliably receives input when it is the topmost window at a point, becoming the hit target for
     /// empty-desktop input without ever covering other apps. <see cref="PreventMinimize"/> keeps the
@@ -803,7 +904,7 @@ internal static class Win32Apis
     /// </summary>
     public static void GlueToDesktopSurface(IntPtr hwnd)
     {
-        var root = GetDesktopRootHandle();
+        var root = GetDesktopAnchorHandle();
         if (root == IntPtr.Zero)
         {
             return;
@@ -816,29 +917,32 @@ internal static class Win32Apis
         ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, root);
         PreventMinimize(hwnd);
 
-        // Never let a click on the empty-desktop surface activate/raise it above application windows.
-        // WS_EX_NOACTIVATE keeps it receiving mouse input while telling Windows not to bring it forward.
+        // WS_EX_NOACTIVATE stays despite boxes being OWNED by this surface (ownership guarantees
+        // Z-ORDER, not FOCUS policy). Experiment conclusion: with the style removed the surface CAN
+        // take focus, but every empty-desktop click starts an activation/focus war — Explorer steals
+        // focus back ~10ms later (KILLFOCUS), and during the churn both the double-click hide-all
+        // gesture and the right-click desktop context menu stop working. Click-no-activate keeps the
+        // surface input-transparent for focus while still receiving mouse input.
+        // Also strip WS_EX_TOPMOST if anything set it: a topmost-band window floats above every normal
+        // app window regardless of what insert-after handle the z-order guard forces.
         int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
+        ex &= ~ManualApis.WS_EX_TOPMOST;
         ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_NOACTIVATE);
 
-        PositionSurfaceOverDesktop(hwnd, root);
+        PositionSurfaceOverDesktop(hwnd);
     }
 
     /// <summary>
-    /// Positions the (top-level) surface over the primary work area and inserts it just ABOVE the desktop
-    /// root in the z-order. Because it is a top-level window — not a child — it escapes the layered-child
+    /// Positions the (top-level) surface over the primary work area and inserts it just ABOVE the
+    /// resolved desktop anchor (<see cref="GetDesktopAnchorHandle"/> — the top-level host of the live
+    /// desktop content). Because it is a top-level window — not a child — it escapes the layered-child
     /// "always behind non-layered siblings" rule, so it ends up above the Explorer list-view while staying
     /// below every real application window (apps sit above the desktop). Used on first glue and on
     /// display/DPI changes.
     /// </summary>
-    public static void PositionSurfaceOverDesktop(IntPtr hwnd, IntPtr? progmanHandle = null)
+    public static void PositionSurfaceOverDesktop(IntPtr hwnd)
     {
-        var root = progmanHandle ?? ExplorerDesktopService.FindDesktopProgman();
-        if (root == IntPtr.Zero)
-        {
-            root = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
-        }
-
+        var root = GetDesktopAnchorHandle();
         if (root == IntPtr.Zero)
         {
             return;
@@ -934,12 +1038,14 @@ internal static class Win32Apis
     private const int WM_SHOWWINDOW = 0x0018;
     private const int WM_SYSCOMMAND = 0x0112;
     private const int SC_MINIMIZE = 0xF020;
+    private const int SW_PARENTCLOSING = 1;
     private const int SW_SHOWNOACTIVATE = 4;
 
     /// <summary>
     /// HwndSource hook that keeps our desktop windows from being minimized/hidden by Show Desktop /
-    /// Win+D. Blocks SC_MINIMIZE and counters a shell-initiated WM_SHOWWINDOW hide by re-showing the
-    /// window. Hides we trigger ourselves are preceded by <see cref="AllowHide"/>.
+    /// Win+D. Blocks SC_MINIMIZE and counters a shell-initiated WM_SHOWWINDOW hide (lParam
+    /// <c>SW_PARENTCLOSING</c>) by re-showing the window. Hides we trigger ourselves are preceded by
+    /// <see cref="AllowHide"/>; hides from other sources (display changes, shell restarts) are not fought.
     /// </summary>
     public static IntPtr MinimizePreventionHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -952,7 +1058,7 @@ internal static class Win32Apis
         if (msg == WM_SHOWWINDOW)
         {
             bool fShow = wParam.ToInt32() != 0;
-            if (!fShow)
+            if (!fShow && lParam.ToInt32() == SW_PARENTCLOSING)
             {
                 bool allowed;
                 lock (_allowHide)
@@ -1010,8 +1116,8 @@ internal static class Win32Apis
     /// <summary>
     /// True when <paramref name="hwnd"/> belongs to the Explorer desktop — i.e. it is a descendant of
     /// <c>Progman</c> or <c>WorkerW</c>. This reliably covers the desktop list-view AND the app's own
-    /// transparent <see cref="Views.DesktopSurface"/> (a child of <c>SHELLDLL_DefView</c>), regardless of
-    /// whether desktop icons are shown or hidden, and without depending on a specific class hierarchy.
+    /// transparent <see cref="Views.DesktopSurface"/> (a top-level window owned by the desktop root),
+    /// regardless of whether desktop icons are shown or hidden, and without depending on a specific class hierarchy.
     /// File Explorer windows are excluded because their ancestry stops at <c>CabinetWClass</c>, not Progman/WorkerW.
     /// </summary>
     public static bool IsDesktopChild(IntPtr hwnd)
@@ -1064,6 +1170,108 @@ internal static class Win32Apis
     }
 
     /// <summary>
+    /// Hit-tests a point (list-view CLIENT pixels) against the desktop list-view. The list-view is
+    /// owned by Explorer, so the direct <c>LVM_HITTEST</c> with an in-process struct cannot work —
+    /// user32 does not marshal pointer-carrying messages across processes and the struct would come
+    /// back untouched. Fast-path tries the direct call anyway; when it clearly did not execute, falls
+    /// back to the canonical remote-buffer technique: allocate the <c>LVHITTESTINFO</c> in Explorer's
+    /// address space, send, read back.
+    /// </summary>
+    public static bool TryHitTestDesktopList(IntPtr listViewHwnd, ManualApis.POINT clientPt, out uint flags, out int item)
+    {
+        flags = 0;
+        item = -1;
+        if (listViewHwnd == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        GetWindowThreadProcessId(listViewHwnd, out uint procId);
+        if (procId == 0)
+        {
+            return false;
+        }
+
+        // Cross-process targets never get the direct call: user32 does not marshal the struct
+        // pointer, yet SendMessage still returns non-zero — a "successful" result built from a
+        // pointer the list-view could not legally read. Only trust in-process results, and even then
+        // only when the struct was actually filled (flags/iItem of exactly 0/0 is impossible for a
+        // real hit-test: empty points yield LVHT_NOWHERE + iItem -1).
+        bool sameProcess = procId == ManualApis.GetCurrentProcessId();
+        if (sameProcess)
+        {
+            var local = new ManualApis.LVHITTESTINFO { pt = clientPt };
+            ManualApis.SendMessage(listViewHwnd, ManualApis.LVM_HITTEST, IntPtr.Zero, ref local);
+            if (local.flags != 0 || local.iItem != 0)
+            {
+                flags = local.flags;
+                item = local.iItem;
+                return true;
+            }
+
+            return false;
+        }
+
+        // Remote path.
+        IntPtr hProc = ManualApis.OpenProcess(
+            ManualApis.PROCESS_VM_OPERATION | ManualApis.PROCESS_VM_READ | ManualApis.PROCESS_VM_WRITE,
+            false,
+            procId);
+        if (hProc == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        try
+        {
+            const uint MEM_COMMIT = 0x1000;
+            const uint MEM_RESERVE = 0x2000;
+            const uint MEM_RELEASE = 0x8000;
+            const uint PAGE_READWRITE = 0x04;
+
+            uint size = (uint)Marshal.SizeOf<ManualApis.LVHITTESTINFO>();
+            IntPtr remote = ManualApis.VirtualAllocEx(hProc, IntPtr.Zero, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            if (remote == IntPtr.Zero)
+            {
+                return false;
+            }
+
+            try
+            {
+                // Only the point needs writing; VirtualAllocEx memory is zero-initialised.
+                byte[] input =
+                {
+                    (byte)clientPt.X, (byte)(clientPt.X >> 8), (byte)(clientPt.X >> 16), (byte)(clientPt.X >> 24),
+                    (byte)clientPt.Y, (byte)(clientPt.Y >> 8), (byte)(clientPt.Y >> 16), (byte)(clientPt.Y >> 24),
+                };
+                if (!ManualApis.WriteProcessMemory(hProc, remote, input, (uint)input.Length, out _))
+                {
+                    return false;
+                }
+
+                ManualApis.SendMessage(listViewHwnd, ManualApis.LVM_HITTEST, IntPtr.Zero, remote);
+                var outBytes = new byte[size];
+                if (!ManualApis.ReadProcessMemory(hProc, remote, outBytes, size, out _) || outBytes.Length < 16)
+                {
+                    return false;
+                }
+
+                flags = BitConverter.ToUInt32(outBytes, 8);
+                item = BitConverter.ToInt32(outBytes, 12);
+                return true;
+            }
+            finally
+            {
+                ManualApis.VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+            }
+        }
+        finally
+        {
+            ManualApis.CloseHandle(hProc);
+        }
+    }
+
+    /// <summary>
     /// True when <paramref name="screenPt"/> (physical screen pixels) falls on empty desktop area
     /// within the given desktop list-view — i.e. not on a desktop icon. Uses <c>LVM_HITTEST</c> so a
     /// double-click that hits an icon leaves the icon's own open behaviour intact.
@@ -1075,14 +1283,25 @@ internal static class Win32Apis
             return false;
         }
 
+        // Hidden desktop icons: the shell only SW_HIDEs the list-view — the items remain in it and
+        // still hit-test as present, which made every point look like "on an icon". An invisible
+        // list-view means there is nothing to hit: every point is empty desktop.
+        if (!IsWindowVisible(listViewHwnd))
+        {
+            return true;
+        }
+
         var client = screenPt;
         if (!ManualApis.ScreenToClient(listViewHwnd, ref client))
         {
             return false;
         }
 
-        var info = new ManualApis.LVHITTESTINFO { pt = client };
-        ManualApis.SendMessage(listViewHwnd, ManualApis.LVM_HITTEST, IntPtr.Zero, ref info);
-        return (info.flags & ManualApis.LVHT_NOWHERE) != 0 || info.iItem < 0;
+        if (!TryHitTestDesktopList(listViewHwnd, client, out uint flags, out int item))
+        {
+            return false;
+        }
+
+        return (flags & ManualApis.LVHT_NOWHERE) != 0 || item < 0;
     }
 }

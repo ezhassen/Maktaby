@@ -41,10 +41,6 @@ public sealed class ExplorerDesktopService : IExplorerDesktopService
         await Task.Run(() => SetDesktopIconsVisible(visible));
     }
 
-    internal static IntPtr FindDesktopProgman()
-    {
-        return Win32Apis.FindWindowEx(HWND.Null, HWND.Null, ShellWindowClasses.Progman, null);
-    }
     internal static IntPtr FindDesktopSHELLDLL_DefView()
     {
         HWND progman = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, ShellWindowClasses.Progman, null);

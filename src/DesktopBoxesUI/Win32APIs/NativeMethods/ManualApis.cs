@@ -99,6 +99,49 @@ internal static class ManualApis
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
+    [DllImport("user32.dll", EntryPoint = "LoadCursorW")]
+    public static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
+
+    [DllImport("user32.dll", EntryPoint = "SetCursor")]
+    public static extern IntPtr SetCursor(IntPtr hCursor);
+
+    public const int GCL_STYLE = -26;
+    public const int CS_DBLCLKS = 0x0008;
+
+    [DllImport("user32.dll", EntryPoint = "GetClassLongW")]
+    public static extern int GetClassLong(IntPtr hWnd, int nIndex);
+
+    [DllImport("user32.dll", EntryPoint = "SetClassLongW")]
+    public static extern int SetClassLong(IntPtr hWnd, int nIndex, int dwNewLong);
+
+    // --- Cross-process list-view hit-test support (Explorer owns the desktop SysListView32, and
+    // user32 does NOT marshal pointer-carrying messages between processes) ---
+
+    public const int PROCESS_VM_OPERATION = 0x0008;
+    public const int PROCESS_VM_READ = 0x0010;
+    public const int PROCESS_VM_WRITE = 0x0020;
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, uint dwProcessId);
+
+    [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentProcessId();
+
+    [DllImport("kernel32.dll")]
+    public static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr VirtualAllocEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint flAllocationType, uint flProtect);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool VirtualFreeEx(IntPtr hProcess, IntPtr lpAddress, uint dwSize, uint dwFreeType);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] buffer, uint nSize, out IntPtr lpNumberOfBytesWritten);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    public static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] buffer, uint nSize, out IntPtr lpNumberOfBytesRead);
+
     [DllImport("user32.dll")]
     public static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
@@ -137,6 +180,7 @@ internal static class ManualApis
     public const int WS_EX_TRANSPARENT = 0x00000020;
     public const int WS_EX_LAYERED = 0x00080000;
     public const int WS_EX_NOACTIVATE = 0x08000000;
+    public const int WS_EX_TOPMOST = 0x00000008;
 
     public const int WS_CHILD = 0x40000000;
     public const int WS_POPUP = unchecked((int)0x80000000);
@@ -171,7 +215,10 @@ internal static class ManualApis
     public static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
 
     public const int LVM_FIRST = 0x1000;
-    public const int LVM_HITTEST = LVM_FIRST + 1;
+
+    // commctrl.h: #define LVM_HITTEST (LVM_FIRST + 18). It was previously declared as LVM_FIRST + 1,
+    // which is LVM_SETBKCOLOR — the hit-test never executed and LVHITTESTINFO came back zeroed.
+    public const int LVM_HITTEST = LVM_FIRST + 18;
     public const uint LVHT_NOWHERE = 0x0001;
 
     [DllImport("user32.dll")]

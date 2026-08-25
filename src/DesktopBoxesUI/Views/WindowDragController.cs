@@ -93,7 +93,10 @@ internal sealed class WindowDragController
         try
         {
             var hwnd = new WindowInteropHelper(_window).Handle;
-            Win32Apis.GlueToDesktop(hwnd);
+            // Own the box to the DesktopSurface when the custom surface is live (handle published);
+            // owned windows always float above their owner, so a box can never sink below (or lose
+            // clicks/activation to) the surface. Falls back to Progman when no surface exists.
+            Win32Apis.GlueToDesktop(hwnd, Win32Apis.DesktopSurfaceHandle);
             Win32Apis.PreventMinimize(hwnd);
             _source = HwndSource.FromHwnd(hwnd);
             _source.AddHook(HwndHook);

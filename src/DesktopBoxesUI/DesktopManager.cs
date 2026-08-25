@@ -814,7 +814,6 @@ public sealed class DesktopManager
 
     private void EnsureSurface()
     {
-        //TODO: _surface EnsureSurface
         if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == false)
         {
             _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
@@ -827,8 +826,22 @@ public sealed class DesktopManager
         {
             if (_surface is not null)
             {
-                //Win32Apis.AllowHide(new WindowInteropHelper(_surface).Handle);
-                //_surface.Close();
+                // Boxes may be OWNED by the surface (GlueToDesktop with the published handle), and
+                // destroying an owner destroys its owned windows. Re-glue every box back to Progman
+                // and unpublish the handle BEFORE closing the surface.
+                Win32Apis.DesktopSurfaceHandle = IntPtr.Zero;
+                foreach (var window in _windows.Values)
+                {
+                    if (window is BoxContainerWindow boxWindow)
+                    {
+                        var hwnd = new WindowInteropHelper(boxWindow).Handle;
+                        if (hwnd != IntPtr.Zero)
+                        {
+                            Win32Apis.GlueToDesktop(hwnd);
+                        }
+                    }
+                }
+
                 _surface.CloseWindowEx();
                 _surface = null;
             }
