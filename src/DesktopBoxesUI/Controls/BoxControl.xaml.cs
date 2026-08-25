@@ -127,6 +127,13 @@ public partial class BoxControl : UserControl
             return;
         }
 
+        // A native resize/move modal loop is running on the container: never morph it into an
+        // OLE icon drag (this used to drag a shortcut along with the resize and could crash).
+        if (Views.WindowDragController.IsNativeSizing)
+        {
+            return;
+        }
+
         if (sender is Border { DataContext: BoxItemViewModel editing } && editing.IsEditing)
         {
             return;
@@ -161,24 +168,32 @@ public partial class BoxControl : UserControl
 
             _dragging = true;
             _ghost = new DragGhostWindow();
-            if (dragged.Count == 1)
+            try
             {
-                _ghost.SetItem(dragged[0].Icon, dragged[0].DisplayName);
-            }
-            else
-            {
-                _ghost.SetItems(dragged[0].Icon, dragged.Count);
-            }
+                if (dragged.Count == 1)
+                {
+                    _ghost.SetItem(dragged[0].Icon, dragged[0].DisplayName);
+                }
+                else
+                {
+                    _ghost.SetItems(dragged[0].Icon, dragged.Count);
+                }
 
-            _ghost.Show();
-            PositionGhost(border);
-            DragDrop.AddGiveFeedbackHandler(border, OnGiveFeedback);
-            var data = new DataObject(DndFormats.BoxItems, dragged);
-            DragDrop.DoDragDrop(border, data, DragDropEffects.Move);
-            DragDrop.RemoveGiveFeedbackHandler(border, OnGiveFeedback);
-            _ghost.Close();
-            _ghost = null;
-            _dragging = false;
+                _ghost.Show();
+                PositionGhost(border);
+                DragDrop.AddGiveFeedbackHandler(border, OnGiveFeedback);
+                var data = new DataObject(DndFormats.BoxItems, dragged);
+                DragDrop.DoDragDrop(border, data, DragDropEffects.Move);
+            }
+            finally
+            {
+                // Guaranteed cleanup: a mid-drag exception (or resize interleave) must not leak the
+                // ghost window or leave the controller stuck in dragging state.
+                DragDrop.RemoveGiveFeedbackHandler(border, OnGiveFeedback);
+                _ghost?.Close();
+                _ghost = null;
+                _dragging = false;
+            }
         }
     }
 

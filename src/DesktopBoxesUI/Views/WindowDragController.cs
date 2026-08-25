@@ -25,6 +25,7 @@ internal sealed class WindowDragController
     private const int WmMovingMsg = 0x0216;
     private const int WmSizingMsg = 0x0214;
     private const int WmExitSizeMove = 0x0232;
+    private const int WmEnterSizeMove = 0x0231;
     private const int WmWindowPosChanging = 0x0046;
     private const uint SwpNoSendChanging = 0x0400;
     private const int HtLeft = 10;
@@ -120,6 +121,11 @@ internal sealed class WindowDragController
         _overlay = null;
     }
 
+    /// <summary>True while a native move/size modal loop (WM_ENTERSIZEMOVE..WM_EXITSIZEMOVE) is
+    /// running for ANY container window. Item drag initiation in BoxControl checks this so a resize
+    /// gesture can never morph into dragging a shortcut icon.</summary>
+    public static bool IsNativeSizing;
+
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         switch (msg)
@@ -139,10 +145,16 @@ internal sealed class WindowDragController
                 return IntPtr.Zero;
 
             case WmSizingMsg:
+                IsNativeSizing = true;
                 WmSizing(wParam, lParam, hwnd);
                 return IntPtr.Zero;
 
+            case WmEnterSizeMove:
+                IsNativeSizing = true;
+                return IntPtr.Zero;
+
             case WmExitSizeMove:
+                IsNativeSizing = false;
                 OnExitSizeMove(hwnd);
                 return IntPtr.Zero;
 
@@ -180,8 +192,9 @@ internal sealed class WindowDragController
         double minH = _window.MinHeight * GetScale(hwnd);
 
         var result = _snapping.SnapResize(moving, edge, new SizeD(minW, minH), new[] { screen }, others, threshold, padding);
+        var final = ClampResize(result.Rect, screen, edge, minW, minH);
 
-        WriteRect(lParam, ClampToScreen(result.Rect, screen));
+        WriteRect(lParam, final);
         ShowGuides(result.Guides, hwnd);
     }
 
@@ -204,9 +217,12 @@ internal sealed class WindowDragController
         double headerH = _getHeaderHeight() * scale;
         bool inHeader = y < b.Y + headerH;
 
-        bool left = !inHeader && x <= b.X + e;
-        bool right = !inHeader && x >= b.Right - e;
-        bool top = !inHeader && y <= b.Y + e;
+        // Outer strips ALWAYS resize — including the top strip across the header. Previously the
+        // header consumed the whole top band (top required !inHeader), so the window could not be
+        // resized from its top edge at all. Edge/corner priority over header matches every native app.
+        bool left = x <= b.X + e;
+        bool right = x >= b.Right - e;
+        bool top = y <= b.Y + e;
         bool bottom = y >= b.Bottom - e;
 
         if (!(left || right || top || bottom))
@@ -260,9 +276,36 @@ internal sealed class WindowDragController
         return RectD.FromXYWH(x, y, rect.Width, rect.Height);
     }
 
+    /// <summary>
+    /// Hard-stops a RESIZE at the monitor work area, anchoring the OPPOSITE edge. The old
+    /// move-semantics clamp (clamp origin, preserve size) made left/bottom resizes run away: each
+    /// clamped frame pushed the opposite edge outward by the clamped amount, and the next native
+    /// frame inherited that bigger width/height — continuous growth at screen/taskbar edges.
+    /// </summary>
+    private static RectD ClampResize(RectD r, RectD wa, ResizeEdge edge, double minW, double minH)
+    {
+        bool mL = edge is ResizeEdge.Left or ResizeEdge.TopLeft or ResizeEdge.BottomLeft;
+        bool mR = edge is ResizeEdge.Right or ResizeEdge.TopRight or ResizeEdge.BottomRight;
+        bool mT = edge is ResizeEdge.Top or ResizeEdge.TopLeft or ResizeEdge.TopRight;
+        bool mB = edge is ResizeEdge.Bottom or ResizeEdge.BottomLeft or ResizeEdge.BottomRight;
+
+        double l = r.X, t = r.Y, rt = r.Right, b = r.Bottom;
+
+        if (mL) l = Math.Max(wa.X, Math.Min(l, rt - minW));
+        if (mR) rt = Math.Min(wa.Right, Math.Max(rt, l + minW));
+        if (mT) t = Math.Max(wa.Y, Math.Min(t, b - minH));
+        if (mB) b = Math.Min(wa.Bottom, Math.Max(b, t + minH));
+
+        return RectD.FromXYWH(l, t, rt - l, b - t);
+    }
+
     private (RectD Screen, List<RectD> Others) GetSnapTargets(RectD moving, IntPtr hwnd)
     {
         var scale = GetScale(hwnd);
+
+        // App constraint: the working area is the PRIMARY screen (the DesktopSurface covers it) —
+        // every box must stay contained within it. Snap AND clamp against that single work area
+        // (taskbar excluded); multi-monitor support would relax this later.
         var screen = _monitor.GetPrimaryWorkArea();
         var others = new List<RectD>();
 
