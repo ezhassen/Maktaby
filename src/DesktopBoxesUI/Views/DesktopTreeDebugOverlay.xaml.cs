@@ -27,6 +27,16 @@ public sealed partial class DesktopTreeDebugOverlay : Window
     // DIP coordinates WPF renders in (otherwise rectangles render too large on scaled displays).
     private DpiScale _dpi = new(1, 1);
 
+    // Left info column: selectable read-only boxes. Text is only rewritten when the content actually
+    // changes — rebuilding every tick would destroy any in-progress selection.
+    private System.Windows.Controls.TextBox _ancestryBox = null!;
+    private System.Windows.Controls.TextBox _zOrderBox = null!;
+    private System.Windows.Controls.TextBox _surfaceBox = null!;
+    private System.Windows.Controls.StackPanel _infoPanel = null!;
+    private string _lastAncestry = string.Empty;
+    private string _lastZOrder = string.Empty;
+    private string _lastSurface = string.Empty;
+
     public DesktopTreeDebugOverlay()
     {
         InitializeComponent();
@@ -37,13 +47,58 @@ public sealed partial class DesktopTreeDebugOverlay : Window
         Width = SystemParameters.WorkArea.Width;
         Height = SystemParameters.WorkArea.Height;
 
-        Loaded += (_, _) =>
+        // NOTE: intentionally NOT click-through. Transparent areas still pass input through natively
+        // (AllowsTransparency), while the info column is interactive so its text can be selected and
+        // copied. Trade-off: desktop clicks under the column land on the overlay while it runs.
+
+        var panel = new StackPanel { Margin = new Thickness(8) };
+        _ancestryBox = MakeInfoBox(Brushes.Red);
+        _zOrderBox = MakeInfoBox(Brushes.Cyan);
+        _surfaceBox = MakeInfoBox(Brushes.Lime);
+        panel.Children.Add(_ancestryBox);
+        panel.Children.Add(new ScrollViewer
         {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            Win32Apis.MakeClickThrough(hwnd);
-        };
+            Content = _zOrderBox,
+            MaxHeight = 300,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+        });
+        panel.Children.Add(_surfaceBox);
+        Canvas.SetLeft(panel, 8);
+        Canvas.SetTop(panel, 8);
+        _infoPanel = panel;
+        Host.Children.Add(panel);
 
         _timer.Tick += (_, _) => Refresh();
+    }
+
+    /// <summary>Creates a read-only, copyable, monospace info box.</summary>
+    private static System.Windows.Controls.TextBox MakeInfoBox(Brush foreground)
+    {
+        return new System.Windows.Controls.TextBox
+        {
+            IsReadOnly = true,
+            BorderThickness = new Thickness(0),
+            Background = new SolidColorBrush(Color.FromArgb(0xCC, 0, 0, 0)),
+            Foreground = foreground,
+            FontSize = 11,
+            FontFamily = new FontFamily("Consolas"),
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 420,
+            Padding = new Thickness(4),
+            IsTabStop = false,
+        };
+    }
+
+    /// <summary>Updates an info box only when the text changed, preserving user selections.</summary>
+    private void SetInfo(System.Windows.Controls.TextBox box, ref string cache, string text)
+    {
+        if (cache == text)
+        {
+            return;
+        }
+
+        cache = text;
+        box.Text = text;
     }
 
     public void Start() => _timer.Start();
@@ -52,6 +107,7 @@ public sealed partial class DesktopTreeDebugOverlay : Window
     private void Refresh()
     {
         Host.Children.Clear();
+        Host.Children.Add(_infoPanel);
         _dpi = VisualTreeHelper.GetDpi(this);
 
         IntPtr surface = GetSurfaceHandle();
@@ -69,19 +125,17 @@ public sealed partial class DesktopTreeDebugOverlay : Window
 
         // The window actually on top under the cursor: the real hit target for a desktop click.
         IntPtr top = IntPtr.Zero;
+        string ancestryText = "ANCESTRY: (no cursor point)";
         if (Win32Apis.GetCursorPos(out ManualApis.POINT pt))
         {
             top = ManualApis.WindowFromPoint(pt);
             DrawWindow(top, Brushes.Red, "TOPMOST @ CURSOR");
-            DrawAncestry(top);
+            ancestryText = BuildAncestry(top);
         }
 
-        // Top-level z-order summary so the surface's position relative to Progman/WorkerW is visible.
-        DrawZOrder(surface);
-
-        // Surface state: parent, style flags, rect, and whether it is the hit target. This is the
-        // definitive read on whether the glue actually stuck.
-        DrawSurfaceInfo(surface, top);
+        SetInfo(_ancestryBox, ref _lastAncestry, ancestryText);
+        SetInfo(_zOrderBox, ref _lastZOrder, BuildZOrder(surface));
+        SetInfo(_surfaceBox, ref _lastSurface, BuildSurfaceInfo(surface, top));
     }
 
     private static IntPtr GetSurfaceHandle()
@@ -101,12 +155,11 @@ public sealed partial class DesktopTreeDebugOverlay : Window
         return Win32Apis.DesktopSurfaceHandle;
     }
 
-    private void DrawSurfaceInfo(IntPtr surface, IntPtr topAtCursor)
+    private string BuildSurfaceInfo(IntPtr surface, IntPtr topAtCursor)
     {
         if (surface == IntPtr.Zero)
         {
-            AddText("SURFACE: not found (0)", Brushes.Lime, 12, 230);
-            return;
+            return "SURFACE: not found (0)";
         }
 
         var sb = new StringBuilder();
@@ -122,24 +175,7 @@ public sealed partial class DesktopTreeDebugOverlay : Window
         }
         sb.AppendLine($"  is TOPMOST @ CURSOR: {((surface == topAtCursor) ? "YES" : "no")}");
 
-        AddText(sb.ToString(), Brushes.Lime, 12, 230);
-    }
-
-    private void AddText(string text, Brush brush, double x, double y)
-    {
-        double max = Math.Max(200, ActualWidth - 24);
-        var tb = new System.Windows.Controls.TextBlock
-        {
-            Text = text,
-            Foreground = brush,
-            FontSize = 11,
-            Background = Brushes.Black,
-            TextWrapping = System.Windows.TextWrapping.Wrap,
-            MaxWidth = max,
-        };
-        Canvas.SetLeft(tb, x);
-        Canvas.SetTop(tb, y);
-        Host.Children.Add(tb);
+        return sb.ToString();
     }
 
     private void DrawTree(string className, Brush brush)
@@ -175,10 +211,10 @@ public sealed partial class DesktopTreeDebugOverlay : Window
             return;
         }
 
-        // GetWindowRect is in device pixels; convert to the DIP space WPF renders in using this
-        // overlay's DPI scale, then to local coordinates.
-        double x = r.left / _dpi.DpiScaleX;
-        double y = r.top / _dpi.DpiScaleY;
+        // GetWindowRect is in DEVICE pixels. PointFromScreen also expects device pixels and converts
+        // them to this window's local DIP space (including the overlay's own origin) — so pass the
+        // raw rect corner. Only the width/height need the manual DPI division.
+        var local = PointFromScreen(new Point(r.left, r.top));
         double w = (r.right - r.left) / _dpi.DpiScaleX;
         double h = (r.bottom - r.top) / _dpi.DpiScaleY;
         if (w <= 0 || h <= 0)
@@ -186,7 +222,6 @@ public sealed partial class DesktopTreeDebugOverlay : Window
             return;
         }
 
-        var local = PointFromScreen(new Point(x, y));
         var rect = new Rectangle
         {
             Width = w,
@@ -211,9 +246,9 @@ public sealed partial class DesktopTreeDebugOverlay : Window
         Host.Children.Add(tb);
     }
 
-    private void DrawAncestry(IntPtr hwnd)
+    private string BuildAncestry(IntPtr hwnd)
     {
-        var sb = new StringBuilder();
+        var sb = new StringBuilder("ANCESTRY: ");
         IntPtr cur = hwnd;
         for (int i = 0; i < 8 && cur != IntPtr.Zero; i++)
         {
@@ -227,22 +262,10 @@ public sealed partial class DesktopTreeDebugOverlay : Window
             cur = ManualApis.GetParent(cur);
         }
 
-        double max = Math.Max(200, ActualWidth - 24);
-        var tb = new System.Windows.Controls.TextBlock
-        {
-            Text = "ANCESTRY: " + sb,
-            Foreground = Brushes.Red,
-            FontSize = 11,
-            Background = Brushes.Black,
-            TextWrapping = System.Windows.TextWrapping.Wrap,
-            MaxWidth = max,
-        };
-        Canvas.SetLeft(tb, 12);
-        Canvas.SetTop(tb, 12);
-        Host.Children.Add(tb);
+        return sb.ToString();
     }
 
-    private void DrawZOrder(IntPtr surface)
+    private string BuildZOrder(IntPtr surface)
     {
         var order = new System.Collections.Generic.List<string>();
         ManualApis.EnumWindows((hwnd, _) =>
@@ -253,24 +276,10 @@ public sealed partial class DesktopTreeDebugOverlay : Window
             return true;
         }, IntPtr.Zero);
 
-        // Cap so the list stays on-screen.
-        const int cap = 60;
+        // Cap so the box stays compact (it scrolls).
+        const int cap = 25;
         var shown = order.Count > cap ? order.GetRange(0, cap) : order;
-        string text = $"TOP-LEVEL Z-ORDER (top->bottom, {order.Count} total):\n" + string.Join("\n", shown);
-
-        double max = Math.Max(200, ActualWidth - 24);
-        var tb = new System.Windows.Controls.TextBlock
-        {
-            Text = text,
-            Foreground = Brushes.Cyan,
-            FontSize = 11,
-            Background = Brushes.Black,
-            TextWrapping = System.Windows.TextWrapping.Wrap,
-            MaxWidth = max,
-        };
-        Canvas.SetLeft(tb, 12);
-        Canvas.SetTop(tb, 40);
-        Host.Children.Add(tb);
+        return $"TOP-LEVEL Z-ORDER (top->bottom, {order.Count} total):\n" + string.Join("\n", shown);
     }
 
     private static string GetClassName(IntPtr hwnd)

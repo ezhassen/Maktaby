@@ -8,8 +8,6 @@
     Topmost="True"
     ShowInTaskbar="False"
     ShowActivated="False"
-    Focusable="False"
-    IsHitTestVisible="False"
     ResizeMode="NoResize">
     <Canvas x:Name="Host" />
 </Window>
