@@ -1,3 +1,4 @@
+using DesktopBoxesUI.Controls;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Services;
@@ -26,7 +27,7 @@ namespace DesktopBoxesUI.Views;
 /// <see cref="WindowDragController"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
-public partial class BoxContainerWindow : Window, IContentDialogHostProvider
+public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvider
 {
     private readonly ContainerViewModel _vm;
     private readonly MainViewModel _host;
