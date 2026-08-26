@@ -208,13 +208,17 @@ function Publish-Project {
     if (Get-Command iscc -ErrorAction SilentlyContinue) {
         Write-Host "Found ISCC in PATH, building installer..." -ForegroundColor Green
 
-        $isccArgs = @()
-        if ($appVersion) { $isccArgs += "/DAppVersion=$appVersion" }
-        $isccArgs += "`"$issPath`""
+        # Hand the version to ISPP via an include file instead of a /D command-line define:
+        # Windows PowerShell 5.1 and 7 quote native arguments differently, which corrupted the
+        # /D form depending on the host. An ASCII include file is engine-proof.
+        $versionInc = Join-Path $solutionRoot "BuildVersion.inc"
+        Set-Content -LiteralPath $versionInc -Value ('#define MyAppVersion "' + $appVersion + '"') -Encoding Ascii
 
-        Write-Host "Running: iscc $($isccArgs -join ' ')" -ForegroundColor Gray
+        Write-Host "Running: iscc $issPath  (version via $versionInc)" -ForegroundColor Gray
 
-        & iscc @isccArgs
+        # Plain argument: each host quotes natively when needed. (Manually embedded quotes broke
+        # pwsh 7, which escapes them into the argument -> invalid-path error inside ISCC.)
+        & iscc $issPath
         if ($LASTEXITCODE -eq 0) {
             Write-Host "`n✓ Installer created successfully!" -ForegroundColor Green
 
@@ -231,9 +235,8 @@ function Publish-Project {
     }
     else {
         Write-Host "`n⚠ Inno Setup Compiler (iscc) not found in PATH." -ForegroundColor Yellow
-        Write-Host "Please run iscc manually:" -ForegroundColor Yellow
-        $verPart = if ($appVersion) { $appVersion } else { "<version>" }
-        Write-Host "iscc /DAppVersion=`"$verPart`" /O$installerDir /F`"Desktop Boxes v$verPart`" $issPath" -ForegroundColor Cyan
+        Write-Host "Publish first (it generates BuildVersion.inc), then run iscc manually:" -ForegroundColor Yellow
+        Write-Host "iscc `"$issPath`"" -ForegroundColor Cyan
         Write-Host "`nThe application has been published successfully to: $publishDir" -ForegroundColor Green
     }
 }

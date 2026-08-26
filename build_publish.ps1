@@ -65,7 +65,9 @@ function Show-Help
    2. Requires branch main or develop
    3. Pushes branch head to remote (if ahead)
    4. Tags HEAD:  -Version wins, else git-derived sequential version
-                  (develop -> '-beta', main -> plain)   ... then pushes the TAG
+                  (develop -> '-beta', main -> plain)   ... then pushes the TAG.
+                  If HEAD is already tagged with a matching flavor, the existing
+                  tag is REUSED (nothing new is created).
    5. Runs build.ps1 -Action Publish
 
  PARAMETERS
@@ -154,62 +156,112 @@ else
 }
 
 # --- 4. Resolve version + tag HEAD ------------------------------------------
-# Sequential scheme: next version = nearest tag's numeric core with PATCH+1
-# (v1.0.0 -> 1.0.1; v1.0.4-beta -> 1.0.5). Override anytime with -Version.
-$computed = $null
+# Sequential scheme: next = nearest tag's numeric core with PATCH+1 (v1.0.0 -> 1.0.1).
+#
+# REUSE RULE: when HEAD is ALREADY tagged and that tag matches the branch flavor
+# (develop => name contains 'beta'; main => plain, no prerelease), NO new tag is
+# created — the existing tag is used/pushed as-is. Override anytime with -Version.
+
+$headSha = (& git rev-parse HEAD) -join ''
 $lastTag = (& git describe --tags --abbrev=0 2>$null) -join ''
+
+$tagAtHead = $false
 if ($LASTEXITCODE -eq 0 -and $lastTag)
 {
-    $base = $lastTag.TrimStart('v') -replace '-.*$', ''   # strip prerelease label
+    $tagSha = (& git rev-parse "$lastTag^{commit}") -join ''
+    $tagAtHead = ($tagSha -eq $headSha)
+}
+
+function Test-TagMatchesFlavor([string]$name, [string]$br)
+{
+    $core = $name.TrimStart('v')
+    if ($br -eq 'develop') { return $core -match '-beta' }
+    return $core -notmatch '-'     # main: plain release tags only
+}
+
+function Get-BranchFlavoredVersion([string]$numeric, [string]$br)
+{
+    if ($br -eq 'develop') { return "$numeric-beta" }
+    return $numeric
+}
+
+$createTag = $true
+
+if ($Version)
+{
+    # Explicit wins; a plain value on develop gets the beta flavor appended.
+    if ($branch -eq 'develop' -and $Version -notmatch '-')
+    {
+        $Version = "$Version-beta"
+    }
+}
+elseif ($tagAtHead -and (Test-TagMatchesFlavor $lastTag $branch))
+{
+    # HEAD already carries the correct release/beta tag: reuse it, create nothing.
+    $createTag = $false
+    $Version = $lastTag.TrimStart('v')
+    Write-Host "✓ HEAD already tagged $($lastTag) — reusing it (no new tag)." -ForegroundColor Green
+}
+elseif ($lastTag)
+{
+    $base = $lastTag.TrimStart('v') -replace '-.*$', ''
     $parts = $base.Split('.')
     if ($parts.Count -ge 3)
     {
         $parts[2] = [string]([int]$parts[2] + 1)
-        $computed = $parts -join '.'
     }
+    $computed = $parts -join '.'
+    $Version = Get-BranchFlavoredVersion $computed $branch
 }
-
-if (-not $computed)
+else
 {
     Abort "no version tag found to derive from. Pass -Version explicitly (e.g. -Version 1.0.1)."
 }
 
-# Branch flavor when auto-computing (an explicit -Version always wins as typed).
-if (-not $Version)
-{
-    $Version = if ($branch -eq 'develop') { "$computed-beta" } else { "$computed" }
-}
-elseif ($Version -notmatch '-')
-{
-    # explicit plain version keeps branch flavor semantics predictable: main plain,
-    # develop gets -beta unless caller already added a prerelease segment.
-    if ($branch -eq 'develop') { $Version = "$Version-beta" }
-}
-
 $tagName = "v$Version"
 
-# Already tagged?
-$null = & git rev-parse -q --verify "refs/tags/$tagName"
-if ($LASTEXITCODE -eq 0)
+if ($createTag)
 {
-    Abort "tag $tagName already exists. Bump the version (or delete the tag)."
+    # Duplicate guard (only relevant when we intend to CREATE).
+    $null = & git rev-parse -q --verify "refs/tags/$tagName"
+    if ($LASTEXITCODE -eq 0)
+    {
+        Abort "tag $tagName already exists. Bump the version (or delete the tag)."
+    }
 }
 
 if ($DryRun)
 {
-    Write-Host "[dry-run] would tag HEAD as $tagName and push the tag" -ForegroundColor Yellow
+    if ($createTag)
+    {
+        Write-Host "[dry-run] would tag HEAD as $tagName and push the tag" -ForegroundColor Yellow
+    }
+    else
+    {
+        Write-Host "[dry-run] reusing existing tag $tagName (nothing to tag)" -ForegroundColor Yellow
+    }
     Write-Host "[dry-run] would run: build.ps1 -Action Publish" -ForegroundColor Yellow
     exit 0
 }
 
-Write-Host "Tagging HEAD as $tagName ..." -ForegroundColor Yellow
-& git tag -a $tagName -m $Version
-if ($LASTEXITCODE -ne 0) { Abort "tag creation failed." }
+if ($createTag)
+{
+    Write-Host "Tagging HEAD as $tagName ..." -ForegroundColor Yellow
+    & git tag -a $tagName -m $Version
+    if ($LASTEXITCODE -ne 0) { Abort "tag creation failed." }
+}
 
 Write-Host "Pushing tag $tagName ..." -ForegroundColor Yellow
 $tagPush = (& git push origin $tagName) -join "`n"
 if ($LASTEXITCODE -ne 0) { Abort "tag push failed:`n$tagPush" }
-Write-Host "✓ Tag $tagName pushed" -ForegroundColor Green
+if ($createTag)
+{
+    Write-Host "✓ Tag $tagName pushed" -ForegroundColor Green
+}
+else
+{
+    Write-Host "✓ Tag $tagName already present on remote" -ForegroundColor Green
+}
 
 # --- 5. Publish --------------------------------------------------------------
 Write-Host "`nPublishing..." -ForegroundColor Cyan

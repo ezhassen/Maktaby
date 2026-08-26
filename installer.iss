@@ -1,14 +1,9 @@
 #define MyAppName "Desktop Boxes"
 #define MyAppExe "DesktopBoxesUI.exe"
 
-; Version priority: build.ps1 forwards the MinVer-computed version (/DAppVersion=...) which carries
-; prerelease labels like -beta.N; a bare iscc run falls back to the published exe's ProductVersion
-; (sha suffix stripped there already).
-#ifndef AppVersion
-    #define MyAppVersion GetVersionNumbersString('src\DesktopBoxesUI\bin\Publish\' + MyAppExe)
-#else
-    #define MyAppVersion AppVersion
-#endif
+; Version is provided by build.ps1 via BuildVersion.inc (written next to this script before the
+; compile). It carries MinVer labels, e.g. '#define AppVersion "1.0.2-beta"'.
+#include "BuildVersion.inc"
 
 ; Strictly numeric variant for directives that reject prerelease labels (VersionInfoVersion):
 ; cut at first '-' or '+'. "1.0.4-beta+abc" -> "1.0.4".
