@@ -146,6 +146,7 @@ public sealed class DesktopManager
         {
             // --- Re-enable: full initialization restores boxes, surface and watchers ---
             IsDisabled = false;
+            App.SyncDesktopIconSizeWatcher();
             await InitializeAsync();
         }
         else
@@ -155,6 +156,7 @@ public sealed class DesktopManager
 
             SaveSync();
             _mouseMonitor.Stop();
+            App.Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>().Stop();
             CloseAll();
             RestoreIcons();
         }

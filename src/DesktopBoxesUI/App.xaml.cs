@@ -1,13 +1,13 @@
 using DesktopBoxesUI.Controls;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Services;
+using DesktopBoxesUI.Services;
 using DesktopBoxesUI.Settings;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
-using DesktopBoxesUI.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -87,20 +87,23 @@ public partial class App : Application
         Win32Apis.SystemTeardown = true;
 
         var mang = Services.GetRequiredService<DesktopManager>();
-        //RestoreIcons first. Guarded: Explorer may already be terminating during a system shutdown.
-        try
+        if (!mang.IsDisabled)
         {
-            mang.RestoreIcons();
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "RestoreIcons during exit failed (shell likely gone)");
-        }
+            //RestoreIcons first. Guarded: Explorer may already be terminating during a system shutdown.
+            try
+            {
+                mang.RestoreIcons();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "RestoreIcons during exit failed (shell likely gone)");
+            }
 
-        Services.GetRequiredService<IMouseMonitor>().Stop();
-        //async is not ok in app exit
-        //await mang.SaveAsync();
-        mang.SaveSync();
+            Services.GetRequiredService<IMouseMonitor>().Stop();
+            //async is not ok in app exit
+            //await mang.SaveAsync();
+            mang.SaveSync();
+        }
         //
         Logging.DisposeAllDefaultLoggers();
         base.OnExit(e);
@@ -137,7 +140,7 @@ public partial class App : Application
         services.AddSingleton<IDesktopWindowService, DesktopWindowService>();
         services.AddSingleton<IExplorerDesktopService, ExplorerDesktopService>();
         services.AddSingleton<IShellWatcherService, ShellDesktopWatcher>();
-        services.AddSingleton<IFileWatcherService, DesktopFileWatcher>();
+        //services.AddSingleton<IFileWatcherService, DesktopFileWatcher>();
         services.AddSingleton<IDispatcher, WpfDispatcher>();
         services.AddSingleton<DesktopManager, DesktopManager>((serv) => new DesktopManager(serv));
 
@@ -244,19 +247,19 @@ public partial class App : Application
 
     private IntPtr TrayHostHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        // While disabled, only re-register the tray icon — do NOT recover the desktop layer.
         if (_taskbarCreatedMsg != 0 && msg == (int)_taskbarCreatedMsg && !_shellRecoveryPending)
         {
             _shellRecoveryPending = true;
+            var isDisabled = Services.GetRequiredService<DesktopManager>().IsDisabled;
             Dispatcher.BeginInvoke(() =>
             {
                 try
                 {
                     ReplaceTrayIcon(Services);
-                    Services.GetRequiredService<DesktopManager>().RecoverAfterShellRestart();
-                    // New list-view => re-bind the icon-size hook to it and resolve immediately
-                    // (only while the watcher is relevant: DefaultBoxIconSize is Auto).
-                    SyncDesktopIconSizeWatcher();
-                    Log.Information("Shell restarted — tray icon and desktop layer recovered");
+                    if (!isDisabled)
+                        Services.GetRequiredService<DesktopManager>().RecoverAfterShellRestart();
+                    Log.Information("Shell restarted — tray icon recovered{Recovery}", isDisabled ? " (layer suspended)" : " + desktop layer");
                 }
                 catch (System.Exception ex)
                 {
