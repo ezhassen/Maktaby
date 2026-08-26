@@ -82,7 +82,19 @@ internal static class Win32Apis
     public static IntPtr SetCursor(IntPtr hCursor) => ManualApis.SetCursor(hCursor);
 
     /// <summary>Registers a system broadcast message (e.g. "TaskbarCreated" after Explorer restarts).</summary>
+    public static bool SetCursorPos(int X, int Y) => ManualApis.SetCursorPos(X, Y);
+
     public static uint RegisterWindowMessage(string message) => ManualApis.RegisterWindowMessage(message);
+
+    /// <summary>Nudges the cursor by 1px — forces the OS to deliver a fresh
+    /// WM_MOUSEMOVE to whatever window is under it, priming WPF's hover state.</summary>
+    public static void NudgeCursor()
+    {
+        if (GetCursorPos(out var pt))
+        {
+            SetCursorPos(pt.X + 1, pt.Y);
+        }
+    }
 
     /// <summary>Returns the window's class name, or <see cref="string.Empty"/> if it cannot be read.</summary>
     public static string GetWindowClass(IntPtr hwnd)
@@ -790,12 +802,11 @@ internal static class Win32Apis
         // Alt-Tab permanently; FRAMECHANGED flushes it immediately.
         MakeToolWindow(hwnd);
 
-        // Raise the window above the Explorer desktop listview (SysListView32) within the desktop
-        // layer. Without this, OLE drag/drop over empty desktop is delivered to Explorer instead of
-        // our surface, so drops onto empty space never reach us. Box windows stay above the
-        // DesktopSurface — structurally, because they are OWNED by it (owned windows always float
-        // above their owner) — preserving click-through and per-container drops.
-        ManualApis.SetWindowPos(hwnd, ManualApis.HWND_TOP, 0, 0, 0, 0,
+        // Place the window DIRECTLY ABOVE its owner (surface or desktop anchor). This anchors the
+        // box in the correct z-band: above the desktop content but below all running applications.
+        // Using the owner handle (not HWND_TOP/HWND_BOTTOM) means the OS maintains the ordering
+        // through the ownership chain — no fighting with other windows.
+        ManualApis.SetWindowPos(hwnd, ownerHwnd, 0, 0, 0, 0,
             ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
         //}
         //catch (Exception)
@@ -1321,7 +1332,7 @@ internal static class Win32Apis
     /// <summary>
     /// True when <paramref name="screenPt"/> (physical screen pixels) falls on empty desktop area
     /// within the given desktop list-view — i.e. not on a desktop icon. Uses <c>LVM_HITTEST</c> so a
-    /// double-click that hits an icon leaves the icon's own open behaviour intact.
+    /// double-click that hits an icon leaves the icon's own open behavior intact.
     /// </summary>
     public static bool IsDesktopEmptyPoint(IntPtr listViewHwnd, ManualApis.POINT screenPt)
     {
