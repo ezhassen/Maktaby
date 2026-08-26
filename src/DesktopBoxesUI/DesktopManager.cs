@@ -41,6 +41,10 @@ public sealed class DesktopManager
     private DesktopSurface? _surface;
     private bool _allBoxesHidden;
 
+    /// <summary>When true all app functionality is suspended: boxes, surface, watchers and shell
+    /// hooks are stopped. Only the tray icon remains. <see cref="ToggleDisableAsync"/> flips it.</summary>
+    public bool IsDisabled { get; private set; }
+
     /// <summary>The work-area resolution the current container layout was computed against. When the
     /// display settings change we rescale every container proportionally against this baseline.</summary>
     private RectD _appliedResolution;
@@ -129,6 +133,31 @@ public sealed class DesktopManager
         //
         _coordinator.Start();
         if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == true) _mouseMonitor.Start();
+    }
+
+    /// <summary>
+    /// Toggles between fully operational and suspended. When disabled, all boxes, the surface,
+    /// shell watchers and mouse hooks are stopped — only the tray icon remains. When re-enabled
+    /// the app is restored via <see cref="InitializeAsync"/>.
+    /// </summary>
+    public async Task ToggleDisableAsync()
+    {
+        if (IsDisabled)
+        {
+            // --- Re-enable: full initialization restores boxes, surface and watchers ---
+            IsDisabled = false;
+            await InitializeAsync();
+        }
+        else
+        {
+            // --- Disable: save state, stop everything, close all windows except tray host ---
+            IsDisabled = true;
+
+            SaveSync();
+            _mouseMonitor.Stop();
+            CloseAll();
+            RestoreIcons();
+        }
     }
 
     #endregion
@@ -709,6 +738,9 @@ public sealed class DesktopManager
             _surface?.CloseWindowEx();
             _surface = null;
         }
+
+        // Clear the published handle so nothing can target a dead window.
+        Win32Apis.DesktopSurfaceHandle = IntPtr.Zero;
     }
 
     /// <summary>Registers every box from every container into <see cref="IBoxService"/> so the rule

@@ -20,13 +20,24 @@
                 Click="Reset_Click"
                 Header="Reset" />
             <MenuItem
-                x:Name="MenuHideAll"
-                Click="HideAll_Click"
+                x:Name="MenuToggleHideAll"
+                Click="ToggleHideAll_Click"
                 Header="Hide All Boxes"
-                IsCheckable="True" />
+                IsCheckable="False"
+                ToolTip="Toggle Hide All" />
+            <Separator />
+            <MenuItem
+                x:Name="MenuToggleDisable"
+                Click="MenuToggleDisable_Click"
+                Header="Toggle Disable"
+                IsCheckable="False"
+                ToolTip="Toggle Disable. and show the desktop icons" />
             <Separator />
             <MenuItem Click="Settings_Click" Header="Settings" />
-            <MenuItem Click="About_Click" Header="About" />
+            <MenuItem
+                x:Name="menuAbout"
+                Click="About_Click"
+                Header="About" />
             <MenuItem Header="Theme">
                 <MenuItem
                     x:Name="menu_theme_system"
@@ -53,7 +64,10 @@
                 Click="DebugTree_Click"
                 Header="Debug Desktop Tree"
                 IsCheckable="True" />
-            <MenuItem Click="Exit_Click" Header="Exit" />
+            <MenuItem
+                x:Name="menuExit"
+                Click="Exit_Click"
+                Header="Exit" />
         </ContextMenu>
     </tray:NotifyIcon.Menu>
 </tray:NotifyIcon>

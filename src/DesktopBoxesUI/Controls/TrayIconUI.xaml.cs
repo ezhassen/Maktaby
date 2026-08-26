@@ -28,6 +28,7 @@ public partial class TrayIconUI
     public event EventHandler? ExitRequested;
     public event EventHandler? ToggleHideAllRequested;
     public event EventHandler? DebugTreeRequested;
+    public event EventHandler? MenuToggleDisableClick;
 
     public TrayIconUI()
     {
@@ -40,12 +41,25 @@ public partial class TrayIconUI
     {
         var dtMan = App.Services.GetRequiredService<DesktopManager>();
         ISettingsService _settingsService = App.Services.GetRequiredService<ISettingsService>();
-        MenuHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
+        MenuToggleHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
         ToggleDebugTree.Visibility = GlobalFeaturesSwitches.ShowDebugTree ? Visibility.Visible : Visibility.Collapsed;
         resetMenuItem.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowReset ? Visibility.Visible : Visibility.Collapsed;
         menu_theme_system.IsChecked = _settingsService.UserSettings.SelectedTheme_IsSystem();
         menu_theme_light.IsChecked = _settingsService.UserSettings.SelectedTheme_IsLight();
         menu_theme_dark.IsChecked = _settingsService.UserSettings.SelectedTheme_IsDark();
+        //
+        bool isDisabled = dtMan.IsDisabled;
+        MenuToggleDisable.Header = isDisabled ? "Enable Desktop Boxes" : "Disable Desktop Boxes";
+        MenuToggleDisable.Foreground = isDisabled
+            ? System.Windows.Media.Brushes.LimeGreen
+            : System.Windows.Media.Brushes.OrangeRed;
+        foreach (var item in contextMenu.Items)
+        {
+            // disable all menu items except MenuToggleDisable, exit, about
+            if (item == MenuToggleDisable || item == menuExit || item == menuAbout) continue;
+            if (item is not MenuItem mItem) continue;
+            mItem.IsEnabled = !isDisabled;
+        }
     }
 
     /// <summary>Loads the app's own icon (largest embedded size) for the tray; falls back to the
@@ -92,12 +106,9 @@ public partial class TrayIconUI
 
     private void Exit_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
-    private void HideAll_Click(object sender, RoutedEventArgs e) => ToggleHideAllRequested?.Invoke(this, EventArgs.Empty);
+    private void ToggleHideAll_Click(object sender, RoutedEventArgs e) => ToggleHideAllRequested?.Invoke(this, EventArgs.Empty);
 
     private void DebugTree_Click(object sender, RoutedEventArgs e) => DebugTreeRequested?.Invoke(this, EventArgs.Empty);
-
-    /// <summary>Reflects the current "all boxes hidden" state in the tray menu's check box.</summary>
-    public void SetHideAllChecked(bool hidden) => MenuHideAll.IsChecked = hidden;
 
     private void Theme_Click(object sender, RoutedEventArgs e)
     {
@@ -111,5 +122,10 @@ public partial class TrayIconUI
     {
         // No left-click action (matches prior behaviour); the menu opens on right click.
         //contextMenu.IsOpen = !contextMenu.IsOpen;
+    }
+
+    private void MenuToggleDisable_Click(object sender, RoutedEventArgs e)
+    {
+        MenuToggleDisableClick?.Invoke(this, EventArgs.Empty);
     }
 }

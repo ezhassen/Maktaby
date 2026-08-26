@@ -230,10 +230,6 @@ public partial class App : Application
         ReplaceTrayIcon(services);
         _trayHost.Show();
 
-        // Keep the tray's "Hide All Boxes" check box in sync with the real state — subscribed once,
-        // targeting whichever tray instance is current (it is recreated after Explorer restarts).
-        Services.GetRequiredService<DesktopManager>().AllBoxesHiddenChanged += (_, hidden) => _tray?.SetHideAllChecked(hidden);
-
         // Double-clicking empty desktop area toggles the same hide-all state (icon double-clicks still open).
         Services.GetRequiredService<IMouseMonitor>().DesktopDoubleClick += OnDesktopDoubleClick;
 
@@ -344,6 +340,11 @@ public partial class App : Application
         tray.ToggleHideAllRequested += (_, _) =>
         {
             Services.GetRequiredService<DesktopManager>().ToggleHideAllBoxes();
+        };
+
+        tray.MenuToggleDisableClick += async (_, _) =>
+        {
+            await Services.GetRequiredService<DesktopManager>().ToggleDisableAsync();
         };
 
         tray.DebugTreeRequested += (_, _) =>
