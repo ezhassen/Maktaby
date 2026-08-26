@@ -107,11 +107,41 @@ public sealed class MainViewModel : ViewModelBase
     private ContainerViewModel MakeVm(DesktopItemContainer container) =>
         new(container, _icons, _boxService);
 
-    /// <summary>Removes a container from both the UI collection and the backing store.</summary>
+    /// <summary>Removes a container from both the UI collection and the backing store.
+    /// DesktopItems boxes are preserved by moving their items into the default box; FolderPortal
+    /// and other types are discarded with the container. The default-box container itself is
+    /// never removed via this path (BoxContainerWindow blocks it), so the target always exists.</summary>
     public void RemoveContainer(ContainerViewModel vm)
     {
+        if (vm.BoxContainerVm != null)
+        {
+            foreach (var box in vm.BoxContainerVm.Tabs.Select(t => t.Model).ToList())
+            {
+                if (box.IsDefault || box.BoxType != BoxType.DesktopItems || box.Items.Count == 0)
+                {
+                    continue;
+                }
+
+                MoveDesktopItemsToDefault(box);
+            }
+        }
+
         _containers.RemoveContainer(vm.Id);
         Containers.Remove(vm);
+    }
+
+    private void MoveDesktopItemsToDefault(Box doomed)
+    {
+        var defaultBox = _boxService.GetBoxes().FirstOrDefault(b => b.IsDefault);
+        if (defaultBox is null || defaultBox.Id == doomed.Id)
+        {
+            return;
+        }
+
+        foreach (var item in doomed.Items.ToList())
+        {
+            defaultBox.Items.Add(item);
+        }
     }
 
     /// <summary>Finds the box (across all containers and tabs) that contains the given item.</summary>

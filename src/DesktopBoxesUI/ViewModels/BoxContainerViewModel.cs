@@ -83,12 +83,19 @@ public sealed class BoxContainerViewModel : ViewModelBase
             return;
         }
 
+        var doomed = _model.Boxes[index];
+        // User-initiated delete: preserve DesktopItems by moving them into the default box.
+        // Moves (allowDefault:true) keep the box intact, so no migration there.
+        if (!allowDefault && doomed.BoxType == BoxType.DesktopItems && doomed.Items.Count > 0)
+        {
+            MoveDesktopItemsToDefault(doomed);
+        }
+
         Tabs.RemoveAt(index);
-        var removed = _model.Boxes[index];
         _model.Boxes.RemoveAt(index);
 
         // A deleted box must stop receiving auto-routed files. (Moves re-register via InsertBox.)
-        _boxService.RemoveBox(removed.Id);
+        _boxService.RemoveBox(doomed.Id);
 
         if (Tabs.Count == 0)
         {
@@ -166,5 +173,26 @@ public sealed class BoxContainerViewModel : ViewModelBase
         OnPropertyChanged(nameof(SelectedIndex));
         OnPropertyChanged(nameof(SelectedBox));
         SelectedIndexChanged?.Invoke();
+    }
+
+    private void MoveDesktopItemsToDefault(Box doomed)
+    {
+        if (doomed.IsDefault || doomed.Items.Count == 0)
+        {
+            return;
+        }
+
+        var defaultBox = _boxService.GetBoxes().FirstOrDefault(b => b.IsDefault);
+        if (defaultBox is null || defaultBox.Id == doomed.Id)
+        {
+            return;
+        }
+
+        // Preserve items by moving them into the default box. The default box's
+        // BoxViewModel (if loaded) mirrors via CollectionChanged, so UI updates automatically.
+        foreach (var item in doomed.Items.ToList())
+        {
+            defaultBox.Items.Add(item);
+        }
     }
 }
