@@ -119,7 +119,7 @@ public sealed class DesktopManager
         // This defers window creation only — item drag/drop logic is untouched.
         if (_mainVm.Containers.Count > 0)
         {
-            AddWindow(_mainVm.Containers[0]);
+            AddWindow(_mainVm.Containers[0], showActivated: false);//focusWorkaround: true
         }
 
         _ = StreamRemainingContainersAsync();
@@ -557,7 +557,7 @@ public sealed class DesktopManager
         {
             foreach (ContainerViewModel vm in e.NewItems)
             {
-                AddWindow(vm);
+                AddWindow(vm, showActivated: true);
             }
         }
 
@@ -570,19 +570,59 @@ public sealed class DesktopManager
         }
     }
 
-    private void AddWindow(ContainerViewModel vm)
+    private void AddWindow(ContainerViewModel vm, bool showActivated = true)//, bool focusWorkaround = false
     {
         if (_windows.ContainsKey(vm.Id))
         {
             return;
         }
 
-        Window window = new BoxContainerWindow(vm, _mainVm, _positioning, SaveAsyncFireAndForget);
+        Window window = new BoxContainerWindow(vm, _mainVm, _positioning, SaveAsyncFireAndForget)
+        {
+            ShowActivated = showActivated
+        };
 
         _windows[vm.Id] = window;
         Win32Apis.RegisterBoxWindow(new WindowInteropHelper(window).Handle);
+        //IntPtr? foregroundWindowHwnd = null;
+        //if (!showActivated && focusWorkaround)
+        //{
+        //    foregroundWindowHwnd = ManualApis.GetForegroundWindow();
+        //}
         window.Show();
+
+        /*if (!showActivated && focusWorkaround && foregroundWindowHwnd is not null)
+        {
+            window.ContentRendered += (_, _) =>
+            {
+                //Win32Apis.NudgeCursor();
+                NudgeWindowActivation(window, foregroundWindowHwnd.Value);
+            };
+            //window.Focus();
+        }*/
     }
+
+    /*public void NudgeWindowActivation(Window window, IntPtr prevForegroundWindow)
+    {
+        var widgetHwnd = new WindowInteropHelper(window).Handle;
+        //var previousHwnd = ManualApis.GetForegroundWindow();
+
+        //Debug.WriteLine($"Previous: 0x{previousHwnd.ToInt64():X}");
+
+        ManualApis.SetForegroundWindow(widgetHwnd);
+        //window.Activate();
+
+        //Debug.WriteLine(
+        //    $"Widget active: {ManualApis.GetForegroundWindow() == widgetHwnd}");
+
+        if (prevForegroundWindow != IntPtr.Zero &&
+            prevForegroundWindow != widgetHwnd)
+        {
+            //Win32.NativeMethods.Win32Apis.GlueToDesktop(widgetHwnd, Win32Apis.DesktopSurfaceHandle);
+            ManualApis.SetActiveWindow(prevForegroundWindow);
+            ManualApis.SetForegroundWindow(prevForegroundWindow);
+        }
+    }*/
 
     /// <summary>True when every open <see cref="BoxContainerWindow"/> is currently hidden via
     /// <see cref="HideAllBoxes"/>. Session-only (not persisted across restarts).</summary>
@@ -644,7 +684,7 @@ public sealed class DesktopManager
     {
         foreach (var vm in _mainVm.Containers)
         {
-            AddWindow(vm);
+            AddWindow(vm, showActivated: false);
             await Task.Yield();
         }
     }
@@ -664,9 +704,12 @@ public sealed class DesktopManager
             var rest = _mainVm.Containers.Skip(1).ToList();
             foreach (var vm in rest)
             {
-                AddWindow(vm);
+                AddWindow(vm, showActivated: false);
                 await Task.Yield();
             }
+            //await Task.Delay(TimeSpan.FromSeconds(1));
+            //_surface!.Focus();
+            //_surface!.Activate();
         }
         catch
         {
