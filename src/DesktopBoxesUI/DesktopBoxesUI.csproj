@@ -39,8 +39,17 @@
 		<Company>Ezz Hassan</Company>
 		<PublisherName>Ezz Hassan</PublisherName>
 		<Copyright>Copyright ©  2026</Copyright>
-		<Version>1.0.0</Version>
+		<!-- Version/AssemblyVersion/InformationalVersion are computed from git (tags + commit height)
+		     by Nerdbank.GitVersioning. Release = tag v1.2.3 on main; prerelease = tags like
+		     v1.2.0-beta.1 (e.g. on develop). No manual <Version> here anymore. -->
 	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Nerdbank.GitVersioning" Version="3.10.91">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="EzzHelper" Version="2.0.3" />

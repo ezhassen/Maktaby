@@ -6,7 +6,7 @@
   <Folder Name="/Solution Items/">
     <File Path="agents.md" />
     <File Path="build.ps1" />
-    <File Path="build_bump.ps1" />
+    <File Path="build_publish.ps1" />
     <File Path="installer.iss" />
     <File Path="README.md" />
   </Folder>

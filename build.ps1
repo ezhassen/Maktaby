@@ -1,17 +1,34 @@
-﻿# Build and Version Management Script for Desktop Boxes
-# This script handles automatic versioning and building
+﻿<#
+.SYNOPSIS
+    Builds, publishes and packages Desktop Boxes, and manages git-tag-driven versions.
+
+.DESCRIPTION
+    Versions are computed by Nerdbank.GitVersioning from GIT state:
+      - tag v1.2.0            -> exact release 1.2.0
+      - tag v1.2.0-beta.1     -> prerelease 1.2.0-beta.1 (use on develop)
+      - commits after a tag   -> height-incremented versions (+ commit id)
+
+.EXAMPLE
+    .\build.ps1 -Action Build
+
+.EXAMPLE
+    .\build.ps1 -Action Publish
+
+.EXAMPLE
+    .\build.ps1 -Action Tag -Version 1.2.0-beta.1
+
+.NOTES
+    Run without arguments (or -?, -Help, Help) to see the full help text.
+#>
 
 param(
-    [Parameter(Mandatory = $false)]
-    [ValidateSet("Publish", "Build", "Clean", "Version", "Bump")]
-    [string]$Action = "Publish",
+    [Parameter(Position = 0)]
+    [ValidateSet('', 'Help', 'Publish', 'Build', 'Clean', 'Version', 'Tag')]
+    [string]$Action = '',
 
+    # Version used by -Action Tag (creates annotated tag v<Version>). Example: 1.2.0-beta.1
     [Parameter(Mandatory = $false)]
     [string]$Version,
-
-    [Parameter(Mandatory = $false)]
-    [ValidateSet("Major", "Minor", "Build", "Revision")]
-    [string]$BumpType = "Build",
 
     [Parameter(Mandatory = $false)]
     [ValidateSet("Debug", "Release")]
@@ -24,124 +41,126 @@ param(
     [string]$Framework = "net10.0-windows10.0.19041.0",
 
     [Parameter(Mandatory = $false)]
-    [bool]$SelfContained = $false
+    [bool]$SelfContained = $false,
+
+    [Alias('help')]
+    [Parameter(Mandatory = $false)]
+    [switch]$ShowHelp
 )
 
 $ErrorActionPreference = "Stop"
 $solutionRoot = $PSScriptRoot
-$versionFile = Join-Path $solutionRoot "version.json"
 $project = "$PSScriptRoot\src\DesktopBoxesUI\DesktopBoxesUI.csproj"
 $publishDir = "$PSScriptRoot\src\DesktopBoxesUI\bin\Publish"
+$publishedExe = Join-Path $publishDir "DesktopBoxesUI.exe"
 $installerDir = "$PSScriptRoot\Installer"
 
-Write-Host "`n========================================" -ForegroundColor Cyan
-Write-Host "Desktop Boxes - Build Script" -ForegroundColor Cyan
-Write-Host "========================================`n" -ForegroundColor Cyan
+function Show-Help
+{
+    Write-Host @"
+========================================
+ Desktop Boxes - build script
+========================================
 
-# Function to read current version from version.json
-function Get-CurrentVersion {
-    if (Test-Path $versionFile) {
-        $versionData = Get-Content $versionFile | ConvertFrom-Json
-        return $versionData.version
+ USAGE
+   build.ps1 [-Action <action>] [parameters]
+   build.ps1 -? | -Help | Help        show this help
+
+ ACTIONS
+   Publish    Build + create the Inno installer (versioned from git)
+   Build      Quick compile (Debug/Release), no installer
+   Clean      Remove bin/obj artifacts
+   Version    Show current computed version info (branch/tag/nbgv)
+   Tag        Create an annotated version tag:  -Version <x.y.z[-pre]>
+   Help       Show this help
+
+ PARAMETERS
+   -Configuration <Debug|Release>          target configuration   (default: Release)
+   -Runtime       <rid>                    publish RID            (default: win-x64)
+   -Framework     <tfm>                    target framework       (default: net10.0-windows10.0.19041.0)
+   -SelfContained <true|false>             self-contained publish (default: false)
+   -Version       <x.y.z[-pre]>            version for -Action Tag
+
+ VERSIONING (Nerdbank.GitVersioning - driven by git tags)
+   git tag -a v1.2.0        -m ""1.2.0""      exact release 1.2.0
+   git tag -a v1.2.0-beta.1 -m ""beta""       prerelease 1.2.0-beta.1 (e.g. on develop)
+   commits after a tag        height-incremented versions (1.2.<height>)
+
+ EXAMPLES
+   build.ps1 -Action Build
+   build.ps1 -Action Publish
+   build.ps1 -Action Tag -Version 1.2.0-beta.1
+   build.ps1 -Action Version
+"@
+}
+
+# No action / explicit help -> print help and stop.
+if ($ShowHelp -or $Action -eq '' -or $Action -eq 'Help')
+{
+    Show-Help
+    exit 0
+}
+
+$publishDir = "$PSScriptRoot\src\DesktopBoxesUI\bin\Publish"
+$publishedExe = Join-Path $publishDir "DesktopBoxesUI.exe"
+$installerDir = "$PSScriptRoot\Installer"
+
+function Get-BuiltExeVersion {
+    # ProductVersion == InformationalVersion (nbgv): carries prerelease labels (-beta.N) plus a
+    # '+<sha>' suffix we strip. No global nbgv tool required.
+    if (Test-Path $publishedExe) {
+        $pv = (Get-Item $publishedExe).VersionInfo.ProductVersion
+        if ($pv) {
+            return ($pv -replace '\+.*$', '')
+        }
     }
+
     return $null
 }
 
-# Function to update version in version.json
-function Set-Version {
-    param([string]$NewVersion)
-
-    Write-Host "Updating version to: $NewVersion" -ForegroundColor Yellow
-
-    $versionData = Get-Content $versionFile | ConvertFrom-Json
-    $versionData.version = $NewVersion
-
-    $versionData | ConvertTo-Json -Depth 10 | Set-Content $versionFile
-
-    Write-Host "✓ Version updated successfully" -ForegroundColor Green
-}
-
-# Function to bump version
-function Bump-Version {
-    param([string]$BumpType)
-
-    $currentVersion = Get-CurrentVersion
-    if (-not $currentVersion) {
-        Write-Host "Error: Could not read current version" -ForegroundColor Red
-        exit 1
-    }
-
-    Write-Host "Current version: $currentVersion" -ForegroundColor Cyan
-
-    # Parse version components
-    $parts = $currentVersion.Split('.')
-    $major = [int]$parts[0]
-    $minor = [int]$parts[1]
-    $build = if ($parts.Count -gt 2) { [int]$parts[2] } else { 0 }
-    $revision = if ($parts.Count -gt 3) { [int]$parts[3] } else { 0 }
-
-    # Bump the specified component
-    switch ($BumpType) {
-        "Major" {
-            $major++
-            $minor = 0
-            $build = 0
-            $revision = 0
-        }
-        "Minor" {
-            $minor++
-            $build = 0
-            $revision = 0
-        }
-        "Build" {
-            $build++
-            $revision = 0
-        }
-        "Revision" {
-            $revision++
-        }
-    }
-
-    $newVersion = "$major.$minor.$build.$revision"
-    Set-Version $newVersion
-
-    Write-Host "New version: $newVersion" -ForegroundColor Green
-}
-
-# Function to display current version info
 function Show-VersionInfo {
-    $currentVersion = Get-CurrentVersion
-    if ($currentVersion) {
-        Write-Host "Current Version: $currentVersion" -ForegroundColor Green
-        Write-Host "Version File: $versionFile" -ForegroundColor Gray
+    $branch = (& git rev-parse --abbrev-ref HEAD 2>$null)
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "Branch : $branch" -ForegroundColor Gray
+    }
 
-        # Try to get NB.GV calculated version if available
-        try {
-            $nbgv = dotnet nbgv --format json 2>$null
-            if ($LASTEXITCODE -eq 0) {
-                $nbgvData = $nbgv | ConvertFrom-Json
-                Write-Host "`nCalculated Version: $($nbgvData.AssemblyVersion)" -ForegroundColor Cyan
-                Write-Host "NuGet Version: $($nbgvData.NuGetPackageVersion)" -ForegroundColor Cyan
-            }
-        }
-        catch {
-            Write-Host "`nNote: Install NB.GV CLI tool for more details:" -ForegroundColor Yellow
-            Write-Host "  dotnet tool install -g nbgv" -ForegroundColor Gray
-        }
+    # Optional tool: absence must not throw (EAP=Stop + native stderr would otherwise terminate).
+    $oldEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $nbgv = dotnet nbgv get-version --format json 2>$null
+    $nbgvExit = $LASTEXITCODE
+    $ErrorActionPreference = $oldEap
+
+    if ($nbgvExit -eq 0 -and $nbgv) {
+        $data = $nbgv | ConvertFrom-Json
+        Write-Host "Version            : $($data.NuGetPackageVersion)" -ForegroundColor Green
+        Write-Host "AssemblyVersion    : $($data.AssemblyVersion)" -ForegroundColor Cyan
+        Write-Host "SimpleVersion      : $($data.SimpleVersion)" -ForegroundColor Cyan
     }
     else {
-        Write-Host "Error: version.json not found" -ForegroundColor Red
+        Write-Host "Version            : (install 'dotnet tool install -g nbgv' for details)" -ForegroundColor Yellow
+    }
+
+    if (Test-Path $publishedExe) {
+        Write-Host "Published exe      : $((Get-Item $publishedExe).VersionInfo.FileVersion)" -ForegroundColor Cyan
     }
 }
 
-# Function to publish the project (build + create installer)
+# Publishes the project, then compiles the Inno installer. The computed version is forwarded to
+# the installer script (/DAppVersion) so prerelease labels (e.g. 1.1.0-beta.1) appear in the name.
 function Publish-Project {
     param([string]$Config)
 
     Write-Host "Publishing in $Config configuration..." -ForegroundColor Yellow
     Write-Host "Runtime: $Runtime | Framework: $Framework | Self-Contained: $SelfContained" -ForegroundColor Gray
 
-    # Step 1: Publish the project using dotnet publish
+    # Clear stale output first: the installer packs *.* recursively, so leftovers from previous
+    # publishes (renamed/removed files, old localized folders) would leak into it.
+    if (Test-Path $publishDir) {
+        Write-Host "Clearing $publishDir ..." -ForegroundColor Gray
+        Remove-Item -Path $publishDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
     Write-Host "`nStep 1/3: Publishing application..." -ForegroundColor Cyan
 
     $publishArgs = @(
@@ -150,7 +169,6 @@ function Publish-Project {
         "--output", $publishDir
         "--runtime", $Runtime
         "--framework", $Framework
-        # "--no-restore"
     )
 
     if ($SelfContained) {
@@ -169,16 +187,15 @@ function Publish-Project {
     }
 
     Write-Host "✓ Application published successfully!" -ForegroundColor Green
-    Write-Host "Output: $publishDir" -ForegroundColor Cyan
 
-    # Get version info for installer
-    $currentVersion = Get-CurrentVersion
-    if (-not $currentVersion) {
-        Write-Host "Warning: Cannot determine version from version.json, using default" -ForegroundColor Yellow
-        $currentVersion = "1.0.0"
+    $appVersion = Get-BuiltExeVersion
+    if (-not $appVersion) {
+        Write-Host "Warning: could not determine app version, installer falls back to exe metadata" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "App version: $appVersion" -ForegroundColor Green
     }
 
-    # Step 2: Prepare installer
     Write-Host "`nStep 2/3: Preparing installer..." -ForegroundColor Cyan
 
     $issPath = Join-Path $solutionRoot "installer.iss"
@@ -187,26 +204,27 @@ function Publish-Project {
         exit 1
     }
 
-    # Create installer output directory
     if (-not (Test-Path $installerDir)) {
         New-Item -ItemType Directory -Path $installerDir -Force | Out-Null
     }
 
     Write-Host "Installer will be created in: $installerDir" -ForegroundColor Cyan
 
-    # Step 3: Build installer using Inno Setup
     Write-Host "`nStep 3/3: Building installer..." -ForegroundColor Cyan
 
     if (Get-Command iscc -ErrorAction SilentlyContinue) {
         Write-Host "Found ISCC in PATH, building installer..." -ForegroundColor Green
 
-        Write-Host "Running: iscc $issPath" -ForegroundColor Gray
+        $isccArgs = @()
+        if ($appVersion) { $isccArgs += "/DAppVersion=$appVersion" }
+        $isccArgs += "`"$issPath`""
 
-        &  iscc "$issPath"
+        Write-Host "Running: iscc $($isccArgs -join ' ')" -ForegroundColor Gray
+
+        & iscc @isccArgs
         if ($LASTEXITCODE -eq 0) {
             Write-Host "`n✓ Installer created successfully!" -ForegroundColor Green
 
-            # Show installer location
             $installerFiles = Get-ChildItem $installerDir -Filter "*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
             if ($installerFiles) {
                 Write-Host "`nInstaller location: $($installerFiles.FullName)" -ForegroundColor Cyan
@@ -221,18 +239,18 @@ function Publish-Project {
     else {
         Write-Host "`n⚠ Inno Setup Compiler (iscc) not found in PATH." -ForegroundColor Yellow
         Write-Host "Please run iscc manually:" -ForegroundColor Yellow
-        Write-Host "iscc /O$installerDir /F`"Desktop Boxes v$currentVersion`" $issPath" -ForegroundColor Cyan
+        $verPart = if ($appVersion) { $appVersion } else { "<version>" }
+        Write-Host "iscc /DAppVersion=`"$verPart`" /O$installerDir /F`"Desktop Boxes v$verPart`" $issPath" -ForegroundColor Cyan
         Write-Host "`nThe application has been published successfully to: $publishDir" -ForegroundColor Green
     }
 }
 
-# Function to build the project (quick build without publishing)
+# Quick build without publishing.
 function Build-Project {
     param([string]$Config)
 
     Write-Host "Building in $Config configuration..." -ForegroundColor Yellow
 
-    # Restore packages
     Write-Host "`nRestoring NuGet packages..." -ForegroundColor Gray
     dotnet restore $project
     if ($LASTEXITCODE -ne 0) {
@@ -240,7 +258,6 @@ function Build-Project {
         exit 1
     }
 
-    # Build solution
     Write-Host "`nBuilding solution..." -ForegroundColor Gray
     dotnet build $project --configuration $Config --no-restore
     if ($LASTEXITCODE -ne 0) {
@@ -250,21 +267,18 @@ function Build-Project {
 
     Write-Host "`n✓ Build completed successfully!" -ForegroundColor Green
 
-    # Show output paths
     $outputPath = Join-Path $solutionRoot "src\DesktopBoxesUI\bin\$Config\$Framework"
     if (Test-Path $outputPath) {
         Write-Host "`nOutput location: $outputPath" -ForegroundColor Cyan
         $exePath = Join-Path $outputPath "DesktopBoxesUI.exe"
         if (Test-Path $exePath) {
-            $fileVersion = (Get-Item $exePath).VersionInfo.FileVersion
-            $productVersion = (Get-Item $exePath).VersionInfo.ProductVersion
-            Write-Host "Executable Version: $fileVersion" -ForegroundColor Green
-            Write-Host "Product Version: $productVersion" -ForegroundColor Green
+            $v = (Get-Item $exePath).VersionInfo
+            Write-Host "Executable Version : $($v.FileVersion)" -ForegroundColor Green
+            Write-Host "Product Version    : $($v.ProductVersion)" -ForegroundColor Green
         }
     }
 }
 
-# Function to clean build artifacts
 function Clean-Project {
     Write-Host "Cleaning build artifacts..." -ForegroundColor Yellow
 
@@ -274,7 +288,6 @@ function Clean-Project {
         exit 1
     }
 
-    # Remove bin and obj folders
     Get-ChildItem -Path $solutionRoot -Include bin, obj -Recurse -Directory -Force -ErrorAction SilentlyContinue |
     Where-Object { $_.FullName -notmatch "\\packages\\" } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
@@ -282,7 +295,6 @@ function Clean-Project {
     Write-Host "✓ Clean completed" -ForegroundColor Green
 }
 
-# Main execution
 switch ($Action) {
     "Publish" {
         Publish-Project $Configuration
@@ -296,20 +308,29 @@ switch ($Action) {
     "Version" {
         Show-VersionInfo
     }
-    "Bump" {
-        if ($Version) {
-            # Set specific version
-            Set-Version $Version
+    "Tag" {
+        if (-not $Version) {
+            Write-Host "Error: provide a version, e.g.  build.ps1 -Action Tag -Version 1.2.0-beta.1" -ForegroundColor Red
+            exit 1
         }
-        else {
-            # Bump version
-            Bump-Version $BumpType
+
+        $tagName = "v$Version"
+
+        & git rev-parse -q --verify "refs/tags/$tagName" | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Tag $tagName already exists." -ForegroundColor Yellow
+            exit 1
         }
-        Write-Host "`nRun 'build.ps1 -Action Publish' to build and create installer with new version" -ForegroundColor Yellow
-    }
-    default {
-        Write-Host "Unknown action: $Action" -ForegroundColor Red
-        exit 1
+
+        & git tag -a $tagName -m $tagName
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Failed to create tag $tagName" -ForegroundColor Red
+            exit 1
+        }
+
+        Write-Host "✓ Created tag $tagName" -ForegroundColor Green
+        Write-Host "Push it with:  git push origin $tagName" -ForegroundColor Yellow
+        Write-Host "Then:          build.ps1 -Action Publish" -ForegroundColor Yellow
     }
 }
 

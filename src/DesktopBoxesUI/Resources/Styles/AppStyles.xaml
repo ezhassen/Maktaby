@@ -8,7 +8,7 @@
 
     <!--
         Fixed WPF-UI menu item templates.
-
+        
         The stock WPF-UI MenuItem.SubmenuHeaderTemplate applies a template-local DropShadowEffect and
         offsets that make submenus OVERLAP their parent item instead of opening beside it whenever the
         menu opens upward (bottom-anchored). These app-wide replacements remove the shadow, anchor the
@@ -29,7 +29,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Check gutter: visible only on checkable/checked items. -->
+                <!--  Check gutter: visible only on checkable/checked items.  -->
                 <Path
                     x:Name="CheckGlyph"
                     Grid.Column="0"
@@ -114,7 +114,7 @@
                 </Grid>
             </Border>
 
-            <!-- Anchored RIGHT of the parent row: fixes the bottom-open overlap bug. No DropShadowEffect. -->
+            <!--  Anchored RIGHT of the parent row: fixes the bottom-open overlap bug. No DropShadowEffect.  -->
             <Popup
                 x:Name="Popup"
                 Grid.Row="1"

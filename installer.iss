@@ -1,6 +1,13 @@
 #define MyAppName "Desktop Boxes"
 #define MyAppExe "DesktopBoxesUI.exe"
-#define MyAppVersion  GetVersionNumbersString('src\DesktopBoxesUI\bin\Publish\' + MyAppExe)
+
+; Version priority: build.ps1 forwards the nbgv-computed version (/DAppVersion=...) which carries
+; prerelease labels like -beta.N; a bare iscc run falls back to the published exe's FileVersion.
+#ifndef AppVersion
+    #define MyAppVersion GetVersionNumbersString('src\DesktopBoxesUI\bin\Publish\' + MyAppExe)
+#else
+    #define MyAppVersion AppVersion
+#endif
 
 [Setup]
 AppId={{6D63481B-105C-49A8-8C5E-52F761DD120B}

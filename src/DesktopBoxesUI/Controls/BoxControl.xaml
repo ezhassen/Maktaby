@@ -2,10 +2,10 @@
     x:Class="DesktopBoxesUI.Controls.BoxControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
-    xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
     d:DesignHeight="200"
     d:DesignWidth="240"
     AllowDrop="True"
@@ -19,7 +19,7 @@
     mc:Ignorable="d">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
-        <!-- Tile = resolved icon size + chrome offsets (hand-tuned at the 32px baseline: 68×64). -->
+        <!--  Tile = resolved icon size + chrome offsets (hand-tuned at the 32px baseline: 68×64).  -->
         <conv:AdaptiveTileSizeConverter x:Key="TileWidth" />
         <conv:AdaptiveTileSizeConverter x:Key="TileHeight" />
     </UserControl.Resources>
