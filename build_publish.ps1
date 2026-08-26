@@ -8,14 +8,14 @@
     3. Pushes the current branch head to its remote (with upstream setup) when ahead.
     4. Determines the release version:
          - -Version <x.y.z[-pre]>      explicit (wins)
-         - otherwise nbgv computes it  (fallback: last tag + commit height)
+         - otherwise derived from git: last tag, patch+1
        and applies the branch flavor: develop -> "-beta", main -> plain.
        Creates annotated tag v<version> on HEAD and pushes the TAG.
     5. Runs build.ps1 -Action Publish (installer is named from that tag).
 
 .PARAMETER Version
     Explicit version to tag (e.g. 1.2.0 or 1.2.0-beta.2). When omitted, the next version is
-    derived from nbgv/git-height and flavored by branch (develop => beta).
+    derived from git and flavored by branch (develop => beta).
 
 .EXAMPLE
     .\build_publish.ps1                        # auto version: beta on develop / plain on main
@@ -64,7 +64,7 @@ function Show-Help
    1. Aborts on uncommitted/untracked changes
    2. Requires branch main or develop
    3. Pushes branch head to remote (if ahead)
-   4. Tags HEAD:  -Version wins, else nbgv-computed + branch flavor
+   4. Tags HEAD:  -Version wins, else git-derived sequential version
                   (develop -> '-beta', main -> plain)   ... then pushes the TAG
    5. Runs build.ps1 -Action Publish
 
@@ -154,39 +154,24 @@ else
 }
 
 # --- 4. Resolve version + tag HEAD ------------------------------------------
+# Sequential scheme: next version = nearest tag's numeric core with PATCH+1
+# (v1.0.0 -> 1.0.1; v1.0.4-beta -> 1.0.5). Override anytime with -Version.
 $computed = $null
-
-# Prefer nbgv when available (matches the msbuild-computed version exactly).
-$oldEap = $ErrorActionPreference
-$ErrorActionPreference = 'Continue'
-$nbgvOut = dotnet nbgv get-version -v Version 2>$null
-$nbgvExit = $LASTEXITCODE
-$ErrorActionPreference = $oldEap
-
-if ($nbgvExit -eq 0 -and $nbgvOut)
+$lastTag = (& git describe --tags --abbrev=0 2>$null) -join ''
+if ($LASTEXITCODE -eq 0 -and $lastTag)
 {
-    $computed = ($nbgvOut | ForEach-Object { $_.ToString() }) -join ''
-}
-
-if (-not $computed)
-{
-    # Fallback: last tag + commit height since it (mirrors NGV's height rule).
-    $lastTag = (& git describe --tags --abbrev=0 2>$null) -join ''
-    if ($LASTEXITCODE -eq 0 -and $lastTag)
+    $base = $lastTag.TrimStart('v') -replace '-.*$', ''   # strip prerelease label
+    $parts = $base.Split('.')
+    if ($parts.Count -ge 3)
     {
-        $h = (& git rev-list --count "$lastTag..HEAD") -join ''
-        $parts = $lastTag.TrimStart('v').Split('.')
-        if ($parts.Count -ge 3)
-        {
-            $parts[2] = [string]([int]$parts[2] + [int]$h)
-            $computed = $parts -join '.'
-        }
+        $parts[2] = [string]([int]$parts[2] + 1)
+        $computed = $parts -join '.'
     }
 }
 
 if (-not $computed)
 {
-    Abort "could not compute version (no nbgv, no prior tag). Pass -Version explicitly."
+    Abort "no version tag found to derive from. Pass -Version explicitly (e.g. -Version 1.0.1)."
 }
 
 # Branch flavor when auto-computing (an explicit -Version always wins as typed).
@@ -238,3 +223,5 @@ if ($LASTEXITCODE -ne 0)
 {
     Abort "publish failed."
 }
+
+

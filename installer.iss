@@ -1,19 +1,33 @@
 #define MyAppName "Desktop Boxes"
 #define MyAppExe "DesktopBoxesUI.exe"
 
-; Version priority: build.ps1 forwards the nbgv-computed version (/DAppVersion=...) which carries
-; prerelease labels like -beta.N; a bare iscc run falls back to the published exe's FileVersion.
+; Version priority: build.ps1 forwards the MinVer-computed version (/DAppVersion=...) which carries
+; prerelease labels like -beta.N; a bare iscc run falls back to the published exe's ProductVersion
+; (sha suffix stripped there already).
 #ifndef AppVersion
     #define MyAppVersion GetVersionNumbersString('src\DesktopBoxesUI\bin\Publish\' + MyAppExe)
 #else
     #define MyAppVersion AppVersion
 #endif
 
+; Strictly numeric variant for directives that reject prerelease labels (VersionInfoVersion):
+; cut at first '-' or '+'. "1.0.4-beta+abc" -> "1.0.4".
+#define TmpVer MyAppVersion
+#define PlusPos Pos('+', TmpVer)
+#if PlusPos > 0
+    #define TmpVer Copy(TmpVer, 1, PlusPos - 1)
+#endif
+#define DashPos Pos('-', TmpVer)
+#if DashPos > 0
+    #define TmpVer Copy(TmpVer, 1, DashPos - 1)
+#endif
+#define MyNumericVersion TmpVer
+
 [Setup]
 AppId={{6D63481B-105C-49A8-8C5E-52F761DD120B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyNumericVersion}
 AppCopyright=Copyright (C) 2026 ezhassen.
 AppVerName={#MyAppName} {#MyAppVersion}
 DefaultDirName={commonpf}\Desktop Boxes

@@ -3,10 +3,10 @@
     Builds, publishes and packages Desktop Boxes, and manages git-tag-driven versions.
 
 .DESCRIPTION
-    Versions are computed by Nerdbank.GitVersioning from GIT state:
+    Versions come from GIT TAGS via MinVer:
       - tag v1.2.0            -> exact release 1.2.0
       - tag v1.2.0-beta.1     -> prerelease 1.2.0-beta.1 (use on develop)
-      - commits after a tag   -> height-incremented versions (+ commit id)
+      - commits after a tag   -> auto prerelease with height (e.g. 1.2.1-alpha.0.N)
 
 .EXAMPLE
     .\build.ps1 -Action Build
@@ -70,7 +70,7 @@ function Show-Help
    Publish    Build + create the Inno installer (versioned from git)
    Build      Quick compile (Debug/Release), no installer
    Clean      Remove bin/obj artifacts
-   Version    Show current computed version info (branch/tag/nbgv)
+   Version    Show current version info (branch / last tag / built exe)
    Tag        Create an annotated version tag:  -Version <x.y.z[-pre]>
    Help       Show this help
 
@@ -81,7 +81,7 @@ function Show-Help
    -SelfContained <true|false>             self-contained publish (default: false)
    -Version       <x.y.z[-pre]>            version for -Action Tag
 
- VERSIONING (Nerdbank.GitVersioning - driven by git tags)
+ VERSIONING (MinVer - driven by git tags)
    git tag -a v1.2.0        -m ""1.2.0""      exact release 1.2.0
    git tag -a v1.2.0-beta.1 -m ""beta""       prerelease 1.2.0-beta.1 (e.g. on develop)
    commits after a tag        height-incremented versions (1.2.<height>)
@@ -106,8 +106,8 @@ $publishedExe = Join-Path $publishDir "DesktopBoxesUI.exe"
 $installerDir = "$PSScriptRoot\Installer"
 
 function Get-BuiltExeVersion {
-    # ProductVersion == InformationalVersion (nbgv): carries prerelease labels (-beta.N) plus a
-    # '+<sha>' suffix we strip. No global nbgv tool required.
+    # ProductVersion == InformationalVersion (MinVer): carries prerelease labels (-beta.N) plus a
+    # '+<sha>' suffix we strip. 
     if (Test-Path $publishedExe) {
         $pv = (Get-Item $publishedExe).VersionInfo.ProductVersion
         if ($pv) {
@@ -121,28 +121,21 @@ function Get-BuiltExeVersion {
 function Show-VersionInfo {
     $branch = (& git rev-parse --abbrev-ref HEAD 2>$null)
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "Branch : $branch" -ForegroundColor Gray
+        Write-Host "Branch       : $branch" -ForegroundColor Gray
     }
 
-    # Optional tool: absence must not throw (EAP=Stop + native stderr would otherwise terminate).
-    $oldEap = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
-    $nbgv = dotnet nbgv get-version --format json 2>$null
-    $nbgvExit = $LASTEXITCODE
-    $ErrorActionPreference = $oldEap
-
-    if ($nbgvExit -eq 0 -and $nbgv) {
-        $data = $nbgv | ConvertFrom-Json
-        Write-Host "Version            : $($data.NuGetPackageVersion)" -ForegroundColor Green
-        Write-Host "AssemblyVersion    : $($data.AssemblyVersion)" -ForegroundColor Cyan
-        Write-Host "SimpleVersion      : $($data.SimpleVersion)" -ForegroundColor Cyan
+    # Nearest version tag + commits since it (MinVer derives versions from exactly these).
+    $desc = & git describe --tags --long 2>$null
+    if ($LASTEXITCODE -eq 0 -and $desc) {
+        Write-Host "Last tag     : $desc   (<tag>-<height>-g<sha> | exact tag when on it)" -ForegroundColor Cyan
     }
     else {
-        Write-Host "Version            : (install 'dotnet tool install -g nbgv' for details)" -ForegroundColor Yellow
+        Write-Host "Last tag     : (none reachable)" -ForegroundColor Yellow
     }
 
     if (Test-Path $publishedExe) {
-        Write-Host "Published exe      : $((Get-Item $publishedExe).VersionInfo.FileVersion)" -ForegroundColor Cyan
+        $v = (Get-Item $publishedExe).VersionInfo
+        Write-Host "Published exe: File=$($v.FileVersion)  Product=$($v.ProductVersion)" -ForegroundColor Cyan
     }
 }
 
@@ -335,3 +328,5 @@ switch ($Action) {
 }
 
 Write-Host "`n========================================`n" -ForegroundColor Cyan
+
+
