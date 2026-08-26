@@ -26,6 +26,7 @@
                 IsCheckable="True" />
             <Separator />
             <MenuItem Click="Settings_Click" Header="Settings" />
+            <MenuItem Click="About_Click" Header="About" />
             <MenuItem Header="Theme">
                 <MenuItem
                     x:Name="menu_theme_system"

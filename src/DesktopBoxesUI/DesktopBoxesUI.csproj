@@ -76,9 +76,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<!-- Embedded WPF resource so windows/tray can load it via pack URI (ApplicationIcon only
-         embeds it into the exe header). -->
+		<!-- Embedded WPF resources so windows/tray can load them via pack URI (ApplicationIcon only
+         embeds app.ico into the exe header). -->
 		<Resource Include="Assets\app.ico" />
+		<Resource Include="Assets\app_image.png" />
+		<Resource Include="Assets\github_dark.png" />
+		<Resource Include="Assets\github_light.png" />
 	</ItemGroup>
 
 </Project>

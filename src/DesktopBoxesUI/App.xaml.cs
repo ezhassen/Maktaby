@@ -312,6 +312,23 @@ public partial class App : Application
                 new SettingsView(vm).Show();
             });
         };
+        tray.AboutRequested += (_, _) =>
+        {
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                // Only one About window at a time.
+                foreach (var w in Application.Current.Windows)
+                {
+                    if (w is Views.AboutView existing)
+                    {
+                        existing.Activate();
+                        return;
+                    }
+                }
+
+                new Views.AboutView().Show();
+            });
+        };
         tray.ThemeRequested += (_, theme) =>
         {
             var settings = Services.GetRequiredService<ISettingsService>();

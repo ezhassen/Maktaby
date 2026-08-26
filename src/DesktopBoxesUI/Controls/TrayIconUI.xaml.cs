@@ -23,6 +23,7 @@ public partial class TrayIconUI
     public event EventHandler? NewBoxRequested;
     public event EventHandler? ResetRequested;
     public event EventHandler? SettingsRequested;
+    public event EventHandler? AboutRequested;
     public event EventHandler<string?>? ThemeRequested;
     public event EventHandler? ExitRequested;
     public event EventHandler? ToggleHideAllRequested;
@@ -86,6 +87,8 @@ public partial class TrayIconUI
     private void Reset_Click(object sender, RoutedEventArgs e) => ResetRequested?.Invoke(this, EventArgs.Empty);
 
     private void Settings_Click(object sender, RoutedEventArgs e) => SettingsRequested?.Invoke(this, EventArgs.Empty);
+
+    private void About_Click(object sender, RoutedEventArgs e) => AboutRequested?.Invoke(this, EventArgs.Empty);
 
     private void Exit_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke(this, EventArgs.Empty);
 
