@@ -99,65 +99,65 @@
                         </Expander.HeaderTemplate>
 
                         <ScrollViewer
-                                Margin="0,8,0,0"
-                                MaxHeight="320"
-                                HorizontalScrollBarVisibility="Auto"
-                                VerticalScrollBarVisibility="Auto">
-                                <StackPanel>
+                            MaxHeight="320"
+                            Margin="0,8,0,0"
+                            HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
 
-                                    <TextBlock
-                                        Margin="0,8,0,4"
-                                        FontSize="11"
-                                        FontWeight="SemiBold"
-                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                        Text="EXCEPTION MESSAGE" />
-                                    <TextBox
-                                        IsReadOnly="True"
-                                        Style="{StaticResource {x:Type TextBox}}"
-                                        Text="{Binding Exception.Message, Mode=OneWay, TargetNullValue=-}"
-                                        TextWrapping="Wrap" />
+                                <TextBlock
+                                    Margin="0,8,0,4"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                    Text="EXCEPTION MESSAGE" />
+                                <TextBox
+                                    IsReadOnly="True"
+                                    Style="{StaticResource {x:Type TextBox}}"
+                                    Text="{Binding Exception.Message, Mode=OneWay, TargetNullValue=-}"
+                                    TextWrapping="Wrap" />
 
-                                    <TextBlock
-                                        Margin="0,12,0,4"
-                                        FontSize="11"
-                                        FontWeight="SemiBold"
-                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                        Text="EXCEPTION TYPE" />
-                                    <TextBox
-                                        IsReadOnly="True"
-                                        Style="{StaticResource {x:Type TextBox}}"
-                                        Text="{Binding ExceptionType, Mode=OneWay, TargetNullValue=-}"
-                                        TextWrapping="Wrap" />
+                                <TextBlock
+                                    Margin="0,12,0,4"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                    Text="EXCEPTION TYPE" />
+                                <TextBox
+                                    IsReadOnly="True"
+                                    Style="{StaticResource {x:Type TextBox}}"
+                                    Text="{Binding ExceptionType, Mode=OneWay, TargetNullValue=-}"
+                                    TextWrapping="Wrap" />
 
-                                    <TextBlock
-                                        Margin="0,12,0,4"
-                                        FontSize="11"
-                                        FontWeight="SemiBold"
-                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                        Text="CALL STACK" />
-                                    <TextBox
-                                        MinHeight="60"
-                                        FontFamily="Consolas"
-                                        FontSize="11"
-                                        IsReadOnly="True"
-                                        Text="{Binding Exception.StackTrace, Mode=OneWay, TargetNullValue=-}"
-                                        TextWrapping="Wrap"
-                                        VerticalScrollBarVisibility="Auto" />
+                                <TextBlock
+                                    Margin="0,12,0,4"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                    Text="CALL STACK" />
+                                <TextBox
+                                    MinHeight="60"
+                                    FontFamily="Consolas"
+                                    FontSize="11"
+                                    IsReadOnly="True"
+                                    Text="{Binding Exception.StackTrace, Mode=OneWay, TargetNullValue=-}"
+                                    TextWrapping="Wrap"
+                                    VerticalScrollBarVisibility="Auto" />
 
-                                    <TextBlock
-                                        Margin="0,12,0,4"
-                                        FontSize="11"
-                                        FontWeight="SemiBold"
-                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                        Text="INNER EXCEPTION" />
-                                    <TextBox
-                                        IsReadOnly="True"
-                                        Style="{StaticResource {x:Type TextBox}}"
-                                        Text="{Binding Exception.InnerException, Mode=OneWay, TargetNullValue=-}"
-                                        TextWrapping="Wrap" />
+                                <TextBlock
+                                    Margin="0,12,0,4"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                    Text="INNER EXCEPTION" />
+                                <TextBox
+                                    IsReadOnly="True"
+                                    Style="{StaticResource {x:Type TextBox}}"
+                                    Text="{Binding Exception.InnerException, Mode=OneWay, TargetNullValue=-}"
+                                    TextWrapping="Wrap" />
 
-                                </StackPanel>
-                            </ScrollViewer>
+                            </StackPanel>
+                        </ScrollViewer>
                     </Expander>
                 </Border>
 

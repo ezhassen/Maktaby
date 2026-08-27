@@ -36,9 +36,22 @@ public partial class App : Application
     private Controls.TrayIconUI? _tray;
     private uint _taskbarCreatedMsg;
     private bool _shellRecoveryPending;
+    private bool _isSecondInstanceExit;
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Single-instance guard must run before any UI or persistence is touched.
+        // The first instance holds the mutex for its lifetime; any secondary instance
+        // just activates the first and exits without touching OnExit save/restore.
+        if (!Helpers.ApplicationSingleInstance.TryAcquire())
+        {
+            _isSecondInstanceExit = true;
+            // No main Window to SetForegroundWindow — DesktopBoxes hosts WS_EX_TOOLWINDOW boxes
+            // and a hidden tray host, so MainWindowHandle is always 0. Second instance just exits
+            // silently; SwitchToCurrentInstance() is intentionally not called.
+            Shutdown();
+            return;
+        }
 #if !DEBUG   
         DispatcherUnhandledException += Application_DispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
@@ -88,6 +101,15 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // Secondary instance (single-instance guard) never initialized Services/DesktopManager;
+        // skip all persistence and shell teardown — it just activated the first instance and exited.
+        if (_isSecondInstanceExit || Services is null)
+        {
+            Helpers.ApplicationSingleInstance.Release();
+            base.OnExit(e);
+            return;
+        }
+
         // Stop the minimize-prevention hooks from fighting window teardown (owned chains collapsing
         // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
         Win32Apis.SystemTeardown = true;
@@ -112,6 +134,7 @@ public partial class App : Application
         }
         //
         Logging.DisposeAllDefaultLoggers();
+        Helpers.ApplicationSingleInstance.Release();
         base.OnExit(e);
     }
     private void Application_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
