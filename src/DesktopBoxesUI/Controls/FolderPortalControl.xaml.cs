@@ -1,4 +1,5 @@
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Services;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -16,6 +17,7 @@ public partial class FolderPortalControl : UserControl
     private BoxViewModel? Box => DataContext as BoxViewModel;
     private int _anchorIndex = -1;
     private int _focusedIndex = -1;
+    private readonly ItemRenameService _renameService = new();
 
     public FolderPortalControl()
     {
@@ -23,6 +25,7 @@ public partial class FolderPortalControl : UserControl
         DataContextChanged += OnDataContextChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        IsKeyboardFocusWithinChanged += Control_IsKeyboardFocusWithinChanged;
     }
 
     public MainViewModel? Host { get; set; }
@@ -78,6 +81,7 @@ public partial class FolderPortalControl : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        if (_renameService.IsEditing) _renameService.Dismiss();
     }
 
     public void UpdateView()
@@ -298,7 +302,7 @@ public partial class FolderPortalControl : UserControl
 
         if (key == Key.F2)
         {
-            StartRename(vm, sender as Border);
+            StartRename(vm, sender as FrameworkElement);
             e.Handled = true;
         }
         else if (key == Key.Delete)
@@ -327,6 +331,90 @@ public partial class FolderPortalControl : UserControl
             UpdateView();
             if (Window.GetWindow(this) is Views.BoxContainerWindow bcw) bcw.ManageFolderWatcher();
             e.Handled = true;
+        }
+        else if (key == Key.Left || key == Key.Right || key == Key.Up || key == Key.Down || key == Key.Home || key == Key.End)
+        {
+            if (Box?.FolderPortalViewMode == FolderPortalViewMode.Icons)
+            {
+                HandleArrowKey(key);
+                e.Handled = true;
+            }
+        }
+        else if (key == Key.A && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            // Ctrl+A select all (icons only)
+            if (Box?.FolderPortalViewMode == FolderPortalViewMode.Icons && Box != null)
+            {
+                foreach (var it in Box.FolderItems) it.IsSelected = true;
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void HandleArrowKey(Key key)
+    {
+        if (Box == null || Box.FolderItems.Count == 0) return;
+        int current = _focusedIndex >= 0 ? _focusedIndex : (Box.FolderItems.FirstOrDefault(i => i.IsSelected) is { } sel ? Box.FolderItems.IndexOf(sel) : 0);
+        int count = Box.FolderItems.Count;
+        int cols = GetColumnCount();
+        int target;
+        switch (key)
+        {
+            case Key.Left: target = Math.Max(0, current - 1); break;
+            case Key.Right: target = Math.Min(count - 1, current + 1); break;
+            case Key.Up: target = Math.Max(0, current - cols); break;
+            case Key.Down: target = Math.Min(count - 1, current + cols); break;
+            case Key.Home: target = 0; break;
+            case Key.End: target = count - 1; break;
+            default: return;
+        }
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+        if (shift)
+        {
+            int anchor = _anchorIndex >= 0 ? _anchorIndex : current;
+            _anchorIndex = anchor;
+            SelectRange(anchor, target, additive: false);
+        }
+        else if (!ctrl)
+        {
+            SelectOnly(Box.FolderItems[target]);
+        }
+        _focusedIndex = target;
+        FocusItem(target);
+    }
+
+    private void FocusItem(int index)
+    {
+        if (Box == null || index < 0 || index >= Box.FolderItems.Count) return;
+        var cp = IconsList.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
+        var border = (cp?.FindName("ItemBorder") as Border) ?? FindVisualChild<Border>(cp);
+        border?.Focus();
+    }
+
+    private int GetColumnCount()
+    {
+        if (Box == null || Box.FolderItems.Count == 0) return 1;
+        var first = IconsList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
+        if (first == null) return 1;
+        double top0 = first.TransformToAncestor(IconsScroll).Transform(new Point(0, 0)).Y;
+        int cols = 0;
+        for (int i = 0; i < Box.FolderItems.Count; i++)
+        {
+            var c = IconsList.ItemContainerGenerator.ContainerFromIndex(i) as UIElement;
+            if (c == null) break;
+            double top = c.TransformToAncestor(IconsScroll).Transform(new Point(0, 0)).Y;
+            if (Math.Abs(top - top0) < 1) cols++;
+            else break;
+        }
+        return Math.Max(1, cols);
+    }
+
+    private void Control_IsKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if ((bool)e.NewValue == false && !_renameService.IsEditing)
+        {
+            ClearSelection();
         }
     }
 
@@ -366,20 +454,44 @@ public partial class FolderPortalControl : UserControl
         }
     }
 
-    private void StartRename(FolderItemViewModel vm, Border? border)
+    private void StartRename(FolderItemViewModel vm, FrameworkElement? element)
     {
-        vm.RenameText = vm.DisplayName;
+        if (element == null) return;
+        if (_renameService.IsEditing) _renameService.Dismiss();
         vm.IsEditing = true;
-        if (border != null)
-        {
-            border.Dispatcher.BeginInvoke(new Action(() =>
+        double minW = Box?.FolderPortalViewMode == FolderPortalViewMode.Details ? 140 : 110;
+        double maxW = Box?.FolderPortalViewMode == FolderPortalViewMode.Details ? 220 : 190;
+        _renameService.StartEdit(vm.DisplayName, element, minW, maxW, 13,
+            onCommit: newName => _ = HandleFolderRenameCommit(vm, newName, element),
+            onDismiss: _ =>
             {
-                if (border.FindName("RenameBox") is TextBox tb) { tb.Focus(); tb.SelectAll(); }
-                // For Details view, the TextBox is not inside Border; find via visual tree
-                var tb2 = FindVisualChild<TextBox>(border);
-                if (tb2 != null) { tb2.Focus(); tb2.SelectAll(); }
-            }), System.Windows.Threading.DispatcherPriority.Input);
+                vm.IsEditing = false;
+                element.Focus();
+            },
+            commitOnDismiss: true);
+    }
+
+    private async Task HandleFolderRenameCommit(FolderItemViewModel vm, string newNameRaw, FrameworkElement? focusTarget)
+    {
+        string newName = newNameRaw.Trim();
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            vm.IsEditing = false;
+            focusTarget?.Focus();
+            return;
         }
+        string currentBase = System.IO.Path.GetFileNameWithoutExtension(vm.Path);
+        if (newName.Equals(currentBase, StringComparison.OrdinalIgnoreCase))
+        {
+            vm.IsEditing = false;
+            focusTarget?.Focus();
+            return;
+        }
+        string ext = System.IO.Path.GetExtension(vm.Path);
+        if (!string.IsNullOrEmpty(ext) && !System.IO.Path.HasExtension(newName)) newName += ext;
+        bool ok = await (Box?.RenameFolderItemAsync(vm, newName) ?? Task.FromResult(false));
+        vm.IsEditing = false;
+        if (ok && focusTarget != null) focusTarget.Focus();
     }
 
     private void RenameBox_KeyDown(object sender, KeyEventArgs e)

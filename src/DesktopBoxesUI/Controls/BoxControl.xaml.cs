@@ -1,5 +1,6 @@
 using DesktopBoxesUI;
 using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Services;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
@@ -40,6 +41,8 @@ public partial class BoxControl : UserControl
     private bool _marqueeActive;
     private Point _marqueeStart;
     private HashSet<BoxItemViewModel>? _marqueeBase;
+
+    private readonly ItemRenameService _renameService = new();
 
     private static readonly bool _singleClick = ShellSettings.IsSingleClickToOpen();
 
@@ -369,20 +372,41 @@ public partial class BoxControl : UserControl
 
     private void StartRename(BoxItemViewModel vm, Border border)
     {
-        // Start editing with exactly the visible name, so the extension is hidden when (and only when) the
-        // display hides it (e.g. .lnk). The original extension is re-attached on commit.
-        vm.RenameText = vm.DisplayName;
+        if (_renameService.IsEditing) _renameService.Dismiss();
         vm.IsEditing = true;
-
-        // Focus the rename TextBox (inside the item template) once it has become visible.
-        border.Dispatcher.BeginInvoke(new Action(() =>
-        {
-            if (border.FindName("RenameBox") is TextBox tb)
+        _renameService.StartEdit(vm.DisplayName, border, 110, 200, 13,
+            onCommit: newName => _ = HandleRenameCommit(vm, newName, border),
+            onDismiss: _ =>
             {
-                tb.Focus();
-                tb.SelectAll();
-            }
-        }), System.Windows.Threading.DispatcherPriority.Input);
+                vm.IsEditing = false;
+                FocusItem(border);
+            },
+            commitOnDismiss: true);
+    }
+
+    private async Task HandleRenameCommit(BoxItemViewModel vm, string newNameRaw, Border? focusTarget)
+    {
+        string newName = newNameRaw.Trim();
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            vm.IsEditing = false;
+            FocusItem(focusTarget);
+            return;
+        }
+        string currentFull = (!string.IsNullOrEmpty(vm.Path) && System.IO.Path.GetFileName(vm.Path) is { } c) ? c : vm.DisplayName;
+        string currentBase = System.IO.Path.GetFileNameWithoutExtension(currentFull);
+        if (newName.Equals(currentBase, System.StringComparison.OrdinalIgnoreCase))
+        {
+            vm.IsEditing = false;
+            FocusItem(focusTarget);
+            return;
+        }
+        string ext = System.IO.Path.GetExtension(currentFull);
+        if (!string.IsNullOrEmpty(ext) && !System.IO.Path.HasExtension(newName))
+            newName = newName + ext;
+        bool ok = await (Host?.RenameItem(vm, newName) ?? Task.FromResult(false));
+        vm.IsEditing = false;
+        if (ok) FocusItem(focusTarget);
     }
 
     private async Task CommitRename(BoxItemViewModel vm, Border? focusTarget = null)

@@ -204,31 +204,7 @@
                                             Text="{Binding DisplayName}"
                                             TextAlignment="Center"
                                             TextTrimming="CharacterEllipsis"
-                                            TextWrapping="Wrap">
-                                            <TextBlock.Style>
-                                                <Style TargetType="TextBlock">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </TextBlock.Style>
-                                        </TextBlock>
-                                        <TextBox
-                                            Margin="0,4,0,0"
-                                            Background="{DynamicResource BoxBackground}"
-                                            BorderBrush="{DynamicResource BoxBorder}"
-                                            BorderThickness="1"
-                                            FontSize="11"
-                                            Foreground="{DynamicResource BoxForeground}"
-                                            KeyDown="RenameBox_KeyDown"
-                                            LostFocus="RenameBox_LostFocus"
-                                            Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
-                                            TextAlignment="Center"
-                                            TextWrapping="Wrap"
-                                            Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" />
+                                            TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>
@@ -323,32 +299,10 @@
                                             Height="16"
                                             Margin="0,0,6,0"
                                             Source="{Binding Icon}" />
-                                        <Grid>
-                                            <TextBlock
-                                                VerticalAlignment="Center"
-                                                Text="{Binding DisplayName}"
-                                                TextTrimming="CharacterEllipsis">
-                                                <TextBlock.Style>
-                                                    <Style TargetType="TextBlock">
-                                                        <Setter Property="Visibility" Value="Visible" />
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </TextBlock.Style>
-                                            </TextBlock>
-                                            <TextBox
-                                                MinWidth="80"
-                                                Background="{DynamicResource BoxBackground}"
-                                                BorderBrush="{DynamicResource BoxBorder}"
-                                                BorderThickness="1"
-                                                KeyDown="RenameBox_KeyDown"
-                                                LostFocus="RenameBox_LostFocus"
-                                                Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
-                                                Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" />
-                                        </Grid>
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            Text="{Binding DisplayName}"
+                                            TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
                                 </DataTemplate>
                             </GridViewColumn.CellTemplate>

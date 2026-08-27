@@ -85,32 +85,7 @@
                                     Text="{Binding DisplayName}"
                                     TextAlignment="Center"
                                     TextTrimming="CharacterEllipsis"
-                                    TextWrapping="Wrap">
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsEditing}" Value="True">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                                <TextBox
-                                    x:Name="RenameBox"
-                                    Margin="0,4,0,0"
-                                    Background="{DynamicResource BoxBackground}"
-                                    BorderBrush="{DynamicResource BoxBorder}"
-                                    BorderThickness="1"
-                                    FontSize="11"
-                                    Foreground="{DynamicResource BoxForeground}"
-                                    KeyDown="RenameBox_KeyDown"
-                                    LostFocus="RenameBox_LostFocus"
-                                    Text="{Binding RenameText, UpdateSourceTrigger=PropertyChanged}"
-                                    TextAlignment="Center"
-                                    TextWrapping="Wrap"
-                                    Visibility="{Binding IsEditing, Converter={StaticResource BoolToVis}}" />
+                                    TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
                     </DataTemplate>
