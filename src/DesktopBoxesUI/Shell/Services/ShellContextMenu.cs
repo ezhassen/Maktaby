@@ -2,9 +2,11 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Windows;
 using System.Windows.Interop;
 using DesktopBoxesUI.Shell.Interop;
 using DesktopBoxesUI.Win32.NativeMethods;
+using Wpf.Ui.Appearance;
 
 namespace DesktopBoxesUI.Shell.Services;
 
@@ -137,17 +139,34 @@ internal static class ShellContextMenu
                     const uint cmfExplore = 0x00000004; // CMF_EXPLORE
                     ctx.QueryContextMenu(hMenu, 0, 1, 0x7FFF, cmfExplore);
 
+                    // Push dark menu rendering to match the app theme (Win32 HMENU is otherwise light
+                    // even when the WPF app is dark). Native calls are best-effort and silently ignored
+                    // on OS versions that don't support them.
+                    bool isDark = IsAppDark();
+                    bool pushed = Win32Apis.TryPushDarkMenuMode(hwnd, isDark);
+
                     // Anchor the menu at the real cursor position. GetCursorPos returns true physical
                     // screen pixels (what TrackPopupMenuEx expects); using WPF's PointToScreen with a
                     // manual DPI scale was landing the menu too far to the right.
                     ManualApis.GetCursorPos(out ManualApis.POINT cursor);
-                    int cmd = ManualApis.TrackPopupMenuEx(
-                        hMenu,
-                        ManualApis.TPM_RETURNCMD | ManualApis.TPM_RIGHTBUTTON,
-                        cursor.X,
-                        cursor.Y,
-                        hwnd,
-                        IntPtr.Zero);
+                    int cmd;
+                    try
+                    {
+                        cmd = ManualApis.TrackPopupMenuEx(
+                            hMenu,
+                            ManualApis.TPM_RETURNCMD | ManualApis.TPM_RIGHTBUTTON,
+                            cursor.X,
+                            cursor.Y,
+                            hwnd,
+                            IntPtr.Zero);
+                    }
+                    finally
+                    {
+                        if (pushed)
+                        {
+                            Win32Apis.TryPopDarkMenuMode(hwnd);
+                        }
+                    }
 
                     if (cmd > 0)
                     {
@@ -312,5 +331,32 @@ internal static class ShellContextMenu
         }
 
         return null;
+    }
+
+    private static bool IsAppDark()
+    {
+        try
+        {
+            var appTheme = ApplicationThemeManager.GetAppTheme();
+            if (appTheme == ApplicationTheme.Dark) return true;
+            if (appTheme == ApplicationTheme.Light) return false;
+            // System / Unknown — fall back to OS theme; Wpf.Ui already applied system theme to windows.
+            return ApplicationThemeManager.GetSystemTheme() == SystemTheme.Dark;
+        }
+        catch
+        {
+            // Fallback: inspect app resources (BoxBackground is dark in dark theme) or assume system light.
+            try
+            {
+                if (Application.Current?.Resources["BoxBackground"] is System.Windows.Media.SolidColorBrush b)
+                {
+                    // Dark header #2D2D30 vs light #F3F3F3; luminance check.
+                    double lum = 0.2126 * b.Color.R + 0.7152 * b.Color.G + 0.0722 * b.Color.B;
+                    return lum < 128;
+                }
+            }
+            catch { }
+            return false;
+        }
     }
 }

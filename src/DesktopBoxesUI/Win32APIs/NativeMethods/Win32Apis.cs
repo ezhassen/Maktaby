@@ -1440,4 +1440,50 @@ internal static class Win32Apis
 
         return (flags & ManualApis.LVHT_NOWHERE) != 0 || item < 0;
     }
+
+    /// <summary>
+    /// Best-effort: pushes the immersive dark mode + menu theme for the calling thread / window so a
+    /// native HMENU shown via TrackPopupMenuEx renders dark when the app is dark (and light when light),
+    /// even when the OS system theme is the opposite. All native calls are guarded; failure is silent.
+    /// Returns true when a FlushMenuThemes was issued and the caller should restore to Default after the popup.
+    /// </summary>
+    public static bool TryPushDarkMenuMode(IntPtr hwnd, bool isDark)
+    {
+        bool flushed = false;
+        try
+        {
+            // 1) Per-window immersive dark (titlebar + popup frame on Win11 22H2+). Harmless if unsupported.
+            int v = isDark ? 1 : 0;
+            ManualApis.DwmSetWindowAttribute(hwnd, ManualApis.DWMWA_USE_IMMERSIVE_DARK_MODE, ref v, sizeof(int));
+        }
+        catch { }
+
+        try
+        {
+            // 2) Per-theme for classic menus: "DarkMode_Explorer" vs "Explorer" controls menu rendering.
+            ManualApis.SetWindowTheme(hwnd, isDark ? "DarkMode_Explorer" : "Explorer", null);
+        }
+        catch { }
+
+        // 3) Undocumented thread-wide menu mode (uxtheme ordinals #135/#136). This is the only mechanism
+        // that reliably forces an HMENU dark on Win10/11 even when the OS light theme is active.
+        // Values: 0 Default, 1 AllowDark, 2 ForceDark, 3 ForceLight, 4 Max. Guarded for older OS.
+        try
+        {
+            ManualApis.SetPreferredAppMode(isDark ? 2 /*ForceDark*/ : 3 /*ForceLight*/);
+            ManualApis.FlushMenuThemes();
+            flushed = true;
+        }
+        catch { }
+
+        return flushed;
+    }
+
+    public static void TryPopDarkMenuMode(IntPtr _)
+    {
+        try { ManualApis.SetPreferredAppMode(0 /*Default*/); ManualApis.FlushMenuThemes(); } catch { }
+        // Do not touch SetWindowTheme / DwmSetWindowAttribute here: those are per-window and owned by
+        // Wpf.Ui's ApplicationThemeManager. Resetting them to "Explorer" / 0 would fight the app theme
+        // (e.g. leave a dark window with a light popup theme until the next theme apply).
+    }
 }
