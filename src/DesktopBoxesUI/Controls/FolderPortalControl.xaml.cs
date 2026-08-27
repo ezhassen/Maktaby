@@ -223,6 +223,25 @@ public partial class FolderPortalControl : UserControl
             if (i >= 0 && i < Box.FolderItems.Count) Box.FolderItems[i].IsSelected = true;
     }
 
+    private void IconsHost_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject src && FindItemBorder(src) != null) return;
+        if (_renameService.IsEditing) return;
+        bool additive = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
+        if (!additive) ClearSelection();
+    }
+
+    private static Border? FindItemBorder(DependencyObject src)
+    {
+        DependencyObject? cur = src;
+        while (cur != null)
+        {
+            if (cur is Border { DataContext: FolderItemViewModel }) return (Border)cur;
+            cur = VisualTreeHelper.GetParent(cur);
+        }
+        return null;
+    }
+
     // ---- Icons view handlers ----
 
     private void ItemBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -243,8 +262,7 @@ public partial class FolderPortalControl : UserControl
         }
         else
         {
-            if (!vm.IsSelected) SelectOnly(vm);
-            else _anchorIndex = Box?.FolderItems.IndexOf(vm) ?? -1;
+            SelectOnly(vm);
         }
 
         if (e.ClickCount == 2)

@@ -263,6 +263,17 @@ public partial class BoxControl : UserControl
 
     private void ItemBorder_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        // Plain click on already-selected item with multi-selection: keep it for drag on MouseDown, select single on MouseUp if no drag.
+        if (!_moved && !_dragging && sender is Border { DataContext: BoxItemViewModel vmUp } && !vmUp.IsEditing)
+        {
+            bool ctrlUp = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            bool shiftUp = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+            if (!ctrlUp && !shiftUp && vmUp.IsSelected && Box is { } boxUp && boxUp.Items.Count(i => i.IsSelected) > 1)
+            {
+                SelectOnly(vmUp);
+            }
+        }
+
         if (_singleClick && !_moved && !_dragging && sender is Border { DataContext: BoxItemViewModel item } && !item.IsEditing)
         {
             if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)

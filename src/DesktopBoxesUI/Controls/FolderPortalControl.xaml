@@ -150,7 +150,7 @@
                 Background="{DynamicResource BoxBackground}"
                 HorizontalScrollBarVisibility="Disabled"
                 VerticalScrollBarVisibility="Auto">
-                <Grid x:Name="IconsHost" Background="{DynamicResource BoxBackground}">
+                <Grid x:Name="IconsHost" Background="{DynamicResource BoxBackground}" ClipToBounds="False" PreviewMouseLeftButtonDown="IconsHost_PreviewMouseLeftButtonDown">
                     <ItemsControl x:Name="IconsList" ItemsSource="{Binding FolderItems}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
