@@ -68,6 +68,10 @@ internal static class ManualApis
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO lpExecInfo);
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SHObjectProperties(IntPtr hwnd, int shopObject, string pszObject, string? pszPage);
+
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 

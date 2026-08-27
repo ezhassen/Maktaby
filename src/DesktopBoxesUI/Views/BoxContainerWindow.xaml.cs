@@ -156,6 +156,18 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         MenuSetRollDirLeft.IsChecked = _vm.RollDirection == RollDirection.Left;
         MenuSetRollDirRight.IsChecked = _vm.RollDirection == RollDirection.Right;
         MenuSetRollDirBottom.IsChecked = _vm.RollDirection == RollDirection.Bottom;
+
+        if (_vm.ActiveBox != null)
+        {
+            bool isFolder = _vm.ActiveBox.BoxType == BoxType.FolderPortal;
+            MenuBoxTypeDesktop.IsChecked = !isFolder;
+            MenuBoxTypeFolder.IsChecked = isFolder;
+            MenuFolderView.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
+            MenuBoxType.Visibility = _vm.ActiveBox.IsDefault ? Visibility.Collapsed : Visibility.Visible;
+            bool isIcons = _vm.ActiveBox.FolderPortalViewMode == FolderPortalViewMode.Icons;
+            MenuFolderViewIcons.IsChecked = isIcons;
+            MenuFolderViewDetails.IsChecked = !isIcons;
+        }
     }
 
     /// <summary>Re-applies the window geometry from the view-model bounds (handles both the rolled and
@@ -265,6 +277,16 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void MenuIconSizeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
+        // Keep value label in sync even while dragging (before the model update)
+        // Header StackPanel lives inside ContextMenu popup namescope — field may be null until menu is opened.
+        if (MenuIconSizeValueText != null)
+            MenuIconSizeValueText.Text = $"{(int)Math.Round(e.NewValue)}px";
+        else if (sender is Slider s && s.Parent is StackPanel sp)
+        {
+            var tb = sp.Children.OfType<System.Windows.Controls.TextBlock>().FirstOrDefault(t => t.Name == "MenuIconSizeValueText");
+            if (tb != null) tb.Text = $"{(int)Math.Round(e.NewValue)}px";
+        }
+
         // Programmatic positioning during sync must not re-apply/persist.
         if (_suppressIconSizeSlider || !IsLoaded || _vm.ActiveBox is not { } active)
         {
@@ -302,7 +324,12 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         MenuIconSizeLarge.IsChecked = size == 96;
 
         _suppressIconSizeSlider = true;
-        MenuIconSizeSlider.Value = BoxContent.IconSize; // effective: resolves Auto/default fallbacks
+        if (MenuIconSizeSlider != null)
+        {
+            MenuIconSizeSlider.Value = BoxContent.IconSize; // effective: resolves Auto/default fallbacks
+            if (MenuIconSizeValueText != null)
+                MenuIconSizeValueText.Text = $"{(int)Math.Round(MenuIconSizeSlider.Value)}px";
+        }
         _suppressIconSizeSlider = false;
     }
 
@@ -336,6 +363,12 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     {
         _mouseMonitor.MouseButtonDown -= OnGlobalMouseDown;
         _drag.Detach();
+        if (_watchedBox != null) { _watchedBox.StopWatching(); _watchedBox = null; }
+        if (_vm.BoxContainerVm != null)
+        {
+            foreach (var t in _vm.BoxContainerVm.Tabs.Where(t => t.IsFolderPortal && t.IsWatching))
+                t.StopWatching();
+        }
     }
 
     /// <summary>Collapses the chrome when a mouse button is pressed on a window outside this application
@@ -381,7 +414,10 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
         // Re-resolve per-box/default icon size (user may have changed DefaultBoxIconSize).
         BoxContent.RefreshIconSize();
+        FolderPortalContent.RefreshIconSize();
     }
+
+    private BoxViewModel? _watchedBox;
 
     private void UpdateBody()
     {
@@ -390,6 +426,57 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             BoxContent.DataContext = _vm.ActiveBox;
             BoxContent.RequestSave = _save;
             BoxContent.Host = _host;
+            FolderPortalContent.DataContext = _vm.ActiveBox;
+            FolderPortalContent.Host = _host;
+            FolderPortalContent.RequestSave = _save;
+
+            bool isFolder = _vm.ActiveBox.BoxType == BoxType.FolderPortal;
+            BoxContent.Visibility = isFolder ? Visibility.Collapsed : Visibility.Visible;
+            FolderPortalContent.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
+            // Keep placeholder logic in ApplyType, but ensure correct BoxContent state
+            FolderPortalContent.UpdateView();
+        }
+        else
+        {
+            BoxContent.Visibility = Visibility.Collapsed;
+            FolderPortalContent.Visibility = Visibility.Collapsed;
+        }
+        ManageFolderWatcher();
+    }
+
+    internal void ManageFolderWatcher()
+    {
+        // Stop previous watched box if it is no longer active
+        if (_watchedBox != null && _watchedBox != _vm.ActiveBox)
+        {
+            _watchedBox.StopWatching();
+            _watchedBox = null;
+        }
+
+        bool shouldWatch = _vm.ActiveBox != null
+            && _vm.ActiveBox.IsFolderPortal
+            && _vm.ActiveBox.HasFolder
+            && !_vm.IsRolled;
+
+        if (shouldWatch)
+        {
+            _watchedBox = _vm.ActiveBox!;
+            _watchedBox.StartWatching();
+            _ = _watchedBox.RefreshFolderAsync();
+        }
+        else
+        {
+            if (_watchedBox != null)
+            {
+                _watchedBox.StopWatching();
+                _watchedBox = null;
+            }
+            // Ensure no other tab is left watching (e.g. after roll)
+            if (_vm.BoxContainerVm != null)
+            {
+                foreach (var t in _vm.BoxContainerVm.Tabs.Where(t => t.IsFolderPortal && t.IsWatching))
+                    t.StopWatching();
+            }
         }
     }
 
@@ -496,6 +583,64 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         UpdateBody();
     }
 
+    private void AddFolderPortal_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.BoxContainerVm == null) return;
+        var vm = _vm.BoxContainerVm.AddTab("Folder Portal");
+        vm.BoxType = BoxType.FolderPortal;
+        vm.FolderPath = null;
+        vm.FolderPortalViewMode = FolderPortalViewMode.Icons;
+        UpdateBody();
+        _save();
+    }
+
+    private async void MenuBoxType_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.ActiveBox is null || _vm.ActiveBox.IsDefault) return;
+        var tag = (sender as FrameworkElement)?.Tag as string;
+        BoxType newType = tag == "FolderPortal" ? BoxType.FolderPortal : BoxType.DesktopItems;
+        if (_vm.ActiveBox.BoxType == newType) return;
+
+        // DesktopItems -> FolderPortal with items: move to default box
+        if (_vm.ActiveBox.BoxType == BoxType.DesktopItems && newType == BoxType.FolderPortal && _vm.ActiveBox.Items.Count > 0)
+        {
+            var confirmed = await _dialogs.ShowConfirmAsync(
+                $"This box contains { _vm.ActiveBox.Items.Count} items. Switch to Folder Portal will move them to the default box. Continue?",
+                new DialogOptions { Title = "Switch Box Type", PrimaryButtonText = "Switch", PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Caution });
+            if (!confirmed) return;
+
+            // Move items to default via BoxContainerViewModel helper (reuse MoveDesktopItemsToDefault)
+            var doomed = _vm.ActiveBox.Model;
+            var boxService = App.Services.GetRequiredService<IBoxService>();
+            var defaultBox = boxService.GetBoxes().FirstOrDefault(b => b.IsDefault);
+            if (defaultBox != null && defaultBox.Id != doomed.Id)
+            {
+                foreach (var item in doomed.Items.ToList())
+                    defaultBox.Items.Add(item);
+            }
+            doomed.Items.Clear();
+            // The BoxViewModel Items will update via CollectionChanged
+        }
+
+        _vm.ActiveBox.BoxType = newType;
+        if (newType == BoxType.FolderPortal)
+        {
+            // Ensure view mode valid
+            if (_vm.ActiveBox.FolderPath == null) _vm.ActiveBox.FolderPath = null;
+        }
+        UpdateBody();
+        _save();
+    }
+
+    private void MenuFolderView_Click(object sender, RoutedEventArgs e)
+    {
+        if (_vm.ActiveBox is null || _vm.ActiveBox.BoxType != BoxType.FolderPortal) return;
+        var tag = (sender as FrameworkElement)?.Tag as string;
+        _vm.ActiveBox.FolderPortalViewMode = tag == "Details" ? FolderPortalViewMode.Details : FolderPortalViewMode.Icons;
+        UpdateBody();
+        _save();
+    }
+
     private void RollButton_Click(object sender, RoutedEventArgs e)
     {
         _vm.IsRolled = !_vm.IsRolled;
@@ -585,6 +730,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             ApplyTitleOrientation(RollDirection.Top);
             UpdateChrome();
             UpdateRollIcon();
+            ManageFolderWatcher();
             return;
         }
 
@@ -607,6 +753,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
         ApplyTitleOrientation(_effectiveDir);
         UpdateRollIcon();
+        ManageFolderWatcher();
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Windows.Input;
 
 namespace DesktopBoxesUI.ViewModels;
@@ -33,7 +35,27 @@ public sealed class ContainerViewModel : ViewModelBase
                 OnPropertyChanged(nameof(ActiveBox));
                 OnPropertyChanged(nameof(Title));
             };
+            _boxContainerVm.Tabs.CollectionChanged += OnTabsChanged;
+            foreach (var t in _boxContainerVm.Tabs)
+                t.PropertyChanged += OnBoxPropertyChanged;
         }
+    }
+
+    private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.NewItems != null)
+            foreach (BoxViewModel vm in e.NewItems)
+                vm.PropertyChanged += OnBoxPropertyChanged;
+        if (e.OldItems != null)
+            foreach (BoxViewModel vm in e.OldItems)
+                vm.PropertyChanged -= OnBoxPropertyChanged;
+        OnPropertyChanged(nameof(Title));
+    }
+
+    private void OnBoxPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(BoxViewModel.Name) && sender == ActiveBox)
+            OnPropertyChanged(nameof(Title));
     }
 
     public System.Guid Id => _container.Id;

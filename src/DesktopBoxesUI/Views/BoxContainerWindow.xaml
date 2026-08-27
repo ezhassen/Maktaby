@@ -122,9 +122,42 @@
                                         Click="AddTab_Click"
                                         Header="Add Tab" />
                                     <MenuItem
+                                        x:Name="MenuAddFolderPortal"
+                                        Click="AddFolderPortal_Click"
+                                        Header="Add Folder Portal" />
+                                    <MenuItem
                                         x:Name="MenuRemoveTab"
                                         Click="RemoveTab_Click"
                                         Header="Remove Tab" />
+                                    <Separator />
+                                    <MenuItem x:Name="MenuBoxType" Header="Box Type">
+                                        <MenuItem
+                                            x:Name="MenuBoxTypeDesktop"
+                                            Click="MenuBoxType_Click"
+                                            Header="Desktop Items"
+                                            IsCheckable="True"
+                                            Tag="DesktopItems" />
+                                        <MenuItem
+                                            x:Name="MenuBoxTypeFolder"
+                                            Click="MenuBoxType_Click"
+                                            Header="Folder Portal"
+                                            IsCheckable="True"
+                                            Tag="FolderPortal" />
+                                    </MenuItem>
+                                    <MenuItem x:Name="MenuFolderView" Header="Folder View">
+                                        <MenuItem
+                                            x:Name="MenuFolderViewIcons"
+                                            Click="MenuFolderView_Click"
+                                            Header="Icons"
+                                            IsCheckable="True"
+                                            Tag="Icons" />
+                                        <MenuItem
+                                            x:Name="MenuFolderViewDetails"
+                                            Click="MenuFolderView_Click"
+                                            Header="Details"
+                                            IsCheckable="True"
+                                            Tag="Details" />
+                                    </MenuItem>
                                     <Separator />
                                     <MenuItem x:Name="MenuRollDir" Header="Roll Direction">
                                         <MenuItem
@@ -207,10 +240,11 @@
                                                         TickFrequency="4"
                                                         ValueChanged="MenuIconSizeSlider_ValueChanged" />
                                                     <TextBlock
+                                                        x:Name="MenuIconSizeValueText"
                                                         Width="44"
                                                         Margin="6,0,0,0"
                                                         VerticalAlignment="Center"
-                                                        Text="{Binding Value, ElementName=MenuIconSizeSlider, StringFormat={}{0:0}px}" />
+                                                        Text="32px" />
                                                 </StackPanel>
                                             </MenuItem.Header>
                                         </MenuItem>
@@ -223,17 +257,40 @@
                             x:Name="TitleArea"
                             Grid.Column="1"
                             HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Background="Transparent"
                             Cursor="SizeAll"
                             MouseLeftButtonDown="TitleArea_MouseLeftButtonDown">
-                            <TextBlock
-                                x:Name="TitleText"
-                                MinWidth="120"
-                                HorizontalAlignment="Stretch"
+                            <Grid
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Foreground="White"
-                                MouseLeftButtonDown="TitleText_MouseLeftButtonDown"
-                                Text="{Binding Title}"
-                                TextAlignment="Center" />
+                                Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon
+                                    x:Name="TitleFolderIcon"
+                                    Grid.Column="0"
+                                    Width="14"
+                                    Height="14"
+                                    Margin="0,0,6,0"
+                                    VerticalAlignment="Center"
+                                    Foreground="{DynamicResource BoxHeaderForeground}"
+                                    Symbol="Folder24"
+                                    Visibility="{Binding ActiveBox.IsFolderPortal, Converter={StaticResource BoolToVis}}" />
+                                <TextBlock
+                                    x:Name="TitleText"
+                                    Grid.Column="1"
+                                    MinWidth="40"
+                                    MaxWidth="220"
+                                    VerticalAlignment="Center"
+                                    Foreground="White"
+                                    MouseLeftButtonDown="TitleText_MouseLeftButtonDown"
+                                    Text="{Binding Title}"
+                                    TextAlignment="Center"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
                             <TextBox
                                 x:Name="TitleEdit"
                                 MinWidth="120"
@@ -282,11 +339,30 @@
                                 <DataTemplate DataType="vm:BoxViewModel">
                                     <Button
                                         HorizontalContentAlignment="Center"
-                                        Content="{Binding Name}"
                                         Cursor="Hand"
                                         PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
                                         Style="{StaticResource TabButtonStyle}"
-                                        Tag="{Binding}" />
+                                        Tag="{Binding}">
+                                        <Grid VerticalAlignment="Center" Background="Transparent">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <ui:SymbolIcon
+                                                Grid.Column="0"
+                                                Width="14"
+                                                Height="14"
+                                                Margin="0,0,6,0"
+                                                VerticalAlignment="Center"
+                                                Symbol="Folder24"
+                                                Visibility="{Binding IsFolderPortal, Converter={StaticResource BoolToVis}}" />
+                                            <TextBlock
+                                                Grid.Column="1"
+                                                VerticalAlignment="Center"
+                                                Text="{Binding Name}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -302,6 +378,7 @@
 
                 <Grid x:Name="BodyContent">
                     <controls:BoxControl x:Name="BoxContent" DataContext="{Binding ActiveBox}" />
+                    <controls:FolderPortalControl x:Name="FolderPortalContent" DataContext="{Binding ActiveBox}" Visibility="Collapsed" />
                     <Border
                         x:Name="Placeholder"
                         Padding="16"

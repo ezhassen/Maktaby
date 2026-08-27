@@ -539,6 +539,50 @@ public sealed class DesktopManager
         };
 
         _containers.CreateContainer(DesktopItemContainerType.BoxContainer, 60, 60, 300, 460, childContainer: boxContainer);
+
+        // FolderPortal for Downloads at top-right
+        string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+        if (string.IsNullOrWhiteSpace(downloadsPath) || !Directory.Exists(downloadsPath))
+        {
+            try
+            {
+                var up = Environment.GetEnvironmentVariable("USERPROFILE");
+                if (!string.IsNullOrWhiteSpace(up))
+                {
+                    var alt = Path.Combine(up, "Downloads");
+                    if (Directory.Exists(alt)) downloadsPath = alt;
+                }
+            }
+            catch { }
+        }
+        if (!string.IsNullOrWhiteSpace(downloadsPath))
+        {
+            string dlName = Path.GetFileName(downloadsPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrEmpty(dlName)) dlName = "Downloads";
+            var dlBox = new Box
+            {
+                Name = dlName,
+                BoxType = BoxType.FolderPortal,
+                FolderPath = downloadsPath,
+                FolderPortalViewMode = FolderPortalViewMode.Details,
+                FolderSortBy = FolderSortMode.DateModified,
+                FolderSortAscending = false,
+            };
+            var dlContainer = new BoxContainer
+            {
+                Boxes = { dlBox },
+                SelectedIndex = 0,
+            };
+            var wa = GetPrimaryWorkAreaDip();
+            double dlW = 380;
+            double dlH = 420;
+            double dlLeft = wa.Right - dlW - 20;
+            double dlTop = wa.Y + 20;
+            // Clamp in case work area is smaller than assumed
+            dlLeft = Math.Max(wa.X, Math.Min(dlLeft, wa.Right - dlW));
+            dlTop = Math.Max(wa.Y, Math.Min(dlTop, wa.Bottom - dlH));
+            _containers.CreateContainer(DesktopItemContainerType.BoxContainer, dlLeft, dlTop, dlW, dlH, childContainer: dlContainer);
+        }
     }
 
     #endregion
@@ -813,6 +857,13 @@ public sealed class DesktopManager
         _ = SaveAsync();
     }
 
+    public void NewFolderPortal()
+    {
+        var offset = _mainVm.Containers.Count * 24;
+        _mainVm.CreateFolderPortalAt(60 + offset, 60 + offset);
+        _ = SaveAsync();
+    }
+
     public void NewBoxContainer()
     {
         var offset = _mainVm.Containers.Count * 24;
@@ -879,9 +930,16 @@ public sealed class DesktopManager
         {
             return;
         }
-
-        await _persistence.SaveSnapshotAsync(snapshot);
+        //
         CloseAll();
+        foreach (var container in _containers.GetContainers().ToList())
+        {
+            _containers.RemoveContainer(container.Id);
+        }
+        _boxRegistry.Clear();
+
+        //
+        await _persistence.SaveSnapshotAsync(snapshot);
         await InitializeAsync();
     }
 

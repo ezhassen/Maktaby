@@ -15,6 +15,8 @@
                 (submenu positioning + checkable state). No local overrides needed anymore.
             -->
             <MenuItem Click="NewBox_Click" Header="New Box" />
+            <MenuItem Click="NewBoxFolderPortal_Click" Header="New Folder Portal" />
+            <Separator />
             <MenuItem
                 x:Name="resetMenuItem"
                 Click="Reset_Click"
@@ -33,11 +35,8 @@
                 IsCheckable="False"
                 ToolTip="Toggle Disable. and show the desktop icons" />
             <Separator />
+            <Separator />
             <MenuItem Click="Settings_Click" Header="Settings" />
-            <MenuItem
-                x:Name="menuAbout"
-                Click="About_Click"
-                Header="About" />
             <MenuItem Header="Theme">
                 <MenuItem
                     x:Name="menu_theme_system"
@@ -58,6 +57,11 @@
                     IsCheckable="True"
                     Tag="light" />
             </MenuItem>
+            <Separator />
+            <MenuItem
+                x:Name="menuAbout"
+                Click="About_Click"
+                Header="About" />
             <Separator />
             <MenuItem
                 x:Name="ToggleDebugTree"

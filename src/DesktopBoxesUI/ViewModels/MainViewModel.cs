@@ -82,6 +82,19 @@ public sealed class MainViewModel : ViewModelBase
         return RegisterContainer(new BoxContainer { Boxes = { box }, SelectedIndex = 0 }, left, top, width, height);
     }
 
+    /// <summary>Creates a single-box FolderPortal container at an explicit position (marquee on empty desktop).</summary>
+    public ContainerViewModel CreateFolderPortalAt(double left, double top, double width = 240, double height = 200, string? folderPath = null)
+    {
+        var box = _boxService.CreateBox("Folder Portal", left, top, width, height);
+        box.BoxType = BoxType.FolderPortal;
+        box.FolderPath = folderPath;
+        box.FolderPortalViewMode = FolderPortalViewMode.Icons;
+        box.FolderSortBy = FolderSortMode.Name;
+        box.FolderSortAscending = true;
+        // Name will be synced to folder name on first FolderPath set via BoxViewModel; keep generic until then
+        return RegisterContainer(new BoxContainer { Boxes = { box }, SelectedIndex = 0 }, left, top, width, height);
+    }
+
     /// <summary>Creates a BoxContainer pre-seeded with two tabs (so the tab strip is visible).</summary>
     public ContainerViewModel CreateBoxContainerAt(double left, double top)
     {

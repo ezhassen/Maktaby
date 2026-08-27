@@ -611,6 +611,10 @@ public sealed partial class DesktopSurface : Window
         var createItem = new MenuItem { Header = "Create New Box" };
         createItem.Click += (_, _) => CreateBoxFromMarquee();
         menu.Items.Add(createItem);
+        var createPortalItem = new MenuItem { Header = "Create Folder Portal" };
+        createPortalItem.Click += (_, _) => CreateFolderPortalFromMarquee();
+        menu.Items.Add(createPortalItem);
+        menu.Items.Add(new Separator());
 
         // NOT PlacementMode.MousePoint: our hook marks every WM_MOUSEMOVE handled, so WPF's cached
         // mouse position is stale by release time. Place absolutely at the tracked release point,
@@ -662,6 +666,23 @@ public sealed partial class DesktopSurface : Window
         y = Math.Max(wa.Top, Math.Min(y, wa.Bottom - h));
 
         _host.CreateBoxAt(x, y, w, h);
+        _save();
+    }
+
+    private void CreateFolderPortalFromMarquee()
+    {
+        GetMarqueeRectDip(out _, out double x, out double y, out double w, out double h);
+
+        const double minWidth = 220;
+        const double minHeight = 160;
+        w = Math.Max(w, minWidth);
+        h = Math.Max(h, minHeight);
+
+        var wa = SystemParameters.WorkArea;
+        x = Math.Max(wa.Left, Math.Min(x, wa.Right - w));
+        y = Math.Max(wa.Top, Math.Min(y, wa.Bottom - h));
+
+        _host.CreateFolderPortalAt(x, y, w, h);
         _save();
     }
 

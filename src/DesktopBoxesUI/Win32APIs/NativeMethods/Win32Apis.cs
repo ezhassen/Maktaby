@@ -576,6 +576,84 @@ internal static class Win32Apis
     {
         try
         {
+            // If we have a filesystem path, try direct properties first (fast path for normal files/folders).
+            // Use NO_UI to suppress error UI; if direct fails (e.g., user profile known folder), fall back to IDLIST via parsing name.
+            if (!string.IsNullOrWhiteSpace(path))
+            {
+                bool exists = false;
+                try { exists = System.IO.File.Exists(path) || System.IO.Directory.Exists(path); } catch { exists = false; }
+                if (exists)
+                {
+                    var direct = new SHELLEXECUTEINFO
+                    {
+                        cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
+                        fMask = SEE_MASK.NO_UI,
+                        hwnd = hwnd,
+                        lpVerb = "properties",
+                        lpFile = path,
+                        nShow = 1, // SW_SHOWNORMAL
+                    };
+                    if (ManualApis.ShellExecuteEx(ref direct))
+                        return;
+                    // Direct failed (e.g., user profile, known folder) -> try IDLIST from parsing name with NO_UI to avoid MessageBox
+                    try
+                    {
+                        if (ShellNative.SHCreateItemFromParsingName(path, IntPtr.Zero, ShellNative.IID_IShellItem, out var item) == 0 && item != null)
+                        {
+                            IntPtr punk = IntPtr.Zero;
+                            try
+                            {
+                                punk = Marshal.GetIUnknownForObject(item);
+                                if (ShellNative.SHGetIDListFromObject(punk, out IntPtr pidl) == 0 && pidl != IntPtr.Zero)
+                                {
+                                    try
+                                    {
+                                        var idlInfo = new SHELLEXECUTEINFO
+                                        {
+                                            cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
+                                            fMask = SEE_MASK.INVOKEIDLIST | SEE_MASK.NO_UI,
+                                            hwnd = hwnd,
+                                            lpVerb = "properties",
+                                            lpIDList = pidl,
+                                            nShow = 1,
+                                        };
+                                        if (ManualApis.ShellExecuteEx(ref idlInfo))
+                                            return;
+                                    }
+                                    finally { Marshal.FreeCoTaskMem(pidl); }
+                                }
+                            }
+                            finally
+                            {
+                                if (punk != IntPtr.Zero) Marshal.Release(punk);
+                                Marshal.ReleaseComObject(item);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                else
+                {
+                    // Path doesn't exist as filesystem (maybe placeholder) - still try direct, let shell handle
+                    var direct2 = new SHELLEXECUTEINFO
+                    {
+                        cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),
+                        fMask = SEE_MASK.NO_UI,
+                        hwnd = hwnd,
+                        lpVerb = "properties",
+                        lpFile = path,
+                        nShow = 1,
+                    };
+                    if (ManualApis.ShellExecuteEx(ref direct2))
+                        return;
+                }
+                // For known folders like user profile where ShellExecuteEx fails, try SHObjectProperties directly (no error UI)
+                if (!string.IsNullOrWhiteSpace(path))
+                {
+                    try { if (ManualApis.SHObjectProperties(hwnd, 2 /*SHOP_FILEPATH*/, path, null)) return; } catch { }
+                }
+            }
+
             var info = new SHELLEXECUTEINFO
             {
                 cbSize = Marshal.SizeOf<SHELLEXECUTEINFO>(),

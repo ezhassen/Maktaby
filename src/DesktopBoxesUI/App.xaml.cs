@@ -8,6 +8,7 @@ using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
+using DesktopBoxesUI.Win32APIs.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
@@ -130,6 +131,7 @@ public partial class App : Application
             () => serv.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget()));
 
         services.AddSingleton<IFileOperationService, FileOperationService>();
+        services.AddSingleton<IFileSystemService, FileSystemService>();
 
         // Win32 platform services
         services.AddSingleton<IMonitorService, MonitorService>();
@@ -175,10 +177,10 @@ public partial class App : Application
         switch (selectedTheme?.Trim().ToLowerInvariant())
         {
             case "light":
-                ApplicationThemeManager.Apply(ApplicationTheme.Light);
+                ApplicationThemeManager.Apply(ApplicationTheme.Light);//, Wpf.Ui.Controls.WindowBackdropType.Mica
                 break;
             case "dark":
-                ApplicationThemeManager.Apply(ApplicationTheme.Dark);
+                ApplicationThemeManager.Apply(ApplicationTheme.Dark);//, Wpf.Ui.Controls.WindowBackdropType.Mica
                 break;
             default:
                 ApplicationThemeManager.ApplySystemTheme();
@@ -286,6 +288,7 @@ public partial class App : Application
 
         var tray = new TrayIconUI();
         tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
+        tray.NewBoxFolderPortalRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewFolderPortal();
         tray.ResetRequested += async (_, _) =>
         {
             var confirmed = await Services.GetRequiredService<IDialogService>().ShowConfirmAsync(
