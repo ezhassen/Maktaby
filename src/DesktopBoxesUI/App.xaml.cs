@@ -39,6 +39,11 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+#if !DEBUG   
+        DispatcherUnhandledException += Application_DispatcherUnhandledException;
+        AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+        TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+#endif
         //
         AppJSettings.Reload();
         //
@@ -108,6 +113,47 @@ public partial class App : Application
         //
         Logging.DisposeAllDefaultLoggers();
         base.OnExit(e);
+    }
+    private void Application_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
+    {
+        //#if !DEBUG
+        Logging.Log.Error(e.Exception, "UnhandledException");
+        e.Handled = true;
+        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            var vm = new ViewModels.WindowExceptionHandlerViewModel(e.Exception);
+            var exceptionWindow = new Views.WindowExceptionHandler
+            {
+                DataContext = vm
+            };
+            exceptionWindow.ShowDialog();
+            // Window owns the shutdown decision: only Exit Application shuts down;
+            // Continue and any system close (X / Alt+F4) just dismiss the dialog.
+            if (vm.HasChosenContinue)
+            {
+                Logging.Log.Warning("User chose to continue after unhandled exception {Type}", vm.ExceptionType);
+            }
+        }));
+        //#endif
+    }
+
+    private void CurrentDomain_UnhandledException(object? sender, UnhandledExceptionEventArgs e)
+    {
+        try
+        {
+            Logging.Log.Fatal(e.ExceptionObject as Exception, "CurrentDomain_UnhandledException IsTerminating={IsTerminating}", e.IsTerminating);
+        }
+        catch { }
+    }
+
+    private void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
+    {
+        try
+        {
+            Logging.Log.Error(e.Exception, "UnobservedTaskException");
+            e.SetObserved();
+        }
+        catch { }
     }
 
     [SupportedOSPlatform("windows10.0.14393")]

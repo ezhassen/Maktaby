@@ -6,19 +6,18 @@ Follow it to keep the architecture clean and the build green.
 ## Golden rules
 - **Never** put WPF, Win32 P/Invoke, or Shell COM code in the `Core` project folders.
   Core may only define models, interfaces, and pure-.NET service implementations.
-- **Never** scatter `DllImport` / P/Invoke declarations outside `Win32/NativeMethods`.
-  Add new native APIs to `Win32/NativeMethods/NativeMethods.txt`; CsWin32 generates them
-  into `Win32/NativeMethods/Win32Apis`. Call them only from `Win32/Services`.
+- **Never** scatter `DllImport` / P/Invoke declarations outside `Win32APIs/NativeMethods`.
+  Add new native APIs to `Win32APIs/NativeMethods/NativeMethods.txt`; CsWin32 generates them
+  into `Win32APIs/NativeMethods/Win32Apis`. Call them only from `Win32APIs/Services`.
 - **Never** create a Window or native handle per `BoxItem`. A Box is one control/window
   holding many items.
 - Use the term **Box** everywhere (code, comments, UI). Do **not** use "Fence".
 - Keep the NuGet surface small. Don't add packages without a reason. Currently allowed:
-  `Microsoft.Extensions.DependencyInjection` and `Microsoft.Windows.CsWin32`.
-  `Wpf.Ui` (v3.4.2.7) is approved too — the user explicitly asked for it to provide the modern
-  window chrome and context-menu styling. Reference its resource dictionaries via pack URIs
-  (`/Wpf.Ui;component/wpfui.xaml`, `/Wpf.Ui;component/themes/theme.xaml`,
-  `/Wpf.Ui;component/themes/brushes.xaml`); this build predates the `ThemesDictionary`/
-  `ControlsDictionary` markup extensions, so do not use those. The window type is `WPF.UI.WPFUIWindow`.
+  `Microsoft.Extensions.DependencyInjection`, `Microsoft.Windows.CsWin32`,
+  `CommunityToolkit.Mvvm`, `Wpf.Ui` (v4.3.0) and `Wpf.Ui.Tray` (v4.3.0) — the user explicitly asked for
+  them to provide the modern window chrome, view-model helpers and tray styling. Reference WPF-UI resource
+  dictionaries via `ui:ThemesDictionary` / `ui:ControlsDictionary` (`App.xaml` already does); legacy pack URIs
+  (`/Wpf.Ui;component/...`) are obsolete. The window type is `Wpf.Ui.Controls.FluentWindow`.
 - Build must stay warning-light and succeed in both Debug and Release.
 
 ## Layer responsibilities
@@ -27,8 +26,8 @@ Follow it to keep the architecture clean and the build green.
   types (`RectD`, `PointD`, `SizeD`) instead of WPF/Win32 coordinate types.
 - **Core/Services** — only platform-independent implementations (no IO to OS specifics).
 - **Shell/** — Windows Shell behavior. Put Shell COM native interop in `Shell/Interop`.
-- **Win32/** — raw Win32. `NativeMethods` for declarations, `Services` for the callers.
-- **Views / Controls / Converters / Resources / App.xaml** — WPF only.
+- **Win32APIs/** — raw Win32. `NativeMethods` for declarations, `Services` for the callers.
+- **Views / Controls / Converters / Resources / App.xaml** — WPF only (ViewModels use `CommunityToolkit.Mvvm` source generators: `[ObservableProperty]`, `[RelayCommand]`).
 
 ## Dependency injection
 - All services are registered in `App.xaml.cs` (`ConfigureServices`). Register new services
@@ -37,15 +36,15 @@ Follow it to keep the architecture clean and the build green.
 - View models get their dependencies via constructor injection resolved from `App.Services`.
 
 ## Adding a new native API (example)
- 1. Add the API name to `Win32/NativeMethods/NativeMethods.txt` (CsWin32 only auto-discovers this
+ 1. Add the API name to `Win32APIs/NativeMethods/NativeMethods.txt` (CsWin32 only auto-discovers this
     file at the project root, so it is also registered as an `AdditionalFiles` item in the csproj).
  2. Leave the rest to CsWin32: it generates the real P/Invoke into its own `Windows.Win32.PInvoke`
-    class. The thin, named wrapper `Win32/NativeMethods/Win32Apis.cs` re-exposes exactly the APIs
+    class. The thin, named wrapper `Win32APIs/NativeMethods/Win32Apis.cs` re-exposes exactly the APIs
     we use, so every native call in the codebase goes through `Win32Apis` and never `PInvoke` directly.
- 3. Use `Win32Apis` from a class in `Win32/Services`, converting to/from Core geometry types
+ 3. Use `Win32Apis` from a class in `Win32APIs/Services`, converting to/from Core geometry types
     (`RectD`, `PointD`, `SizeD`). Do NOT take `Win32Apis` members' addresses or use `void*` handles
     (e.g. prefer the implicit `HWND`→`IntPtr` conversion over `.Value`).
- 4. Win32 service classes that call these APIs are marked
+ 4. Win32APIs service classes that call these APIs are marked
     `[SupportedOSPlatform("windows10.0.14393")]` so platform-API analyzers (CA1416) stay quiet;
     keep that attribute in sync when you add newer-API usage. The project suppresses CA1416 globally
     (it is a Windows-only app), but the attribute is still good documentation.
@@ -61,9 +60,9 @@ Follow it to keep the architecture clean and the build green.
  at all for this project. Instead:
    - Keep CsWin32 for every normal API (leave it in `NativeMethods.txt`).
    - For the architecture-specific few, declare them manually in
-     `Win32/NativeMethods/ManualApis.cs` via `[DllImport]` (NOT `LibraryImport` — the source
+     `Win32APIs/NativeMethods/ManualApis.cs` via `[DllImport]` (NOT `LibraryImport` — the source
      generator can't marshal structs like `SHFILEINFOW`). Re-expose them through `Win32Apis` so all
-     native calls still flow through the one wrapper. This keeps raw P/Invoke inside `Win32/NativeMethods`.
+     native calls still flow through the one wrapper. This keeps raw P/Invoke inside `Win32APIs/NativeMethods`.
 
 ## Verifying changes
 After editing:
@@ -84,7 +83,7 @@ There are two implementations of "detect a double-click on empty desktop" (the t
 supported path; the custom `DesktopSurface` is experimental and has unresolved issues (see Known issues).
 
 - **Global low-level hook (`true`)** — `DesktopManager` calls `_mouseMonitor.Start()` which spins up
-  `MouseMonitor` (`Win32/Services/MouseMonitor.cs`), a `WH_MOUSE_LL` hook on a **dedicated STA background
+  `MouseMonitor` (`Win32APIs/Services/MouseMonitor.cs`), a `WH_MOUSE_LL` hook on a **dedicated STA background
   thread with its own `Dispatcher` message pump** (so a busy UI thread never delays input to other apps).
   It raises `MouseButtonDown` (the `HWND` under the cursor) and, after its own double-click logic,
   `DesktopDoubleClick`. Double-click confirmation uses `Win32Apis.IsDesktopChild` (descendant of
@@ -130,4 +129,11 @@ that draws, at the cursor, the hit-test result, z-order, and the surface's style
      (around `BoxContainerWindow.xaml.cs:824`) uses `PointToScreen` instead of `GetCursorPos` combined with
      per-monitor DPI. `GetDpiForMonitor` + `MonitorFromPoint` are already declared in `NativeMethods.txt`
      but are not yet wrapped in `Win32Apis`.
-
+- **`WindowExceptionHandler` unhandled-exception flow:** The `DispatcherUnhandledException` / `AppDomain` /
+  `TaskScheduler` handlers are wired in `App.xaml.cs:OnStartup` (`#if !DEBUG` gate). The dialog is a
+  `Wpf.Ui.Controls.FluentWindow` (`Views/WindowExceptionHandler.xaml`) bound to
+  `WindowExceptionHandlerViewModel` (`CommunityToolkit.Mvvm`: `[ObservableProperty]`, `[RelayCommand]`).
+  It offers **Continue** (keep app alive, `HasChosenContinue=true`, no shutdown) and **Exit Application**
+  (`Danger`), plus **Copy details**; only **Exit Application** shuts down — closing via the X button,
+  Alt+F4 or any system close just dismisses the dialog (treated as Continue). If you add new global
+  exception sources, keep the `HasChosenContinue` / `RequestClose(bool)` contract intact.

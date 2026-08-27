@@ -69,6 +69,12 @@
                 Header="Debug Desktop Tree"
                 IsCheckable="True" />
             <MenuItem
+                x:Name="menuTest"
+                Click="Test_Click"
+                Foreground="OrangeRed"
+                Header="Test Button"
+                ToolTip="Used for tests" />
+            <MenuItem
                 x:Name="menuExit"
                 Click="Exit_Click"
                 Header="Exit" />

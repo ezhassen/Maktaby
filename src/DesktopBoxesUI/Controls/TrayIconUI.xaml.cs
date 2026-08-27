@@ -40,6 +40,12 @@ public partial class TrayIconUI
 
     private void ContextMenu_Opened(object sender, RoutedEventArgs e)
     {
+#if DEBUG
+        menuTest.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowTestButton ? Visibility.Visible : Visibility.Collapsed;
+#else
+    menuTest.Visibility = Visibility.Collapsed;
+#endif
+
         var dtMan = App.Services.GetRequiredService<DesktopManager>();
         ISettingsService _settingsService = App.Services.GetRequiredService<ISettingsService>();
         MenuToggleHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
@@ -131,4 +137,8 @@ public partial class TrayIconUI
         MenuToggleDisableClick?.Invoke(this, EventArgs.Empty);
     }
 
+    private void Test_Click(object sender, RoutedEventArgs e)
+    {
+        throw new Exception("Test Exception");
+    }
 }
