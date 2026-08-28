@@ -439,6 +439,20 @@ internal static class ManualApis
         public int iSubItem;
         public int iGroup;
     }
+
+
+    public const uint TME_LEAVE = 0x00000002;
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool TrackMouseEvent(ref TRACKMOUSEEVENT lpEventTrack);
+    [StructLayout(LayoutKind.Sequential)]
+    public struct TRACKMOUSEEVENT
+    {
+        public uint cbSize;
+        public uint dwFlags;
+        public IntPtr hwndTrack;
+        public uint dwHoverTime;
+    }
 }
 
 /// <summary>Flags for <see cref="ManualApis.ShellExecuteEx"/>.</summary>
@@ -523,6 +537,8 @@ internal enum SHGFI : uint
     OpenIcon = 0x00000002,
     Pidl = 0x00000008,
 }
+
+
 
 /// <summary>Callback for <see cref="ManualApis.SetWinEventHook"/>.</summary>
 internal delegate void WinEventProc(

@@ -1,15 +1,16 @@
-using System.IO;
-using System.Linq;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Interop;
 using DesktopBoxesUI.Controls;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Interop;
 
 namespace DesktopBoxesUI.Views;
 
@@ -47,17 +48,23 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
         LocationChanged += OnLocationChanged;
-        // Hover/focus over WebView2 HWND does not raise WPF IsMouseOver/IsKeyboardFocusWithin reliably (airspace),
-        // so we use WebView events (DOM mouseenter/leave via postMessage + WPF MouseEnter) forwarded from CssWidgetControl.
+        // Hover/focus over the WebView HWND does not raise WPF hover reliably; use the root border
+        // as the single hover source for the whole widget. This avoids the header/host transition churn
+        // that caused the chrome to flicker while the pointer crossed between the title bar and the WebView.
         TitleArea.MouseLeftButtonDown += TitleArea_MouseDown;
         TitleArea.MouseMove += TitleArea_MouseMove;
         TitleArea.MouseLeftButtonUp += TitleArea_MouseUp;
+        PreviewMouseLeftButtonDown += TitleArea_MouseDown;
+        MouseMove += TitleArea_MouseMove;
+        MouseUp += TitleArea_MouseUp;
+
+        RootBorder.MouseEnter += (_, _) => { _isHover = true; UpdateChrome(); };
+        RootBorder.MouseLeave += (_, _) => { _isHover = false; UpdateChrome(); };
+
         WidgetMenu.Closed += (_, _) => UpdateChrome();
         WidgetMenu.Opened += (_, _) => UpdateChrome();
         Activated += (_, _) => { _isActive = true; UpdateChrome(); };
-        Deactivated += (_, _) => { _isActive = false; UpdateChrome(); };
-        MouseEnter += (_, _) => { _isHover = true; UpdateChrome(); };
-        MouseLeave += (_, _) => { _isHover = false; UpdateChrome(); };
+        Deactivated += (_, _) => { _isActive = false; _isHover = false; UpdateChrome(); };
     }
 
     private CssWidgetManifest? LoadWidget()
@@ -152,7 +159,15 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         return IntPtr.Zero;
     }
 
-    private void OnWidgetMouseEnter(object? sender, EventArgs e) { _isHover = true; UpdateChrome(); }
+    private void OnWidgetMouseEnter(object? sender, EventArgs e)
+    {
+        if (!HeaderIsShown() && !_isHover)
+        {
+            Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseEnter to show");
+            _isHover = true;
+            UpdateChrome();
+        }
+    }
     private void OnWidgetMouseLeave(object? sender, EventArgs e) { _isHover = false; UpdateChrome(); }
     private void OnWidgetClicked(object? sender, EventArgs e)
     {
@@ -189,13 +204,24 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         _container.Bounds = RectD.FromXYWH(Left, Top, ActualWidth, ActualHeight);
     }
 
-    private void UpdateChrome()
+    bool HeaderIsShown() => HeaderBorder.Visibility == Visibility.Visible;
+    bool CanShowHeader()
     {
         bool show = _isHover || _isActive || WidgetMenu.IsOpen;
         if (!show) show = IsMouseOver || IsKeyboardFocusWithin;
+        return show;
+    }
+    private void UpdateChrome()
+    {
+        if (_drag.IsDragging || WindowDragController.IsNativeSizing) return;
+        bool show = CanShowHeader();
+        //if (!show) show = IsMouseOver || IsKeyboardFocusWithin;
+
+        // Only toggle chrome when the pointer truly enters/leaves the widget bounds; avoid per-move
+        // updates so the title bar does not flicker while the pointer crosses the transparent WebView.
         HeaderBorder.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        bool canResize = ResizeMode == ResizeMode.CanResize || ResizeMode == ResizeMode.CanResizeWithGrip;
-        ResizeBorder.Visibility = (show && canResize) ? Visibility.Visible : Visibility.Collapsed;
+        //bool canResize = ResizeMode == ResizeMode.CanResize || ResizeMode == ResizeMode.CanResizeWithGrip;
+        RootBorder.BorderThickness = new Thickness(show ? 3 : 0);
     }
 
     private void TitleArea_MouseDown(object sender, MouseButtonEventArgs e)

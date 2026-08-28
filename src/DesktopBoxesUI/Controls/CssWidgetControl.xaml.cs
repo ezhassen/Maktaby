@@ -140,18 +140,18 @@ public partial class CssWidgetControl : UserControl
             settings.AreDefaultContextMenusEnabled = true;
             settings.IsStatusBarEnabled = false;
             WebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
-            // Mouse / activation bridge: WPF HwndHost does not reliably raise IsMouseOver / IsKeyboardFocusWithin,
-            // so forward DOM mouseenter/leave/click via postMessage plus WPF host events.
-            WebView.MouseEnter += (_, _) => WidgetMouseEnter?.Invoke(this, EventArgs.Empty);
-            WebView.MouseLeave += (_, _) => WidgetMouseLeave?.Invoke(this, EventArgs.Empty);
-            WebView.GotFocus += (_, _) => WidgetClicked?.Invoke(this, EventArgs.Empty);
+            // DOM mouse/activation bridge: WebView2CompositionControl does not reliably
+            // raise WPF MouseEnter/MouseLeave (especially on inactive windows), so all
+            // hover/click detection comes from the DOM via postMessage.
+            //WebView.MouseEnter += (ss, ee) => { WidgetMouseEnter?.Invoke(this, EventArgs.Empty); };
+            //WebView.MouseLeave += (ss, ee) => { WidgetMouseLeave?.Invoke(this, EventArgs.Empty); };
+            //WebView.GotFocus += (ss, ee) => { WidgetClicked?.Invoke(this, EventArgs.Empty); };
             WebView.CoreWebView2.WebMessageReceived += OnWebMessage;
             try
             {
                 await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                    "document.addEventListener('mouseenter',()=>chrome.webview.postMessage('enter'));" +
-                    "document.addEventListener('mouseleave',()=>chrome.webview.postMessage('leave'));" +
-                    "document.addEventListener('click',()=>chrome.webview.postMessage('click'));");
+                    "(function(){var entered=false;function sendEnter(){if(!entered){entered=true;chrome.webview.postMessage('enter');}}function sendLeave(){if(entered){entered=false;chrome.webview.postMessage('leave');}}document.addEventListener('pointerenter',sendEnter);document.addEventListener('mouseenter',sendEnter);document.addEventListener('mouseover',sendEnter);document.addEventListener('mousemove',sendEnter,{passive:true});document.addEventListener('pointerleave',sendLeave);document.addEventListener('mouseleave',sendLeave);document.addEventListener('mouseout',sendLeave);document.addEventListener('click',function(){chrome.webview.postMessage('click');});})();"
+                );
             }
             catch { }
             // Apply initial filter based on current manifest

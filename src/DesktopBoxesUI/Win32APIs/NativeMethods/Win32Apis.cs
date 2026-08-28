@@ -1237,6 +1237,19 @@ internal static class Win32Apis
     /// focused window loses focus. Used to defocus the active box when the user clicks empty desktop.</summary>
     public static bool SetForegroundWindow(IntPtr hWnd) => ManualApis.SetForegroundWindow(hWnd);
 
+    /// <summary>Registers the window to receive <c>WM_MOUSELEAVE</c> when the cursor leaves its bounds.</summary>
+    public static bool TrackMouseEvent(IntPtr hwnd)
+    {
+        var tme = new ManualApis.TRACKMOUSEEVENT
+        {
+            cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<ManualApis.TRACKMOUSEEVENT>(),
+            dwFlags = ManualApis.TME_LEAVE,
+            hwndTrack = hwnd,
+            dwHoverTime = 0,
+        };
+        return ManualApis.TrackMouseEvent(ref tme);
+    }
+
     /// <summary>True when <paramref name="hwnd"/> is a <c>SysListView32</c> (the desktop list-view among others).</summary>
     public static bool IsSysListView32(IntPtr hwnd)
     {

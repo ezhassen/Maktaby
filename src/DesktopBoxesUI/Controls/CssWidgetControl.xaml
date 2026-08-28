@@ -4,8 +4,9 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
-    <Grid Background="Transparent">
+    <Grid Background="#01000000">
         <wv2:WebView2 x:Name="WebView" />
+        <!--<wv2:WebView2CompositionControl x:Name="WebView" />-->
         <ui:InfoBar
             x:Name="ErrorBar"
             Title="WebView2 unavailable"
