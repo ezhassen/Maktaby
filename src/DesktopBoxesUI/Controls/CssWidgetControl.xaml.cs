@@ -113,7 +113,7 @@ public partial class CssWidgetControl : UserControl
             // Ensure DefaultBackgroundColor is set before EnsureCoreWebView2Async for transparency
             try { WebView.DefaultBackgroundColor = Color.Transparent; } catch { }
 
-            var userData = Path.Combine(SettingsService.AppDataDir, "EBWebView");
+            var userData = SettingsService.AppDataDir;//Path.Combine(SettingsService.AppDataDir, "EBWebView");
             try { Directory.CreateDirectory(userData); } catch { }
 
             // Share the same CoreWebView2Environment across all widget controls.

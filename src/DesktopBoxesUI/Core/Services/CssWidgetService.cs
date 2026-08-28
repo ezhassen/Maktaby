@@ -1,12 +1,12 @@
-using System.IO;
-using System.Text;
-using System.Text.Json;
-using System.Windows;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Settings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using System.IO;
+using System.Text;
+using System.Text.Json;
+using System.Windows;
 
 namespace DesktopBoxesUI.Core.Services;
 
@@ -252,8 +252,8 @@ public sealed class CssWidgetService : ICssWidgetService
             };
             web = new WebView2();
             win.Content = web;
-
-            var userData = Path.Combine(SettingsService.AppDataDir, "EBWebView");
+            //EBWebView created by default in target folder
+            var userData = SettingsService.AppDataDir;//Path.Combine(SettingsService.AppDataDir, "EBWebView");
             Directory.CreateDirectory(userData);
             var env = await CoreWebView2Environment.CreateAsync(null, userData);
             win.Show();
@@ -269,14 +269,14 @@ public sealed class CssWidgetService : ICssWidgetService
             web.CoreWebView2.NavigationCompleted += Handler;
             web.NavigateToString(doc);
 
-                    var completed = await Task.WhenAny(navTcs.Task, Task.Delay(5000));
-                    if (completed != navTcs.Task || !navTcs.Task.Result)
-                    {
-                        try { web.Visibility = Visibility.Collapsed; } catch { }
-                        try { (web as IDisposable)?.Dispose(); } catch { }
-                        try { win.Close(); } catch { }
-                        return null;
-                    }
+            var completed = await Task.WhenAny(navTcs.Task, Task.Delay(5000));
+            if (completed != navTcs.Task || !navTcs.Task.Result)
+            {
+                try { web.Visibility = Visibility.Collapsed; } catch { }
+                try { (web as IDisposable)?.Dispose(); } catch { }
+                try { win.Close(); } catch { }
+                return null;
+            }
             await Task.Delay(800);
             using var fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
             await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, fs);
