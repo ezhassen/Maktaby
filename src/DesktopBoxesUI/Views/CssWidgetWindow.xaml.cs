@@ -4,9 +4,7 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
-using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -163,12 +161,35 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
     {
         if (!HeaderIsShown() && !_isHover)
         {
-            Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseEnter to show");
+            //Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseEnter to show");
             _isHover = true;
             UpdateChrome();
         }
     }
-    private void OnWidgetMouseLeave(object? sender, EventArgs e) { _isHover = false; UpdateChrome(); }
+    private void OnWidgetMouseLeave(object? sender, EventArgs e)
+    {
+        //Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseLeave");
+        try
+        {
+            // If the native cursor is still inside this window's bounds, ignore the DOM 'leave' messages
+            // (they can fire when moving between elements inside the WebView). Use physical coordinates
+            // which match GetWindowRect and GetCursorPos.
+            Win32Apis.GetCursorPos(out var pt);
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero && Win32Apis.GetWindowRect((Windows.Win32.Foundation.HWND)hwnd, out var rect))
+            {
+                if (pt.X >= rect.left && pt.X <= rect.right && pt.Y >= rect.top && pt.Y <= rect.bottom)
+                {
+                    //Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseLeave ignored — cursor still inside window");
+                    return;
+                }
+            }
+        }
+        catch { }
+
+        _isHover = false;
+        UpdateChrome();
+    }
     private void OnWidgetClicked(object? sender, EventArgs e)
     {
         try { Activate(); } catch { }
@@ -213,6 +234,7 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
     }
     private void UpdateChrome()
     {
+        if (_drag is null) return;
         if (_drag.IsDragging || WindowDragController.IsNativeSizing) return;
         bool show = CanShowHeader();
         //if (!show) show = IsMouseOver || IsKeyboardFocusWithin;
