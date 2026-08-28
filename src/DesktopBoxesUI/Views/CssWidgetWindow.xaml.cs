@@ -317,6 +317,9 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
             Width = _container.Bounds.Width > 0 ? _container.Bounds.Width : (info.Manifest.Width ?? 300);
             Height = _container.Bounds.Height > 0 ? _container.Bounds.Height : (info.Manifest.Height ?? 220);
             try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { }
+            //reload
+            var manifest = LoadWidget();
+            ApplyManifest(manifest);
         }
     }
 

@@ -7,6 +7,49 @@
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
 
     <!--
+        Box appearance resources. These are resolved from UserSettings by BoxAppearance and
+        applied at runtime (App.ApplyBoxAppearance / BoxContainerWindow.ApplyAppearance), so
+        boxes follow the configured theme and colors. Declared here only as safe defaults.
+    -->
+
+    <!--
+        Borderless button that blends into its parent (transparent background, no border).
+        Used for the title-bar icon buttons (menu, roll).
+    -->
+    <Style x:Key="BorderlesButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border
+                        x:Name="PART_Background"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="4">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="PART_Background" Property="Background" Value="#24FFFFFF" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="PART_Background" Property="Background" Value="#3BFFFFFF" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
         Fixed WPF-UI menu item templates.
         
         The stock WPF-UI MenuItem.SubmenuHeaderTemplate applies a template-local DropShadowEffect and

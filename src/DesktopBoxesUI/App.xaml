@@ -5,7 +5,19 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
     <Application.Resources>
         <ResourceDictionary>
+
+            <!--  Missing brush referenced by some Wpf.Ui button styles  -->
+            <SolidColorBrush x:Key="PressedForeground" Color="White" />
+
+            <SolidColorBrush x:Key="BoxBackground" Color="#2d2d30" />
+            <SolidColorBrush x:Key="BoxForeground" Color="White" />
+            <SolidColorBrush x:Key="BoxBorder" Color="#3f3f46" />
+            <SolidColorBrush x:Key="BoxHeaderBackground" Color="#3f3f46" />
+            <SolidColorBrush x:Key="BoxHeaderForeground" Color="White" />
+            <Thickness x:Key="BoxBorderThickness">1</Thickness>
+
             <ResourceDictionary.MergedDictionaries>
+
                 <ui:ThemesDictionary />
                 <ui:ControlsDictionary />
 
@@ -15,55 +27,6 @@
                 -->
                 <ResourceDictionary Source="Resources/Styles/AppStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
-
-            <!--
-                Borderless button that blends into its parent (transparent background, no border).
-                Used for the title-bar icon buttons (menu, roll).
-            -->
-            <Style x:Key="BorderlesButtonStyle" TargetType="Button">
-                <Setter Property="Background" Value="Transparent" />
-                <Setter Property="BorderBrush" Value="Transparent" />
-                <Setter Property="BorderThickness" Value="0" />
-                <Setter Property="Cursor" Value="Hand" />
-                <Setter Property="Padding" Value="6,4" />
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Border
-                                x:Name="PART_Background"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="PART_Background" Property="Background" Value="#24FFFFFF" />
-                                </Trigger>
-                                <Trigger Property="IsPressed" Value="True">
-                                    <Setter TargetName="PART_Background" Property="Background" Value="#3BFFFFFF" />
-                                </Trigger>
-                                <Trigger Property="IsEnabled" Value="False">
-                                    <Setter Property="Opacity" Value="0.5" />
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-
-            <!--
-                Box appearance resources. These are resolved from UserSettings by BoxAppearance and
-                applied at runtime (App.ApplyBoxAppearance / BoxContainerWindow.ApplyAppearance), so
-                boxes follow the configured theme and colors. Declared here only as safe defaults.
-            -->
-            <SolidColorBrush x:Key="BoxBackground" Color="#2d2d30" />
-            <SolidColorBrush x:Key="BoxForeground" Color="White" />
-            <SolidColorBrush x:Key="BoxBorder" Color="#3f3f46" />
-            <SolidColorBrush x:Key="BoxHeaderBackground" Color="#3f3f46" />
-            <SolidColorBrush x:Key="BoxHeaderForeground" Color="White" />
-            <Thickness x:Key="BoxBorderThickness">1</Thickness>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

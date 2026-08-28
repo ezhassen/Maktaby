@@ -16,7 +16,11 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Title="Widgets" Grid.Row="0" ShowMaximize="True" ShowMinimize="True" />
+        <ui:TitleBar
+            Title="Widgets"
+            Grid.Row="0"
+            ShowMaximize="True"
+            ShowMinimize="True" />
 
         <Grid Grid.Row="1" Margin="16">
             <Grid.RowDefinitions>
@@ -24,7 +28,10 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+            <StackPanel
+                Grid.Row="0"
+                Margin="0,0,0,12"
+                Orientation="Horizontal">
                 <TextBlock
                     VerticalAlignment="Center"
                     FontWeight="SemiBold"
@@ -32,9 +39,13 @@
                 <Border
                     Margin="12,0,0,0"
                     Padding="6,2"
+                    VerticalAlignment="Center"
                     Background="{DynamicResource ControlFillColorSecondaryBrush}"
                     CornerRadius="4">
-                    <TextBlock x:Name="CountText" FontSize="11" Text="0 widgets" />
+                    <TextBlock
+                        x:Name="CountText"
+                        FontSize="11"
+                        Text="0 widgets" />
                 </Border>
                 <ui:Button
                     x:Name="NewButton"
@@ -80,9 +91,7 @@
                                         Background="{DynamicResource ControlFillColorTertiaryBrush}"
                                         CornerRadius="6">
                                         <Grid>
-                                            <Image
-                                                Source="{Binding ThumbnailPath, TargetNullValue={x:Null}, FallbackValue={x:Null}}"
-                                                Stretch="UniformToFill">
+                                            <Image Source="{Binding ThumbnailBitmap, TargetNullValue={x:Null}, FallbackValue={x:Null}}" Stretch="Uniform">
                                                 <Image.Style>
                                                     <Style TargetType="Image">
                                                         <Style.Triggers>
@@ -114,9 +123,7 @@
                                                     </Style>
                                                 </TextBlock.Style>
                                             </TextBlock>
-                                            <StackPanel
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center">
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                                                 <StackPanel.Style>
                                                     <Style TargetType="StackPanel">
                                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -139,10 +146,10 @@
                                                     Text="Generating thumbnail..." />
                                             </StackPanel>
                                             <Border
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Top"
                                                 Margin="6"
                                                 Padding="4,2"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Top"
                                                 Background="{DynamicResource SystemFillColorAttentionBackgroundBrush}"
                                                 CornerRadius="4">
                                                 <TextBlock
@@ -164,7 +171,10 @@
                                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                         Text="{Binding Manifest.Author, FallbackValue='', TargetNullValue=''}"
                                         TextTrimming="CharacterEllipsis" />
-                                    <StackPanel Grid.Row="3" Margin="0,8,0,0" Orientation="Horizontal">
+                                    <StackPanel
+                                        Grid.Row="3"
+                                        Margin="0,8,0,0"
+                                        Orientation="Horizontal">
                                         <ui:Button
                                             Padding="8,3"
                                             Appearance="Primary"
@@ -172,6 +182,7 @@
                                             Content="Place"
                                             Tag="{Binding}"
                                             Visibility="{Binding DataContext.IsSelectMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibilityConverter}}" />
+
                                         <ui:Button
                                             Margin="6,0,0,0"
                                             Padding="8,3"
@@ -179,6 +190,15 @@
                                             Click="Edit_Click"
                                             Content="Edit"
                                             Tag="{Binding}" />
+                                        <ui:Button
+                                            Margin="6,0,0,0"
+                                            Padding="8,3"
+                                            Appearance="Secondary"
+                                            Click="RegenerateThumbnail_Click"
+                                            Content="Refresh"
+                                            Icon="{ui:SymbolIcon Symbol=ArrowSync20}"
+                                            Tag="{Binding}"
+                                            ToolTip="Regenerate Thumbnail" />
                                         <ui:Button
                                             Margin="6,0,0,0"
                                             Padding="6,3"

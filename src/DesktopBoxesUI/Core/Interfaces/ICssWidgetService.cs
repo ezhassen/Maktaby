@@ -37,5 +37,5 @@ public interface ICssWidgetService
     void EnsureUserWidgetsRoot();
 
     /// <summary>Generates a thumbnail for the widget (renders offscreen and saves PNG). Returns saved path or null.</summary>
-    Task<string?> GenerateThumbnailAsync(CssWidgetInfo widget, int width = 480, int height = 270);
+    Task<string?> GenerateThumbnailAsync(CssWidgetInfo widget, int width = 480, int height = 270, bool force = false);
 }

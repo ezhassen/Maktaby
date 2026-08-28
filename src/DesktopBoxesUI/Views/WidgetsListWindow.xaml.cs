@@ -1,10 +1,11 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
+using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Core.Models;
-using Microsoft.Extensions.DependencyInjection;
+using System.Windows.Media.Imaging;
 using Wpf.Ui.Controls;
 
 namespace DesktopBoxesUI.Views;
@@ -45,32 +46,38 @@ public partial class WidgetsListWindow : FluentWindow
         // Generate thumbnails for widgets missing them, showing "Generating..." indicator
         foreach (var item in view.Where(v => v.ThumbnailPath == null).ToList())
         {
-            item.IsGenerating = true;
-            try
-            {
-                var path = await _svc.GenerateThumbnailAsync(item.SourceInfo);
-                if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
-                {
-                    item.ThumbnailPath = path;
-                }
-                else
-                {
-                    // Keep null -> will show "No preview"
-                }
-            }
-            catch
-            {
-                // Keep null
-            }
-            finally
-            {
-                item.IsGenerating = false;
-            }
-            // Small delay to avoid flooding WebView2 with concurrent captures
-            await System.Threading.Tasks.Task.Delay(100);
+            await RefreshThumbnail(item);
         }
     }
-
+    async Task RefreshThumbnail(WidgetGalleryItem vm, bool force = false)
+    {
+        vm.IsGenerating = true;
+        try
+        {
+            vm.ThumbnailPath = null;
+            var thWidth = vm.Manifest.Width ?? 480;
+            var thHeight = vm.Manifest.Height ?? 300;
+            var path = await _svc.GenerateThumbnailAsync(vm.SourceInfo, width: thWidth, height: thHeight, force: force);
+            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+            {
+                vm.ThumbnailPath = path;
+            }
+            else
+            {
+                // Keep null -> will show "No preview"
+            }
+        }
+        catch
+        {
+            // Keep null
+        }
+        finally
+        {
+            vm.IsGenerating = false;
+        }
+        // Small delay to avoid flooding WebView2 with concurrent captures
+        await System.Threading.Tasks.Task.Delay(100);
+    }
     private void Refresh_Click(object sender, RoutedEventArgs e) => Refresh();
 
     private void New_Click(object sender, RoutedEventArgs e)
@@ -79,7 +86,14 @@ public partial class WidgetsListWindow : FluentWindow
         if (w.ShowDialog() == true) Refresh();
     }
 
-    private void Edit_Click(object sender, RoutedEventArgs e)
+    private async void RegenerateThumbnail_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
+        {
+            await RefreshThumbnail(vm, force: true);
+        }
+    }
+    private async void Edit_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
@@ -89,7 +103,7 @@ public partial class WidgetsListWindow : FluentWindow
                 return;
             }
             var w = new WidgetDataWindow(vm.Slug, isNew: false);
-            if (w.ShowDialog() == true) Refresh();
+            if (w.ShowDialog() == true) await RefreshThumbnail(vm, force: true);
         }
     }
 
@@ -131,6 +145,7 @@ public partial class WidgetsListWindow : FluentWindow
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
+
 }
 
 public sealed class WidgetGalleryItem : INotifyPropertyChanged
@@ -145,7 +160,32 @@ public sealed class WidgetGalleryItem : INotifyPropertyChanged
     public string? ThumbnailPath
     {
         get => _thumbnailPath;
-        set { if (_thumbnailPath != value) { _thumbnailPath = value; OnPropertyChanged(); } }
+        set { if (_thumbnailPath != value) { _thumbnailPath = value; OnPropertyChanged(); OnPropertyChanged(nameof(ThumbnailBitmap)); } }
+    }
+
+    public BitmapImage? ThumbnailBitmap
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_thumbnailPath) || !System.IO.File.Exists(_thumbnailPath))
+                return null;
+
+            try
+            {
+                var bitmap = new BitmapImage();
+                bitmap.BeginInit();
+                bitmap.UriSource = new Uri(_thumbnailPath);
+                bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                bitmap.DecodePixelWidth = 240;
+                bitmap.EndInit();
+                bitmap.Freeze();
+                return bitmap;
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 
     private bool _isGenerating;

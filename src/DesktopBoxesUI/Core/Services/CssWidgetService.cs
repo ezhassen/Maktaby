@@ -198,6 +198,7 @@ public sealed class CssWidgetService : ICssWidgetService
         {
             var sb = new StringBuilder();
             sb.Append("<!DOCTYPE html><html><head><meta charset=\"utf-8\">");
+            sb.Append("<style>html, body { margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; }</style>");
             if (!string.IsNullOrWhiteSpace(css)) sb.Append($"<style>{css}</style>");
             sb.Append("</head><body>");
             sb.Append(html);
@@ -207,9 +208,9 @@ public sealed class CssWidgetService : ICssWidgetService
         }
     }
 
-    public async Task<string?> GenerateThumbnailAsync(CssWidgetInfo widget, int width = 480, int height = 270)
+    public async Task<string?> GenerateThumbnailAsync(CssWidgetInfo widget, int width = 480, int height = 270, bool force = false)
     {
-        if (!string.IsNullOrEmpty(widget.ThumbnailPath) && File.Exists(widget.ThumbnailPath))
+        if (!string.IsNullOrEmpty(widget.ThumbnailPath) && File.Exists(widget.ThumbnailPath) && !force)
             return widget.ThumbnailPath;
 
         string outputPath;
@@ -237,6 +238,17 @@ public sealed class CssWidgetService : ICssWidgetService
         WebView2? web = null;
         try
         {
+            // Check if widget CSS has transparent background
+            var info = TryGetWidget(widget.Slug, widget.Source);
+            var css = info != null && File.Exists(info.CssPath) ? File.ReadAllText(info.CssPath) : "";
+            var hasTransparentBg = !string.IsNullOrWhiteSpace(css) && 
+                (css.Contains("transparent", StringComparison.OrdinalIgnoreCase) ||
+                 css.Contains("rgba", StringComparison.OrdinalIgnoreCase));
+
+            var windowBackground = hasTransparentBg 
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent)
+                : System.Windows.Media.Brushes.White;
+
             win = new Window
             {
                 Width = width,
@@ -245,12 +257,16 @@ public sealed class CssWidgetService : ICssWidgetService
                 ShowInTaskbar = false,
                 ShowActivated = false,
                 Visibility = Visibility.Hidden,
-                Background = System.Windows.Media.Brushes.White,
-                AllowsTransparency = false,
+                Background = windowBackground,
+                AllowsTransparency = hasTransparentBg,
                 Top = -10000,
                 Left = -10000
             };
-            web = new WebView2();
+            web = new WebView2
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch
+            };
             win.Content = web;
             //EBWebView created by default in target folder
             var userData = SettingsService.AppDataDir;//Path.Combine(SettingsService.AppDataDir, "EBWebView");
@@ -258,7 +274,13 @@ public sealed class CssWidgetService : ICssWidgetService
             var env = await CoreWebView2Environment.CreateAsync(null, userData);
             win.Show();
             await web.EnsureCoreWebView2Async(env);
-            try { web.DefaultBackgroundColor = System.Drawing.Color.White; } catch { }
+            try 
+            { 
+                web.DefaultBackgroundColor = hasTransparentBg 
+                    ? System.Drawing.Color.Transparent 
+                    : System.Drawing.Color.White; 
+            } 
+            catch { }
 
             var navTcs = new TaskCompletionSource<bool>();
             void Handler(object? s, CoreWebView2NavigationCompletedEventArgs e)
@@ -278,7 +300,41 @@ public sealed class CssWidgetService : ICssWidgetService
                 return null;
             }
             await Task.Delay(800);
-            using var fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write);
+
+            // Measure actual DOM content size
+            try
+            {
+                var sizeJson = await web.CoreWebView2.ExecuteScriptAsync(
+                    "JSON.stringify({ width: document.body.scrollWidth, height: document.body.scrollHeight })");
+                if (!string.IsNullOrEmpty(sizeJson) && sizeJson.Length > 2)
+                {
+                    sizeJson = sizeJson.Trim('"').Replace("\\\"", "\"");
+                    var jsonDoc = System.Text.Json.JsonDocument.Parse(sizeJson);
+                    var root = jsonDoc.RootElement;
+                    int contentWidth = root.TryGetProperty("width", out var w) ? w.GetInt32() : 0;
+                    int contentHeight = root.TryGetProperty("height", out var h) ? h.GetInt32() : 0;
+
+                    if (contentWidth > 0 && contentHeight > 0)
+                    {
+                        // Use actual content size or manifest size, whichever is larger
+                        var actualWidth = Math.Max(widget.Manifest.Width ?? width, contentWidth);
+                        var actualHeight = Math.Max(widget.Manifest.Height ?? height, contentHeight);
+
+                        if (actualWidth != width || actualHeight != height)
+                        {
+                            win.Width = actualWidth;
+                            win.Height = actualHeight;
+                            web.Width = actualWidth;
+                            web.Height = actualHeight;
+                            await Task.Delay(1000); // Wait for layout to settle
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (File.Exists(outputPath)) File.Delete(outputPath);
+            using var fs = new FileStream(outputPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
             await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, fs);
             await fs.FlushAsync();
             try { web.Visibility = Visibility.Collapsed; } catch { }
