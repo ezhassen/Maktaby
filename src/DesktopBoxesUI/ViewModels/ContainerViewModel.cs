@@ -64,11 +64,18 @@ public sealed class ContainerViewModel : ViewModelBase
 
     public string? CustomTypeName => _container.CustomTypeName;
 
-    /// <summary>Display title: the active box name for a BoxContainer, or the widget name for Custom.</summary>
+    public string? CssWidgetName => _container.CssWidgetName;
+    public CssWidgetSource? CssWidgetSource => _container.CssWidgetSource;
+
+    public DesktopItemContainer Model => _container;
+
+    /// <summary>Display title: the active box name for a BoxContainer, or the widget name for Custom/CssWidget.</summary>
     public string Title =>
-        Type == DesktopItemContainerType.Custom
-            ? (CustomTypeName ?? "Custom Widget")
-            : (ActiveBox?.Name ?? "");
+        Type == DesktopItemContainerType.CssWidget
+            ? (CssWidgetName ?? "Widget")
+            : Type == DesktopItemContainerType.Custom
+                ? (CustomTypeName ?? "Custom Widget")
+                : (ActiveBox?.Name ?? "");
 
     public BoxContainerViewModel? BoxContainerVm => _boxContainerVm;
 

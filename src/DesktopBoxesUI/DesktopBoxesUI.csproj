@@ -47,6 +47,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2739.15" />
 		<PackageReference Include="MinVer" Version="6.1.0">
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -83,6 +84,10 @@
 		<Resource Include="Assets\app_image.png" />
 		<Resource Include="Assets\github_dark.png" />
 		<Resource Include="Assets\github_light.png" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Content Include="CSSWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 </Project>

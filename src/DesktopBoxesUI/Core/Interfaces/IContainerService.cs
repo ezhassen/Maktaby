@@ -24,6 +24,14 @@ public interface IContainerService
         string? customTypeName = null,
         string? customData = null);
 
+    DesktopItemContainer CreateCssWidgetContainer(
+        double left,
+        double top,
+        double width,
+        double height,
+        string slug,
+        CssWidgetSource source);
+
     void AddContainer(DesktopItemContainer container);
 
     void RemoveContainer(System.Guid id);

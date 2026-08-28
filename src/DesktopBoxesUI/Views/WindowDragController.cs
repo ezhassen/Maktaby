@@ -1,3 +1,6 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Win32.NativeMethods;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -5,9 +8,6 @@ using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Core.Models;
-using DesktopBoxesUI.Win32.NativeMethods;
 
 namespace DesktopBoxesUI.Views;
 
@@ -207,6 +207,10 @@ internal sealed class WindowDragController
 
     private int HitTest(IntPtr lParam, IntPtr hwnd)
     {
+        // Non-resizable windows (locked widgets or fixed-size dialogs) should not show resize handles
+        if (_window.ResizeMode == ResizeMode.NoResize || _window.ResizeMode == ResizeMode.CanMinimize)
+            return 1;
+
         int x = (short)(lParam.ToInt32() & 0xFFFF);
         int y = (short)((lParam.ToInt32() >> 16) & 0xFFFF);
 

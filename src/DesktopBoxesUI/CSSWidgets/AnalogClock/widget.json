@@ -1,0 +1,11 @@
+{
+  "Name": "Analog Clock",
+  "Author": "DesktopBoxes",
+  "Description": "Built-in analog clock widget. Replace with your own CSS/HTML/JS later.",
+  "Version": "1.0.0",
+  "Width": 220,
+  "Height": 220,
+  "Resizable": true,
+  "AllowNetwork": false,
+  "Thumbnail": "thumbnail.png"
+}

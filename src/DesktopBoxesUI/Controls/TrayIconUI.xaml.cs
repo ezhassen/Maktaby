@@ -22,6 +22,8 @@ public partial class TrayIconUI
 {
     public event EventHandler? NewBoxRequested;
     public event EventHandler? NewBoxFolderPortalRequested;
+    public event EventHandler? NewWidgetRequested;
+    public event EventHandler? ManageWidgetsRequested;
     public event EventHandler? ResetRequested;
     public event EventHandler? SettingsRequested;
     public event EventHandler? AboutRequested;
@@ -105,6 +107,8 @@ public partial class TrayIconUI
 
     private void NewBox_Click(object sender, RoutedEventArgs e) => NewBoxRequested?.Invoke(this, EventArgs.Empty);
     private void NewBoxFolderPortal_Click(object sender, RoutedEventArgs e) => NewBoxFolderPortalRequested?.Invoke(this, EventArgs.Empty);
+    private void NewWidget_Click(object sender, RoutedEventArgs e) => NewWidgetRequested?.Invoke(this, EventArgs.Empty);
+    private void ManageWidgets_Click(object sender, RoutedEventArgs e) => ManageWidgetsRequested?.Invoke(this, EventArgs.Empty);
 
     private void Reset_Click(object sender, RoutedEventArgs e) => ResetRequested?.Invoke(this, EventArgs.Empty);
 

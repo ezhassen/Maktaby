@@ -614,6 +614,9 @@ public sealed partial class DesktopSurface : Window
         var createPortalItem = new MenuItem { Header = "Create Folder Portal" };
         createPortalItem.Click += (_, _) => CreateFolderPortalFromMarquee();
         menu.Items.Add(createPortalItem);
+        var createWidgetItem = new MenuItem { Header = "Create Widget" };
+        createWidgetItem.Click += (_, _) => CreateWidgetFromMarquee();
+        menu.Items.Add(createWidgetItem);
         menu.Items.Add(new Separator());
 
         // NOT PlacementMode.MousePoint: our hook marks every WM_MOUSEMOVE handled, so WPF's cached
@@ -684,6 +687,40 @@ public sealed partial class DesktopSurface : Window
 
         _host.CreateFolderPortalAt(x, y, w, h);
         _save();
+    }
+
+    private void CreateWidgetFromMarquee()
+    {
+        GetMarqueeRectDip(out _, out double x, out double y, out double w, out double h);
+        const double minWidth = 200;
+        const double minHeight = 160;
+        w = Math.Max(w, minWidth);
+        h = Math.Max(h, minHeight);
+        var wa = SystemParameters.WorkArea;
+        x = Math.Max(wa.Left, Math.Min(x, wa.Right - w));
+        y = Math.Max(wa.Top, Math.Min(y, wa.Bottom - h));
+
+        // Open gallery in select mode; on selection create widget at marquee position
+        var win = new WidgetsListWindow(selectMode: true);
+        if (win.ShowDialog() == true && win.SelectedInfo is not null)
+        {
+            // Use marquee size as override if user dragged larger than default
+            var info = win.SelectedInfo;
+            double useW = w;
+            double useH = h;
+            // If manifest has default size and marquee is close to min, prefer manifest
+            if (info.Manifest.Width.HasValue && Math.Abs(w - minWidth) < 1) useW = info.Manifest.Width.Value;
+            if (info.Manifest.Height.HasValue && Math.Abs(h - minHeight) < 1) useH = info.Manifest.Height.Value;
+            var dm = App.Services.GetRequiredService<DesktopManager>();
+            // Create via MainViewModel to keep bounds correct
+            var main = App.Services.GetRequiredService<ViewModels.MainViewModel>();
+            main.CreateCssWidgetAt(info.Slug, info.Source, x, y, useW, useH);
+            _save();
+        }
+        else
+        {
+            HideMarquee();
+        }
     }
 
     private void Surface_DragLeave(object sender, DragEventArgs e)

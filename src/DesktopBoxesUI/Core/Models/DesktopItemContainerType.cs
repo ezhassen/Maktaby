@@ -9,4 +9,5 @@ public enum DesktopItemContainerType
 {
     Custom = 0,
     BoxContainer = 1,
+    CssWidget
 }

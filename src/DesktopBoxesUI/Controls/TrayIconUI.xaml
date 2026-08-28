@@ -16,6 +16,8 @@
             -->
             <MenuItem Click="NewBox_Click" Header="New Box" />
             <MenuItem Click="NewBoxFolderPortal_Click" Header="New Folder Portal" />
+            <MenuItem Click="NewWidget_Click" Header="New Widget" />
+            <MenuItem Click="ManageWidgets_Click" Header="Widgets Gallery" />
             <Separator />
             <MenuItem
                 x:Name="resetMenuItem"

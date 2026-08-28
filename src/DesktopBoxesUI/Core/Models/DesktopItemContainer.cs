@@ -24,6 +24,12 @@ public sealed class DesktopItemContainer
     /// <summary>Optional serialized payload for a custom widget.</summary>
     public string? CustomData { get; set; }
 
+    /// <summary>When <see cref="Type"/> is <see cref="DesktopItemContainerType.CssWidget"/>: folder name under CSSWidgets (App) or UserWidgets (User).</summary>
+    public string? CssWidgetName { get; set; }
+
+    /// <summary>When <see cref="Type"/> is <see cref="DesktopItemContainerType.CssWidget"/>: where the template lives.</summary>
+    public CssWidgetSource? CssWidgetSource { get; set; }
+
     /// <summary>When locked, the container cannot be moved or resized by the user.</summary>
     public bool IsLocked { get; set; }
 

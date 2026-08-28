@@ -283,6 +283,17 @@ public sealed class DesktopManager
             {
                 boxWindow.ApplyGeometry();
             }
+            else if (window is CssWidgetWindow widgetWindow)
+            {
+                widgetWindow.Left = widgetWindow.DataContext is ContainerViewModel vm ? vm.Left : widgetWindow.Left;
+                widgetWindow.Top = widgetWindow.DataContext is ContainerViewModel wvm ? wvm.Top : widgetWindow.Top;
+                // Size also scaled via vm already; window will follow via binding or we set explicitly
+                if (window.DataContext is ContainerViewModel cvm)
+                {
+                    window.Width = cvm.Width;
+                    window.Height = cvm.Height;
+                }
+            }
         }
 
         _surface?.Relayout();
@@ -621,13 +632,25 @@ public sealed class DesktopManager
             return;
         }
 
-        Window window = new BoxContainerWindow(vm, _mainVm, _positioning, SaveAsyncFireAndForget)
+        Window window;
+        if (vm.Type == DesktopItemContainerType.CssWidget)
         {
-            ShowActivated = showActivated
-        };
+            window = new CssWidgetWindow(vm)
+            {
+                ShowActivated = showActivated
+            };
+        }
+        else
+        {
+            window = new BoxContainerWindow(vm, _mainVm, _positioning, SaveAsyncFireAndForget)
+            {
+                ShowActivated = showActivated
+            };
+        }
 
         _windows[vm.Id] = window;
-        Win32Apis.RegisterBoxWindow(new WindowInteropHelper(window).Handle);
+        // RegisterBoxWindow is done inside each window's OnLoaded for CssWidget; keep for BoxContainer compat
+        try { Win32Apis.RegisterBoxWindow(new WindowInteropHelper(window).Handle); } catch { }
         //IntPtr? foregroundWindowHwnd = null;
         //if (!showActivated && focusWorkaround)
         //{
@@ -696,7 +719,7 @@ public sealed class DesktopManager
     /// </summary>
     public void HideAllBoxes()
     {
-        foreach (var window in Application.Current.Windows.OfType<BoxContainerWindow>())
+        foreach (var window in _windows.Values)
         {
             var hwnd = new WindowInteropHelper(window).Handle;
             Win32Apis.AllowHide(hwnd);
@@ -711,7 +734,7 @@ public sealed class DesktopManager
     /// <summary>Re-shows every box window previously hidden by <see cref="HideAllBoxes"/>.</summary>
     public void ShowAllBoxes()
     {
-        foreach (var window in Application.Current.Windows.OfType<BoxContainerWindow>())
+        foreach (var window in _windows.Values)
         {
             window.Show();
         }
@@ -871,6 +894,34 @@ public sealed class DesktopManager
         _ = SaveAsync();
     }
 
+    public void NewCssWidget(string slug, CssWidgetSource source)
+    {
+        var offset = _mainVm.Containers.Count * 24;
+        // Use manifest default size if available
+        var svc = App.Services.GetRequiredService<ICssWidgetService>();
+        var info = svc.TryGetWidget(slug, source);
+        double w = info?.Manifest.Width ?? 300;
+        double h = info?.Manifest.Height ?? 220;
+        _mainVm.CreateCssWidgetAt(slug, source, 60 + offset, 60 + offset, w, h);
+        _ = SaveAsync();
+    }
+
+    public void RegisterContainer(DesktopItemContainer container)
+    {
+        _containers.AddContainer(container);
+        var vm = new ContainerViewModel(container, App.Services.GetRequiredService<IconImageService>(), App.Services.GetRequiredService<IBoxService>());
+        _mainVm.Containers.Add(vm);
+        _ = SaveAsync();
+    }
+
+    public void RemoveContainer(Guid id)
+    {
+        var vm = _mainVm.Containers.FirstOrDefault(c => c.Id == id);
+        if (vm is not null) _mainVm.RemoveContainer(vm);
+        else _containers.RemoveContainer(id);
+        _ = SaveAsync();
+    }
+
     public DesktopSnapshot GetCurrentDesktopSnapshot()
     {
         var current = GetPrimaryWorkAreaDip();
@@ -967,13 +1018,10 @@ public sealed class DesktopManager
                 Win32Apis.DesktopSurfaceHandle = IntPtr.Zero;
                 foreach (var window in _windows.Values)
                 {
-                    if (window is BoxContainerWindow boxWindow)
+                    var hwnd = new WindowInteropHelper(window).Handle;
+                    if (hwnd != IntPtr.Zero)
                     {
-                        var hwnd = new WindowInteropHelper(boxWindow).Handle;
-                        if (hwnd != IntPtr.Zero)
-                        {
-                            Win32Apis.GlueToDesktop(hwnd);
-                        }
+                        Win32Apis.GlueToDesktop(hwnd);
                     }
                 }
 
@@ -1028,18 +1076,15 @@ public sealed class DesktopManager
             Win32Apis.DesktopSurfaceHandle = IntPtr.Zero;
         }
 
-        // Boxes: their owner handle pointed at the dead explorer/surface window — re-own them all
+        // Boxes & Widgets: their owner handle pointed at the dead explorer/surface window — re-own them all
         // (to the surface in custom-surface mode, Progman otherwise) so owned-above-owner holds again.
         IntPtr owner = customSurface ? Win32Apis.DesktopSurfaceHandle : IntPtr.Zero;
         foreach (var window in _windows.Values)
         {
-            if (window is BoxContainerWindow box)
+            var hwnd = new WindowInteropHelper(window).Handle;
+            if (hwnd != IntPtr.Zero && Win32Apis.IsWindow(hwnd))
             {
-                var hwnd = new WindowInteropHelper(box).Handle;
-                if (hwnd != IntPtr.Zero && Win32Apis.IsWindow(hwnd))
-                {
-                    Win32Apis.GlueToDesktop(hwnd, owner);
-                }
+                Win32Apis.GlueToDesktop(hwnd, owner);
             }
         }
     }

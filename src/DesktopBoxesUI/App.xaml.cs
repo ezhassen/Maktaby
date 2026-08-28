@@ -70,6 +70,8 @@ public partial class App : Application
         ApplyTheme(Services.GetRequiredService<ISettingsService>().UserSettings.SelectedTheme);
         ApplyBoxAppearance();
         ApplicationThemeManager.Changed += (_, _) => ApplyBoxAppearance();
+        // Ensure CssWidget storage roots exist (UserWidgets + EBWebView)
+        try { Services.GetRequiredService<ICssWidgetService>().EnsureUserWidgetsRoot(); } catch { }
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -140,6 +142,15 @@ public partial class App : Application
     private void Application_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
     {
         //#if !DEBUG
+        // Suppress known WebView2 shutdown race: CoreWebView2Controller.IsVisible is set by WPF
+        // during visual tree teardown after CoreWebView2 is already disposed. This is harmless
+        // and should not show the crash dialog, especially during app exit.
+        if (IsIgnorableWebViewShutdownException(e.Exception) || Win32Apis.SystemTeardown)
+        {
+            Logging.Log.Debug(e.Exception, "Suppressed WebView2 shutdown race");
+            e.Handled = true;
+            return;
+        }
         Logging.Log.Error(e.Exception, "UnhandledException");
         e.Handled = true;
         Application.Current.Dispatcher.BeginInvoke(new Action(() =>
@@ -158,6 +169,23 @@ public partial class App : Application
             }
         }));
         //#endif
+    }
+
+    private static bool IsIgnorableWebViewShutdownException(Exception? ex)
+    {
+        if (ex == null) return false;
+        var msg = ex.ToString();
+        // WebView2's internal IsVisible setter throws ArgumentException/InvalidOperationException
+        // with "CoreWebView2Controller" and "IsVisible" when the control is torn down after dispose
+        if (msg.Contains("IsVisible", StringComparison.OrdinalIgnoreCase) &&
+            msg.Contains("CoreWebView2", StringComparison.OrdinalIgnoreCase))
+            return true;
+        if (msg.Contains("CoreWebView2Controller", StringComparison.OrdinalIgnoreCase))
+            return true;
+        // Unwrap aggregate/inner
+        if (ex.InnerException != null && IsIgnorableWebViewShutdownException(ex.InnerException))
+            return true;
+        return false;
     }
 
     private void CurrentDomain_UnhandledException(object? sender, UnhandledExceptionEventArgs e)
@@ -225,6 +253,7 @@ public partial class App : Application
         services.AddSingleton<MainViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddSingleton<IDialogService, DialogService>();
+        services.AddSingleton<ICssWidgetService, CssWidgetService>();
 
         // Win32 watchers
         services.AddSingleton<IMouseMonitor, MouseMonitor>();
@@ -358,6 +387,8 @@ public partial class App : Application
         var tray = new TrayIconUI();
         tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
         tray.NewBoxFolderPortalRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewFolderPortal();
+        tray.NewWidgetRequested += (_, _) => ShowWidgetsList(selectMode: true);
+        tray.ManageWidgetsRequested += (_, _) => ShowWidgetsList(selectMode: false);
         tray.ResetRequested += async (_, _) =>
         {
             var confirmed = await Services.GetRequiredService<IDialogService>().ShowConfirmAsync(
@@ -439,6 +470,23 @@ public partial class App : Application
 
         _trayHost!.Content = tray;
         _tray = tray;
+    }
+
+    private void ShowWidgetsList(bool selectMode)
+    {
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            foreach (var w in Application.Current.Windows.OfType<Views.WidgetsListWindow>())
+            {
+                w.Activate();
+                return;
+            }
+            var win = new Views.WidgetsListWindow(selectMode);
+            if (win.ShowDialog() == true && win.SelectedInfo is not null)
+            {
+                Services.GetRequiredService<DesktopManager>().NewCssWidget(win.SelectedInfo.Slug, win.SelectedInfo.Source);
+            }
+        });
     }
 
     private void OnDesktopDoubleClick(object? sender, EventArgs e)
