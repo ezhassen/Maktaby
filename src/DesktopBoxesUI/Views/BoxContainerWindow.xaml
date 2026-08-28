@@ -113,9 +113,20 @@
                             <ui:SymbolIcon Symbol="Navigation24" />
                             <Button.ContextMenu>
                                 <ContextMenu x:Name="BoxMenu">
-                                    <MenuItem Click="MenuDelete_Click" Header="Delete" />
-                                    <MenuItem Click="MenuHide_Click" Header="Hide" />
-                                    <MenuItem Click="MenuLock_Click" Header="Lock / Unlock" />
+                                    <MenuItem
+                                        Click="MenuDelete_Click"
+                                        Foreground="OrangeRed"
+                                        Header="Delete" />
+                                    <!--  Not implemented yet  -->
+                                    <MenuItem
+                                        Click="MenuHide_Click"
+                                        Header="Hide"
+                                        Visibility="Collapsed" />
+                                    <!--  Not implemented yet  -->
+                                    <MenuItem
+                                        Click="MenuLock_Click"
+                                        Header="Lock / Unlock"
+                                        Visibility="Collapsed" />
                                     <Separator />
                                     <MenuItem
                                         x:Name="MenuAddTab"
@@ -128,6 +139,7 @@
                                     <MenuItem
                                         x:Name="MenuRemoveTab"
                                         Click="RemoveTab_Click"
+                                        Foreground="OrangeRed"
                                         Header="Remove Tab" />
                                     <Separator />
                                     <MenuItem x:Name="MenuBoxType" Header="Box Type">
@@ -378,7 +390,10 @@
 
                 <Grid x:Name="BodyContent">
                     <controls:BoxControl x:Name="BoxContent" DataContext="{Binding ActiveBox}" />
-                    <controls:FolderPortalControl x:Name="FolderPortalContent" DataContext="{Binding ActiveBox}" Visibility="Collapsed" />
+                    <controls:FolderPortalControl
+                        x:Name="FolderPortalContent"
+                        DataContext="{Binding ActiveBox}"
+                        Visibility="Collapsed" />
                     <Border
                         x:Name="Placeholder"
                         Padding="16"
