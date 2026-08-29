@@ -365,7 +365,12 @@
                                 <DataTemplate DataType="vm:BoxViewModel">
                                     <Button
                                         HorizontalContentAlignment="Center"
+                                        AllowDrop="True"
                                         Cursor="Hand"
+                                        DragEnter="TabItem_DragEnter"
+                                        DragLeave="TabItem_DragLeave"
+                                        DragOver="TabItem_DragOver"
+                                        Drop="TabItem_Drop"
                                         PreviewMouseLeftButtonDown="Tab_PreviewMouseLeftButtonDown"
                                         Style="{StaticResource TabButtonStyle}"
                                         Tag="{Binding}">

@@ -357,6 +357,9 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         {
             CommitRename();
         }
+        // Avoid stale multi-selections persisting across windows and causing drops to surface.
+        try { BoxContent?.ClearSelectionOnDeactivate(); } catch { }
+        try { FolderPortalContent?.ClearSelectionOnDeactivate(); } catch { }
     }
 
     private void OnClosed(object? sender, EventArgs e)
@@ -1029,7 +1032,9 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
                 return;
             }
 
-            if ((e.GetPosition(this) - _dragStart).Length < 4)
+            if (!IsActive) return;
+
+            if ((e.GetPosition(this) - _dragStart).Length < SystemParameters.MinimumHorizontalDragDistance)
             {
                 return;
             }
@@ -1146,6 +1151,97 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         ClearTabDropVisuals();
         _debugOverlay?.Hide();
         //SetTabColumnsForDrag();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _tabHoverTimer;
+    private BoxViewModel? _pendingHoverTab;
+
+    private void TabItem_DragEnter(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DndFormats.BoxItems) && !e.Data.GetDataPresent(DataFormats.FileDrop) && !e.Data.GetDataPresent("Shell IDList Array")) return;
+        if (sender is Button { Tag: BoxViewModel vm } && _vm.BoxContainerVm != null)
+        {
+            _pendingHoverTab = vm;
+            StartTabHoverTimer();
+            e.Effects = DragDropEffects.Copy | DragDropEffects.Move;
+            e.Handled = true;
+        }
+    }
+
+    private void TabItem_DragOver(object sender, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(DndFormats.BoxItems) && !e.Data.GetDataPresent(DataFormats.FileDrop) && !e.Data.GetDataPresent("Shell IDList Array")) return;
+        if (sender is Button { Tag: BoxViewModel vm } && _vm.BoxContainerVm != null)
+        {
+            if (_pendingHoverTab != vm)
+            {
+                _pendingHoverTab = vm;
+                StartTabHoverTimer();
+            }
+            BringToFrontForDrag();
+            e.Effects = DragDropEffects.Copy | DragDropEffects.Move;
+            e.Handled = true;
+        }
+    }
+
+    private void TabItem_DragLeave(object sender, DragEventArgs e)
+    {
+        // Keep timer - hover will still switch if briefly leaving; cancel only when leaving TabStrip entirely
+        // Checked via mouse over TabStrip in DragLeave of window
+    }
+
+    private void StartTabHoverTimer()
+    {
+        _tabHoverTimer?.Stop();
+        _tabHoverTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        _tabHoverTimer.Tick += (s, ev) =>
+        {
+            _tabHoverTimer.Stop();
+            if (_pendingHoverTab != null && _vm.BoxContainerVm != null && _vm.BoxContainerVm.Tabs.Contains(_pendingHoverTab))
+            {
+                int idx = _vm.BoxContainerVm.Tabs.IndexOf(_pendingHoverTab);
+                if (idx >= 0 && idx != _vm.BoxContainerVm.SelectedIndex)
+                {
+                    _vm.BoxContainerVm.SelectedIndex = idx;
+                    UpdateBody();
+                    Activate();
+                }
+            }
+            _pendingHoverTab = null;
+        };
+        _tabHoverTimer.Start();
+    }
+
+    private void TabItem_Drop(object sender, DragEventArgs e)
+    {
+        _tabHoverTimer?.Stop();
+        _pendingHoverTab = null;
+        if (sender is not Button { Tag: BoxViewModel targetBox } || _vm.BoxContainerVm == null) return;
+        int idx = _vm.BoxContainerVm.Tabs.IndexOf(targetBox);
+        if (idx >= 0 && idx != _vm.BoxContainerVm.SelectedIndex)
+        {
+            _vm.BoxContainerVm.SelectedIndex = idx;
+            UpdateBody();
+            Activate();
+        }
+        // Direct drop onto tab appends to that box
+        if (e.Data.GetDataPresent(DndFormats.BoxItems) || e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent("Shell IDList Array"))
+        {
+            var moved = DropHelper.AddToBox(targetBox, _host, e, -1);
+            if (e.Handled)
+            {
+                if (moved != null && moved.Count > 0)
+                {
+                    foreach (var m in moved)
+                    {
+                        var vm = targetBox.Items.FirstOrDefault(i => i.Model == m);
+                        if (vm != null) vm.IsSelected = true;
+                    }
+                }
+                _save();
+            }
+        }
+        e.Handled = true;
     }
 
     /// <summary>
@@ -1363,6 +1459,13 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             double top = Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - 200));
             _host.MoveBoxToNewContainer(box, _vm, left, top);
             _save();
+            // Activate the newly created container window.
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var newVm = _host.Containers.FirstOrDefault(c => c.BoxContainerVm != null && c.BoxContainerVm.Tabs.Any(t => t.Model == box));
+                var newWin = newVm != null ? FindWindowFor(newVm) : null;
+                newWin?.Activate();
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
             return;
         }
 
@@ -1370,12 +1473,22 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         {
             int from = _vm.BoxContainerVm.Tabs.IndexOf(_dragTab);
             _vm.BoxContainerVm.MoveTab(from, _tabDropIndex);
+            Activate();
             _save();
         }
         else
         {
             // Merge into another container at the indicated insertion index; make it the active tab.
-            _host.MoveBoxToContainer(box, _vm, _dropWindow._vm, _tabDropIndex);
+            var targetVm = _dropWindow._vm;
+            _host.MoveBoxToContainer(box, _vm, targetVm, _tabDropIndex);
+            // Activate target window so dropped tab selection is visible.
+            _dropWindow.Activate();
+            // Ensure the moved box becomes active tab in target (MoveBoxToContainer may already, but enforce)
+            if (targetVm.BoxContainerVm != null)
+            {
+                var movedIdx = targetVm.BoxContainerVm.Tabs.IndexOf(_dragTab);
+                if (movedIdx >= 0) targetVm.BoxContainerVm.SelectedIndex = movedIdx;
+            }
             _save();
         }
     }
@@ -1581,10 +1694,19 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         if (box != null)
         {
             _host.MoveBoxToContainer(box, source, _vm);
+            // Activate target and select moved box
+            Activate();
+            if (_vm.BoxContainerVm != null && box != null)
+            {
+                var tab = _vm.BoxContainerVm.Tabs.FirstOrDefault(t => t.Model == box);
+                if (tab != null) _vm.BoxContainerVm.SelectedIndex = _vm.BoxContainerVm.Tabs.IndexOf(tab);
+                UpdateBody();
+            }
         }
         else
         {
             _host.MergeContainers(source, _vm);
+            Activate();
         }
 
         e.Handled = true;

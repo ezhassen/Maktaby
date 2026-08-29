@@ -158,6 +158,12 @@ public partial class BoxControl : UserControl
             return;
         }
 
+        // Native behavior: drag only from active window — check, don't activate.
+        if (sender is Border b && Window.GetWindow(b) is Window w && !w.IsActive)
+        {
+            return;
+        }
+
         // A native resize/move modal loop is running on the container: never morph it into an
         // OLE icon drag (this used to drag a shortcut along with the resize and could crash).
         if (Views.WindowDragController.IsNativeSizing)
@@ -170,8 +176,9 @@ public partial class BoxControl : UserControl
             return;
         }
 
+        // Native WPF drag threshold — no time delay, purely distance based.
         var diff = e.GetPosition(null) - _dragStart;
-        if (Math.Abs(diff.X) <= 4 && Math.Abs(diff.Y) <= 4)
+        if (Math.Abs(diff.X) <= SystemParameters.MinimumHorizontalDragDistance && Math.Abs(diff.Y) <= SystemParameters.MinimumVerticalDragDistance)
         {
             return;
         }
@@ -625,6 +632,8 @@ public partial class BoxControl : UserControl
 
         if (e.Handled)
         {
+            // Activate target window so selection is visible and next drag starts correctly.
+            Window.GetWindow(this)?.Activate();
             RequestSave?.Invoke();
         }
     }
@@ -658,8 +667,9 @@ public partial class BoxControl : UserControl
                 return i;
             }
 
-            // Pointer is within this item's row and left of its centre — insert before it.
-            if (pt.Y >= topLeft.Y && pt.Y <= topLeft.Y + h && pt.X < topLeft.X + w / 2)
+            // Pointer is within this item's row and anywhere over the icon's full width — insert before it.
+            // Half-width was confusing (right half dropped after). Whole icon now counts as left.
+            if (pt.Y >= topLeft.Y && pt.Y <= topLeft.Y + h && pt.X < topLeft.X + w)
             {
                 return i;
             }
@@ -782,7 +792,7 @@ public partial class BoxControl : UserControl
         _marqueeBase = null;
     }
 
-    private void ClearSelection()
+    public void ClearSelection()
     {
         if (Box is { } box)
         {
@@ -793,6 +803,13 @@ public partial class BoxControl : UserControl
         }
 
         _anchorIndex = -1;
+    }
+
+    /// <summary>Called by owning window on Deactivated to avoid stale multi-selections persisting.</summary>
+    public void ClearSelectionOnDeactivate()
+    {
+        if (_marqueeActive || _editing || _dragging) return;
+        ClearSelection();
     }
 
     private void SelectOnly(BoxItemViewModel vm)

@@ -200,11 +200,17 @@ public partial class FolderPortalControl : UserControl
 
     // ---- Selection helpers ----
 
-    private void ClearSelection()
+    public void ClearSelection()
     {
         if (Box == null) return;
         foreach (var it in Box.FolderItems) it.IsSelected = false;
         _anchorIndex = -1;
+    }
+
+    public void ClearSelectionOnDeactivate()
+    {
+        if (_renameService.IsEditing) return;
+        ClearSelection();
     }
 
     private void SelectOnly(FolderItemViewModel vm)
