@@ -228,8 +228,8 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
     bool HeaderIsShown() => HeaderBorder.Visibility == Visibility.Visible;
     bool CanShowHeader()
     {
-        bool show = _isHover || _isActive || WidgetMenu.IsOpen;
-        if (!show) show = IsMouseOver || IsKeyboardFocusWithin;
+        bool show = _isHover || this.IsActive || this.IsFocused;//|| this.IsKeyboardFocused;// || WidgetMenu.IsOpen;
+        if (!show) show = IsMouseOver;//|| IsKeyboardFocusWithin;
         return show;
     }
     private void UpdateChrome()

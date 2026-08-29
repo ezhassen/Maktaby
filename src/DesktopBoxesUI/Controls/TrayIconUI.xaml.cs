@@ -51,6 +51,8 @@ public partial class TrayIconUI
         var dtMan = App.Services.GetRequiredService<DesktopManager>();
         ISettingsService _settingsService = App.Services.GetRequiredService<ISettingsService>();
         MenuToggleHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
+        // Icon per state — centralized in AppStyles.xaml (ItemIcon_HideAllBoxes_*)
+        MenuToggleHideAll.Icon = Application.Current.FindResource(dtMan.AllBoxesHidden ? "ItemIcon_HideAllBoxes_Show" : "ItemIcon_HideAllBoxes_Hide") as object ?? MenuToggleHideAll.Icon;
         ToggleDebugTree.Visibility = GlobalFeaturesSwitches.ShowDebugTree ? Visibility.Visible : Visibility.Collapsed;
         resetMenuItem.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowReset ? Visibility.Visible : Visibility.Collapsed;
         menu_theme_system.IsChecked = _settingsService.UserSettings.SelectedTheme_IsSystem();
@@ -62,6 +64,9 @@ public partial class TrayIconUI
         MenuToggleDisable.Foreground = isDisabled
             ? System.Windows.Media.Brushes.LimeGreen
             : System.Windows.Media.Brushes.OrangeRed;
+        // Icon per state — PlugConnected (Enable) vs PlugDisconnected (Disable)
+        MenuToggleDisable.Icon = Application.Current.FindResource(isDisabled ? "ItemIcon_Enable" : "ItemIcon_Disable") as object ?? MenuToggleDisable.Icon;
+
         foreach (var item in contextMenu.Items)
         {
             // disable all menu items except MenuToggleDisable, exit, about

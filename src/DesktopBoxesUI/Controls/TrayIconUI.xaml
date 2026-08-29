@@ -10,23 +10,34 @@
     TooltipText="Desktop Boxes">
     <tray:NotifyIcon.Menu>
         <ContextMenu x:Name="contextMenu" HasDropShadow="False">
-            <!--
-                Menu item templates come from the app-wide fixed overrides in AppStyles.xaml
-                (submenu positioning + checkable state). No local overrides needed anymore.
-            -->
-            <MenuItem Click="NewBox_Click" Header="New Box" />
-            <MenuItem Click="NewBoxFolderPortal_Click" Header="New Folder Portal" />
-            <MenuItem Click="NewWidget_Click" Header="New Widget" />
-            <MenuItem Click="ManageWidgets_Click" Header="Widgets Gallery" />
+            <!--  Icons are centrally defined in AppStyles.xaml (ItemIcon_*) and shared app-wide.  -->
+            <MenuItem
+                Click="NewBox_Click"
+                Header="New Box"
+                Icon="{StaticResource ItemIcon_NewBox}" />
+            <MenuItem
+                Click="NewBoxFolderPortal_Click"
+                Header="New Folder Portal"
+                Icon="{StaticResource ItemIcon_FolderPortal}" />
+            <MenuItem
+                Click="NewWidget_Click"
+                Header="New Widget"
+                Icon="{StaticResource ItemIcon_NewWidget}" />
+            <MenuItem
+                Click="ManageWidgets_Click"
+                Header="Widgets Gallery"
+                Icon="{StaticResource ItemIcon_Gallery}" />
             <Separator />
             <MenuItem
                 x:Name="resetMenuItem"
                 Click="Reset_Click"
-                Header="Reset" />
+                Header="Reset"
+                Icon="{StaticResource ItemIcon_Reset}" />
             <MenuItem
                 x:Name="MenuToggleHideAll"
                 Click="ToggleHideAll_Click"
                 Header="Hide All Boxes"
+                Icon="{StaticResource ItemIcon_HideAllBoxes_Hide}"
                 IsCheckable="False"
                 ToolTip="Toggle Hide All" />
             <Separator />
@@ -34,28 +45,35 @@
                 x:Name="MenuToggleDisable"
                 Click="MenuToggleDisable_Click"
                 Header="Toggle Disable"
+                Icon="{StaticResource ItemIcon_Enable}"
                 IsCheckable="False"
                 ToolTip="Toggle Disable. and show the desktop icons" />
             <Separator />
             <Separator />
-            <MenuItem Click="Settings_Click" Header="Settings" />
-            <MenuItem Header="Theme">
+            <MenuItem
+                Click="Settings_Click"
+                Header="Settings"
+                Icon="{StaticResource ItemIcon_Settings}" />
+            <MenuItem Header="Theme" Icon="{StaticResource ItemIcon_Theme}">
                 <MenuItem
                     x:Name="menu_theme_system"
                     Click="Theme_Click"
                     Header="System"
+                    Icon="{StaticResource ItemIcon_ThemeSystem}"
                     IsCheckable="True"
                     Tag="{x:Null}" />
                 <MenuItem
                     x:Name="menu_theme_dark"
                     Click="Theme_Click"
                     Header="Dark"
+                    Icon="{StaticResource ItemIcon_ThemeDark}"
                     IsCheckable="True"
                     Tag="dark" />
                 <MenuItem
                     x:Name="menu_theme_light"
                     Click="Theme_Click"
                     Header="Light"
+                    Icon="{StaticResource ItemIcon_ThemeLight}"
                     IsCheckable="True"
                     Tag="light" />
             </MenuItem>
@@ -63,23 +81,27 @@
             <MenuItem
                 x:Name="menuAbout"
                 Click="About_Click"
-                Header="About" />
+                Header="About"
+                Icon="{StaticResource ItemIcon_About}" />
             <Separator />
             <MenuItem
                 x:Name="ToggleDebugTree"
                 Click="DebugTree_Click"
                 Header="Debug Desktop Tree"
+                Icon="{StaticResource ItemIcon_DebugTree}"
                 IsCheckable="True" />
             <MenuItem
                 x:Name="menuTest"
                 Click="Test_Click"
                 Foreground="OrangeRed"
                 Header="Test Button"
+                Icon="{StaticResource ItemIcon_Test}"
                 ToolTip="Used for tests" />
             <MenuItem
                 x:Name="menuExit"
                 Click="Exit_Click"
-                Header="Exit" />
+                Header="Exit"
+                Icon="{StaticResource ItemIcon_Exit}" />
         </ContextMenu>
     </tray:NotifyIcon.Menu>
 </tray:NotifyIcon>

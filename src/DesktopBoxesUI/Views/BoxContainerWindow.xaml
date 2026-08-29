@@ -116,43 +116,51 @@
                                     <MenuItem
                                         Click="MenuDelete_Click"
                                         Foreground="OrangeRed"
-                                        Header="Delete" />
+                                        Header="Delete"
+                                        Icon="{StaticResource ItemIcon_Delete}" />
                                     <!--  Not implemented yet  -->
                                     <MenuItem
                                         Click="MenuHide_Click"
                                         Header="Hide"
+                                        Icon="{StaticResource ItemIcon_HideBoxe}"
                                         Visibility="Collapsed" />
                                     <!--  Not implemented yet  -->
                                     <MenuItem
                                         Click="MenuLock_Click"
                                         Header="Lock / Unlock"
+                                        Icon="{StaticResource ItemIcon_Locked}"
                                         Visibility="Collapsed" />
                                     <Separator />
                                     <MenuItem
                                         x:Name="MenuAddTab"
                                         Click="AddTab_Click"
-                                        Header="Add Tab" />
+                                        Header="Add Tab"
+                                        Icon="{StaticResource ItemIcon_NewBox}" />
                                     <MenuItem
                                         x:Name="MenuAddFolderPortal"
                                         Click="AddFolderPortal_Click"
-                                        Header="Add Folder Portal" />
+                                        Header="Add Folder Portal"
+                                        Icon="{StaticResource ItemIcon_FolderPortal}" />
                                     <MenuItem
                                         x:Name="MenuRemoveTab"
                                         Click="RemoveTab_Click"
                                         Foreground="OrangeRed"
-                                        Header="Remove Tab" />
+                                        Header="Remove Tab"
+                                        Icon="{StaticResource ItemIcon_Remove}" />
                                     <Separator />
                                     <MenuItem x:Name="MenuBoxType" Header="Box Type">
                                         <MenuItem
                                             x:Name="MenuBoxTypeDesktop"
                                             Click="MenuBoxType_Click"
                                             Header="Desktop Items"
+                                            Icon="{StaticResource ItemIcon_NewBox}"
                                             IsCheckable="True"
                                             Tag="DesktopItems" />
                                         <MenuItem
                                             x:Name="MenuBoxTypeFolder"
                                             Click="MenuBoxType_Click"
                                             Header="Folder Portal"
+                                            Icon="{StaticResource ItemIcon_FolderPortal}"
                                             IsCheckable="True"
                                             Tag="FolderPortal" />
                                     </MenuItem>
@@ -176,6 +184,7 @@
                                             x:Name="MenuSetRollDirAuto"
                                             Click="MenuSetRollDir_Click"
                                             Header="Auto (snap)"
+                                            Icon="{StaticResource ItemIcon_Roll_Auto}"
                                             IsCheckable="True"
                                             Tag="Auto" />
                                         <Separator />
@@ -183,24 +192,28 @@
                                             x:Name="MenuSetRollDirTop"
                                             Click="MenuSetRollDir_Click"
                                             Header="Top"
+                                            Icon="{StaticResource ItemIcon_Roll_Up}"
                                             IsCheckable="True"
                                             Tag="Top" />
                                         <MenuItem
                                             x:Name="MenuSetRollDirBottom"
                                             Click="MenuSetRollDir_Click"
                                             Header="Bottom"
+                                            Icon="{StaticResource ItemIcon_Roll_Down}"
                                             IsCheckable="True"
                                             Tag="Bottom" />
                                         <MenuItem
                                             x:Name="MenuSetRollDirLeft"
                                             Click="MenuSetRollDir_Click"
                                             Header="Left"
+                                            Icon="{StaticResource ItemIcon_Roll_Left}"
                                             IsCheckable="True"
                                             Tag="Left" />
                                         <MenuItem
                                             x:Name="MenuSetRollDirRight"
                                             Click="MenuSetRollDir_Click"
                                             Header="Right"
+                                            Icon="{StaticResource ItemIcon_Roll_Right}"
                                             IsCheckable="True"
                                             Tag="Right" />
                                     </MenuItem>
@@ -209,6 +222,7 @@
                                             x:Name="MenuIconSizeAuto"
                                             Click="MenuSetIconSize_Click"
                                             Header="Auto / Default"
+                                            Icon="{StaticResource ItemIcon_Size_Small}"
                                             IsCheckable="True"
                                             Tag="Auto" />
                                         <Separator />
