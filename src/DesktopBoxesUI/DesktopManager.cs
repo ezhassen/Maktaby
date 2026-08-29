@@ -597,6 +597,48 @@ public sealed class DesktopManager
             dlLeft = Math.Max(wa.X, Math.Min(dlLeft, wa.Right - dlW));
             dlTop = Math.Max(wa.Y, Math.Min(dlTop, wa.Bottom - dlH));
             _containers.CreateContainer(DesktopItemContainerType.BoxContainer, dlLeft, dlTop, dlW, dlH, childContainer: dlContainer);
+
+            // Analog clock widget directly under the Downloads box
+            const string clockSlug = "AnalogClock";
+            double clockW = 220;
+            double clockH = 220;
+            try
+            {
+                var svc = App.Services?.GetService<ICssWidgetService>();
+                var info = svc?.TryGetWidget(clockSlug, CssWidgetSource.App);
+                if (info?.Manifest.Width is int mw && mw > 0) clockW = mw;
+                if (info?.Manifest.Height is int mh && mh > 0) clockH = mh;
+                else
+                {
+                    // Fallback: read manifest directly if service not yet available
+                    var appBase = AppContext.BaseDirectory;
+                    var clockManifestPath = Path.Combine(appBase, "CSSWidgets", clockSlug, "widget.json");
+                    if (!File.Exists(clockManifestPath))
+                    {
+                        var devPath = Path.GetFullPath(Path.Combine(appBase, "..", "..", "..", "..", "src", "DesktopBoxesUI", "CSSWidgets", clockSlug, "widget.json"));
+                        if (File.Exists(devPath)) clockManifestPath = devPath;
+                    }
+                    if (File.Exists(clockManifestPath))
+                    {
+                        var json = File.ReadAllText(clockManifestPath);
+                        var manifest = System.Text.Json.JsonSerializer.Deserialize<CssWidgetManifest>(json);
+                        if (manifest?.Width is int fmw && fmw > 0) clockW = fmw;
+                        if (manifest?.Height is int fmh && fmh > 0) clockH = fmh;
+                    }
+                }
+            }
+            catch { }
+
+            double clockLeft = dlLeft + (dlW - clockW) / 2; // centered under Downloads
+            double clockTop = dlTop + dlH + 20;
+            // Clamp inside work area
+            clockLeft = Math.Max(wa.X, Math.Min(clockLeft, wa.Right - clockW));
+            clockTop = Math.Max(wa.Y, Math.Min(clockTop, wa.Bottom - clockH));
+            // Only place if there is vertical space below Downloads (avoid overlapping bottom edge)
+            if (clockTop + clockH <= wa.Bottom + 1)
+            {
+                _containers.CreateCssWidgetContainer(clockLeft, clockTop, clockW, clockH, clockSlug, CssWidgetSource.App);
+            }
         }
     }
 
