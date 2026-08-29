@@ -2,7 +2,7 @@
 
 <p align="center">
   <!-- Placeholder: replace with a real banner/screenshot -->
-  <img src=".github/assets/banner.png" alt="Desktop Boxes — organize your desktop into resizable boxes" width="640" />
+  <img src=".github/assets/app_icon_svg.svg" alt="Desktop Boxes — organize your desktop into resizable boxes" width="256" />
 </p>
 
 Organize your Windows desktop into **resizable, snap-able boxes** that pin your files, folders and app shortcuts above the desktop — so everything stays where you put it.
@@ -27,12 +27,15 @@ Organize your Windows desktop into **resizable, snap-able boxes** that pin your 
 
 <!-- Placeholder screenshots — replace with actual captures -->
 
-### Box with items
+### Box with items and widgets
+<p align="center">
+  <img src=".github/assets/clock-Widget.png" alt="A box containing app shortcuts on the desktop" width="220" />
+</p>
 <p align="center">
   <img src=".github/assets/screenshot-box.png" alt="A box containing app shortcuts on the desktop" width="480" />
 </p>
 
-### Marquee → Create New Box
+### Marquee → Create New
 <p align="center">
   <img src=".github/assets/screenshot-marquee.png" alt="Dragging a marquee on empty space shows the Create New Box menu" width="480" />
 </p>
