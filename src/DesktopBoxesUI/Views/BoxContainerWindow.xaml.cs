@@ -1578,12 +1578,12 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     {
         var bounds = GetVisibleTabBounds();
         int index = 0;
-        //calculate using half
+        // Small right-edge zone: only near right edge counts as "after" — rest is "before"
         foreach (var (left, right) in bounds)
         {
             var tWidth = right - left;
-            var rHalf = right - (tWidth / 2);
-            if (screenP.X > rHalf)
+            var threshold = right - Math.Min(tWidth * 0.22, 18);
+            if (screenP.X > threshold)
             {
                 index++;
             }
