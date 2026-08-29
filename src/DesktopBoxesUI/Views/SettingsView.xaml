@@ -385,7 +385,7 @@
                             <TextBlock
                                 FontSize="11"
                                 Foreground="#999999"
-                                Text="Back up the current layout, restore it from a backup file, or permanently delete everything." />
+                                Text="Back up or restore a .dbe1 bundle (layout, settings and UserWidgets), or permanently delete everything." />
                             <StackPanel Margin="0,8,0,0" Orientation="Horizontal">
                                 <ui:Button
                                     Margin="0,0,8,0"

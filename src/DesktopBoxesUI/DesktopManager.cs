@@ -1,5 +1,6 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Core.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.NativeMethods;
@@ -7,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using System.Collections.Specialized;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Interop;
@@ -36,6 +38,7 @@ public sealed class DesktopManager
     private readonly IBoxService _boxRegistry;
     private readonly IFileRuleCoordinator _coordinator;
     private readonly IMouseMonitor _mouseMonitor;
+    private readonly ISettingsService _settingsService;
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
     private DesktopSurface? _surface;
@@ -65,6 +68,7 @@ public sealed class DesktopManager
         _boxRegistry = provider.GetRequiredService<IBoxService>();
         _coordinator = provider.GetRequiredService<IFileRuleCoordinator>();
         _mouseMonitor = provider.GetRequiredService<IMouseMonitor>();
+        _settingsService = provider.GetRequiredService<ISettingsService>();
     }
 
     public async Task InitializeAsync()
@@ -955,33 +959,74 @@ public sealed class DesktopManager
     public void SaveAsyncFireAndForget() => _ = SaveAsync();
 
     /// <summary>
-    /// Copies the current live snapshot file to <paramref name="destinationPath"/> (the "Backup" action
-    /// in Settings). The live state is flushed first so the backup is up to date.
+    /// Creates a .dbe1 bundle (zip) containing boxes.snapshot.json, UserSettings.json and UserWidgets/
+    /// (the "Backup" action in Settings). The live snapshot is flushed first so the backup is up to date.
     /// </summary>
     public async Task BackupAsync(string destinationPath)
     {
         await SaveAsync();
-        var src = _persistence.SnapshotFilePath;
-        if (File.Exists(src))
+
+        var appDataDir = SettingsService.AppDataDir;
+        var snapshotPath = _persistence.SnapshotFilePath;
+        var settingsPath = Path.Combine(appDataDir, "UserSettings.json");
+        var userWidgetsRoot = Path.Combine(appDataDir, "UserWidgets");
+
+        var dir = Path.GetDirectoryName(destinationPath);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+        // Build bundle as a zip archive with .dbe1 extension
+        using var fs = File.Create(destinationPath);
+        using var archive = new ZipArchive(fs, ZipArchiveMode.Create);
+
+        if (File.Exists(snapshotPath))
         {
-            var dir = Path.GetDirectoryName(destinationPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-            File.Copy(src, destinationPath, overwrite: true);
+            archive.CreateEntryFromFile(snapshotPath, "boxes.snapshot.json", CompressionLevel.Optimal);
+        }
+
+        if (File.Exists(settingsPath))
+        {
+            archive.CreateEntryFromFile(settingsPath, "UserSettings.json", CompressionLevel.Optimal);
+        }
+
+        if (Directory.Exists(userWidgetsRoot))
+        {
+            var files = Directory.EnumerateFiles(userWidgetsRoot, "*", SearchOption.AllDirectories).ToList();
+            if (files.Count == 0)
+            {
+                // Preserve empty folder so restore knows it existed
+                archive.CreateEntry("UserWidgets/");
+            }
+            else
+            {
+                foreach (var file in files)
+                {
+                    var relative = Path.GetRelativePath(userWidgetsRoot, file);
+                    var entryName = Path.Combine("UserWidgets", relative).Replace('\\', '/');
+                    archive.CreateEntryFromFile(file, entryName, CompressionLevel.Optimal);
+                }
+            }
         }
     }
 
     /// <summary>
-    /// Loads a snapshot from <paramref name="sourcePath"/>, replaces the live snapshot with it, and
-    /// re-initializes the boxes (the "Restore" action in Settings).
+    /// Restores from a .dbe1 bundle or a legacy JSON snapshot file, then re-initializes boxes.
+    /// Bundle restore replaces UserSettings.json and UserWidgets/ before reloading the snapshot.
     /// </summary>
     public async Task RestoreAsync(string sourcePath)
     {
-        var snapshot = await _persistence.LoadFromFileAsync(sourcePath);
-        if (snapshot is null)
+        if (IsBundleFile(sourcePath))
+        {
+            await RestoreBundleAsync(sourcePath);
+            return;
+        }
+
+        // Legacy: plain JSON snapshot file
+        var legacySnapshot = await _persistence.LoadFromFileAsync(sourcePath);
+        if (legacySnapshot is null)
         {
             return;
         }
-        //
+
         CloseAll();
         foreach (var container in _containers.GetContainers().ToList())
         {
@@ -989,9 +1034,190 @@ public sealed class DesktopManager
         }
         _boxRegistry.Clear();
 
-        //
-        await _persistence.SaveSnapshotAsync(snapshot);
+        await _persistence.SaveSnapshotAsync(legacySnapshot);
         await InitializeAsync();
+    }
+
+    private static bool IsBundleFile(string path)
+    {
+        var ext = Path.GetExtension(path);
+        if (ext.Equals(".dbe1", StringComparison.OrdinalIgnoreCase) ||
+            ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        // Fallback: peek header for zip signature (PK\x03\x04) even if extension is .json
+        try
+        {
+            using var fs = File.OpenRead(path);
+            if (fs.Length < 4) return false;
+            Span<byte> header = stackalloc byte[4];
+            fs.ReadExactly(header);
+            return header[0] == 0x50 && header[1] == 0x4B && (header[2] == 0x03 || header[2] == 0x05 || header[2] == 0x07);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task RestoreBundleAsync(string bundlePath)
+    {
+        var appDataDir = SettingsService.AppDataDir;
+        var snapshotPath = _persistence.SnapshotFilePath;
+        var settingsPath = Path.Combine(appDataDir, "UserSettings.json");
+        var userWidgetsRoot = Path.Combine(appDataDir, "UserWidgets");
+
+        // Extract bundle to a temp directory first so we can validate before touching live files
+        var tempDir = Path.Combine(Path.GetTempPath(), "DesktopBoxesRestore_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        try
+        {
+            using (var fs = File.OpenRead(bundlePath))
+            using (var archive = new ZipArchive(fs, ZipArchiveMode.Read))
+            {
+                foreach (var entry in archive.Entries)
+                {
+                    var fullName = entry.FullName.Replace('\\', '/');
+
+                    // Directory entry
+                    if (string.IsNullOrEmpty(entry.Name) && fullName.EndsWith('/'))
+                        continue;
+
+                    // Security: prevent zip-slip and absolute paths
+                    if (fullName.Contains("..") || Path.IsPathRooted(fullName))
+                        continue;
+
+                    // Only allow known prefixes
+                    bool allowed = fullName.Equals("boxes.snapshot.json", StringComparison.OrdinalIgnoreCase) ||
+                                   fullName.Equals("UserSettings.json", StringComparison.OrdinalIgnoreCase) ||
+                                   fullName.StartsWith("UserWidgets/", StringComparison.OrdinalIgnoreCase);
+                    if (!allowed)
+                        continue;
+
+                    var destPath = Path.Combine(tempDir, fullName);
+                    var destDir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(destDir)) Directory.CreateDirectory(destDir);
+
+                    // Skip directory entries
+                    if (string.IsNullOrEmpty(entry.Name))
+                        continue;
+
+                    using var entryStream = entry.Open();
+                    using var outStream = File.Create(destPath);
+                    await entryStream.CopyToAsync(outStream);
+                }
+            }
+
+            var extractedSnapshot = Path.Combine(tempDir, "boxes.snapshot.json");
+            var extractedSettings = Path.Combine(tempDir, "UserSettings.json");
+            var extractedWidgets = Path.Combine(tempDir, "UserWidgets");
+
+            DesktopSnapshot? snapshot = null;
+            if (File.Exists(extractedSnapshot))
+            {
+                snapshot = await _persistence.LoadFromFileAsync(extractedSnapshot);
+            }
+
+            // If bundle has no snapshot we cannot proceed with layout restore,
+            // but still restore settings/widgets if present
+            if (snapshot is null && !File.Exists(extractedSettings) && !Directory.Exists(extractedWidgets))
+            {
+                return;
+            }
+
+            if (snapshot is not null)
+            {
+                // Prepare to re-init: close windows and clear state first
+                CloseAll();
+                foreach (var container in _containers.GetContainers().ToList())
+                {
+                    _containers.RemoveContainer(container.Id);
+                }
+                _boxRegistry.Clear();
+
+                await _persistence.SaveSnapshotAsync(snapshot);
+            }
+
+            // Restore UserSettings.json
+            if (File.Exists(extractedSettings))
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
+                File.Copy(extractedSettings, settingsPath, overwrite: true);
+                try
+                {
+                    _settingsService.Load();
+                    // Re-apply appearance/theme on UI thread
+                    var app = Application.Current;
+                    if (app is not null)
+                    {
+                        if (app.Dispatcher.CheckAccess())
+                        {
+                            App.ApplyTheme(_settingsService.UserSettings.SelectedTheme);
+                            App.ApplyBoxAppearance();
+                            App.SyncDesktopIconSizeWatcher();
+                        }
+                        else
+                        {
+                            app.Dispatcher.Invoke(() =>
+                            {
+                                App.ApplyTheme(_settingsService.UserSettings.SelectedTheme);
+                                App.ApplyBoxAppearance();
+                                App.SyncDesktopIconSizeWatcher();
+                            });
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Restore UserWidgets: replace entire folder if bundle contained it
+            bool hasWidgetEntries = Directory.Exists(extractedWidgets) &&
+                                    (Directory.EnumerateFileSystemEntries(extractedWidgets).Any() ||
+                                     Directory.Exists(Path.Combine(tempDir, "UserWidgets")));
+            // Also consider empty UserWidgets/ marker
+            if (Directory.Exists(extractedWidgets) || hasWidgetEntries)
+            {
+                try
+                {
+                    if (Directory.Exists(userWidgetsRoot))
+                        Directory.Delete(userWidgetsRoot, recursive: true);
+                }
+                catch { }
+
+                if (Directory.Exists(extractedWidgets))
+                {
+                    CopyDirectory(extractedWidgets, userWidgetsRoot);
+                }
+                else
+                {
+                    // Bundle had empty UserWidgets/ marker
+                    Directory.CreateDirectory(userWidgetsRoot);
+                }
+            }
+
+            if (snapshot is not null)
+            {
+                await InitializeAsync();
+            }
+        }
+        finally
+        {
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
+    private static void CopyDirectory(string sourceDir, string destDir)
+    {
+        Directory.CreateDirectory(destDir);
+        foreach (var file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(sourceDir, file);
+            var destPath = Path.Combine(destDir, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destPath)!);
+            File.Copy(file, destPath, overwrite: true);
+        }
     }
 
     #endregion

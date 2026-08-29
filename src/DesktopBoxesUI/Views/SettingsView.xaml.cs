@@ -447,10 +447,10 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
     {
         var dlg = new SaveFileDialog
         {
-            Title = "Back up snapshot",
-            Filter = "JSON snapshot (*.json)|*.json",
-            FileName = "DesktopBoxes.snapshot.backup.json",
-            DefaultExt = ".json"
+            Title = "Back up",
+            Filter = "DesktopBoxes bundle (*.dbe1)|*.dbe1",
+            FileName = "DesktopBoxes.backup.dbe1",
+            DefaultExt = ".dbe1"
         };
 
         if (dlg.ShowDialog() != true)
@@ -467,7 +467,7 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         try
         {
             await manager.BackupAsync(dlg.FileName);
-            await ShowMessageAsync("Snapshot backed up.", "Backup");
+            await ShowMessageAsync("Backup created.", "Backup");
         }
         catch (Exception ex)
         {
@@ -480,8 +480,8 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Restore snapshot",
-            Filter = "JSON snapshot (*.json)|*.json",
+            Title = "Restore",
+            Filter = "DesktopBoxes bundle (*.dbe1)|*.dbe1|JSON snapshot (*.json)|*.json|All files (*.*)|*.*",
             Multiselect = false
         };
 
@@ -499,7 +499,7 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         try
         {
             await manager.RestoreAsync(dlg.FileName);
-            await ShowMessageAsync("Snapshot restored.", "Restore");
+            await ShowMessageAsync("Restore completed.", "Restore");
         }
         catch (Exception ex)
         {
