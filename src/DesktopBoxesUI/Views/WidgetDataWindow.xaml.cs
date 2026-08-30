@@ -1,18 +1,20 @@
+using DesktopBoxesUI.Controls;
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Services;
+using Microsoft.Extensions.DependencyInjection;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
-using DesktopBoxesUI.Controls;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Core.Models;
-using Microsoft.Extensions.DependencyInjection;
 using Wpf.Ui.Controls;
 
 namespace DesktopBoxesUI.Views;
 
-public partial class WidgetDataWindow : FluentWindow
+public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
 {
     private readonly ICssWidgetService _svc;
+    private readonly IDialogService _dialogs;
     private readonly string? _originalSlug;
     private readonly bool _isNew;
     private readonly DispatcherTimer _debounce;
@@ -22,6 +24,7 @@ public partial class WidgetDataWindow : FluentWindow
     {
         InitializeComponent();
         _svc = App.Services.GetRequiredService<ICssWidgetService>();
+        _dialogs = App.Services.GetRequiredService<IDialogService>();
         _originalSlug = slug;
         _isNew = isNew;
         _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
@@ -32,7 +35,9 @@ public partial class WidgetDataWindow : FluentWindow
         JsBox.TextChanged += (_, _) => _debounce.Start();
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    // The global dialog service renders WPF-UI content dialogs on this host.
+    public ContentDialogHost DialogHost => RootContentDialogHost;
+    private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         _previewControl = new CssWidgetControl();
         PreviewHost.Content = _previewControl;
@@ -42,7 +47,7 @@ public partial class WidgetDataWindow : FluentWindow
             var info = _svc.TryGetWidget(_originalSlug!, CssWidgetSource.User);
             if (info is null)
             {
-                System.Windows.MessageBox.Show($"Widget '{_originalSlug}' not found.", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+                await _dialogs.ShowMessageAsync($"Widget '{_originalSlug}' not found.", "Error");
                 Close();
                 return;
             }
@@ -122,7 +127,7 @@ public partial class WidgetDataWindow : FluentWindow
         {
             if (_svc.UserWidgetExists(slug))
             {
-                System.Windows.MessageBox.Show($"A widget named '{slug}' already exists.", "Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                await _dialogs.ShowMessageAsync($"A widget named '{slug}' already exists.", "Error");
                 return;
             }
             var newSlug = _svc.CreateUserWidget(slug, html, css, js, manifest);

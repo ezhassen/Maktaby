@@ -17,7 +17,11 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar Title="Widget Editor" Grid.Row="0" ShowMaximize="True" ShowMinimize="True" />
+        <ui:TitleBar
+            Title="Widget Editor"
+            Grid.Row="0"
+            ShowMaximize="True"
+            ShowMinimize="True" />
 
         <!--  Manifest fields  -->
         <Border
@@ -40,13 +44,19 @@
                         FontWeight="SemiBold"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="NAME (FOLDER)" />
-                    <ui:TextBox x:Name="NameBox" Margin="0,4,0,8" PlaceholderText="MyWidget" />
+                    <ui:TextBox
+                        x:Name="NameBox"
+                        Margin="0,4,0,8"
+                        PlaceholderText="MyWidget" />
                     <TextBlock
                         FontSize="11"
                         FontWeight="SemiBold"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="AUTHOR" />
-                    <ui:TextBox x:Name="AuthorBox" Margin="0,4,0,0" PlaceholderText="Author" />
+                    <ui:TextBox
+                        x:Name="AuthorBox"
+                        Margin="0,4,0,0"
+                        PlaceholderText="Author" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Margin="8,0">
                     <TextBlock
@@ -54,7 +64,10 @@
                         FontWeight="SemiBold"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="DESCRIPTION" />
-                    <ui:TextBox x:Name="DescBox" Margin="0,4,0,8" PlaceholderText="Description" />
+                    <ui:TextBox
+                        x:Name="DescBox"
+                        Margin="0,4,0,8"
+                        PlaceholderText="Description" />
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
@@ -67,22 +80,34 @@
                                 FontSize="11"
                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                 Text="WIDTH" />
-                            <ui:TextBox x:Name="WidthBox" Margin="0,4,0,0" PlaceholderText="300" />
+                            <ui:TextBox
+                                x:Name="WidthBox"
+                                Margin="0,4,0,0"
+                                PlaceholderText="300" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Margin="4,0">
                             <TextBlock
                                 FontSize="11"
                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                 Text="HEIGHT" />
-                            <ui:TextBox x:Name="HeightBox" Margin="0,4,0,0" PlaceholderText="220" />
+                            <ui:TextBox
+                                x:Name="HeightBox"
+                                Margin="0,4,0,0"
+                                PlaceholderText="220" />
                         </StackPanel>
-                        <StackPanel Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Bottom">
+                        <StackPanel
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Bottom">
                             <CheckBox
                                 x:Name="ResizableBox"
                                 Content="Resizable"
                                 IsChecked="True" />
                         </StackPanel>
-                        <StackPanel Grid.Column="3" Margin="8,0,0,0" VerticalAlignment="Bottom">
+                        <StackPanel
+                            Grid.Column="3"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Bottom">
                             <CheckBox
                                 x:Name="NetworkBox"
                                 Content="Allow network"
@@ -90,12 +115,19 @@
                         </StackPanel>
                     </Grid>
                 </StackPanel>
-                <StackPanel Grid.Column="2" Margin="12,0,0,0" VerticalAlignment="Bottom">
+                <StackPanel
+                    Grid.Column="2"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Bottom">
                     <TextBlock
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="VERSION" />
-                    <ui:TextBox x:Name="VersionBox" Width="100" Margin="0,4,0,0" PlaceholderText="1.0.0" />
+                    <ui:TextBox
+                        x:Name="VersionBox"
+                        Width="100"
+                        Margin="0,4,0,0"
+                        PlaceholderText="1.0.0" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -225,5 +257,10 @@
                 </StackPanel>
             </Grid>
         </Border>
+
+        <ui:ContentDialogHost
+            x:Name="RootContentDialogHost"
+            Grid.Row="0"
+            Grid.RowSpan="3" />
     </Grid>
 </ui:FluentWindow>

@@ -1,5 +1,6 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Linq;
@@ -10,17 +11,21 @@ using Wpf.Ui.Controls;
 
 namespace DesktopBoxesUI.Views;
 
-public partial class WidgetsListWindow : FluentWindow
+public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvider
 {
     private readonly ICssWidgetService _svc;
+    private readonly IDialogService _dialogs;
     public bool IsSelectMode { get; }
     public CssWidgetInfo? SelectedInfo { get; private set; }
 
+    // The global dialog service renders WPF-UI content dialogs on this host.
+    public ContentDialogHost DialogHost => RootContentDialogHost;
     public WidgetsListWindow(bool selectMode = false)
     {
         InitializeComponent();
         IsSelectMode = selectMode;
         _svc = App.Services.GetRequiredService<ICssWidgetService>();
+        _dialogs = App.Services.GetRequiredService<IDialogService>();
         DataContext = this;
         Loaded += (_, _) => Refresh();
         if (IsSelectMode) SelectButton.Visibility = Visibility.Visible;
@@ -99,7 +104,7 @@ public partial class WidgetsListWindow : FluentWindow
         {
             if (vm.Source == CssWidgetSource.App)
             {
-                System.Windows.MessageBox.Show("App widgets are read-only. Duplicate to edit.", "Widgets", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Information);
+                await _dialogs.ShowMessageAsync("App widgets are read-only. Duplicate to edit.", "Widgets");
                 return;
             }
             var w = new WidgetDataWindow(vm.Slug, isNew: false);
@@ -107,20 +112,20 @@ public partial class WidgetsListWindow : FluentWindow
         }
     }
 
-    private void Delete_Click(object sender, RoutedEventArgs e)
+    private async void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe2 && fe2.Tag is WidgetGalleryItem vm2)
         {
             if (vm2.Source == CssWidgetSource.App)
             {
-                System.Windows.MessageBox.Show("Cannot delete built-in widgets.", "Widgets", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
+                await _dialogs.ShowMessageAsync("Cannot delete built-in widgets.", "Widgets");
                 return;
             }
-            if (System.Windows.MessageBox.Show($"Delete widget '{vm2.Slug}'? This cannot be undone.", "Delete", System.Windows.MessageBoxButton.YesNo, System.Windows.MessageBoxImage.Warning) == System.Windows.MessageBoxResult.Yes)
-            {
-                _svc.DeleteUserWidget(vm2.Slug);
-                Refresh();
-            }
+            var confirmed = await _dialogs.ShowConfirmDeleteAsync($"Delete widget '{vm2.Slug}'? This cannot be undone.");
+            if (!confirmed) return;
+
+            _svc.DeleteUserWidget(vm2.Slug);
+            Refresh();
         }
     }
 

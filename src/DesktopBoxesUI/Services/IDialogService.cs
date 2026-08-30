@@ -35,6 +35,10 @@ public sealed record DialogOptions
 public interface IDialogService
 {
     Task ShowMessageAsync(string message, DialogOptions? options = null, CancellationToken cancellationToken = default);
+    Task ShowMessageAsync(string content, string title);
     Task<bool> ShowConfirmAsync(string message, DialogOptions? options = null, CancellationToken cancellationToken = default);
+    Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info);
+    Task<bool> ShowConfirmDangerAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger);
+    Task<bool> ShowConfirmDeleteAsync(string content, string title = "Confirm Delete", string confirmText = "Delete", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger);
     Task<ContentDialogResult> ShowAsync(DialogOptions options, CancellationToken cancellationToken = default);
 }

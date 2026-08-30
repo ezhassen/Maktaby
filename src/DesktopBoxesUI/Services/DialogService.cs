@@ -17,6 +17,26 @@ public sealed class DialogService : IDialogService
     private const double DialogMaxWidthValue = 480;
     private const double DialogMaxHeightValue = 640;
 
+    public Task ShowMessageAsync(string content, string title)
+        => this.ShowMessageAsync(content, new DialogOptions { Title = title });
+
+    public Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info)
+        => this.ShowConfirmAsync(content, new DialogOptions
+        {
+            Title = title,
+            PrimaryButtonText = confirmText,
+            PrimaryButtonAppearance = primaryButtonAppearance
+        });
+    public Task<bool> ShowConfirmDangerAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger)
+    {
+        return ShowConfirmAsync(content, title, confirmText: confirmText, primaryButtonAppearance: primaryButtonAppearance);
+    }
+    public Task<bool> ShowConfirmDeleteAsync(string content, string title = "Confirm Delete", string confirmText = "Delete", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger)
+    {
+        return ShowConfirmAsync(content, title, confirmText: confirmText, primaryButtonAppearance: primaryButtonAppearance);
+    }
+
+
     public Task ShowMessageAsync(string message, DialogOptions? options = null, CancellationToken cancellationToken = default)
     {
         options ??= new DialogOptions();
