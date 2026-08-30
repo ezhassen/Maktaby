@@ -262,6 +262,12 @@ internal static class ManualApis
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
+
+    public const uint KEYEVENTF_KEYUP = 0x0002;
+    public const byte VK_ESCAPE = 0x1B;
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern int SHFileOperationW(ref SHFILEOPSTRUCT lpFileOp);
 

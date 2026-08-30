@@ -240,11 +240,28 @@ public sealed partial class DesktopSurface : Window
             return (IntPtr)1;
         }
 
-        // NOTE: no WM_MOUSEACTIVATE handling here. Returning MA_NOACTIVATE suppresses the activation an
-        // OLE drop target needs (that broke drag/drop), and allowing activation is worse: with
-        // WS_EX_NOACTIVATE restored after the focus experiment, DefWindowProc's default MA_ACTIVATE
-        // never fires because the style declines mouse activation up front. The surface deliberately
-        // never becomes the foreground window — empty-desktop input is forwarded to Explorer instead.
+        // Hit-test + activate: any mouse button activates surface so Start Menu (topmost popup) loses
+        // foreground and dismisses (covers hidden-icons where forwarding to hidden list-view doesn't).
+        // Keep OLE drop path: when a Box drag is over surface (_dragging) we stay NOACTIVATE to preserve drop target.
+        if (msg == 0x0021 /*WM_MOUSEACTIVATE*/)
+        {
+            // MA_ACTIVATE=1 activates and eats click, MA_NOACTIVATE=3 keeps OLE alive
+            bool anyButtonDown = (Win32Apis.GetAsyncKeyState(0x01) & 0x8000) != 0
+                || (Win32Apis.GetAsyncKeyState(0x02) & 0x8000) != 0
+                || (Win32Apis.GetAsyncKeyState(0x04) & 0x8000) != 0
+                || (Win32Apis.GetAsyncKeyState(0x05) & 0x8000) != 0
+                || (Win32Apis.GetAsyncKeyState(0x06) & 0x8000) != 0;
+            if (_dragging)
+            {
+                handled = true;
+                return (IntPtr)3; // MA_NOACTIVATE — preserve OLE drop
+            }
+            if (anyButtonDown)
+            {
+                handled = true;
+                return (IntPtr)1; // MA_ACTIVATE — click activates surface and dismisses Start Menu, then we still forward
+            }
+        }
 
         // WPF keeps trying to re-assert a normal top-level z-order and, on click/activation, raises the
         // surface above application windows. Intercept every reposition and force the insert-after back

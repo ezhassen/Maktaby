@@ -1020,17 +1020,17 @@ internal static class Win32Apis
         // excludes it permanently.
         MakeToolWindow(hwnd);
 
-        // WS_EX_NOACTIVATE stays despite boxes being OWNED by this surface (ownership guarantees
-        // Z-ORDER, not FOCUS policy). Experiment conclusion: with the style removed the surface CAN
-        // take focus, but every empty-desktop click starts an activation/focus war — Explorer steals
-        // focus back ~10ms later (KILLFOCUS), and during the churn both the double-click hide-all
-        // gesture and the right-click desktop context menu stop working. Click-no-activate keeps the
-        // surface input-transparent for focus while still receiving mouse input.
+        // Hit-test + activate: surface is hit-testable (#01000000) and now activatable so any
+        // click deactivates Start Menu reliably (also covers hidden-icons where PostMessage to hidden
+        // list-view does not dismiss shell). Previous WS_EX_NOACTIVATE avoided focus war (~10ms
+        // Explorer KILLFOCUS) that broke double-click/context menu; now handled via WM_MOUSEACTIVATE
+        // -> MA_ACTIVATE for any button while keeping OLE drop path intact.
         // Also strip WS_EX_TOPMOST if anything set it: a topmost-band window floats above every normal
         // app window regardless of what insert-after handle the z-order guard forces.
         int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
         ex &= ~ManualApis.WS_EX_TOPMOST;
-        ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_NOACTIVATE);
+        ex &= ~ManualApis.WS_EX_NOACTIVATE;
+        ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex);
 
         PositionSurfaceOverDesktop(hwnd);
     }
@@ -1498,5 +1498,61 @@ internal static class Win32Apis
         // Do not touch SetWindowTheme / DwmSetWindowAttribute here: those are per-window and owned by
         // Wpf.Ui's ApplicationThemeManager. Resetting them to "Explorer" / 0 would fight the app theme
         // (e.g. leave a dark window with a light popup theme until the next theme apply).
+    }
+
+    /// <summary>
+    /// Best-effort Start Menu visibility check. On Win10/11 the menu is a visible top-level
+    /// <c>Windows.UI.Core.CoreWindow</c> titled "Start" (Win10) or hosted in an
+    /// <c>XamlExplorerHostIslandWindow</c>. Enum top-level windows and match those.
+    /// </summary>
+    public static bool IsStartMenuVisible()
+    {
+        bool visible = false;
+        try
+        {
+            ManualApis.EnumWindows((hWnd, _) =>
+            {
+                if (!ManualApis.IsWindowVisible(hWnd)) return true;
+                var sb = new StringBuilder(256);
+                ManualApis.GetClassName(hWnd, sb, sb.Capacity);
+                string cls = sb.ToString();
+                if (cls == "Windows.UI.Core.CoreWindow" || cls == "XAML Explorer Host Island Window" || cls == "XamlExplorerHostIslandWindow")
+                {
+                    var tb = new StringBuilder(256);
+                    ManualApis.GetWindowText(hWnd, tb, tb.Capacity);
+                    string title = tb.ToString();
+                    if (title.Equals("Start", StringComparison.OrdinalIgnoreCase) || title.Equals("Search", StringComparison.OrdinalIgnoreCase))
+                    {
+                        visible = true;
+                        return false;
+                    }
+                }
+                // Fallback: Windows 11 Start uses ApplicationFrameWindow hosting Start
+                if (cls == "ApplicationFrameWindow")
+                {
+                    var tb = new StringBuilder(256);
+                    ManualApis.GetWindowText(hWnd, tb, tb.Capacity);
+                    if (tb.ToString().Contains("Start", StringComparison.OrdinalIgnoreCase))
+                    {
+                        visible = true;
+                        return false;
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+        }
+        catch { }
+        return visible;
+    }
+
+    public static void DismissStartMenu()
+    {
+        try
+        {
+            // ESC dismisses Start without side effects; safe even if not visible.
+            ManualApis.keybd_event(ManualApis.VK_ESCAPE, 0, 0, UIntPtr.Zero);
+            ManualApis.keybd_event(ManualApis.VK_ESCAPE, 0, ManualApis.KEYEVENTF_KEYUP, UIntPtr.Zero);
+        }
+        catch { }
     }
 }
