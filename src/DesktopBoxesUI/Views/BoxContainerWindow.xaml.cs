@@ -1070,8 +1070,6 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         _lastDragPoint = GetScreenDragPoint(e);
         UpdateTabDropTarget(_lastDragPoint);
         PositionTabGhost(e);
-        // Animate gap in target
-        if (_dropWindow != null) _dropWindow.AnimateTabGap(_tabDropIndex);
     }
 
     /// <summary>
@@ -1305,10 +1303,11 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         {
             if (_tabDragging)
             {
-                // A local value overrides the XAML binding during the drag so the remaining tabs fill
-                // the strip (the dragged tab's column would otherwise stay reserved/empty).
-                int count = _vm.BoxContainerVm.Tabs.Count;
-                ug.Columns = Math.Max(1, count - 1);
+                // Do NOT shrink Columns to count-1: UniformGrid with Rows=1 and 3 children + Columns=2
+                // wraps the 3rd child to row 1 (clipped by MaxHeight 36) so right tabs "disappear".
+                // Keep original binding; the dragged tab's cell stays empty but visible tabs stay in
+                // row 0. Gap-fill is handled by animating suffix tabs left (see AnimateTabGap) if needed.
+                // Intentionally keep Columns = Tabs.Count to avoid wrap.
             }
             else
             {
@@ -1613,8 +1612,12 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
                 continue;
             }
 
-            var sLeft = container.PointToScreen(new Point(0, 0)).X;
-            var sRight = container.PointToScreen(new Point(container.RenderSize.Width, 0)).X;
+            // PointToScreen includes RenderTransform (our gap animation). For hit-testing we need the
+            // layout bounds without the animated offset, otherwise thresholds drift as we animate.
+            double tx = 0;
+            if (container.RenderTransform is TranslateTransform tt) tx = tt.X;
+            var sLeft = container.PointToScreen(new Point(-tx, 0)).X;
+            var sRight = container.PointToScreen(new Point(container.RenderSize.Width - tx, 0)).X;
             bounds.Add((sLeft, sRight));
             //bounds.Add((topLeft.X, topLeft.X + container.RenderSize.Width));
         }
@@ -1624,13 +1627,16 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private int ComputeInsertionIndex(Point screenP)
     {
-        var bounds = GetVisibleTabBounds();
+        var bounds = GetVisibleTabBounds(includeDraggingTap: false);
         int index = 0;
-        // Small right-edge zone: only near right edge counts as "after" — rest is "before"
-        foreach (var (left, right) in bounds)
+        for (int bi = 0; bi < bounds.Count; bi++)
         {
+            var (left, right) = bounds[bi];
             var tWidth = right - left;
-            var threshold = right - Math.Min(tWidth * 0.22, 18);
+            bool isLast = bi == bounds.Count - 1;
+            // Small gap: most of tab is "before", only near right edge counts as "after".
+            // Far-right tab gets larger zone so dropping at end is easy.
+            var threshold = right - Math.Min(tWidth * (isLast ? 0.45 : 0.22), isLast ? 32 : 18);
             if (screenP.X > threshold)
             {
                 index++;
@@ -1646,71 +1652,44 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void ShowTabDropIndicator(int index)
     {
-        var localX = 0d;
-        int count = TabItems.Items.Count;
-        var bwidth = 30d;
-        if (count > 0)
-        {
-            if (TabItems.ItemContainerGenerator.ContainerFromIndex(0) is UIElement container)
-            {
-                bwidth = container.RenderSize.Width;
-            }
-        }
-        if (index + 1 == count)
-        {
-            localX = (bwidth * count) - 4;//last so show in right
-        }
-        else if (index == 0)
+        // Use actual visible tab bounds so indicator stays aligned even with UniformGrid rounding
+        // and small-gap shift (not full tab width). Falls back to estimated layout if not generated.
+        var bounds = GetVisibleTabBounds(includeDraggingTap: false);
+        double localX;
+        if (bounds.Count == 0)
         {
             localX = TabStrip.Padding.Left;
         }
-        else //if (index != 0)
+        else if (index <= 0)
         {
-            localX = TabStrip.Padding.Left;
-            for (int i = 1; i < count; i++)
-            {
-                if (index >= i)
-                {
-                    localX += bwidth;
-                }
-                else
-                {
-                    break;
-                }
-            }
+            var screenBoundaryX = bounds[0].Left;
+            localX = TabStrip.PointFromScreen(new Point(screenBoundaryX, 0)).X;
         }
-
-        ////double stripLeft = TabStrip.PointToScreen(new Point(0, 0)).X + TabStrip.Padding.Left;
-        //var bounds = GetVisibleTabBounds();
-
-        //double screenBoundaryX;
-        //if (bounds.Count == 0)
-        //{
-        //    screenBoundaryX = 0;
-        //}
-        //else if (index <= 0)
-        //{
-        //    screenBoundaryX = bounds[0].Left;
-        //}
-        //else if (index >= bounds.Count)
-        //{
-        //    screenBoundaryX = bounds[^1].Right;
-        //}
-        //else
-        //{
-        //    screenBoundaryX = bounds[index].Left;
-        //}
-        //var localpaddX = TabStrip.PointFromScreen(new Point(screenBoundaryX, 0)).X;
-        ////double localX = screenBoundaryX - stripLeft;
-        //double localX = localpaddX + TabStrip.Padding.Left;
+        else if (index >= bounds.Count)
+        {
+            var screenBoundaryX = bounds[^1].Right;
+            localX = TabStrip.PointFromScreen(new Point(screenBoundaryX, 0)).X - 1.5;
+        }
+        else
+        {
+            var screenBoundaryX = bounds[index].Left;
+            localX = TabStrip.PointFromScreen(new Point(screenBoundaryX, 0)).X;
+        }
         TabDropIndicator.Margin = new Thickness(localX, 0, 0, 0);
         TabDropIndicator.Visibility = Visibility.Visible;
     }
 
     private void HideTabDropIndicator() => TabDropIndicator.Visibility = Visibility.Collapsed;
 
+    // Tracks last animated gap to avoid restarting animation every mouse-move (glitching).
+    private int _animatedGapIndex = int.MinValue;
+    private const double TabGapWidth = 22;
+
     private void AnimateTabGap(int index)
     {
+        // Avoid restarting the same animation every mouse-move — causes flicker/jank.
+        if (index == _animatedGapIndex) return;
+
         // Reset previous transforms
         for (int i = 0; i < TabItems.Items.Count; i++)
         {
@@ -1721,27 +1700,35 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
                 el.RenderTransform = Transform.Identity;
             }
         }
-        if (index < 0 || index >= TabItems.Items.Count) return;
-        double w = 0;
-        if (TabItems.ItemContainerGenerator.ContainerFromIndex(0) is UIElement first) w = first.RenderSize.Width;
-        if (w <= 0) w = 110;
-        for (int i = index; i < TabItems.Items.Count; i++)
+        _animatedGapIndex = index;
+        if (index < 0) return;
+
+        // Build ordered list of visible tab elements (excluding the dragged tab whose inner Button is Collapsed but container stays visible).
+        int from = _dragTab != null && _vm.BoxContainerVm != null ? _vm.BoxContainerVm.Tabs.IndexOf(_dragTab) : -1;
+        var visible = new List<UIElement>();
+        for (int i = 0; i < TabItems.Items.Count; i++)
         {
-            if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is UIElement el)
+            if (i == from) continue;
+            if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is UIElement el && el.IsVisible)
+                visible.Add(el);
+        }
+        if (index >= visible.Count) return; // far-right gap: no tabs to shift, just show indicator at end
+        for (int vi = index; vi < visible.Count; vi++)
+        {
+            var el = visible[vi];
+            var tt = new TranslateTransform();
+            el.RenderTransform = tt;
+            var anim = new System.Windows.Media.Animation.DoubleAnimation(0, TabGapWidth, TimeSpan.FromMilliseconds(160))
             {
-                var tt = new TranslateTransform();
-                el.RenderTransform = tt;
-                var anim = new System.Windows.Media.Animation.DoubleAnimation(0, w, TimeSpan.FromMilliseconds(180))
-                {
-                    EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-                };
-                tt.BeginAnimation(TranslateTransform.XProperty, anim);
-            }
+                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+            };
+            tt.BeginAnimation(TranslateTransform.XProperty, anim);
         }
     }
 
     private void ClearTabGap()
     {
+        _animatedGapIndex = int.MinValue;
         for (int i = 0; i < TabItems.Items.Count; i++)
         {
             if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is UIElement el)
