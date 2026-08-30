@@ -22,6 +22,8 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
     private bool _isHover;
     private bool _isActive;
     private HwndSource? _hwndSource;
+    private bool ShowChromeOnHover = false;
+    //private bool MoveWindowByWidgetMouseDown = true;
 
     public CssWidgetWindow(ContainerViewModel vm)
     {
@@ -93,11 +95,13 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
             _widgetControl.WidgetMouseEnter -= OnWidgetMouseEnter;
             _widgetControl.WidgetMouseLeave -= OnWidgetMouseLeave;
             _widgetControl.WidgetClicked -= OnWidgetClicked;
+            //_widgetControl.WidgetMouseDown -= OnWidgetMouseDown;
         }
         _widgetControl = new CssWidgetControl();
         _widgetControl.WidgetMouseEnter += OnWidgetMouseEnter;
         _widgetControl.WidgetMouseLeave += OnWidgetMouseLeave;
         _widgetControl.WidgetClicked += OnWidgetClicked;
+        //_widgetControl.WidgetMouseDown += OnWidgetMouseDown;
         WidgetHost.Content = _widgetControl;
         _widgetControl.LoadWidget(info.Slug, info.Source);
         return info.Manifest;
@@ -203,6 +207,26 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         UpdateChrome();
     }
 
+    /*private void OnWidgetMouseDown(object? sender, EventArgs e)
+    {
+        if (!MoveWindowByWidgetMouseDown || _container.IsLocked) return;
+        if (_drag?.IsDragging == true) return;
+        // WebView2CompositionControl has no airspace but still captures mouse; DragMove() fails when
+        // invoked from async WebMessage (button state lost). Use _drag title loop via synthetic
+        // WM_NCLBUTTONDOWN so WindowDragController's snapping (WmMoving/WmSizing) still applies.
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                const int WM_NCLBUTTONDOWN = 0x00A1;
+                const int HTCAPTION = 2;
+                ManualApis.SendMessage(hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+            }
+        }
+        catch { }
+    }*/
+
     private void ApplyDraggedBounds(RectD bounds)
     {
         _container.Bounds = bounds;
@@ -228,8 +252,8 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
     bool HeaderIsShown() => HeaderBorder.Visibility == Visibility.Visible;
     bool CanShowHeader()
     {
-        bool show = _isHover || this.IsActive || this.IsFocused;//|| this.IsKeyboardFocused;// || WidgetMenu.IsOpen;
-        if (!show) show = IsMouseOver;//|| IsKeyboardFocusWithin;
+        bool show = (ShowChromeOnHover && _isHover) || this.IsActive || this.IsFocused || (ShowChromeOnHover && IsMouseOver);//|| this.IsKeyboardFocused;// || WidgetMenu.IsOpen;
+        //if (!show) show = (ShowChromeOnHover && IsMouseOver);//|| IsKeyboardFocusWithin;
         return show;
     }
     private void UpdateChrome()
@@ -359,6 +383,7 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
             try { _widgetControl.WidgetMouseEnter -= OnWidgetMouseEnter; } catch { }
             try { _widgetControl.WidgetMouseLeave -= OnWidgetMouseLeave; } catch { }
             try { _widgetControl.WidgetClicked -= OnWidgetClicked; } catch { }
+            //try { _widgetControl.WidgetMouseDown -= OnWidgetMouseDown; } catch { }
             try { _widgetControl.CleanupForShutdown(); } catch { }
             try { WidgetHost.Content = null; } catch { }
             _widgetControl = null;

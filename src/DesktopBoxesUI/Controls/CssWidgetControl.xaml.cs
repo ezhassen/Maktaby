@@ -23,6 +23,7 @@ public partial class CssWidgetControl : UserControl
     public event EventHandler? WidgetMouseEnter;
     public event EventHandler? WidgetMouseLeave;
     public event EventHandler? WidgetClicked;
+    public event EventHandler? WidgetMouseDown;
 
     public CssWidgetControl()
     {
@@ -137,21 +138,26 @@ public partial class CssWidgetControl : UserControl
 #else
             settings.AreDevToolsEnabled = false;
 #endif
-            settings.AreDefaultContextMenusEnabled = true;
+            settings.AreDefaultContextMenusEnabled = false;
             settings.IsStatusBarEnabled = false;
             WebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
             // DOM mouse/activation bridge: WebView2CompositionControl does not reliably
             // raise WPF MouseEnter/MouseLeave (especially on inactive windows), so all
             // hover/click detection comes from the DOM via postMessage.
-            //WebView.MouseEnter += (ss, ee) => { WidgetMouseEnter?.Invoke(this, EventArgs.Empty); };
-            //WebView.MouseLeave += (ss, ee) => { WidgetMouseLeave?.Invoke(this, EventArgs.Empty); };
-            //WebView.GotFocus += (ss, ee) => { WidgetClicked?.Invoke(this, EventArgs.Empty); };
+            //if (WebView is WebView2CompositionControl)
+            //{
+            //    this.MouseEnter += (ss, ee) => { WidgetMouseEnter?.Invoke(this, EventArgs.Empty); };
+            //    this.MouseLeave += (ss, ee) => { WidgetMouseLeave?.Invoke(this, EventArgs.Empty); };
+            //    //WebView.GotFocus += (ss, ee) => { WidgetClicked?.Invoke(this, EventArgs.Empty); };
+            //    this.PreviewMouseUp += (ss, ee) => { WidgetClicked?.Invoke(this, EventArgs.Empty); };
+            //}
             WebView.CoreWebView2.WebMessageReceived += OnWebMessage;
+            const string domBridge = """(() => { let inside = false; function sendEnter() { if (!inside) { inside = true; try{chrome.webview.postMessage("enter");}catch(e){} } } function sendLeave() { if (inside) { inside = false; try{chrome.webview.postMessage("leave");}catch(e){} } } window.addEventListener("pointerenter", sendEnter); window.addEventListener("pointerleave", sendLeave); window.addEventListener("mouseenter", sendEnter); window.addEventListener("mouseleave", sendLeave); window.addEventListener("mousemove", () => { if (!inside) sendEnter(); }, { passive: true }); window.addEventListener("click", () => { try{chrome.webview.postMessage("click");}catch(e){} }); window.addEventListener("mousedown", (e) => { if (e.button !== 0) return; if (e.target.closest('button, a, input, select, textarea, [data-no-drag]')) return; try{chrome.webview.postMessage("mousedown");}catch(e){} }, { capture: true }); })();""";
             try
             {
-                await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                    "(function(){var entered=false;function sendEnter(){if(!entered){entered=true;chrome.webview.postMessage('enter');}}function sendLeave(){if(entered){entered=false;chrome.webview.postMessage('leave');}}document.addEventListener('pointerenter',sendEnter);document.addEventListener('mouseenter',sendEnter);document.addEventListener('mouseover',sendEnter);document.addEventListener('mousemove',sendEnter,{passive:true});document.addEventListener('pointerleave',sendLeave);document.addEventListener('mouseleave',sendLeave);document.addEventListener('mouseout',sendLeave);document.addEventListener('click',function(){chrome.webview.postMessage('click');});})();"
-                );
+                await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(domBridge);
+                // Also try immediate ExecuteScriptAsync if document already exists (NavigateToString case)
+                //try { await WebView.CoreWebView2.ExecuteScriptAsync(domBridge); } catch { }
             }
             catch { }
             // Apply initial filter based on current manifest
@@ -184,6 +190,7 @@ public partial class CssWidgetControl : UserControl
             if (msg == "enter") WidgetMouseEnter?.Invoke(this, EventArgs.Empty);
             else if (msg == "leave") WidgetMouseLeave?.Invoke(this, EventArgs.Empty);
             else if (msg == "click") WidgetClicked?.Invoke(this, EventArgs.Empty);
+            else if (msg == "mousedown") WidgetMouseDown?.Invoke(this, EventArgs.Empty);
         }
         catch { }
     }

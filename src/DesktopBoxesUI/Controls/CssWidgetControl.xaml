@@ -5,8 +5,8 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
     <Grid Background="#01000000">
-        <wv2:WebView2 x:Name="WebView" />
-        <!--<wv2:WebView2CompositionControl x:Name="WebView" />-->
+        <wv2:WebView2 x:Name="WebView" Visibility="Visible" />
+        <!--<wv2:WebView2CompositionControl x:Name="WebView" AllowExternalDrop="False" />-->
         <ui:InfoBar
             x:Name="ErrorBar"
             Title="WebView2 unavailable"
@@ -20,6 +20,7 @@
             x:Name="PlaceholderText"
             HorizontalAlignment="Center"
             VerticalAlignment="Center"
+            Background="{DynamicResource WindowBackground}"
             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
             Text="No widget"
             Visibility="Collapsed" />
