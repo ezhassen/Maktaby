@@ -1003,8 +1003,14 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     private Thickness _origBorderThickness;
     private bool _tabStripTempShown;
     private Button? _dragButton;            // the tab button being dragged; hidden while dragging
+    private UIElement? _dragContainer;        // ItemContainer ContentPresenter collapsed so TabStripPanel snaps remaining tabs
     private TabDragGhostWindow? _tabGhost;
     private Point _tabGhostOffset;
+    private double _dragTabOriginalWidth;
+    private double _dragTabOriginalHeight;
+
+    private TabStripPanel? GetTabPanel() => FindVisualChild<TabStripPanel>(TabItems);
+    private static TabStripPanel? GetTabPanelFor(BoxContainerWindow w) => FindVisualChild<TabStripPanel>(w.TabItems);
 
     /// <summary>When true, a click-through overlay draws the computed drop-target rectangles and cursor
     /// point during a tab drag, so the coordinate maths can be verified visually. Set to false to disable.</summary>
@@ -1045,13 +1051,27 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
             _tabDragging = true;
             Mouse.OverrideCursor = Cursors.SizeAll;
-            // Chrome-like: hide source tab and collapse its space, ghost follows cursor constrained to tab strip
+            // Chrome-like: collapse the dragged container so TabStripPanel snaps remaining tabs to fill its space.
+            // The ghost shows the dragged tab; panel GapIndex will show insertion gap in target window.
             double ghostW = _dragButton != null && _dragButton.ActualWidth > 0 ? _dragButton.ActualWidth : 120;
             double ghostH = _dragButton != null && _dragButton.ActualHeight > 0 ? _dragButton.ActualHeight : TabStrip.ActualHeight > 0 ? TabStrip.ActualHeight : 28;
-            if (_dragButton != null) _dragButton.Visibility = Visibility.Collapsed;
-            SetTabColumnsForDrag();
+            _dragTabOriginalWidth = ghostW;
+            _dragTabOriginalHeight = ghostH;
+            if (_vm.BoxContainerVm != null)
+            {
+                int fromIdx = _vm.BoxContainerVm.Tabs.IndexOf(_dragTab!);
+                if (fromIdx >= 0 && TabItems.ItemContainerGenerator.ContainerFromIndex(fromIdx) is UIElement c)
+                {
+                    _dragContainer = c;
+                    _dragContainer.Visibility = Visibility.Collapsed;
+                }
+                else if (_dragButton != null)
+                {
+                    _dragButton.Visibility = Visibility.Collapsed;
+                }
+            }
             _tabGhost = new TabDragGhostWindow(_dragTab.Name, _dragTab.IsFolderPortal, ghostW, ghostH);
-            _tabGhostOffset = e.GetPosition(_dragButton);
+            _tabGhostOffset = _dragButton != null ? e.GetPosition(_dragButton) : new Point(ghostW / 2, ghostH / 2);
             _tabGhost.Show();
             PositionTabGhost(e);
             RootBorder.CaptureMouse();
@@ -1088,18 +1108,41 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         if (!Win32Apis.GetCursorPos(out ManualApis.POINT pt)) return;
         var ghostSrc = PresentationSource.FromVisual(_tabGhost);
         if (ghostSrc == null) return;
+
+        // Match ghost width to target tabs if they are wider; restore original in empty area.
+        if (_dropWindow != null)
+        {
+            var targetPanel = GetTabPanelFor(_dropWindow);
+            if (targetPanel != null && _dropWindow._vm.BoxContainerVm != null)
+            {
+                _dropWindow.TabStrip.UpdateLayout();
+                int visible = _dropWindow._vm.BoxContainerVm.Tabs.Count;
+                // Target shows gap while dragging, so available width for tabs is W - GapWidth
+                double stripW = _dropWindow.TabStrip.ActualWidth;
+                double gap = targetPanel.GapIndex >= 0 ? targetPanel.GapWidth : 0;
+                double targetTabW = visible > 0 ? (stripW - gap) / visible : _dragTabOriginalWidth;
+                // Only enlarge (as requested) — keep original width when target tabs are narrower
+                double desiredW = targetTabW < _dragTabOriginalWidth ? targetTabW : _dragTabOriginalWidth;
+                if (System.Math.Abs(_tabGhost.Width - desiredW) > 0.5)
+                    _tabGhost.Width = desiredW;
+            }
+        }
+        else
+        {
+            if (System.Math.Abs(_tabGhost.Width - _dragTabOriginalWidth) > 0.5)
+                _tabGhost.Width = _dragTabOriginalWidth;
+        }
+
         Point cursorGhost = ghostSrc.CompositionTarget.TransformFromDevice.Transform(new Point(pt.X, pt.Y));
         double x = cursorGhost.X - _tabGhostOffset.X;
         double y;
         if (_dropWindow != null)
         {
             _dropWindow.TabStrip.UpdateLayout();
-            UIElement? tabRef = null;
-            if (_dropWindow.TabItems.ItemContainerGenerator.ContainerFromIndex(0) is UIElement firstTab) tabRef = firstTab;
-            else tabRef = _dropWindow.TabStrip;
+            FrameworkElement tabRef = _dropWindow.TabStrip;
             Point tabScreenPhysical = tabRef.PointToScreen(new Point(0, 0));
             Point tabScreenGhost = ghostSrc.CompositionTarget.TransformFromDevice.Transform(tabScreenPhysical);
-            double tabH = (tabRef as FrameworkElement)?.ActualHeight ?? _dropWindow.TabStrip.ActualHeight;
+            double tabH = tabRef.ActualHeight;
             y = tabScreenGhost.Y + (tabH - _tabGhost.Height) / 2;
             Point stripScreenPhysical = _dropWindow.TabStrip.PointToScreen(new Point(0, 0));
             Point stripGhost = ghostSrc.CompositionTarget.TransformFromDevice.Transform(stripScreenPhysical);
@@ -1144,9 +1187,9 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             this.UpdateChrome();
             // Chrome-like cleanup: ghost and source gap
             if (_tabGhost != null) { _tabGhost.Close(); _tabGhost = null; }
-            if (_dragButton != null) _dragButton.Visibility = Visibility.Visible;
+            if (_dragContainer != null) { _dragContainer.Visibility = Visibility.Visible; _dragContainer = null; }
+            else if (_dragButton != null) _dragButton.Visibility = Visibility.Visible;
             _tabDragging = false;
-            SetTabColumnsForDrag();
             ClearTabGap();
         }
         else if (_vm.BoxContainerVm != null)
@@ -1163,12 +1206,21 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         _dragButton = null;
         _dragTab = null;
         _tabDragging = false;
-        //SetTabColumnsForDrag();
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (_tabDragging && e.Key == Key.Escape)
+        {
+            CancelTabDrag();
+            e.Handled = true;
+        }
+    }
+
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        // Any non-left click cancels tab drag (right/middle/XButton).
+        if (_tabDragging && e.ChangedButton != MouseButton.Left)
         {
             CancelTabDrag();
             e.Handled = true;
@@ -1183,7 +1235,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         }
 
         if (_tabGhost != null) { _tabGhost.Close(); _tabGhost = null; }
-        if (_dragButton != null) _dragButton.Visibility = Visibility.Visible;
+        if (_dragContainer != null) { _dragContainer.Visibility = Visibility.Visible; _dragContainer = null; }
+        else if (_dragButton != null) _dragButton.Visibility = Visibility.Visible;
         _dragTab = null;
         _tabDragging = false;
         _dragButton = null;
@@ -1191,7 +1244,6 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         Mouse.Capture(null);
         ClearTabDropVisuals();
         ClearTabGap();
-        SetTabColumnsForDrag();
         _debugOverlay?.Hide();
     }
 
@@ -1681,63 +1733,30 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void HideTabDropIndicator() => TabDropIndicator.Visibility = Visibility.Collapsed;
 
-    // Tracks last animated gap to avoid restarting animation every mouse-move (glitching).
-    private int _animatedGapIndex = int.MinValue;
     private const double TabGapWidth = 22;
+    private int _animatedGapIndex = int.MinValue;
 
     private void AnimateTabGap(int index)
     {
-        // Avoid restarting the same animation every mouse-move — causes flicker/jank.
+        // TabStripPanel reserves GapWidth at GapIndex via layout (no TranslateTransform overflow).
+        // Layout distributes remaining width uniformly so last tab never clips beyond window.
         if (index == _animatedGapIndex) return;
-
-        // Reset previous transforms
-        for (int i = 0; i < TabItems.Items.Count; i++)
-        {
-            if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is UIElement el)
-            {
-                if (el.RenderTransform is TranslateTransform tt)
-                    tt.BeginAnimation(TranslateTransform.XProperty, null);
-                el.RenderTransform = Transform.Identity;
-            }
-        }
         _animatedGapIndex = index;
-        if (index < 0) return;
-
-        // Build ordered list of visible tab elements (excluding the dragged tab whose inner Button is Collapsed but container stays visible).
-        int from = _dragTab != null && _vm.BoxContainerVm != null ? _vm.BoxContainerVm.Tabs.IndexOf(_dragTab) : -1;
-        var visible = new List<UIElement>();
-        for (int i = 0; i < TabItems.Items.Count; i++)
-        {
-            if (i == from) continue;
-            if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is UIElement el && el.IsVisible)
-                visible.Add(el);
-        }
-        if (index >= visible.Count) return; // far-right gap: no tabs to shift, just show indicator at end
-        for (int vi = index; vi < visible.Count; vi++)
-        {
-            var el = visible[vi];
-            var tt = new TranslateTransform();
-            el.RenderTransform = tt;
-            var anim = new System.Windows.Media.Animation.DoubleAnimation(0, TabGapWidth, TimeSpan.FromMilliseconds(160))
-            {
-                EasingFunction = new System.Windows.Media.Animation.CubicEase { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
-            };
-            tt.BeginAnimation(TranslateTransform.XProperty, anim);
-        }
+        var panel = GetTabPanel();
+        if (panel != null) panel.GapIndex = index;
     }
 
     private void ClearTabGap()
     {
         _animatedGapIndex = int.MinValue;
-        for (int i = 0; i < TabItems.Items.Count; i++)
-        {
-            if (TabItems.ItemContainerGenerator.ContainerFromIndex(i) is UIElement el)
-            {
-                if (el.RenderTransform is TranslateTransform tt)
-                    tt.BeginAnimation(TranslateTransform.XProperty, null);
-                el.RenderTransform = Transform.Identity;
-            }
-        }
+        var panel = GetTabPanel();
+        if (panel != null) panel.GapIndex = -1;
+    }
+
+    private void ClearAllTabGaps()
+    {
+        foreach (var w in System.Windows.Application.Current.Windows.OfType<BoxContainerWindow>())
+            w.ClearTabGap();
     }
 
     private void Window_DragEnter(object sender, DragEventArgs e) => HandleContainerDragOver(e);

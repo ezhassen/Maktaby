@@ -19,6 +19,7 @@
     MouseLeftButtonUp="TitleArea_MouseLeftButtonUp"
     MouseMove="TitleArea_MouseMove"
     PreviewKeyDown="Window_PreviewKeyDown"
+    PreviewMouseDown="Window_PreviewMouseDown"
     PreviewMouseLeftButtonUp="Tab_PreviewMouseLeftButtonUp"
     PreviewMouseMove="Tab_PreviewMouseMove"
     ResizeMode="CanResize"
@@ -358,7 +359,7 @@
                         <ItemsControl x:Name="TabItems" ItemsSource="{Binding BoxContainerVm.Tabs}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
-                                    <UniformGrid Columns="{Binding BoxContainerVm.Tabs.Count}" Rows="1" />
+                                    <controls:TabStripPanel GapIndex="-1" GapWidth="22" />
                                 </ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
