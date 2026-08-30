@@ -1031,6 +1031,7 @@ internal static class Win32Apis
         ex &= ~ManualApis.WS_EX_TOPMOST;
         ex &= ~ManualApis.WS_EX_NOACTIVATE;
         ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex);
+        //ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_NOACTIVATE);
 
         PositionSurfaceOverDesktop(hwnd);
     }
