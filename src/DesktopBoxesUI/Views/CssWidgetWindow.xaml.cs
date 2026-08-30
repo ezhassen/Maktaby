@@ -126,7 +126,7 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         var positioning = App.Services.GetRequiredService<IWindowPositioningService>();
         Action save = () => { try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { } };
         _drag = new WindowDragController(
-            this, monitor, dpi, snapping, positioning,
+            this, App.Services.GetRequiredService<DesktopManager>(), monitor, dpi, snapping, positioning,
             r => ApplyDraggedBounds(r),
             () => App.Services.GetRequiredService<IContainerService>().GetContainers()
                     .Where(c => c.Id != _container.Id && c.IsVisible)

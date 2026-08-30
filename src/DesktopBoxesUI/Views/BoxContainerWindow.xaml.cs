@@ -134,7 +134,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         Height = vm.Height;
 
         _drag = new WindowDragController(
-            this,
+            this, App.Services.GetRequiredService<DesktopManager>(),
             monitor,
             dpi,
             snapping,

@@ -872,11 +872,7 @@ internal static class Win32Apis
             return;
         }
 
-        // Do NOT set owner: owned windows are hidden with SW_PARENTCLOSING on Show Desktop and our
-        // MinimizePreventionHook's synchronous re-show breaks the shell's Win+D toggle (second press
-        // never restores). TOOLWINDOW already excludes from SC_MINIMIZE; z-order is maintained via
-        // SetWindowPos insert-after owner, not ownership.
-        //ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, ownerHwnd);
+        ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, ownerHwnd);
 
         // Enforce tool-window semantics on every glue: after an Explorer restart the new taskbar can
         // briefly classify re-owned boxes as regular windows (stale-owner / WPF style churn), which

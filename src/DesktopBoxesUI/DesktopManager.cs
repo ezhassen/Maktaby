@@ -671,6 +671,31 @@ public sealed class DesktopManager
         }
     }
 
+    public bool IsDesktopWindow(Window wind, bool checkSurfaceToo = true)
+    {
+        if (checkSurfaceToo && wind is DesktopSurface) return true;
+        return wind is BoxContainerWindow || wind is CssWidgetWindow;
+    }
+
+    public bool IsDesktopWindow(IntPtr hWnd, bool checkSurfaceToo = true)
+    {
+        if (checkSurfaceToo && hWnd == Win32Apis.DesktopSurfaceHandle) return true;
+        // Check if hwnd belongs to our app's BoxContainerWindow / CssWidgetWindow
+        try
+        {
+            foreach (var w in _windows.Values)
+            {
+                if (IsDesktopWindow(w, checkSurfaceToo: false))
+                {
+                    var wh = new System.Windows.Interop.WindowInteropHelper((System.Windows.Window)w).Handle;
+                    if (wh == hWnd) return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
     private void AddWindow(ContainerViewModel vm, bool showActivated = true)//, bool focusWorkaround = false
     {
         if (_windows.ContainsKey(vm.Id))

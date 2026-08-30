@@ -27,7 +27,14 @@ internal sealed class WindowDragController
     private const int WmExitSizeMove = 0x0232;
     private const int WmEnterSizeMove = 0x0231;
     private const int WmWindowPosChanging = 0x0046;
+    private const int WmMouseActivate = 0x0021;
+    private const int MaActivate = 1;
+    private const int MaNoActivate = 3;
     private const uint SwpNoSendChanging = 0x0400;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoSize = 0x0001;
     private const int HtLeft = 10;
     private const int HtRight = 11;
     private const int HtTop = 12;
@@ -44,6 +51,7 @@ internal sealed class WindowDragController
     private readonly IDpiService _dpi;
     private readonly IWindowSnappingService _snapping;
     private readonly IWindowPositioningService _positioning;
+    private readonly DesktopManager _desktopManager;
     private readonly Action<RectD> _setBounds;
     private readonly Func<List<RectD>> _getOthers;
     private readonly Action _onChanged;
@@ -69,6 +77,7 @@ internal sealed class WindowDragController
 
     public WindowDragController(
         Window window,
+        DesktopManager desktopManager,
         IMonitorService monitor,
         IDpiService dpi,
         IWindowSnappingService snapping,
@@ -87,6 +96,7 @@ internal sealed class WindowDragController
         _getOthers = getOthers;
         _onChanged = onChanged;
         _getHeaderHeight = getHeaderHeight;
+        _desktopManager = desktopManager;
     }
 
     public void Attach()
@@ -130,6 +140,11 @@ internal sealed class WindowDragController
     {
         switch (msg)
         {
+            case WmMouseActivate:
+                // Activate on any click but don't bring above normal apps — keep in desktop layer
+                handled = true;
+                return (IntPtr)MaActivate;
+
             case WmNcHitTest:
                 int ht = HitTest(lParam, hwnd);
                 if (ht != 0)
@@ -160,6 +175,7 @@ internal sealed class WindowDragController
 
             case WmWindowPosChanging:
                 SuppressShellSnap(lParam);
+                KeepBelowApps(hwnd, lParam);
                 return IntPtr.Zero;
 
             default:
@@ -264,6 +280,61 @@ internal sealed class WindowDragController
         var wp = Marshal.PtrToStructure<WindowPos>(lParam);
         wp.Flags |= SwpNoSendChanging;
         Marshal.StructureToPtr(wp, lParam, false);
+    }
+
+    private void KeepBelowApps(IntPtr hwnd, IntPtr lParam)
+    {
+        var wp = Marshal.PtrToStructure<WindowPos>(lParam);
+        bool noZOrder = (wp.Flags & SwpNoZOrder) != 0;
+        bool noActivate = (wp.Flags & SwpNoActivate) != 0;
+        bool noMove = (wp.Flags & SwpNoMove) != 0;
+        bool noSize = (wp.Flags & SwpNoSize) != 0;
+        // Only pure z-order activation (no move/size) should be kept in desktop layer.
+        // Move/resize (WM_ENTERSIZEMOVE, WM_MOVING, WM_SIZING) clears NOMOVE/NOSIZE and must be allowed.
+        if (noZOrder || noActivate || !noMove || !noSize) return;
+
+        bool toTop = wp.HwndInsertAfter == (IntPtr)0; // HWND_TOP
+        bool isAppWindow = wp.HwndInsertAfter != IntPtr.Zero && !IsDesktopWindow(wp.HwndInsertAfter);
+        if (toTop || isAppWindow)
+        {
+            IntPtr surface = Win32Apis.DesktopSurfaceHandle;
+            if (surface == IntPtr.Zero) surface = Win32Apis.GetDesktopAnchorHandle();
+            IntPtr topDesktop = surface;
+            if (surface != IntPtr.Zero)
+            {
+                IntPtr cur = ManualApis.GetWindow(surface, ManualApis.GW_HWNDNEXT);
+                IntPtr lastDesktop = surface;
+                while (cur != IntPtr.Zero)
+                {
+                    if (IsDesktopWindow(cur)) lastDesktop = cur;
+                    else break;
+                    cur = ManualApis.GetWindow(cur, ManualApis.GW_HWNDNEXT);
+                }
+                topDesktop = lastDesktop;
+            }
+            wp.HwndInsertAfter = topDesktop;
+            Marshal.StructureToPtr(wp, lParam, false);
+        }
+    }
+
+    private bool IsDesktopWindow(IntPtr hWnd)
+    {
+        return _desktopManager.IsDesktopWindow(hWnd, checkSurfaceToo: true);
+        /*if (hWnd == Win32Apis.DesktopSurfaceHandle) return true;
+        // Check if hwnd belongs to our app's BoxContainerWindow / CssWidgetWindow
+        try
+        {
+            foreach (var w in System.Windows.Application.Current.Windows)
+            {
+                if (w is BoxContainerWindow || w is CssWidgetWindow)
+                {
+                    var wh = new System.Windows.Interop.WindowInteropHelper((System.Windows.Window)w).Handle;
+                    if (wh == hWnd) return true;
+                }
+            }
+        }
+        catch { }
+        return false;*/
     }
 
     private double GetScale(IntPtr hwnd) => _dpi.GetDpiForWindow(hwnd) / 96.0;
