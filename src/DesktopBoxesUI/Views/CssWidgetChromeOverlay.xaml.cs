@@ -11,14 +11,27 @@ namespace DesktopBoxesUI.Views;
 
 public partial class CssWidgetChromeOverlay : Window
 {
+    #region Fields
+
     private readonly CssWidgetWindow _ownerWidget;
     private HwndSource? _hwndSource;
     private WindowDragController? _drag;
     private readonly DesktopManager _desktopManager;
     private bool _isDragging;
     private bool _isSyncing;
+
+    #endregion
+
+    #region Public Props
+
     public bool IsDragging => _drag?.IsDragging ?? _isDragging;
+
     public bool IsResizing => WindowDragController.IsNativeSizing;
+
+    #endregion
+
+    #region Init, Load, close
+
     public CssWidgetChromeOverlay(CssWidgetWindow owner)
     {
         InitializeComponent();
@@ -88,7 +101,7 @@ public partial class CssWidgetChromeOverlay : Window
                             .Where(c => c.Id != _ownerWidget.ContainerViewModel.Id && c.IsVisible)
                             .Select(c => c.Bounds).ToList(),
                     () => { try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { } },
-                    () => HeaderBorder.ActualHeight,
+                    () => HeaderBorder.ActualHeight, getIsLocked: () => _ownerWidget.ContainerViewModel.IsLocked,
                     handleHitTest: false, handleMouseActivate: false, handleKeepBelow: false);
                 drag.Attach(glueToDesktop: false);
                 _drag = drag;
@@ -131,6 +144,10 @@ public partial class CssWidgetChromeOverlay : Window
         try { Close(); } catch { }
     }
 
+    #endregion
+
+    #region Owner Sync Props
+
     private void OwnerPosChanged(object? sender, EventArgs e)
     {
         if (_isDragging || _isSyncing) return;
@@ -155,6 +172,7 @@ public partial class CssWidgetChromeOverlay : Window
         MinWidth = _ownerWidget.MinWidth;
         MinHeight = _ownerWidget.MinHeight;
         ResizeMode = _ownerWidget.ResizeMode;
+        UpdateLockButtonAppearance();
         _isSyncing = false;
     }
 
@@ -169,6 +187,22 @@ public partial class CssWidgetChromeOverlay : Window
         _ownerWidget.ContainerViewModel.Model.Bounds = RectD.FromXYWH(Left, Top, Width, Height);
         _isSyncing = false;
     }
+
+    void UpdateLockButtonAppearance()
+    {
+        if (_ownerWidget.ContainerViewModel.IsLocked)
+        {
+            //ToggleLocked.Appearance = Wpf.Ui.Controls.ControlAppearance.Info;
+            ToggleLocked.Icon = (Wpf.Ui.Controls.SymbolIcon)Application.Current.FindResource("ItemIcon_Locked");
+        }
+        else
+        {
+            //ToggleLocked.Appearance = Wpf.Ui.Controls.ControlAppearance.Transparent;
+            ToggleLocked.Icon = (Wpf.Ui.Controls.SymbolIcon)Application.Current.FindResource("ItemIcon_UnLocked");
+        }
+    }
+
+    #endregion
 
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -281,8 +315,8 @@ public partial class CssWidgetChromeOverlay : Window
 
     private void Header_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (_ownerWidget.ContainerViewModel.IsLocked) return;
         try { _ownerWidget.Activate(); } catch { }
+        if (_ownerWidget.ContainerViewModel.IsLocked) return;
         _isDragging = true;
         _drag?.BeginTitleDrag(e);
         e.Handled = true;
@@ -295,6 +329,7 @@ public partial class CssWidgetChromeOverlay : Window
         if (_ownerWidget.ContainerViewModel.IsLocked) return;
         var src = e.OriginalSource as DependencyObject;
         if (src != null && IsDescendant(src, MenuButton)) return;
+        if (src != null && IsDescendant(src, ToggleLocked)) return;
         Header_MouseDown(sender, e);
     }
 
@@ -340,15 +375,10 @@ public partial class CssWidgetChromeOverlay : Window
         TitleText.Text = title;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct WindowPos
+    private void ToggleLocked_Click(object sender, RoutedEventArgs e)
     {
-        public IntPtr Hwnd;
-        public IntPtr HwndInsertAfter;
-        public int X;
-        public int Y;
-        public int CX;
-        public int CY;
-        public uint Flags;
+        _ownerWidget.ContainerViewModel.IsLocked = !_ownerWidget.ContainerViewModel.IsLocked;
+        if (_ownerWidget.LockMenuItem is not null) _ownerWidget.LockMenuItem.IsChecked = _ownerWidget.ContainerViewModel.IsLocked;
+        UpdateLockButtonAppearance();
     }
 }

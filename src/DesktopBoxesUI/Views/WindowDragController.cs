@@ -56,7 +56,7 @@ internal sealed class WindowDragController
     private readonly Func<List<RectD>> _getOthers;
     private readonly Action _onChanged;
     private readonly Func<double> _getHeaderHeight;
-
+    private readonly Func<bool>? _getIsLocked;
     private HwndSource? _source;
     private SnapOverlay? _overlay;
     private bool _dragging;
@@ -89,7 +89,7 @@ internal sealed class WindowDragController
         Action<RectD> setBounds,
         Func<List<RectD>> getOthers,
         Action onChanged,
-        Func<double> getHeaderHeight,
+        Func<double> getHeaderHeight, Func<bool>? getIsLocked = null,
         bool handleHitTest = true,
         bool handleMouseActivate = true,
         bool handleKeepBelow = true)
@@ -103,6 +103,7 @@ internal sealed class WindowDragController
         _getOthers = getOthers;
         _onChanged = onChanged;
         _getHeaderHeight = getHeaderHeight;
+        _getIsLocked = getIsLocked;
         _desktopManager = desktopManager;
         _handleHitTest = handleHitTest;
         _handleMouseActivate = handleMouseActivate;
@@ -235,12 +236,18 @@ internal sealed class WindowDragController
         _setBounds(RectD.FromXYWH(_window.Left, _window.Top, _window.Width, _window.Height));
         _onChanged();
     }
+    public bool CanMoveWindow()
+    {
+        if (_getIsLocked is null) return true;
+        return !_getIsLocked();
+    }
 
     private int HitTest(IntPtr lParam, IntPtr hwnd)
     {
         // Non-resizable windows (locked widgets or fixed-size dialogs) should not show resize handles
         if (_window.ResizeMode == ResizeMode.NoResize || _window.ResizeMode == ResizeMode.CanMinimize)
             return 1;
+        if (!CanMoveWindow()) return 1;
 
         int x = (short)(lParam.ToInt32() & 0xFFFF);
         int y = (short)((lParam.ToInt32() >> 16) & 0xFFFF);
@@ -458,7 +465,7 @@ internal sealed class WindowDragController
         {
             return;
         }
-
+        if (!CanMoveWindow()) return;
         // Don't start dragging yet: wait until the pointer actually moves. This lets a plain click or a
         // double-click (e.g. to rename the title) happen without hijacking the gesture.
         _dragPending = true;

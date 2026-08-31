@@ -286,7 +286,6 @@
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             Background="Transparent"
-                            Cursor="SizeAll"
                             MouseLeftButtonDown="TitleArea_MouseLeftButtonDown">
                             <Grid
                                 HorizontalAlignment="Center"

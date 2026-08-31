@@ -142,7 +142,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             r => ApplyDraggedBounds(r),
             () => _host.Containers.Where(c => c.Id != _vm.Id).Select(GetDropRect).ToList(),
             _save,
-            () => HeaderBorder.ActualHeight);
+            () => HeaderBorder.ActualHeight,
+            getIsLocked: () => _vm.IsLocked);
 
         Loaded += OnLoaded;
         Closed += OnClosed;

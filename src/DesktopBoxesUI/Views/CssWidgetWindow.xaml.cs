@@ -6,10 +6,8 @@ using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
 using System.Windows.Interop;
 
 namespace DesktopBoxesUI.Views;
@@ -29,7 +27,6 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
     private readonly DesktopManager _desktopManager;
     private bool ShowChromeOnHover = false;
     //private bool MoveWindowByWidgetMouseDown = false;
-    private HwndSource? _source;
 
     public CssWidgetWindow(ContainerViewModel vm)
     {
@@ -126,68 +123,45 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        var hwnd = new WindowInteropHelper(this).Handle;
-        if (hwnd != IntPtr.Zero)
-        {
-            Win32Apis.MakeToolWindow(hwnd);
-            Win32Apis.RegisterBoxWindow(hwnd);
-            _hwndSource = HwndSource.FromHwnd(hwnd);
-            // Hook is added once in Attach(); do not add here to avoid duplicate HwndHook invocation.
-        }
-        var monitor = App.Services.GetRequiredService<IMonitorService>();
-        var dpi = App.Services.GetRequiredService<IDpiService>();
-        var snapping = App.Services.GetRequiredService<IWindowSnappingService>();
-        var positioning = App.Services.GetRequiredService<IWindowPositioningService>();
         Attach();
     }
+    bool _attached;
     private void Attach()
     {
-        try
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            // Own the box to the DesktopSurface when the custom surface is live (handle published);
-            // owned windows always float above their owner, so a box can never sink below (or lose
-            // clicks/activation to) the surface. Falls back to Progman when no surface exists.
-            Win32Apis.GlueToDesktop(hwnd, Win32Apis.DesktopSurfaceHandle);
-            Win32Apis.PreventMinimize(hwnd);
-            _source = HwndSource.FromHwnd(hwnd);
-            // _hwndSource and _source are the same HwndSource instance (FromHwnd returns singleton);
-            // keep both refs in sync and add the hook only once.
-            _hwndSource = _source;
-            _source.AddHook(HwndHook);
-            _source.AddHook(Win32Apis.MinimizePreventionHook);
-        }
-        catch
-        {
-            // Positioning can fail if the handle isn't ready yet; the window still shows.
-        }
+        if (_attached) return;
+        //try
+        //{
+        var hwnd = new WindowInteropHelper(this).Handle;
+        _hwndSource = HwndSource.FromHwnd(hwnd);
+        Win32Apis.MakeToolWindow(hwnd);
+        Win32Apis.RegisterBoxWindow(hwnd);
+        // Own the box to the DesktopSurface when the custom surface is live (handle published);
+        // owned windows always float above their owner, so a box can never sink below (or lose
+        // clicks/activation to) the surface. Falls back to Progman when no surface exists.
+        Win32Apis.GlueToDesktop(hwnd, Win32Apis.DesktopSurfaceHandle);
+        Win32Apis.PreventMinimize(hwnd);
+        _hwndSource.AddHook(HwndHook);
+        _hwndSource.AddHook(Win32Apis.MinimizePreventionHook);
+        //}
+        //catch
+        //{
+        //    // Positioning can fail if the handle isn't ready yet; the window still shows.
+        //}
+        _attached = true;
     }
 
     private void Detach()
     {
-        if (_source != null)
+        _attached = false;
+        if (_hwndSource != null)
         {
-            _source.RemoveHook(HwndHook);
-            try { _source.RemoveHook(Win32Apis.MinimizePreventionHook); } catch { }
-            _source = null;
-            _hwndSource = null;
-        }
-        else if (_hwndSource != null)
-        {
+            _hwndSource.RemoveHook(HwndHook);
+            try { _hwndSource.RemoveHook(Win32Apis.MinimizePreventionHook); } catch { }
             try { _hwndSource.RemoveHook(HwndHook); } catch { }
             _hwndSource = null;
         }
     }
 
-    private void EnsureChromeOverlay()
-    {
-        if (_chromeOverlay != null) return;
-        _chromeOverlay = new CssWidgetChromeOverlay(this);
-        _chromeOverlay.UpdateTitle(Title);
-        _chromeOverlay.ResizeMode = ResizeMode;
-
-        // Visibility controlled by UpdateChrome (ShowChromeOnHover)
-    }
 
     public void ShowWidgetMenu()
     {
@@ -354,22 +328,40 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         }
     }
 
+    private void EnsureChromeOverlay()
+    {
+        if (_chromeOverlay != null) return;
+        _chromeOverlay = new CssWidgetChromeOverlay(this);
+        _chromeOverlay.UpdateTitle(Title);
+        _chromeOverlay.ResizeMode = ResizeMode;
+        _chromeOverlay.Deactivated += _chromeOverlay_Deactivated;
+        // Visibility controlled by UpdateChrome (ShowChromeOnHover)
+    }
+
+    private void _chromeOverlay_Deactivated(object? sender, EventArgs e)
+    {
+        if (!this.IsActive)
+        {
+            UpdateChrome();
+        }
+    }
+
     internal void EnsureOverlayAboveHost()
     {
-        try
-        {
-            if (_chromeOverlay == null) return;
-            var ohwnd = new WindowInteropHelper(_chromeOverlay).Handle;
-            if (ohwnd == IntPtr.Zero) return;
-            IntPtr ownerH = new WindowInteropHelper(this).Handle;
-            if (ownerH == IntPtr.Zero) return;
-            ManualApis.SetWindowLongPtr(ohwnd, ManualApis.GWL_HWNDPARENT, ownerH);
+        //try
+        //{
+        if (_chromeOverlay is null) return;
+        var ohwnd = new WindowInteropHelper(_chromeOverlay).Handle;
+        if (ohwnd == IntPtr.Zero) return;
+        IntPtr ownerH = new WindowInteropHelper(this).Handle;
+        if (ownerH == IntPtr.Zero) return;
+        ManualApis.SetWindowLongPtr(ohwnd, ManualApis.GWL_HWNDPARENT, ownerH);
 
-            //ManualApis.SetWindowPos(ohwnd, ownerH, 0, 0, 0, 0,
-            //    ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
-            //_chromeOverlay.Activate();
-        }
-        catch { }
+        //ManualApis.SetWindowPos(ohwnd, ownerH, 0, 0, 0, 0,
+        //    ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+        //_chromeOverlay.Activate();
+        //}
+        //catch { }
     }
 
     private void MenuButton_Click(object sender, RoutedEventArgs e)
@@ -469,6 +461,7 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         _chromeOverlay = null;
         if (overlay != null)
         {
+            try { overlay.Deactivated -= _chromeOverlay_Deactivated; } catch { }
             try { overlay.Owner = null; } catch { }
             try { overlay.Close(); } catch { }
         }

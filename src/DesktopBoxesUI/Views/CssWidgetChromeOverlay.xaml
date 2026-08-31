@@ -32,12 +32,12 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <Border
                         x:Name="TitleArea"
                         Grid.Column="0"
-                        Background="Transparent"
-                        Cursor="SizeAll">
+                        Background="Transparent">
                         <TextBlock
                             x:Name="TitleText"
                             Margin="10,0"
@@ -48,9 +48,22 @@
                             Text="Widget"
                             TextTrimming="CharacterEllipsis" />
                     </Border>
+
+                    <ui:Button
+                        x:Name="ToggleLocked"
+                        Grid.Column="1"
+                        Width="28"
+                        Height="28"
+                        Margin="0,0,4,0"
+                        Padding="0"
+                        Appearance="Transparent"
+                        Click="ToggleLocked_Click"
+                        Icon="{StaticResource ItemIcon_Locked}"
+                        ToolTip="Toggle Locked" />
+
                     <ui:Button
                         x:Name="MenuButton"
-                        Grid.Column="1"
+                        Grid.Column="2"
                         Width="28"
                         Height="28"
                         Padding="0"
