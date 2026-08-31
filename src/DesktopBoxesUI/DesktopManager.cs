@@ -674,7 +674,7 @@ public sealed class DesktopManager
     public bool IsDesktopWindow(Window wind, bool checkSurfaceToo = true)
     {
         if (checkSurfaceToo && wind is DesktopSurface) return true;
-        return wind is BoxContainerWindow || wind is CssWidgetWindow;
+        return wind is BoxContainerWindow || wind is CssWidgetWindow;//|| wind is CssWidgetChromeOverlay;
     }
 
     public bool IsDesktopWindow(IntPtr hWnd, bool checkSurfaceToo = true)
@@ -684,10 +684,11 @@ public sealed class DesktopManager
         try
         {
             foreach (var w in _windows.Values)
+            //foreach (Window w in App.Current.Windows)
             {
                 if (IsDesktopWindow(w, checkSurfaceToo: false))
                 {
-                    var wh = new System.Windows.Interop.WindowInteropHelper((System.Windows.Window)w).Handle;
+                    var wh = new System.Windows.Interop.WindowInteropHelper(w).Handle;
                     if (wh == hWnd) return true;
                 }
             }

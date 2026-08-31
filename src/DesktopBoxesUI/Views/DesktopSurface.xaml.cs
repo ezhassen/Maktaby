@@ -21,6 +21,7 @@ public sealed partial class DesktopSurface : Window
     private const double NewBoxHeight = 200;
 
     private readonly MainViewModel _host;
+    private readonly DesktopManager _desktopManager;
     private readonly System.Action _save;
     private bool _dragging;
     private IntPtr _listView;
@@ -77,6 +78,7 @@ public sealed partial class DesktopSurface : Window
         InitializeComponent();
         _host = host;
         _save = save;
+        _desktopManager = App.Services.GetRequiredService<DesktopManager>();
 
         // Cover the primary work area (excludes the taskbar) so the taskbar stays usable.
         Left = SystemParameters.WorkArea.Left;
@@ -271,6 +273,8 @@ public sealed partial class DesktopSurface : Window
         // let the surface escape to a high z-position.
         if (msg == WM_WINDOWPOSCHANGING)
         {
+            /*WindowDragController.SuppressShellSnap(lParam);
+            WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager);*/
             var wp = System.Runtime.InteropServices.Marshal.PtrToStructure<WINDOWPOS>(lParam);
 
             if (_anchor == IntPtr.Zero || !Win32Apis.IsWindow(_anchor) || !Win32Apis.IsDesktopLayerTopLevel(_anchor))

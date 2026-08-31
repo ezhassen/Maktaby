@@ -4,7 +4,9 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
+using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -15,23 +17,28 @@ namespace DesktopBoxesUI.Views;
 public partial class CssWidgetWindow : Controls.WidgetWindow
 {
     private readonly ContainerViewModel _vm;
+    internal ContainerViewModel ContainerViewModel { get; }
     private readonly DesktopItemContainer _container;
     private readonly ICssWidgetService _widgetService;
     private CssWidgetControl? _widgetControl;
-    private WindowDragController? _drag;
+    //private WindowDragController? _drag;
     private bool _isHover;
     private bool _isActive;
     private HwndSource? _hwndSource;
+    private CssWidgetChromeOverlay? _chromeOverlay;
+    private readonly DesktopManager _desktopManager;
     private bool ShowChromeOnHover = false;
-    //private bool MoveWindowByWidgetMouseDown = true;
+    //private bool MoveWindowByWidgetMouseDown = false;
+    private HwndSource? _source;
 
     public CssWidgetWindow(ContainerViewModel vm)
     {
         InitializeComponent();
         _vm = vm;
+        ContainerViewModel = vm;
         _container = vm.Model;
         _widgetService = App.Services.GetRequiredService<ICssWidgetService>();
-
+        _desktopManager = App.Services.GetRequiredService<DesktopManager>();
         var manifest = LoadWidget();
         ApplyManifest(manifest);
 
@@ -41,28 +48,27 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         Height = _container.Bounds.Height > 0 ? _container.Bounds.Height : (manifest?.Height ?? 220);
 
         Title = manifest?.Name ?? _container.CssWidgetName ?? "Widget";
-        TitleText.Text = Title;
 
-        LockMenuItem.IsChecked = _container.IsLocked;
-        UpdateChrome();
+        //UpdateChrome();
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
         LocationChanged += OnLocationChanged;
+        this.LockMenuItem.IsChecked = vm.IsLocked;
         // Hover/focus over the WebView HWND does not raise WPF hover reliably; use the root border
         // as the single hover source for the whole widget. This avoids the header/host transition churn
         // that caused the chrome to flicker while the pointer crossed between the title bar and the WebView.
-        TitleArea.MouseLeftButtonDown += TitleArea_MouseDown;
-        TitleArea.MouseMove += TitleArea_MouseMove;
-        TitleArea.MouseLeftButtonUp += TitleArea_MouseUp;
-        PreviewMouseLeftButtonDown += TitleArea_MouseDown;
-        MouseMove += TitleArea_MouseMove;
-        MouseUp += TitleArea_MouseUp;
+        //TitleArea.MouseLeftButtonDown += TitleArea_MouseDown;
+        //TitleArea.MouseMove += TitleArea_MouseMove;
+        //TitleArea.MouseLeftButtonUp += TitleArea_MouseUp;
+        //PreviewMouseLeftButtonDown += TitleArea_MouseDown;
+        //MouseMove += TitleArea_MouseMove;
+        //MouseUp += TitleArea_MouseUp;
 
-        RootBorder.MouseEnter += (_, _) => { _isHover = true; UpdateChrome(); };
-        RootBorder.MouseLeave += (_, _) => { _isHover = false; UpdateChrome(); };
+        //RootBorder.MouseEnter += (_, _) => { _isHover = true; UpdateChrome(); };
+        //RootBorder.MouseLeave += (_, _) => { _isHover = false; UpdateChrome(); };
 
-        WidgetMenu.Closed += (_, _) => UpdateChrome();
-        WidgetMenu.Opened += (_, _) => UpdateChrome();
+        //WidgetMenu.Closed += (_, _) => UpdateChrome();
+        //WidgetMenu.Opened += (_, _) => UpdateChrome();
         Activated += (_, _) => { _isActive = true; UpdateChrome(); };
         Deactivated += (_, _) => { _isActive = false; _isHover = false; UpdateChrome(); };
     }
@@ -112,6 +118,10 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         bool resizable = manifest?.IsResizable ?? true;
         if (_container.IsLocked) resizable = false;
         ResizeMode = resizable ? ResizeMode.CanResize : ResizeMode.NoResize;
+        if (_chromeOverlay is not null)
+        {
+            _chromeOverlay.ResizeMode = ResizeMode;
+        }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -122,29 +132,75 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
             Win32Apis.MakeToolWindow(hwnd);
             Win32Apis.RegisterBoxWindow(hwnd);
             _hwndSource = HwndSource.FromHwnd(hwnd);
-            _hwndSource?.AddHook(HwndHook);
+            // Hook is added once in Attach(); do not add here to avoid duplicate HwndHook invocation.
         }
         var monitor = App.Services.GetRequiredService<IMonitorService>();
         var dpi = App.Services.GetRequiredService<IDpiService>();
         var snapping = App.Services.GetRequiredService<IWindowSnappingService>();
         var positioning = App.Services.GetRequiredService<IWindowPositioningService>();
-        Action save = () => { try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { } };
-        _drag = new WindowDragController(
-            this, App.Services.GetRequiredService<DesktopManager>(), monitor, dpi, snapping, positioning,
-            r => ApplyDraggedBounds(r),
-            () => App.Services.GetRequiredService<IContainerService>().GetContainers()
-                    .Where(c => c.Id != _container.Id && c.IsVisible)
-                    .Select(c => c.Bounds).ToList(),
-            save,
-            () => HeaderBorder.ActualHeight);
-        _drag.Attach();
-        UpdateChrome();
+        Attach();
+    }
+    private void Attach()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            // Own the box to the DesktopSurface when the custom surface is live (handle published);
+            // owned windows always float above their owner, so a box can never sink below (or lose
+            // clicks/activation to) the surface. Falls back to Progman when no surface exists.
+            Win32Apis.GlueToDesktop(hwnd, Win32Apis.DesktopSurfaceHandle);
+            Win32Apis.PreventMinimize(hwnd);
+            _source = HwndSource.FromHwnd(hwnd);
+            // _hwndSource and _source are the same HwndSource instance (FromHwnd returns singleton);
+            // keep both refs in sync and add the hook only once.
+            _hwndSource = _source;
+            _source.AddHook(HwndHook);
+            _source.AddHook(Win32Apis.MinimizePreventionHook);
+        }
+        catch
+        {
+            // Positioning can fail if the handle isn't ready yet; the window still shows.
+        }
+    }
+
+    private void Detach()
+    {
+        if (_source != null)
+        {
+            _source.RemoveHook(HwndHook);
+            try { _source.RemoveHook(Win32Apis.MinimizePreventionHook); } catch { }
+            _source = null;
+            _hwndSource = null;
+        }
+        else if (_hwndSource != null)
+        {
+            try { _hwndSource.RemoveHook(HwndHook); } catch { }
+            _hwndSource = null;
+        }
+    }
+
+    private void EnsureChromeOverlay()
+    {
+        if (_chromeOverlay != null) return;
+        _chromeOverlay = new CssWidgetChromeOverlay(this);
+        _chromeOverlay.UpdateTitle(Title);
+        _chromeOverlay.ResizeMode = ResizeMode;
+
+        // Visibility controlled by UpdateChrome (ShowChromeOnHover)
+    }
+
+    public void ShowWidgetMenu()
+    {
+        //WidgetMenu.PlacementTarget = MenuButton;
+        WidgetMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse;
+        WidgetMenu.IsOpen = true;
     }
 
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int WM_MOUSEACTIVATE = 0x0021;
         const int WM_ACTIVATE = 0x0006;
+        const int WM_WINDOWPOSCHANGING = 0x0046;
         const int MA_ACTIVATE = 1;
         if (msg == WM_MOUSEACTIVATE)
         {
@@ -157,6 +213,15 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
             int low = wParam.ToInt32() & 0xFFFF;
             _isActive = low != 0; // WA_INACTIVE = 0
             UpdateChrome();
+        }
+        if (msg == WM_WINDOWPOSCHANGING)
+        {
+            WindowDragController.SuppressShellSnap(lParam);
+            // Don't enforce KeepBelowApps while overlay is dragging — TitleDrag moves overlay+owner via Left/Top
+            // with SWP_NOZORDER; KeepBelowApps would see pure z-order change and incorrectly reparent, blocking move.
+            // BoxContainerWindow's KeepBelowApps also skips during move (!noMove), same guard here.
+            if (_chromeOverlay == null || (!_chromeOverlay.IsDragging && !_chromeOverlay.IsResizing))
+                WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager);
         }
         return IntPtr.Zero;
     }
@@ -249,48 +314,69 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         _container.Bounds = RectD.FromXYWH(Left, Top, ActualWidth, ActualHeight);
     }
 
-    bool HeaderIsShown() => HeaderBorder.Visibility == Visibility.Visible;
+    public void SetHover(bool hover) { _isHover = hover; UpdateChrome(); }
+    bool HeaderIsShown() => _chromeOverlay?.IsVisible == true;
     bool CanShowHeader()
     {
-        bool show = (ShowChromeOnHover && _isHover) || this.IsActive || this.IsFocused || (ShowChromeOnHover && IsMouseOver);//|| this.IsKeyboardFocused;// || WidgetMenu.IsOpen;
-        //if (!show) show = (ShowChromeOnHover && IsMouseOver);//|| IsKeyboardFocusWithin;
+        // Check both _isActive (WM_ACTIVATE, set before WPF updates IsActive) and IsActive/IsFocused.
+        // ShowChromeOnHover gates hover; when false only activation matters.
+        bool show = (ShowChromeOnHover && _isHover) || _isActive || this.IsActive || this.IsFocused || (ShowChromeOnHover && IsMouseOver);
         return show;
     }
     private void UpdateChrome()
     {
-        if (_drag is null) return;
-        if (_drag.IsDragging || WindowDragController.IsNativeSizing) return;
+        EnsureChromeOverlay();
+        //if (_drag is null) return;
+        //if (_drag.IsDragging || WindowDragController.IsNativeSizing) return;
+        if (_chromeOverlay!.IsDragging || _chromeOverlay.IsResizing) return;
+        // Keep chrome visible while user is interacting with it (mouse down gap before
+        // WM_ENTERSIZEMOVE/WM_NCLBUTTONDOWN sets IsDragging). Without this, the
+        // WM_ACTIVATE transient during NOACTIVATE caption click would hide it.
+        if (_chromeOverlay.IsVisible && System.Windows.Input.Mouse.LeftButton == System.Windows.Input.MouseButtonState.Pressed) return;
+
         bool show = CanShowHeader();
-        //if (!show) show = IsMouseOver || IsKeyboardFocusWithin;
-
-        // Only toggle chrome when the pointer truly enters/leaves the widget bounds; avoid per-move
-        // updates so the title bar does not flicker while the pointer crosses the transparent WebView.
-        HeaderBorder.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        //bool canResize = ResizeMode == ResizeMode.CanResize || ResizeMode == ResizeMode.CanResizeWithGrip;
-        RootBorder.BorderThickness = new Thickness(show ? 3 : 0);
+        // Chrome is now in overlay window glued above WebView (no airspace, title shows over WebView2 HwndHost)
+        if (_chromeOverlay != null)
+        {
+            bool shouldShow = show;
+            if (shouldShow)
+            {
+                _chromeOverlay.SyncFromOwner();
+                _chromeOverlay.UpdateTitle(Title);
+                if (!_chromeOverlay.IsVisible)
+                {
+                    if (_chromeOverlay.ResizeMode != ResizeMode) _chromeOverlay.ResizeMode = ResizeMode;
+                    _chromeOverlay.Show();
+                }
+                EnsureOverlayAboveHost();
+            }
+            else if (!shouldShow && _chromeOverlay.IsVisible) _chromeOverlay.Hide();
+        }
     }
 
-    private void TitleArea_MouseDown(object sender, MouseButtonEventArgs e)
+    internal void EnsureOverlayAboveHost()
     {
-        if (_container.IsLocked) return;
-        _drag?.BeginTitleDrag(e);
-    }
-    private void TitleArea_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (_container.IsLocked) return;
-        _drag?.TitleDrag(e);
-        if (_drag?.IsDragging == true) UpdateChrome();
-    }
-    private void TitleArea_MouseUp(object sender, MouseButtonEventArgs e)
-    {
-        _drag?.EndTitleDrag(e);
-        UpdateChrome();
+        try
+        {
+            if (_chromeOverlay == null) return;
+            var ohwnd = new WindowInteropHelper(_chromeOverlay).Handle;
+            if (ohwnd == IntPtr.Zero) return;
+            IntPtr ownerH = new WindowInteropHelper(this).Handle;
+            if (ownerH == IntPtr.Zero) return;
+            ManualApis.SetWindowLongPtr(ohwnd, ManualApis.GWL_HWNDPARENT, ownerH);
+
+            //ManualApis.SetWindowPos(ohwnd, ownerH, 0, 0, 0, 0,
+            //    ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+            //_chromeOverlay.Activate();
+        }
+        catch { }
     }
 
     private void MenuButton_Click(object sender, RoutedEventArgs e)
     {
-        WidgetMenu.PlacementTarget = MenuButton;
-        WidgetMenu.IsOpen = true;
+        //WidgetMenu.PlacementTarget = MenuButton;
+        //WidgetMenu.IsOpen = true;
+        ShowWidgetMenu();
     }
 
     private void Edit_Click(object sender, RoutedEventArgs e)
@@ -333,7 +419,7 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
             _container.CssWidgetSource = w.SelectedInfo.Source;
             var info = w.SelectedInfo;
             Title = info.Manifest.Name ?? info.Slug;
-            TitleText.Text = Title;
+            //TitleText.Text = Title;
             _widgetControl?.LoadWidget(info.Slug, info.Source);
             ApplyManifest(info.Manifest);
             Left = _container.Bounds.X;
@@ -344,6 +430,7 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
             //reload
             var manifest = LoadWidget();
             ApplyManifest(manifest);
+            UpdateChrome();
         }
     }
 
@@ -374,6 +461,20 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         Close();
     }
 
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // Overlay must be closed before owner handle is destroyed — otherwise overlay's
+        // HwndHook (KeepBelowApps/SyncOwnerToThis) and OwnerClosed re-entrancy run on half-torn-down owner.
+        var overlay = _chromeOverlay;
+        _chromeOverlay = null;
+        if (overlay != null)
+        {
+            try { overlay.Owner = null; } catch { }
+            try { overlay.Close(); } catch { }
+        }
+        base.OnClosing(e);
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         // Prevent CoreWebView2Controller.IsVisible race on shutdown:
@@ -388,6 +489,8 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
             try { WidgetHost.Content = null; } catch { }
             _widgetControl = null;
         }
+        // Overlay already closed in OnClosing — defensive null check only
+        _chromeOverlay = null;
         if (_hwndSource != null)
         {
             try { _hwndSource.RemoveHook(HwndHook); } catch { }
@@ -395,7 +498,7 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         }
         var hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(hwnd); } catch { }
-        try { _drag?.Detach(); } catch { }
+        try { Detach(); } catch { }
         try { base.OnClosed(e); } catch { }
     }
 }

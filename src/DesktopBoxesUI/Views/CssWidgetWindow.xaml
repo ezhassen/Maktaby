@@ -16,7 +16,43 @@
     ShowInTaskbar="False"
     Topmost="False"
     WindowStyle="None">
-    <Border
+    <Grid>
+        <Grid.ContextMenu>
+            <ContextMenu x:Name="WidgetMenu">
+                <MenuItem Click="Edit_Click" Header="Edit">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="Edit24" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Click="Change_Click" Header="Change Widget">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="ArrowSwap24" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator />
+                <MenuItem Click="Duplicate_Click" Header="Duplicate">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="Copy24" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem
+                    x:Name="LockMenuItem"
+                    Click="Lock_Click"
+                    Header="Lock"
+                    IsCheckable="True" />
+                <Separator />
+                <MenuItem Click="Delete_Click" Header="Delete">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="Delete24" />
+                    </MenuItem.Icon>
+                </MenuItem>
+            </ContextMenu>
+        </Grid.ContextMenu>
+        <ContentControl x:Name="WidgetHost" Background="AliceBlue" />
+    </Grid>
+
+
+    <!--<Border
         x:Name="RootBorder"
         Background="#01000000"
         BorderBrush="{DynamicResource BoxBorder}"
@@ -59,7 +95,9 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!--  TitleBar — hidden until hover/focus  -->
+    -->
+    <!--  TitleBar — hidden until hover/focus  -->
+    <!--
             <Border
                 x:Name="HeaderBorder"
                 Grid.Row="0"
@@ -74,7 +112,11 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <!--  Drag area  -->
+
+    -->
+    <!--  Drag area  -->
+    <!--
+
                     <Border
                         x:Name="TitleArea"
                         Grid.Column="0"
@@ -105,7 +147,9 @@
                 </Grid>
             </Border>
 
-            <!--  WebView host  -->
+    -->
+    <!--  WebView host  -->
+    <!--
             <Border
                 Grid.Row="1"
                 Background="Transparent"
@@ -113,5 +157,5 @@
                 <ContentControl x:Name="WidgetHost" />
             </Border>
         </Grid>
-    </Border>
+    </Border>-->
 </controls:WidgetWindow>
