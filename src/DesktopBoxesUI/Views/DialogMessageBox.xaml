@@ -1,0 +1,73 @@
+<ui:FluentWindow
+    x:Class="DesktopBoxesUI.Views.DialogMessageBox"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="Message"
+    Width="380"
+    Height="180"
+    MinWidth="340"
+    MinHeight="140"
+    MaxWidth="480"
+    MaxHeight="640"
+    Background="{DynamicResource ApplicationBackgroundBrush}"
+    ExtendsContentIntoTitleBar="True"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    SizeToContent="Manual"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
+    WindowStartupLocation="Manual">
+    <DockPanel x:Name="RootPanel" LastChildFill="True">
+        <ui:TitleBar
+            x:Name="TitleBar"
+            Title="{Binding Title, RelativeSource={RelativeSource AncestorType=Window}}"
+            DockPanel.Dock="Top"
+            ShowMaximize="False"
+            ShowMinimize="False" />
+
+        <Border
+            x:Name="FooterBorder"
+            Padding="16,12"
+            Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0"
+            DockPanel.Dock="Bottom">
+            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                <ui:Button
+                    x:Name="PrimaryButton"
+                    MinWidth="90"
+                    Appearance="Primary"
+                    Click="PrimaryButton_Click" />
+                <ui:Button
+                    x:Name="SecondaryButton"
+                    MinWidth="90"
+                    Margin="8,0,0,0"
+                    Appearance="Secondary"
+                    Click="SecondaryButton_Click" />
+                <ui:Button
+                    x:Name="CloseButton"
+                    MinWidth="90"
+                    Margin="8,0,0,0"
+                    Appearance="Secondary"
+                    Click="CloseButton_Click"
+                    IsCancel="True" />
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer
+            x:Name="ContentScroll"
+            Padding="24,16,24,16"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <ContentControl x:Name="ContentHost" Focusable="False">
+                <ContentControl.Resources>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="TextWrapping" Value="Wrap" />
+                        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                    </Style>
+                </ContentControl.Resources>
+            </ContentControl>
+        </ScrollViewer>
+    </DockPanel>
+</ui:FluentWindow>

@@ -1,3 +1,4 @@
+using System.Windows;
 using Wpf.Ui.Controls;
 
 namespace DesktopBoxesUI.Services;
@@ -34,11 +35,11 @@ public sealed record DialogOptions
 /// </summary>
 public interface IDialogService
 {
-    Task ShowMessageAsync(string message, DialogOptions? options = null, CancellationToken cancellationToken = default);
-    Task ShowMessageAsync(string content, string title);
-    Task<bool> ShowConfirmAsync(string message, DialogOptions? options = null, CancellationToken cancellationToken = default);
-    Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info);
-    Task<bool> ShowConfirmDangerAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger);
-    Task<bool> ShowConfirmDeleteAsync(string content, string title = "Confirm Delete", string confirmText = "Delete", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger);
-    Task<ContentDialogResult> ShowAsync(DialogOptions options, CancellationToken cancellationToken = default);
+    Task ShowMessageAsync(string message, DialogOptions? options = null, Window? owner = null, CancellationToken cancellationToken = default);
+    Task ShowMessageAsync(string content, string title, Window? owner = null);
+    Task<bool> ShowConfirmAsync(string message, DialogOptions? options = null, Window? owner = null, CancellationToken cancellationToken = default);
+    Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info, Window? owner = null);
+    Task<bool> ShowConfirmDangerAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger, Window? owner = null);
+    Task<bool> ShowConfirmDeleteAsync(string content, string title = "Confirm Delete", string confirmText = "Delete", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger, Window? owner = null);
+    Task<ContentDialogResult> ShowAsync(DialogOptions options, Window? owner = null, CancellationToken cancellationToken = default);
 }
