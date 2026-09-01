@@ -219,7 +219,7 @@ public sealed class CssWidgetService : ICssWidgetService
             var cacheDir = Path.Combine(SettingsService.AppDataDir, "WidgetThumbnails");
             Directory.CreateDirectory(cacheDir);
             outputPath = Path.Combine(cacheDir, widget.Slug + ".png");
-            if (File.Exists(outputPath)) return outputPath;
+            //if (File.Exists(outputPath)) return outputPath;
         }
         else
         {
@@ -241,11 +241,11 @@ public sealed class CssWidgetService : ICssWidgetService
             // Check if widget CSS has transparent background
             var info = TryGetWidget(widget.Slug, widget.Source);
             var css = info != null && File.Exists(info.CssPath) ? File.ReadAllText(info.CssPath) : "";
-            var hasTransparentBg = !string.IsNullOrWhiteSpace(css) && 
+            var hasTransparentBg = !string.IsNullOrWhiteSpace(css) &&
                 (css.Contains("transparent", StringComparison.OrdinalIgnoreCase) ||
                  css.Contains("rgba", StringComparison.OrdinalIgnoreCase));
 
-            var windowBackground = hasTransparentBg 
+            var windowBackground = hasTransparentBg
                 ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Colors.Transparent)
                 : System.Windows.Media.Brushes.White;
 
@@ -274,12 +274,12 @@ public sealed class CssWidgetService : ICssWidgetService
             var env = await CoreWebView2Environment.CreateAsync(null, userData);
             win.Show();
             await web.EnsureCoreWebView2Async(env);
-            try 
-            { 
-                web.DefaultBackgroundColor = hasTransparentBg 
-                    ? System.Drawing.Color.Transparent 
-                    : System.Drawing.Color.White; 
-            } 
+            try
+            {
+                web.DefaultBackgroundColor = hasTransparentBg
+                    ? System.Drawing.Color.Transparent
+                    : System.Drawing.Color.White;
+            }
             catch { }
 
             var navTcs = new TaskCompletionSource<bool>();

@@ -114,11 +114,6 @@
                             <ui:SymbolIcon Symbol="Navigation24" />
                             <Button.ContextMenu>
                                 <ContextMenu x:Name="BoxMenu">
-                                    <MenuItem
-                                        Click="MenuDelete_Click"
-                                        Foreground="OrangeRed"
-                                        Header="Delete"
-                                        Icon="{StaticResource ItemIcon_Delete}" />
                                     <!--  Not implemented yet  -->
                                     <MenuItem
                                         Click="MenuHide_Click"
@@ -131,7 +126,7 @@
                                         Header="Lock / Unlock"
                                         Icon="{StaticResource ItemIcon_Locked}"
                                         Visibility="Collapsed" />
-                                    <Separator />
+                                    <!--<Separator />-->
                                     <MenuItem
                                         x:Name="MenuAddTab"
                                         Click="AddTab_Click"
@@ -276,6 +271,12 @@
                                             </MenuItem.Header>
                                         </MenuItem>
                                     </MenuItem>
+                                    <Separator />
+                                    <MenuItem
+                                        Click="MenuDelete_Click"
+                                        Foreground="OrangeRed"
+                                        Header="Delete"
+                                        Icon="{StaticResource ItemIcon_Delete}" />
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>

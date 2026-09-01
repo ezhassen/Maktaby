@@ -45,11 +45,11 @@
                     Header="Lock"
                     IsCheckable="True" />
                 <Separator />
-                <MenuItem Click="Delete_Click" Header="Delete">
-                    <MenuItem.Icon>
-                        <ui:SymbolIcon Symbol="Delete24" />
-                    </MenuItem.Icon>
-                </MenuItem>
+                <MenuItem
+                    Click="Delete_Click"
+                    Foreground="OrangeRed"
+                    Header="Delete"
+                    Icon="{StaticResource ItemIcon_Delete}" />
             </ContextMenu>
         </Grid.ContextMenu>
         <ContentControl x:Name="WidgetHost" />
