@@ -288,7 +288,22 @@ public partial class BoxControl : UserControl
                 PositionGhost(border);
                 DragDrop.AddGiveFeedbackHandler(border, OnGiveFeedback);
                 var data = new DataObject(DndFormats.BoxItems, dragged);
-                DragDrop.DoDragDrop(border, data, DragDropEffects.Move);
+                // Also expose as FileDrop / Shell IDList so external apps (Explorer, etc.) can receive the files
+                try
+                {
+                    var filePaths = dragged
+                        .Select(vm => vm.Path)
+                        .Where(p => !string.IsNullOrEmpty(p) && (File.Exists(p!) || Directory.Exists(p!)))
+                        .Select(p => p!)
+                        .ToArray();
+                    if (filePaths.Length > 0)
+                        data.SetData(DataFormats.FileDrop, filePaths);
+
+                    // For virtual PIDL items, also provide Shell IDList if possible (handled via FileDrop fallback in DropHelper)
+                    // No need to add explicit Shell IDList here; FileDrop covers most external drops.
+                }
+                catch { }
+                DragDrop.DoDragDrop(border, data, DragDropEffects.Move | DragDropEffects.Copy | DragDropEffects.Link);
             }
             finally
             {
