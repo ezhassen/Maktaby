@@ -8,14 +8,15 @@
     xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
     d:DesignHeight="200"
     d:DesignWidth="240"
-    AllowDrop="True"
-    DragLeave="BoxControl_DragLeave"
-    DragOver="BoxControl_DragOver"
-    Drop="BoxControl_Drop"
-    IsKeyboardFocusWithinChanged="BoxControl_IsKeyboardFocusWithinChanged"
-    MouseLeftButtonUp="BoxControl_MouseLeftButtonUp"
-    MouseMove="BoxControl_MouseMove"
-    PreviewMouseLeftButtonDown="BoxControl_PreviewMouseLeftButtonDown"
+     AllowDrop="True"
+     DragLeave="BoxControl_DragLeave"
+     DragOver="BoxControl_DragOver"
+     Drop="BoxControl_Drop"
+     IsKeyboardFocusWithinChanged="BoxControl_IsKeyboardFocusWithinChanged"
+     MouseLeftButtonUp="BoxControl_MouseLeftButtonUp"
+     MouseMove="BoxControl_MouseMove"
+     PreviewMouseLeftButtonDown="BoxControl_PreviewMouseLeftButtonDown"
+     PreviewMouseLeftButtonUp="BoxControl_PreviewMouseLeftButtonUp"
     mc:Ignorable="d">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />

@@ -994,6 +994,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private BoxViewModel? _dragTab;
     private bool _tabDragging;
+    private bool _suppressTabDragUntilMouseUp;
     private Point _dragStart;
     private Point _lastDragPoint;
     private Point _lastWindowRel;           // last window-relative cursor point, for the debug A/B compare
@@ -1031,6 +1032,12 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void Tab_PreviewMouseMove(object sender, MouseEventArgs e)
     {
+        if (_suppressTabDragUntilMouseUp)
+        {
+            if (e.LeftButton == MouseButtonState.Released) _suppressTabDragUntilMouseUp = false;
+            return;
+        }
+
         if (_dragTab == null)
         {
             return;
@@ -1235,6 +1242,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             return;
         }
 
+        _suppressTabDragUntilMouseUp = true;
         if (_tabGhost != null) { _tabGhost.Close(); _tabGhost = null; }
         if (_dragContainer != null) { _dragContainer.Visibility = Visibility.Visible; _dragContainer = null; }
         else if (_dragButton != null) _dragButton.Visibility = Visibility.Visible;

@@ -97,11 +97,10 @@ internal static class DropHelper
 
         var entries = GetShellItems(e).ToArray();
 
-        // The copy lands on the desktop, so pause the shell watcher while we add the item manually;
-        // otherwise the CREATE notification would also route the new file into a box (duplicate entry).
         watcher.Pause();
         try
         {
+            int at = insertIndex < 0 ? -1 : Math.Min(insertIndex, target.Items.Count);
             foreach (var entry in entries)
             {
                 BoxItem? boxItem = null;
@@ -120,14 +119,21 @@ internal static class DropHelper
                     }
                     else
                     {
-                        // Virtual shell item with no materialisable file: keep a PIDL-only reference.
                         boxItem = BoxItemFactory.FromShellPidl(b64, Win32Apis.GetPidlDisplayName(b64));
                     }
                 }
 
                 if (boxItem is not null)
                 {
-                    target.AddItem(boxItem);
+                    if (at >= 0)
+                    {
+                        target.InsertItem(boxItem, at);
+                        at++;
+                    }
+                    else
+                    {
+                        target.AddItem(boxItem);
+                    }
                 }
             }
         }

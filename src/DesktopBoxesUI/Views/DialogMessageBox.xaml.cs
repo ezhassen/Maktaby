@@ -25,6 +25,22 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
     private readonly DialogOptions _options;
     private HwndSource? _hwndSource;
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var src = HwndSource.FromHwnd(hwnd);
+                src?.AddHook(HwndHook);
+                _hwndSource = src;
+            }
+        }
+        catch { }
+    }
+
     public DialogMessageBox(Window? owner, DialogOptions options)
     {
         _options = options;
@@ -274,22 +290,6 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
             catch { }
         }
         return IntPtr.Zero;
-    }
-
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
-        try
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero)
-            {
-                var src = HwndSource.FromHwnd(hwnd);
-                src?.AddHook(HwndHook);
-                _hwndSource = src;
-            }
-        }
-        catch { }
     }
 
     private void ApplyManualSize()

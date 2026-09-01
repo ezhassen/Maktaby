@@ -31,9 +31,17 @@ public partial class BoxControl : UserControl
     private Point _dragStart;
     private bool _dragging;
     private bool _moved;
+    private bool _suppressDragUntilMouseUp;
+    private static bool _suppressNextContextMenu;
     private DropIndicatorAdorner? _dropAdorner;
     private int _insertIndex = -1;
     private DragGhostWindow? _ghost;
+
+    // Drag visual gap - collapsed source items and placeholder in target
+    private static readonly List<UIElement> _collapsedForDrag = new();
+    private static BoxControl? _dragSourceControl;
+    private Border? _gapPlaceholder;
+    private WrapPanel? _wrapPanelCache;
 
     // Selection / marquee state.
     private int _anchorIndex = -1;
@@ -83,6 +91,57 @@ public partial class BoxControl : UserControl
     public IPersistenceService? Persistence { get; set; }
 
     public System.Action? RequestSave { get; set; }
+
+    private void CollapseDraggedItems(List<BoxItemViewModel> dragged)
+    {
+        RestoreCollapsedItems();
+        _dragSourceControl = this;
+        foreach (var vm in dragged)
+        {
+            if (Box is null) continue;
+            int idx = Box.Items.IndexOf(vm);
+            if (idx < 0) continue;
+            if (ItemsList.ItemContainerGenerator.ContainerFromIndex(idx) is UIElement container)
+            {
+                // ContentPresenter that wraps the item; collapsing it creates a gap-free reflow
+                container.Visibility = Visibility.Collapsed;
+                _collapsedForDrag.Add(container);
+            }
+        }
+    }
+
+    private static void RestoreCollapsedItems()
+    {
+        foreach (var c in _collapsedForDrag)
+        {
+            c.Visibility = Visibility.Visible;
+        }
+        _collapsedForDrag.Clear();
+        _dragSourceControl = null;
+    }
+
+    private WrapPanel? GetWrapPanel()
+    {
+        if (_wrapPanelCache != null) return _wrapPanelCache;
+        _wrapPanelCache = FindVisualChild<WrapPanel>(ItemsList);
+        return _wrapPanelCache;
+    }
+
+    private void ShowGapPlaceholder(int visibleIndex)
+    {
+        // Layout placeholder via WrapPanel.Children.Insert is not allowed for ItemsPanel (throws
+        // InvalidOperationException). Visual gap is instead shown via DropIndicatorAdorner (small
+        // 8px gap between items) which is an adorner overlay and does not affect layout.
+        // Keep _gapPlaceholder as a marker so HideGapPlaceholder can clear state without touching panel.
+        HideGapPlaceholder();
+        _gapPlaceholder = new Border { Width = 8, Height = IconSize + 36, Margin = new Thickness(2) };
+    }
+
+    private void HideGapPlaceholder()
+    {
+        // No panel modification - just clear marker. Adorner gap is cleared via RemoveDropIndicator.
+        _gapPlaceholder = null;
+    }
 
     /// <summary>Controls the vertical scrollbar visibility of the item list.</summary>
     public ScrollBarVisibility VerticalScrollBarVisibility
@@ -153,6 +212,13 @@ public partial class BoxControl : UserControl
 
     private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     {
+        if (_suppressDragUntilMouseUp)
+        {
+            if (e.LeftButton == MouseButtonState.Released)
+                _suppressDragUntilMouseUp = false;
+            return;
+        }
+
         if (e.LeftButton != MouseButtonState.Pressed || _dragging)
         {
             return;
@@ -205,6 +271,7 @@ public partial class BoxControl : UserControl
             }
 
             _dragging = true;
+            CollapseDraggedItems(dragged);
             _ghost = new DragGhostWindow();
             try
             {
@@ -225,12 +292,14 @@ public partial class BoxControl : UserControl
             }
             finally
             {
-                // Guaranteed cleanup: a mid-drag exception (or resize interleave) must not leak the
-                // ghost window or leave the controller stuck in dragging state.
                 DragDrop.RemoveGiveFeedbackHandler(border, OnGiveFeedback);
                 _ghost?.Close();
                 _ghost = null;
                 _dragging = false;
+                RestoreCollapsedItems();
+                RemoveDropIndicator();
+                _insertIndex = -1;
+                _suppressDragUntilMouseUp = true;
             }
         }
     }
@@ -578,17 +647,28 @@ public partial class BoxControl : UserControl
             return;
         }
 
-        if (e.Data.GetDataPresent(DndFormats.BoxItems) && DataContext is BoxViewModel targetBox)
+        if ((e.Data.GetDataPresent(DndFormats.BoxItems) || e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent("Shell IDList Array")) && DataContext is BoxViewModel)
         {
+            HideGapPlaceholder();
+            GetWrapPanel()?.UpdateLayout();
             var pt = e.GetPosition(Scroll);
-            _insertIndex = GetInsertIndex(pt);
-            ShowDropIndicator(_insertIndex);
-            e.Effects = DragDropEffects.Move;
+            int newIdx = GetInsertIndex(pt);
+            if (newIdx != _insertIndex || _dropAdorner == null)
+            {
+                _insertIndex = newIdx;
+                ShowDropIndicator(_insertIndex);
+            }
+            else
+            {
+                ShowDropIndicator(_insertIndex);
+            }
+            e.Effects = e.Data.GetDataPresent(DndFormats.BoxItems) ? DragDropEffects.Move : DropHelper.GetEffect(e);
             e.Handled = true;
             return;
         }
 
         RemoveDropIndicator();
+        _insertIndex = -1;
         e.Effects = DropHelper.GetEffect(e);
         e.Handled = true;
     }
@@ -638,47 +718,80 @@ public partial class BoxControl : UserControl
         }
     }
 
+    private List<(UIElement container, int originalIndex)> GetVisibleContainers()
+    {
+        var list = new List<(UIElement, int)>();
+        int count = ItemsList.Items.Count;
+        for (int i = 0; i < count; i++)
+        {
+            if (ItemsList.ItemContainerGenerator.ContainerFromIndex(i) is UIElement c && c.Visibility != Visibility.Collapsed)
+            {
+                list.Add((c, i));
+            }
+        }
+        return list;
+    }
+
     /// <summary>
-    /// Computes the index at which a dragged item would be inserted, based on the pointer position
-    /// relative to the (horizontally wrapped) item layout. Items flow left-to-right, top-to-bottom.
+    /// Computes the visible insert index (0..visibleCount) based on pointer position.
+    /// Collapsed dragged items are skipped so the gap reflects the post-removal layout.
+    /// For cross-box drops there are no collapsed items and visible==original.
     /// </summary>
     private int GetInsertIndex(Point pt)
     {
-        int count = ItemsList.Items.Count;
-        if (count == 0)
-        {
-            return 0;
-        }
+        var visible = GetVisibleContainers();
+        int visCount = visible.Count;
+        if (visCount == 0) return 0;
 
-        for (int i = 0; i < count; i++)
-        {
-            if (ItemsList.ItemContainerGenerator.ContainerFromIndex(i) is not UIElement container)
-            {
-                continue;
-            }
+        const double rowTolerance = 4;
+        const double deadZone = 3; // hysteresis around center to prevent flicker
 
+        for (int vi = 0; vi < visCount; vi++)
+        {
+            var container = visible[vi].container;
             var topLeft = container.TransformToAncestor(Scroll).Transform(new Point(0, 0));
             double w = container.RenderSize.Width;
             double h = container.RenderSize.Height;
 
-            // Pointer is above this item's row — insert before it (everything from here is lower).
-            if (pt.Y < topLeft.Y)
+            if (pt.Y < topLeft.Y - rowTolerance) return vi;
+
+            bool inRow = pt.Y >= topLeft.Y - rowTolerance && pt.Y <= topLeft.Y + h + rowTolerance;
+            if (!inRow) continue;
+
+            double centerX = topLeft.X + w / 2;
+            double rightEdge = topLeft.X + w;
+            double nextLeft = double.PositiveInfinity;
+            if (vi + 1 < visCount)
             {
-                return i;
+                var next = visible[vi + 1].container;
+                var nextTl = next.TransformToAncestor(Scroll).Transform(new Point(0, 0));
+                if (Math.Abs(nextTl.Y - topLeft.Y) < rowTolerance) nextLeft = nextTl.X;
+            }
+            double gapMid = double.IsPositiveInfinity(nextLeft) ? rightEdge + 8 : (rightEdge + nextLeft) / 2;
+
+            // Dead zone around center - keep previous index to avoid flicker when hovering near edge
+            if (Math.Abs(pt.X - centerX) <= deadZone && _insertIndex >= 0)
+            {
+                // If pointer is within dead zone and previous index was vi or vi+1, keep it
+                if (_insertIndex == vi || _insertIndex == vi + 1) return _insertIndex;
             }
 
-            // Pointer is within this item's row and anywhere over the icon's full width — insert before it.
-            // Half-width was confusing (right half dropped after). Whole icon now counts as left.
-            if (pt.Y >= topLeft.Y && pt.Y <= topLeft.Y + h && pt.X < topLeft.X + w)
-            {
-                return i;
-            }
+            if (pt.X < centerX - deadZone) return vi;
+            if (pt.X < gapMid) return vi + 1;
         }
-
-        return count;
+        return visCount;
     }
 
-    private void ShowDropIndicator(int index)
+    private int VisibleIndexToOriginal(int visibleIndex)
+    {
+        var visible = GetVisibleContainers();
+        if (visibleIndex >= visible.Count) return ItemsList.Items.Count;
+        if (visibleIndex < 0) return 0;
+        // Original index of the visible item at visibleIndex
+        return visible[visibleIndex].originalIndex;
+    }
+
+    private void ShowDropIndicator(int visibleIndex)
     {
         if (_dropAdorner == null)
         {
@@ -686,36 +799,68 @@ public partial class BoxControl : UserControl
             AdornerLayer.GetAdornerLayer(Scroll)?.Add(_dropAdorner);
         }
 
-        int count = ItemsList.Items.Count;
-        double x, y, h;
-        if (count == 0)
+        var visible = GetVisibleContainers();
+        int visCount = visible.Count;
+        double tileH = IconSize + 36;
+        if (visCount > 0)
         {
+            var sample = visible[Math.Clamp(visibleIndex, 0, visCount - 1)].container;
+            tileH = sample.RenderSize.Height;
+            if (tileH < 10) tileH = IconSize + 36;
+        }
+
+        const double gapW = 8; // small gap between items, not a full tile
+
+        double x, y, w, h;
+        if (visCount == 0)
+        {
+            double tileW = IconSize + 36;
             x = 6;
             y = 6;
-            h = Math.Max(20, Scroll.ActualHeight - 12);
+            w = tileW;
+            h = tileH;
+            if (Scroll.ActualWidth > w + 12) x = (Scroll.ActualWidth - w) / 2;
+            if (Scroll.ActualHeight > h + 12) y = (Scroll.ActualHeight - h) / 2;
+            _dropAdorner.UpdateGap(x, y, w, h);
+            _dropAdorner.Update(x + w/2, y, h);
+            ShowGapPlaceholder(visibleIndex);
+            return;
         }
-        else if (index < count)
+        else if (visibleIndex < visCount)
         {
-            var c = (UIElement)ItemsList.ItemContainerGenerator.ContainerFromIndex(index)!;
+            var c = visible[visibleIndex].container;
             var tl = c.TransformToAncestor(Scroll).Transform(new Point(0, 0));
-            x = tl.X;
+            x = tl.X - gapW / 2 - 1;
+            if (x < 1) x = 1;
             y = tl.Y;
-            h = c.RenderSize.Height;
+            w = gapW;
+            h = tileH;
+            _dropAdorner.UpdateGap(x, y, w, h);
+            _dropAdorner.Update(x + gapW/2, y, h);
+            ShowGapPlaceholder(visibleIndex);
+            return;
         }
         else
         {
-            var c = (UIElement)ItemsList.ItemContainerGenerator.ContainerFromIndex(count - 1)!;
+            var c = visible[visCount - 1].container;
             var tl = c.TransformToAncestor(Scroll).Transform(new Point(0, 0));
-            x = tl.X + c.RenderSize.Width;
+            x = tl.X + c.RenderSize.Width - gapW/2 + 1;
+            double maxX = Scroll.ActualWidth - gapW - 1;
+            if (x > maxX) x = maxX;
+            if (x < 1) x = 1;
             y = tl.Y;
-            h = c.RenderSize.Height;
+            w = gapW;
+            h = tileH;
+            _dropAdorner.UpdateGap(x, y, w, h);
+            _dropAdorner.Update(x + gapW/2, y, h);
+            ShowGapPlaceholder(visibleIndex);
+            return;
         }
-
-        _dropAdorner.Update(x, y, h);
     }
 
     private void RemoveDropIndicator()
     {
+        HideGapPlaceholder();
         if (_dropAdorner != null)
         {
             AdornerLayer.GetAdornerLayer(Scroll)?.Remove(_dropAdorner);
@@ -783,6 +928,8 @@ public partial class BoxControl : UserControl
     {
         if (!_marqueeActive)
         {
+            // Even when marquee not active, clear drag suppress on left up
+            if (_suppressDragUntilMouseUp) _suppressDragUntilMouseUp = false;
             return;
         }
 
@@ -790,6 +937,11 @@ public partial class BoxControl : UserControl
         Marquee.Visibility = Visibility.Collapsed;
         ReleaseMouseCapture();
         _marqueeBase = null;
+    }
+
+    private void BoxControl_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_suppressDragUntilMouseUp) _suppressDragUntilMouseUp = false;
     }
 
     public void ClearSelection()
@@ -1013,6 +1165,13 @@ public partial class BoxControl : UserControl
 
     private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (_suppressNextContextMenu)
+        {
+            _suppressNextContextMenu = false;
+            e.Handled = true;
+            return;
+        }
+
         if ((sender as FrameworkElement)?.DataContext is not BoxItemViewModel vm)
         {
             return;
@@ -1035,7 +1194,12 @@ public partial class BoxControl : UserControl
 
     private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        // We show the native shell menu ourselves; suppress any WPF default.
+        if (_suppressNextContextMenu)
+        {
+            _suppressNextContextMenu = false;
+            e.Handled = true;
+            return;
+        }
         e.Handled = true;
     }
 }
