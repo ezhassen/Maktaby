@@ -129,6 +129,29 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
         }
     }
 
+    private void Duplicate_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
+        {
+            try
+            {
+                var info = _svc.TryGetWidget(vm.Slug, vm.Source);
+                if (info is null) return;
+                var html = System.IO.File.Exists(info.HtmlPath) ? System.IO.File.ReadAllText(info.HtmlPath) : "";
+                var css = System.IO.File.Exists(info.CssPath) ? System.IO.File.ReadAllText(info.CssPath) : "";
+                var js = System.IO.File.Exists(info.JsPath) ? System.IO.File.ReadAllText(info.JsPath) : "";
+                // CreateUserWidget handles unique slug (adds numeric suffix if needed)
+                _svc.CreateUserWidget(vm.Slug + "_copy", html, css, js, info.Manifest);
+                Refresh();
+            }
+            catch (System.Exception ex)
+            {
+                ex.Log_Error();
+                System.Diagnostics.Debug.WriteLine($"Duplicate failed: {ex}");
+            }
+        }
+    }
+
     private void Place_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe3 && fe3.Tag is WidgetGalleryItem vm3)

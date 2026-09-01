@@ -14,7 +14,6 @@ namespace DesktopBoxesUI.Views;
 
 public partial class CssWidgetWindow : Controls.WidgetWindow
 {
-    private readonly ContainerViewModel _vm;
     internal ContainerViewModel ContainerViewModel { get; }
     private readonly DesktopItemContainer _container;
     private readonly ICssWidgetService _widgetService;
@@ -31,7 +30,6 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
     public CssWidgetWindow(ContainerViewModel vm)
     {
         InitializeComponent();
-        _vm = vm;
         ContainerViewModel = vm;
         _container = vm.Model;
         _widgetService = App.Services.GetRequiredService<ICssWidgetService>();
@@ -493,5 +491,10 @@ public partial class CssWidgetWindow : Controls.WidgetWindow
         if (hwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(hwnd); } catch { }
         try { Detach(); } catch { }
         try { base.OnClosed(e); } catch { }
+    }
+
+    private void WidgetMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        WidgetMenuEdit.Visibility = ContainerViewModel.CssWidgetSource == CssWidgetSource.App ? Visibility.Collapsed : Visibility.Visible;
     }
 }

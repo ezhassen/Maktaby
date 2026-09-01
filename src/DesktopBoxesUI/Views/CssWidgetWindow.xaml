@@ -19,15 +19,18 @@
     WindowStyle="None">
     <Grid>
         <Grid.ContextMenu>
-            <ContextMenu x:Name="WidgetMenu">
-                <MenuItem Click="Edit_Click" Header="Edit">
-                    <MenuItem.Icon>
-                        <ui:SymbolIcon Symbol="Edit24" />
-                    </MenuItem.Icon>
-                </MenuItem>
+            <ContextMenu x:Name="WidgetMenu" Opened="WidgetMenu_Opened">
                 <MenuItem Click="Change_Click" Header="Change Widget">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="ArrowSwap24" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem
+                    x:Name="WidgetMenuEdit"
+                    Click="Edit_Click"
+                    Header="Edit">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="Edit24" />
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
@@ -49,7 +52,7 @@
                 </MenuItem>
             </ContextMenu>
         </Grid.ContextMenu>
-        <ContentControl x:Name="WidgetHost" Background="AliceBlue" />
+        <ContentControl x:Name="WidgetHost" />
     </Grid>
 
 
