@@ -28,7 +28,6 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
         _dialogs = App.Services.GetRequiredService<IDialogService>();
         DataContext = this;
         Loaded += (_, _) => Refresh();
-        if (IsSelectMode) SelectButton.Visibility = Visibility.Visible;
     }
 
     private async void Refresh()
@@ -164,12 +163,6 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
                 Close();
             }
         }
-    }
-
-    private void Select_Click(object sender, RoutedEventArgs e)
-    {
-        DialogResult = SelectedInfo is not null;
-        Close();
     }
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();

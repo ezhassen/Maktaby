@@ -296,14 +296,6 @@
                     Text="User widgets stored in %LocalAppData%\DesktopBoxes\UserWidgets" />
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <ui:Button
-                        x:Name="SelectButton"
-                        MinWidth="100"
-                        Appearance="Primary"
-                        Click="Select_Click"
-                        Content="Select"
-                        Visibility="Collapsed" />
-                    <ui:Button
-                        Margin="8,0,0,0"
                         Appearance="Secondary"
                         Click="Close_Click"
                         Content="Close" />
