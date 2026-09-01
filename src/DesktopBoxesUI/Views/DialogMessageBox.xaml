@@ -2,6 +2,7 @@
     x:Class="DesktopBoxesUI.Views.DialogMessageBox"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Message"
     Width="380"
@@ -17,7 +18,16 @@
     SizeToContent="Manual"
     WindowBackdropType="Mica"
     WindowCornerPreference="Round"
-    WindowStartupLocation="Manual">
+    WindowStartupLocation="Manual"
+    WindowStyle="None">
+
+    <!--<shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome
+            CaptionHeight="0"
+            GlassFrameThickness="0"
+            ResizeBorderThickness="0" />
+    </shell:WindowChrome.WindowChrome>-->
+
     <DockPanel x:Name="RootPanel" LastChildFill="True">
         <ui:TitleBar
             x:Name="TitleBar"

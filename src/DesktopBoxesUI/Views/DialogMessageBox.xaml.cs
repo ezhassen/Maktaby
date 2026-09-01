@@ -1,3 +1,4 @@
+using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.Services;
 using DesktopBoxesUI.Win32.NativeMethods;
 using System.Windows;
@@ -5,6 +6,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Windows.Services.Maps;
 using Wpf.Ui.Controls;
 
 namespace DesktopBoxesUI.Views;
@@ -21,6 +23,7 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
     public ContentDialogResult Result { get; private set; } = ContentDialogResult.None;
 
     private readonly DialogOptions _options;
+    private HwndSource? _hwndSource;
 
     public DialogMessageBox(Window? owner, DialogOptions options)
     {
@@ -105,9 +108,7 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        // Manually autosize to content within min/max before centering. This keeps the footer
-        // docked at the bottom with no gap and avoids the SizeToContent+MinHeight gap that
-        // FluentWindow produces.
+        // Manually autosize before clearing resize style - style change would affect DesiredSize.
         ApplyManualSize();
 
         // Default button focus
@@ -136,6 +137,159 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
         catch { }
 
         PositionCenterParent();
+
+        // Now clear resize style (after measure) and force non-client recalc
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                const int WS_THICKFRAME = 0x00040000;
+                const int WS_MAXIMIZEBOX = 0x00010000;
+                const int SWP_NOMOVE = 0x0002;
+                const int SWP_NOSIZE = 0x0001;
+                const int SWP_NOZORDER = 0x0004;
+                const int SWP_FRAMECHANGED = 0x0020;
+                int style = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_STYLE);
+                style &= ~WS_THICKFRAME;
+                style &= ~WS_MAXIMIZEBOX;
+                ManualApis.SetWindowLong(hwnd, ManualApis.GWL_STYLE, style);
+                ManualApis.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+                var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(this);
+                if (chrome != null)
+                {
+                    chrome.ResizeBorderThickness = new Thickness(0);
+                }
+                else
+                {
+                    // FluentWindow uses its own chrome; create one that disables resize border
+                    var newChrome = new System.Windows.Shell.WindowChrome
+                    {
+                        ResizeBorderThickness = new Thickness(0),
+                        CaptionHeight = 32,
+                        CornerRadius = new CornerRadius(8),
+                        GlassFrameThickness = new Thickness(-1)
+                    };
+                    System.Windows.Shell.WindowChrome.SetWindowChrome(this, newChrome);
+                }
+            }
+        }
+        catch { }
+    }
+    protected override void OnClosed(EventArgs e)
+    {
+        _hwndSource?.RemoveHook(HwndHook);
+        _hwndSource = null;
+        base.OnClosed(e);
+    }
+    private const int WmNcHitTest = 0x0084;
+    private const int WmGetMinMaxInfo = 0x0024;
+    private const int WmWindowPosChanging = 0x0046;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct POINT { public int x; public int y; }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MINMAXINFO
+    {
+        public POINT ptReserved;
+        public POINT ptMaxSize;
+        public POINT ptMaxPosition;
+        public POINT ptMinTrackSize;
+        public POINT ptMaxTrackSize;
+    }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct WINDOWPOS
+    {
+        public IntPtr hwnd;
+        public IntPtr hwndInsertAfter;
+        public int x;
+        public int y;
+        public int cx;
+        public int cy;
+        public uint flags;
+    }
+
+    private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (ResizeMode != ResizeMode.NoResize) return IntPtr.Zero;
+
+        if (msg == WmNcHitTest)
+        {
+            var hit = ManualApis.DefWindowProc(hwnd, (uint)msg, wParam, lParam).ToInt32();
+            if (hit >= 10 && hit <= 17)
+            {
+                handled = true;
+                return new IntPtr(1);
+            }
+        }
+        else if (msg == WmGetMinMaxInfo)
+        {
+            try
+            {
+                var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
+                // Lock to current outer size (in pixels)
+                var dpi = VisualTreeHelper.GetDpi(this);
+                int curW = (int)Math.Round(Width * dpi.DpiScaleX);
+                int curH = (int)Math.Round(Height * dpi.DpiScaleY);
+                // Ensure at least MinWidth/MinHeight in pixels
+                int minW = (int)Math.Round(MinWidth * dpi.DpiScaleX);
+                int minH = (int)Math.Round(MinHeight * dpi.DpiScaleY);
+                if (curW < minW) curW = minW;
+                if (curH < minH) curH = minH;
+                mmi.ptMinTrackSize.x = curW;
+                mmi.ptMinTrackSize.y = curH;
+                mmi.ptMaxTrackSize.x = curW;
+                mmi.ptMaxTrackSize.y = curH;
+                System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, true);
+                handled = true;
+                return IntPtr.Zero;
+            }
+            catch { }
+        }
+        else if (msg == WmWindowPosChanging)
+        {
+            try
+            {
+                var pos = System.Runtime.InteropServices.Marshal.PtrToStructure<WINDOWPOS>(lParam);
+                const uint SWP_NOSIZE = 0x0001;
+                if ((pos.flags & SWP_NOSIZE) == 0)
+                {
+                    // Prevent any size change - keep current size
+                    var dpi = VisualTreeHelper.GetDpi(this);
+                    int curW = (int)Math.Round(Width * dpi.DpiScaleX);
+                    int curH = (int)Math.Round(Height * dpi.DpiScaleY);
+                    // Allow only if new size equals current (within 2px for rounding)
+                    int newW = pos.cx;
+                    int newH = pos.cy;
+                    if (Math.Abs(newW - curW) > 2 || Math.Abs(newH - curH) > 2)
+                    {
+                        pos.cx = curW;
+                        pos.cy = curH;
+                        System.Runtime.InteropServices.Marshal.StructureToPtr(pos, lParam, true);
+                        handled = true;
+                        return IntPtr.Zero;
+                    }
+                }
+            }
+            catch { }
+        }
+        return IntPtr.Zero;
+    }
+
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var src = HwndSource.FromHwnd(hwnd);
+                src?.AddHook(HwndHook);
+                _hwndSource = src;
+            }
+        }
+        catch { }
     }
 
     private void ApplyManualSize()
