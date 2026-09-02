@@ -10,6 +10,7 @@
     d:DesignHeight="300"
     d:DesignWidth="400"
     PreviewMouseDown="Control_PreviewMouseDown"
+    PreviewMouseLeftButtonDown="Root_PreviewMouseLeftButtonDown"
     PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
     mc:Ignorable="d">
     <UserControl.Resources>
@@ -223,9 +224,14 @@
                 BorderThickness="0"
                 Foreground="{DynamicResource BoxForeground}"
                 ItemsSource="{Binding FolderItems}"
+                PreviewMouseLeftButtonDown="DetailsList_PreviewMouseLeftButtonDown"
+                ScrollViewer.CanContentScroll="True"
                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                 SelectionMode="Extended"
+                VirtualizingPanel.IsContainerVirtualizable="True"
+                VirtualizingPanel.IsVirtualizing="True"
+                VirtualizingPanel.VirtualizationMode="Recycling"
                 Visibility="Collapsed">
                 <ListView.Resources>
                     <Style TargetType="GridViewColumnHeader">
@@ -369,6 +375,8 @@
                         <EventSetter Event="MouseDoubleClick" Handler="DetailsItem_DoubleClick" />
                         <EventSetter Event="KeyDown" Handler="ItemBorder_KeyDown" />
                         <EventSetter Event="PreviewMouseDown" Handler="ItemBorder_PreviewMouseDown" />
+                        <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DetailsItem_PreviewMouseLeftButtonDown" />
+                        <EventSetter Event="MouseLeftButtonDown" Handler="DetailsItem_MouseLeftButtonDown" />
                         <EventSetter Event="MouseMove" Handler="ItemBorder_MouseMove" />
                         <EventSetter Event="MouseLeftButtonUp" Handler="ItemBorder_MouseLeftButtonUp" />
                         <EventSetter Event="MouseRightButtonUp" Handler="ItemBorder_MouseRightButtonUp" />

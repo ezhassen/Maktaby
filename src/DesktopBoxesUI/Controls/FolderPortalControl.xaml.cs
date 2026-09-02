@@ -328,18 +328,17 @@ public partial class FolderPortalControl : UserControl
         var diff = e.GetPosition(null) - _dragStart;
         if (Math.Abs(diff.X) <= SystemParameters.MinimumHorizontalDragDistance && Math.Abs(diff.Y) <= SystemParameters.MinimumVerticalDragDistance) return;
 
-        // Determine dragged set: all selected in current view, or just the item under cursor
+        _moved = true;
+
+        // Determine dragged set: all selected in current view, or just the item under cursor.
+        // Do NOT mutate selection here — starting a drag should never clear/change the selection.
+        // Plain clicks on already-selected items keep multi-selection for drag; collapsing to
+        // single happens on MouseUp if no drag occurred (see ItemBorder_MouseLeftButtonUp).
         List<FolderItemViewModel> dragged;
         if (Box != null && Box.FolderItems.Any(i => i.IsSelected) && vm.IsSelected)
             dragged = Box.FolderItems.Where(i => i.IsSelected).ToList();
         else
         {
-            // Ensure clicked item is selected
-            if (Box != null)
-            {
-                foreach (var it in Box.FolderItems) it.IsSelected = false;
-                vm.IsSelected = true;
-            }
             dragged = new List<FolderItemViewModel> { vm };
         }
 
@@ -399,12 +398,152 @@ public partial class FolderPortalControl : UserControl
         catch { }
     }
 
-    private void ItemBorder_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) { }
+    private void ItemBorder_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        // Deferred single-selection: plain click on already-selected item with multi-selection keeps it for drag on MouseDown,
+        // collapse to single on MouseUp only if no drag occurred and no modifier is held (Explorer-like).
+        if (!_moved && !_dragging && sender is FrameworkElement { DataContext: FolderItemViewModel vmUp } && !vmUp.IsEditing)
+        {
+            bool ctrlUp = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+            bool shiftUp = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+            bool altUp = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+            if (!ctrlUp && !shiftUp && !altUp && vmUp.IsSelected && Box is { } boxUp && boxUp.FolderItems.Count(i => i.IsSelected) > 1)
+            {
+                SelectOnly(vmUp);
+            }
+        }
+    }
 
     private void ItemBorder_GotFocus(object sender, RoutedEventArgs e)
     {
-        if (sender is Border { DataContext: FolderItemViewModel vm } && Box != null)
+        if (sender is FrameworkElement { DataContext: FolderItemViewModel vm } && Box != null)
             _focusedIndex = Box.FolderItems.IndexOf(vm);
+    }
+
+    private void DetailsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Click on empty area (not on a ListViewItem) — clear selection unless Ctrl/Shift held (like IconsHost)
+        if (e.OriginalSource is DependencyObject src)
+        {
+            if (FindListViewItem(src) != null) return;
+            // Header click should not clear selection — it's for sorting
+            DependencyObject? cur = src;
+            while (cur != null)
+            {
+                if (cur is GridViewColumnHeader) return;
+                cur = VisualTreeHelper.GetParent(cur);
+            }
+        }
+        if (_renameService.IsEditing) return;
+        bool additive = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
+        if (!additive) ClearSelection();
+    }
+
+    private static ListViewItem? FindListViewItem(DependencyObject src)
+    {
+        DependencyObject? cur = src;
+        while (cur != null)
+        {
+            if (cur is ListViewItem lvi) return lvi;
+            cur = VisualTreeHelper.GetParent(cur);
+        }
+        return null;
+    }
+
+    private void DetailsItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Handled at Root_PreviewMouseLeftButtonDown (ancestor TUNNEL) to suppress ListView Selector before it runs.
+        // Keep this no-op so per-item Preview doesn't interfere.
+    }
+
+    private void Root_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Box == null || Box.FolderPortalViewMode != FolderPortalViewMode.Details) return;
+        if (e.OriginalSource is not DependencyObject src) return;
+        // Ignore header / empty area — only handle real rows
+        var lvi = FindListViewItem(src);
+        if (lvi == null) return;
+        if (lvi.DataContext is not FolderItemViewModel vm) return;
+        if (vm.IsEditing) { e.Handled = true; return; }
+
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+        if (shift && _anchorIndex >= 0)
+        {
+            SelectRange(_anchorIndex, Box.FolderItems.IndexOf(vm), false);
+            e.Handled = true;
+            // record drag start so Details drag works
+            _dragStart = e.GetPosition(null);
+            _dragging = false;
+            _moved = false;
+            // ensure row gets focus
+            if (!lvi.IsKeyboardFocusWithin) { Keyboard.Focus(lvi); lvi.Focus(); }
+            return;
+        }
+        if (ctrl)
+        {
+            vm.IsSelected = !vm.IsSelected;
+            _anchorIndex = Box.FolderItems.IndexOf(vm);
+            e.Handled = true;
+            _dragStart = e.GetPosition(null);
+            _dragging = false;
+            _moved = false;
+            if (!lvi.IsKeyboardFocusWithin) { Keyboard.Focus(lvi); lvi.Focus(); }
+            return;
+        }
+        // Plain click — keep multi for drag, collapse on MouseUp (Explorer-like). Do not clear here if already selected.
+        if (!vm.IsSelected)
+        {
+            SelectOnly(vm);
+        }
+        else
+        {
+            _anchorIndex = Box.FolderItems.IndexOf(vm);
+        }
+        e.Handled = true;
+        _dragStart = e.GetPosition(null);
+        _dragging = false;
+        _moved = false;
+        if (!lvi.IsKeyboardFocusWithin) { Keyboard.Focus(lvi); lvi.Focus(); }
+    }
+
+    private void DetailsItem_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Selection for Details is handled in Root_PreviewMouseLeftButtonDown (tunneling, before ListView Selector).
+        // This bubbling handler is only a fallback / for drag bookkeeping if preview was missed.
+        if (Box?.FolderPortalViewMode == FolderPortalViewMode.Details) return;
+
+        if (sender is not FrameworkElement { DataContext: FolderItemViewModel vm } fe) return;
+        if (!fe.IsKeyboardFocusWithin)
+        {
+            Keyboard.Focus(fe);
+            fe.Focus();
+        }
+        if (vm.IsEditing) { e.Handled = true; return; }
+
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+
+        if (shift && _anchorIndex >= 0 && Box != null)
+            SelectRange(_anchorIndex, Box.FolderItems.IndexOf(vm), false);
+        else if (ctrl)
+        {
+            vm.IsSelected = !vm.IsSelected;
+            _anchorIndex = Box?.FolderItems.IndexOf(vm) ?? -1;
+        }
+        else
+        {
+            if (!vm.IsSelected)
+                SelectOnly(vm);
+            else
+                _anchorIndex = Box?.FolderItems.IndexOf(vm) ?? -1;
+        }
+
+        _dragStart = e.GetPosition(null);
+        _dragging = false;
+        _moved = false;
+        e.Handled = true;
     }
 
     private void ItemBorder_KeyDown(object sender, KeyEventArgs e)
@@ -726,6 +865,7 @@ public partial class FolderPortalControl : UserControl
         {
             _dragStart = e.GetPosition(null);
             _dragging = false;
+            _moved = false;
         }
         if (e.ChangedButton == MouseButton.Middle)
         {
