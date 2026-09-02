@@ -6,10 +6,12 @@ using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -81,6 +83,100 @@ public partial class FolderPortalControl : UserControl
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         UpdateView();
+        // DataGridRow events are often marked handled by DataGrid's internal selection logic.
+        // Register with handledEventsToo so dragging / double-click / right-click / middle-click still fire.
+        DetailsGrid.AddHandler(UIElement.PreviewMouseDownEvent, new MouseButtonEventHandler(DetailsGrid_OnPreviewMouseDown), true);
+        DetailsGrid.AddHandler(UIElement.MouseMoveEvent, new MouseEventHandler(DetailsGrid_OnMouseMove), true);
+        DetailsGrid.AddHandler(Control.MouseDoubleClickEvent, new MouseButtonEventHandler(DetailsGrid_OnDoubleClick), true);
+        DetailsGrid.AddHandler(UIElement.MouseRightButtonUpEvent, new MouseButtonEventHandler(DetailsGrid_OnRightButtonUp), true);
+        DetailsGrid.AddHandler(UIElement.PreviewMouseRightButtonUpEvent, new MouseButtonEventHandler(DetailsGrid_OnRightButtonUp), true);
+        DetailsGrid.AddHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler(DetailsGrid_OnLeftButtonUp), true);
+        DetailsGrid.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(DetailsGrid_OnKeyDown), true);
+        DetailsGrid.AddHandler(UIElement.GotFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
+        DetailsGrid.AddHandler(FrameworkElement.ContextMenuOpeningEvent, new ContextMenuEventHandler(DetailsGrid_OnContextMenuOpening), true);
+    }
+
+    private void DetailsGrid_OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
+        if (row == null)
+        {
+            // Don't clear origin here — Root preview already set it for left clicks; only clear for non-row
+            return;
+        }
+        // Middle / XButton handled here (Root only handles Left)
+        if (e.ChangedButton == MouseButton.Middle || e.ChangedButton == MouseButton.XButton1 || e.ChangedButton == MouseButton.XButton2)
+        {
+            ItemBorder_PreviewMouseDown(row, e);
+            return;
+        }
+        // Left button selection + drag origin is handled in Root_PreviewMouseLeftButtonDown (higher tunnel) before DataGrid's Selector.
+        // Nothing to do here for Left — Root already set _gridDragRow/_gridDragVm/_dragStart and marked Handled.
+    }
+
+    private void DetailsGrid_OnMouseMove(object sender, MouseEventArgs e)
+    {
+        // Use origin row (where mousedown happened) for drag, not current hover row
+        var row = _gridDragRow;
+        var vm = _gridDragVm;
+        if (row == null || vm == null) return;
+        // Still verify left button pressed and window active inside ItemBorder_MouseMove
+        ItemBorder_MouseMove(row, e);
+    }
+
+    private void DetailsGrid_OnDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
+        if (row == null) return;
+        DetailsRow_DoubleClick(row, e);
+    }
+
+    private void DetailsGrid_OnRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
+        if (row == null) return;
+        ItemBorder_MouseRightButtonUp(row, e);
+        // Suppress DataGrid's default context menu
+        e.Handled = true;
+    }
+
+    private void DetailsGrid_OnKeyDown(object sender, KeyEventArgs e)
+    {
+        var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
+        if (row == null)
+        {
+            // Also handle when focus is on DataGrid itself (e.g., Ctrl+A without row)
+            if (sender is DataGrid dg && dg.SelectedItems.Count > 0) { /* let ItemBorder_KeyDown handle via focused row */ }
+            return;
+        }
+        ItemBorder_KeyDown(row, e);
+    }
+
+    private void DetailsGrid_OnGotFocus(object sender, RoutedEventArgs e)
+    {
+        var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
+        if (row == null) return;
+        ItemBorder_GotFocus(row, e);
+    }
+
+    private void DetailsGrid_OnLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
+        if (row != null)
+            ItemBorder_MouseLeftButtonUp(row, e);
+        // Clear drag origin on mouse up (also cleared after successful DoDragDrop via _suppress)
+        if (e.LeftButton == MouseButtonState.Released || !_dragging)
+        {
+            _gridDragRow = null;
+            _gridDragVm = null;
+        }
+    }
+
+    private void DetailsGrid_OnContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
+        if (row == null) return;
+        ItemBorder_ContextMenuOpening(row, e);
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -106,7 +202,7 @@ public partial class FolderPortalControl : UserControl
 
         bool isIcons = box.FolderPortalViewMode == Core.Models.FolderPortalViewMode.Icons;
         IconsScroll.Visibility = isIcons ? Visibility.Visible : Visibility.Collapsed;
-        DetailsList.Visibility = isIcons ? Visibility.Collapsed : Visibility.Visible;
+        DetailsGrid.Visibility = isIcons ? Visibility.Collapsed : Visibility.Visible;
         BackButton.IsEnabled = !box.IsAtRoot;
         if (ViewToggleIcon != null)
         {
@@ -122,7 +218,7 @@ public partial class FolderPortalControl : UserControl
     private void UpdateSortArrows()
     {
         if (Box == null) return;
-        if (DetailsList.View is not GridView gv) return;
+        if (DetailsGrid.Columns.Count == 0) return;
         string expected = Box.FolderSortBy switch
         {
             FolderSortMode.Size => "Size",
@@ -131,17 +227,17 @@ public partial class FolderPortalControl : UserControl
             _ => "Name",
         };
         string arrow = Box.FolderSortAscending ? " ▲" : " ▼";
-        foreach (var col in gv.Columns)
+        foreach (var col in DetailsGrid.Columns)
         {
             string raw = (col.Header as string) ?? string.Empty;
             string baseHeader = raw.TrimEnd(' ', '▲', '▼', '◄', '►');
-            // Fallback: if header was somehow empty, keep original
             if (string.IsNullOrWhiteSpace(baseHeader)) continue;
-            // Normalize trimmed
-            // OriginalHeaders contains canonical names; use that for comparison
             bool isSorted = string.Equals(baseHeader, expected, StringComparison.Ordinal);
-            // If baseHeader already contains arrow-trimmed, keep it
-            col.Header = baseHeader + (isSorted ? arrow : string.Empty);
+            string normalized = baseHeader + (isSorted ? arrow : string.Empty);
+            col.Header = normalized;
+            // Also update SortDirection for DataGrid built-in arrow (optional)
+            if (isSorted) col.SortDirection = Box.FolderSortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending;
+            else col.SortDirection = null;
         }
     }
 
@@ -182,10 +278,10 @@ public partial class FolderPortalControl : UserControl
         UpdateView();
     }
 
-    private void DetailsHeader_Click(object sender, RoutedEventArgs e)
+    private void DetailsGrid_Sorting(object sender, DataGridSortingEventArgs e)
     {
-        if (e.OriginalSource is not GridViewColumnHeader header || header.Column == null) return;
-        string raw = (header.Column.Header as string) ?? string.Empty;
+        e.Handled = true;
+        string raw = (e.Column.Header as string) ?? string.Empty;
         string baseHeader = raw.TrimEnd(' ', '▲', '▼', '◄', '►');
         FolderSortMode newMode = baseHeader switch
         {
@@ -313,6 +409,8 @@ public partial class FolderPortalControl : UserControl
     private bool _moved;
     private bool _suppressDragUntilMouseUp;
     private DragGhostWindow? _dragGhost;
+    private DataGridRow? _gridDragRow;
+    private FolderItemViewModel? _gridDragVm;
 
     private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     {
@@ -420,17 +518,16 @@ public partial class FolderPortalControl : UserControl
             _focusedIndex = Box.FolderItems.IndexOf(vm);
     }
 
-    private void DetailsList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void DetailsGrid_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        // Click on empty area (not on a ListViewItem) — clear selection unless Ctrl/Shift held (like IconsHost)
+        // Click on empty area (not on a DataGridRow) — clear selection unless Ctrl/Shift held (like IconsHost)
         if (e.OriginalSource is DependencyObject src)
         {
-            if (FindListViewItem(src) != null) return;
-            // Header click should not clear selection — it's for sorting
+            if (FindDataGridRow(src) != null) return;
             DependencyObject? cur = src;
             while (cur != null)
             {
-                if (cur is GridViewColumnHeader) return;
+                if (cur is DataGridColumnHeader) return;
                 cur = VisualTreeHelper.GetParent(cur);
             }
         }
@@ -439,12 +536,12 @@ public partial class FolderPortalControl : UserControl
         if (!additive) ClearSelection();
     }
 
-    private static ListViewItem? FindListViewItem(DependencyObject src)
+    private static DataGridRow? FindDataGridRow(DependencyObject src)
     {
         DependencyObject? cur = src;
         while (cur != null)
         {
-            if (cur is ListViewItem lvi) return lvi;
+            if (cur is DataGridRow row) return row;
             cur = VisualTreeHelper.GetParent(cur);
         }
         return null;
@@ -458,13 +555,20 @@ public partial class FolderPortalControl : UserControl
 
     private void Root_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (Box == null || Box.FolderPortalViewMode != FolderPortalViewMode.Details) return;
+        // Intercept DataGrid left clicks BEFORE DataGrid's class handler clears multi-selection.
+        // Tunnel is UserControl -> DataGrid -> Row, so handling here (UserControl preview) runs before DataGrid's Selector logic.
+        if (Box == null) return;
+        if (Box.FolderPortalViewMode != FolderPortalViewMode.Details) return; // Icons handled per-Border
+        if (e.ChangedButton != MouseButton.Left) return;
         if (e.OriginalSource is not DependencyObject src) return;
-        // Ignore header / empty area — only handle real rows
-        var lvi = FindListViewItem(src);
-        if (lvi == null) return;
-        if (lvi.DataContext is not FolderItemViewModel vm) return;
+        var row = FindDataGridRow(src);
+        if (row == null) return; // empty area handled by DetailsGrid_PreviewMouseLeftButtonDown
+        if (row.DataContext is not FolderItemViewModel vm) return;
         if (vm.IsEditing) { e.Handled = true; return; }
+
+        // Remember origin for drag (used by DetailsGrid_OnMouseMove)
+        _gridDragRow = row;
+        _gridDragVm = vm;
 
         bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
@@ -473,39 +577,32 @@ public partial class FolderPortalControl : UserControl
         {
             SelectRange(_anchorIndex, Box.FolderItems.IndexOf(vm), false);
             e.Handled = true;
-            // record drag start so Details drag works
-            _dragStart = e.GetPosition(null);
-            _dragging = false;
-            _moved = false;
-            // ensure row gets focus
-            if (!lvi.IsKeyboardFocusWithin) { Keyboard.Focus(lvi); lvi.Focus(); }
-            return;
         }
-        if (ctrl)
+        else if (ctrl)
         {
             vm.IsSelected = !vm.IsSelected;
-            _anchorIndex = Box.FolderItems.IndexOf(vm);
+            _anchorIndex = Box?.FolderItems.IndexOf(vm) ?? -1;
             e.Handled = true;
-            _dragStart = e.GetPosition(null);
-            _dragging = false;
-            _moved = false;
-            if (!lvi.IsKeyboardFocusWithin) { Keyboard.Focus(lvi); lvi.Focus(); }
-            return;
-        }
-        // Plain click — keep multi for drag, collapse on MouseUp (Explorer-like). Do not clear here if already selected.
-        if (!vm.IsSelected)
-        {
-            SelectOnly(vm);
         }
         else
         {
-            _anchorIndex = Box.FolderItems.IndexOf(vm);
+            if (!vm.IsSelected)
+            {
+                SelectOnly(vm);
+                e.Handled = true;
+            }
+            else
+            {
+                // Already selected multi — keep for drag, collapse on MouseUp if no drag
+                _anchorIndex = Box.FolderItems.IndexOf(vm);
+                e.Handled = true;
+            }
         }
-        e.Handled = true;
+
+        if (!row.IsKeyboardFocusWithin) { Keyboard.Focus(row); row.Focus(); }
         _dragStart = e.GetPosition(null);
         _dragging = false;
         _moved = false;
-        if (!lvi.IsKeyboardFocusWithin) { Keyboard.Focus(lvi); lvi.Focus(); }
     }
 
     private void DetailsItem_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -594,8 +691,7 @@ public partial class FolderPortalControl : UserControl
         }
         else if (key == Key.A && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
         {
-            // Ctrl+A select all (icons only)
-            if (Box?.FolderPortalViewMode == FolderPortalViewMode.Icons && Box != null)
+            if (Box != null)
             {
                 foreach (var it in Box.FolderItems) it.IsSelected = true;
                 e.Handled = true;
@@ -688,6 +784,29 @@ public partial class FolderPortalControl : UserControl
                 if (Window.GetWindow(this) is Views.BoxContainerWindow bcw) bcw.ManageFolderWatcher();
             }
             else OpenItem(vm);
+        }
+    }
+
+    private void DetailsRow_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is DataGridRow { DataContext: FolderItemViewModel vm })
+        {
+            bool alt = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+            if (alt)
+            {
+                ShowProperties(vm);
+                e.Handled = true;
+                return;
+            }
+            if (vm.IsDirectory)
+            {
+                Box?.TryNavigateInto(vm);
+                RequestSave?.Invoke();
+                UpdateView();
+                if (Window.GetWindow(this) is Views.BoxContainerWindow bcw) bcw.ManageFolderWatcher();
+            }
+            else OpenItem(vm);
+            e.Handled = true;
         }
     }
 

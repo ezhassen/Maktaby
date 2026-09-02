@@ -215,35 +215,53 @@
                 </Grid>
             </ScrollViewer>
 
-            <!--  Details view  -->
-            <ListView
-                x:Name="DetailsList"
+            <!--  Details view - DataGrid (compact, virtualized, sorting)  -->
+            <DataGrid
+                x:Name="DetailsGrid"
                 Grid.Row="1"
+                AutoGenerateColumns="False"
                 Background="{DynamicResource BoxBackground}"
                 BorderBrush="{DynamicResource BoxBorder}"
                 BorderThickness="0"
+                CanUserAddRows="False"
+                CanUserDeleteRows="False"
+                CanUserReorderColumns="False"
+                CanUserResizeRows="False"
+                CanUserSortColumns="True"
+                EnableColumnVirtualization="True"
+                EnableRowVirtualization="True"
                 Foreground="{DynamicResource BoxForeground}"
+                GridLinesVisibility="None"
+                HeadersVisibility="Column"
                 ItemsSource="{Binding FolderItems}"
-                PreviewMouseLeftButtonDown="DetailsList_PreviewMouseLeftButtonDown"
+                RowHeight="22"
+                RowHeaderWidth="0"
                 ScrollViewer.CanContentScroll="True"
                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                 SelectionMode="Extended"
+                SelectionUnit="FullRow"
+                Sorting="DetailsGrid_Sorting"
+                PreviewMouseLeftButtonDown="DetailsGrid_PreviewMouseLeftButtonDown"
                 VirtualizingPanel.IsContainerVirtualizable="True"
                 VirtualizingPanel.IsVirtualizing="True"
                 VirtualizingPanel.VirtualizationMode="Recycling"
                 Visibility="Collapsed">
-                <ListView.Resources>
-                    <Style TargetType="GridViewColumnHeader">
+                <DataGrid.Resources>
+                    <Style TargetType="{x:Type DataGridColumnHeader}">
                         <Setter Property="Background" Value="{DynamicResource BoxHeaderBackground}" />
                         <Setter Property="Foreground" Value="{DynamicResource BoxHeaderForeground}" />
                         <Setter Property="BorderBrush" Value="{DynamicResource BoxBorder}" />
                         <Setter Property="BorderThickness" Value="0,0,1,1" />
-                        <Setter Property="Padding" Value="6,4" />
+                        <Setter Property="Padding" Value="6,2" />
+                        <Setter Property="FontSize" Value="11" />
+                        <Setter Property="Height" Value="22" />
                         <Setter Property="HorizontalContentAlignment" Value="Left" />
+                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                        <Setter Property="SnapsToDevicePixels" Value="True" />
                         <Setter Property="Template">
                             <Setter.Value>
-                                <ControlTemplate TargetType="GridViewColumnHeader">
+                                <ControlTemplate TargetType="{x:Type DataGridColumnHeader}">
                                     <Grid>
                                         <Border
                                             x:Name="HeaderBorder"
@@ -252,10 +270,10 @@
                                             BorderBrush="{TemplateBinding BorderBrush}"
                                             BorderThickness="{TemplateBinding BorderThickness}">
                                             <ContentPresenter
-                                                x:Name="HeaderContent"
                                                 HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                VerticalAlignment="Center"
-                                                RecognizesAccessKey="True" />
+                                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                                RecognizesAccessKey="True"
+                                                SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
                                         </Border>
                                         <Thumb
                                             x:Name="PART_HeaderGripper"
@@ -264,7 +282,7 @@
                                             Background="Transparent"
                                             Cursor="SizeWE">
                                             <Thumb.Template>
-                                                <ControlTemplate TargetType="Thumb">
+                                                <ControlTemplate TargetType="{x:Type Thumb}">
                                                     <Border Width="8" Background="Transparent">
                                                         <Rectangle
                                                             Width="1"
@@ -285,106 +303,122 @@
                                         <Trigger Property="IsEnabled" Value="False">
                                             <Setter Property="Foreground" Value="#888888" />
                                         </Trigger>
+                                        <Trigger Property="SortDirection" Value="Ascending">
+                                            <Setter Property="Foreground" Value="{DynamicResource BoxHeaderForeground}" />
+                                        </Trigger>
+                                        <Trigger Property="SortDirection" Value="Descending">
+                                            <Setter Property="Foreground" Value="{DynamicResource BoxHeaderForeground}" />
+                                        </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>
                             </Setter.Value>
                         </Setter>
-                        <EventSetter Event="Click" Handler="DetailsHeader_Click" />
                     </Style>
-                    <Style TargetType="ScrollViewer">
+                    <Style TargetType="{x:Type ScrollViewer}">
                         <Setter Property="Background" Value="{DynamicResource BoxBackground}" />
                     </Style>
-                </ListView.Resources>
-                <ListView.View>
-                    <GridView>
-                        <GridViewColumn Width="220" Header="Name">
-                            <GridViewColumn.CellTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal">
-                                        <Image
-                                            Width="16"
-                                            Height="16"
-                                            Margin="0,0,6,0"
-                                            Source="{Binding Icon}" />
-                                        <TextBlock
-                                            VerticalAlignment="Center"
-                                            Text="{Binding DisplayName}"
-                                            TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </GridViewColumn.CellTemplate>
-                        </GridViewColumn>
-                        <GridViewColumn
-                            Width="90"
-                            DisplayMemberBinding="{Binding SizeText}"
-                            Header="Size" />
-                        <GridViewColumn
-                            Width="90"
-                            DisplayMemberBinding="{Binding TypeName}"
-                            Header="Type" />
-                        <GridViewColumn
-                            Width="150"
-                            DisplayMemberBinding="{Binding ModifiedText}"
-                            Header="Date modified" />
-                    </GridView>
-                </ListView.View>
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
+                </DataGrid.Resources>
+                <DataGrid.RowStyle>
+                    <Style TargetType="{x:Type DataGridRow}">
                         <Setter Property="Background" Value="Transparent" />
                         <Setter Property="Foreground" Value="{DynamicResource BoxForeground}" />
                         <Setter Property="BorderThickness" Value="1" />
                         <Setter Property="BorderBrush" Value="Transparent" />
-                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}" />
+                        <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                         <Setter Property="SnapsToDevicePixels" Value="True" />
                         <Setter Property="FocusVisualStyle" Value="{x:Null}" />
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ListViewItem">
-                                    <Border
-                                        x:Name="Bd"
-                                        Padding="2,0"
-                                        Background="{TemplateBinding Background}"
-                                        BorderBrush="{TemplateBinding BorderBrush}"
-                                        BorderThickness="{TemplateBinding BorderThickness}"
-                                        SnapsToDevicePixels="True">
-                                        <GridViewRowPresenter VerticalAlignment="Center" />
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#3A3A3A" />
-                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#5A5A5A" />
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="#407FB2FF" />
-                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#FF7FB2FF" />
-                                        </Trigger>
-                                        <MultiTrigger>
-                                            <MultiTrigger.Conditions>
-                                                <Condition Property="IsSelected" Value="True" />
-                                                <Condition Property="IsMouseOver" Value="True" />
-                                            </MultiTrigger.Conditions>
-                                            <Setter TargetName="Bd" Property="Background" Value="#4A6EAF" />
-                                        </MultiTrigger>
-                                        <Trigger Property="IsFocused" Value="True">
-                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#FF7FB2FF" />
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                        <EventSetter Event="MouseDoubleClick" Handler="DetailsItem_DoubleClick" />
-                        <EventSetter Event="KeyDown" Handler="ItemBorder_KeyDown" />
-                        <EventSetter Event="PreviewMouseDown" Handler="ItemBorder_PreviewMouseDown" />
-                        <EventSetter Event="PreviewMouseLeftButtonDown" Handler="DetailsItem_PreviewMouseLeftButtonDown" />
-                        <EventSetter Event="MouseLeftButtonDown" Handler="DetailsItem_MouseLeftButtonDown" />
-                        <EventSetter Event="MouseMove" Handler="ItemBorder_MouseMove" />
-                        <EventSetter Event="MouseLeftButtonUp" Handler="ItemBorder_MouseLeftButtonUp" />
-                        <EventSetter Event="MouseRightButtonUp" Handler="ItemBorder_MouseRightButtonUp" />
-                        <EventSetter Event="ContextMenuOpening" Handler="ItemBorder_ContextMenuOpening" />
-                        <EventSetter Event="GotFocus" Handler="ItemBorder_GotFocus" />
+                        <Setter Property="FontSize" Value="11" />
+                        <Setter Property="MinHeight" Value="22" />
+                        <Setter Property="Height" Value="22" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0" />
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#3A3A3A" />
+                                <Setter Property="BorderBrush" Value="#5A5A5A" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="#407FB2FF" />
+                                <Setter Property="BorderBrush" Value="#FF7FB2FF" />
+                            </Trigger>
+                            <MultiTrigger>
+                                <MultiTrigger.Conditions>
+                                    <Condition Property="IsSelected" Value="True" />
+                                    <Condition Property="IsMouseOver" Value="True" />
+                                </MultiTrigger.Conditions>
+                                <Setter Property="Background" Value="#4A6EAF" />
+                            </MultiTrigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter Property="BorderBrush" Value="#FF7FB2FF" />
+                            </Trigger>
+                        </Style.Triggers>
                     </Style>
-                </ListView.ItemContainerStyle>
-            </ListView>
+                </DataGrid.RowStyle>
+                <DataGrid.CellStyle>
+                    <Style TargetType="{x:Type DataGridCell}">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                        <Setter Property="Padding" Value="4,0" />
+                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                        <Setter Property="FontSize" Value="11" />
+                        <Style.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="Foreground" Value="{DynamicResource BoxForeground}" />
+                                <Setter Property="BorderBrush" Value="Transparent" />
+                            </Trigger>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter Property="BorderBrush" Value="Transparent" />
+                                <Setter Property="Background" Value="Transparent" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </DataGrid.CellStyle>
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn
+                        Width="220"
+                        CanUserSort="True"
+                        Header="Name"
+                        SortMemberPath="DisplayName">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate DataType="vm:FolderItemViewModel">
+                                <StackPanel Orientation="Horizontal">
+                                    <Image
+                                        Width="16"
+                                        Height="16"
+                                        Margin="0,0,6,0"
+                                        RenderOptions.BitmapScalingMode="HighQuality"
+                                        Source="{Binding Icon}" />
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Text="{Binding DisplayName}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn
+                        Width="90"
+                        Binding="{Binding SizeText}"
+                        CanUserSort="True"
+                        ElementStyle="{StaticResource {x:Type TextBlock}}"
+                        Header="Size"
+                        SortMemberPath="FileSize" />
+                    <DataGridTextColumn
+                        Width="90"
+                        Binding="{Binding TypeName}"
+                        CanUserSort="True"
+                        Header="Type"
+                        SortMemberPath="TypeName" />
+                    <DataGridTextColumn
+                        Width="150"
+                        Binding="{Binding ModifiedText}"
+                        CanUserSort="True"
+                        Header="Date modified"
+                        SortMemberPath="ModifiedTime" />
+                </DataGrid.Columns>
+            </DataGrid>
         </Grid>
     </Grid>
 </UserControl>
