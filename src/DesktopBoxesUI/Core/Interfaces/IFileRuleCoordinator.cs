@@ -20,4 +20,8 @@ public interface IFileRuleCoordinator
     /// <summary>Deletes the item (Recycle Bin unless <paramref name="permanent"/>), updating the model.
     /// Returns false if the operation was cancelled or failed.</summary>
     System.Threading.Tasks.Task<bool> DeleteItemAsync(BoxItem item, bool permanent);
+
+    /// <summary>Deletes the items (Recycle Bin unless <paramref name="permanent"/>), updating the model.
+    /// Returns false if the operation was cancelled or failed.</summary>
+    System.Threading.Tasks.Task<bool> DeleteItemsAsync(IEnumerable<BoxItem> items, bool permanent);
 }

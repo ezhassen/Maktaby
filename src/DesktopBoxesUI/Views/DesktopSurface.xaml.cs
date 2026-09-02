@@ -767,26 +767,22 @@ public sealed partial class DesktopSurface : Window
         return new Point(SystemParameters.WorkArea.Left, SystemParameters.WorkArea.Top);
     }
 
-    private void Surface_Drop(object sender, DragEventArgs e)
+    private async void Surface_Drop(object sender, DragEventArgs e)
     {
         // Exceptions thrown inside an OLE IDropTarget::Drop callback are swallowed by the drag modal
         // loop (no global handler catches them), so wrap everything and surface failures in the trace.
         try
         {
-            DropCore(e);
+            await DropCore(e);
         }
         catch (Exception ex)
         {
             _dragging = false;
-
-            if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
-            {
-                Logging.Log.Debug($"Surface_Drop EXCEPTION: {ex}");
-            }
+            Logging.Log.Error($"Surface_Drop EXCEPTION: {ex}");
         }
     }
 
-    private void DropCore(DragEventArgs e)
+    private async Task DropCore(DragEventArgs e)
     {
         _dragging = false;
 
@@ -835,7 +831,7 @@ public sealed partial class DesktopSurface : Window
         var container = _host.CreateBoxAt(left2, top2);
         if (container.ActiveBox != null)
         {
-            DropHelper.AddToBox(container.ActiveBox, _host, e);
+            await DropHelper.AddToBoxAsync(container.ActiveBox, _host, e);
         }
 
         if (e.Handled)

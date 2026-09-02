@@ -150,6 +150,71 @@ internal static class DropHelper
         return null;
     }
 
+    public static async Task<List<BoxItem>?> AddToBoxAsync(BoxViewModel target, MainViewModel? host, DragEventArgs e, int insertIndex = -1)
+    {
+        if (e.Data.GetDataPresent(DndFormats.BoxItems))
+        {
+            if (e.Data.GetData(DndFormats.BoxItems) is List<BoxItemViewModel> items && items.Count > 0)
+            {
+                var source = host?.FindBoxContaining(items[0]);
+                if (source != null)
+                {
+                    var movedModels = items.Select(i => i.Model).ToList();
+                    foreach (var m in movedModels) source.RemoveItem(m);
+                    int at = insertIndex < 0 ? target.Items.Count : Math.Min(insertIndex, target.Items.Count);
+                    foreach (var m in movedModels) { target.InsertItem(m, at); at++; }
+                    e.Handled = true;
+                    return movedModels;
+                }
+            }
+            e.Handled = true;
+            return null;
+        }
+
+        var fileOps = App.Services.GetRequiredService<IFileOperationService>();
+        var watcher = App.Services.GetRequiredService<IShellWatcherService>();
+        var entries = (await GetShellItemsAsync(e)).ToArray();
+        watcher.Pause();
+        try
+        {
+            // Batch resolve: collect file paths that need shell copy and PIDL entries
+            var fileEntries = new List<(Win32Apis.ShellItemEntry entry, string b64)>();
+            var resolvedItems = new List<(BoxItem? item, int origIdx)>();
+            for (int i = 0; i < entries.Length; i++)
+            {
+                var entry = entries[i];
+                if (entry.FilePath != null)
+                {
+                    var resolved = await ResolveDroppedFileAsync(entry.FilePath, fileOps);
+                    var bi = BoxItemFactory.FromPath(resolved);
+                    resolvedItems.Add((bi, i));
+                }
+                else if (entry.Pidl != null)
+                {
+                    var b64 = Convert.ToBase64String(entry.Pidl);
+                    var resolved = await ResolveDroppedPidlAsync(b64, fileOps);
+                    BoxItem? bi = null;
+                    if (!string.IsNullOrEmpty(resolved)) bi = BoxItemFactory.FromPath(resolved);
+                    else bi = BoxItemFactory.FromShellPidl(b64, Win32Apis.GetPidlDisplayName(b64));
+                    resolvedItems.Add((bi, i));
+                }
+            }
+
+            int at = insertIndex < 0 ? -1 : Math.Min(insertIndex, target.Items.Count);
+            foreach (var (bi, _) in resolvedItems.OrderBy(x => x.origIdx))
+            {
+                if (bi is null) continue;
+                if (at >= 0) { target.InsertItem(bi, at); at++; }
+                else target.AddItem(bi);
+            }
+        }
+        finally { watcher.Resume(); }
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(ShellIdListFormat))
+            e.Handled = true;
+        return null;
+    }
+
     private static IEnumerable<Win32Apis.ShellItemEntry> GetShellItems(DragEventArgs e)
     {
         // FileDrop yields real filesystem paths (and an AppUserModelID for UWP apps), which is the
@@ -316,6 +381,51 @@ internal static class DropHelper
         {
             CopyDirectory(dir, Path.Combine(destination, Path.GetFileName(dir)));
         }
+    }
+
+    private static async Task<string> ResolveDroppedFileAsync(string source, IFileOperationService fileOps)
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(source) || (!File.Exists(source) && !Directory.Exists(source))) return source;
+            var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            if (string.IsNullOrEmpty(desktop)) return source;
+            var srcDir = Path.GetDirectoryName(source);
+            if (srcDir != null && string.Equals(srcDir, desktop, StringComparison.OrdinalIgnoreCase)) return source;
+            var dest = MakeUnique(Path.Combine(desktop, Path.GetFileName(source)));
+            if (await fileOps.CopyAsync(new[] { source }, new[] { dest })) return dest;
+            try
+            {
+                if (File.Exists(source)) await Task.Run(() => File.Copy(source, dest, false));
+                else await CopyDirectoryAsync(source, dest);
+                return dest;
+            }
+            catch { return source; }
+        }
+        catch { return source; }
+    }
+
+    private static async Task<string?> ResolveDroppedPidlAsync(string pidlBase64, IFileOperationService fileOps)
+    {
+        var path = Win32Apis.GetPathFromPidl(pidlBase64);
+        if (!string.IsNullOrEmpty(path)) return await ResolveDroppedFileAsync(path, fileOps);
+        var desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        if (string.IsNullOrEmpty(desktop)) return null;
+        var name = Win32Apis.GetPidlDisplayName(pidlBase64);
+        if (string.IsNullOrEmpty(name)) name = "App";
+        foreach (var c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
+        var dest = MakeUnique(Path.Combine(desktop, name + ".lnk"));
+        return Win32Apis.CreateShortcutFromPidl(pidlBase64, dest) ? dest : null;
+    }
+
+    private static Task<IEnumerable<Win32Apis.ShellItemEntry>> GetShellItemsAsync(DragEventArgs e)
+    {
+        return Task.FromResult(GetShellItems(e));
+    }
+
+    private static Task CopyDirectoryAsync(string source, string destination)
+    {
+        return Task.Run(() => CopyDirectory(source, destination));
     }
 
     private static byte[]? GetShellIdListBytes(DragEventArgs e)

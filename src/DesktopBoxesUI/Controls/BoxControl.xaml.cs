@@ -378,7 +378,7 @@ public partial class BoxControl : UserControl
         }
     }
 
-    private void ItemBorder_KeyDown(object sender, KeyEventArgs e)
+    private async void ItemBorder_KeyDown(object sender, KeyEventArgs e)
     {
         if (sender is not Border { DataContext: BoxItemViewModel vm } border)
         {
@@ -403,17 +403,18 @@ public partial class BoxControl : UserControl
                 var selected = box.Items.Where(i => i.IsSelected).ToList();
                 if (selected.Count > 0)
                 {
-                    foreach (var it in selected)
-                    {
-                        _ = Host?.DeleteItem(it, permanent);
-                    }
-
+                    //foreach (var it in selected)
+                    //{
+                    //    _ = Host?.DeleteItem(it, permanent);
+                    //}
+                    if (Host is not null) await Host.DeleteItems(selected, permanent);
                     e.Handled = true;
                     return;
                 }
             }
 
-            _ = Host?.DeleteItem(vm, permanent);
+            //_ = Host?.DeleteItem(vm, permanent);
+            if (Host is not null) await Host.DeleteItem(vm, permanent);
             e.Handled = true;
         }
         else if (key == Key.Enter)
@@ -694,7 +695,7 @@ public partial class BoxControl : UserControl
         _insertIndex = -1;
     }
 
-    private void BoxControl_Drop(object sender, DragEventArgs e)
+    private async void BoxControl_Drop(object sender, DragEventArgs e)
     {
         if (e.Data.GetDataPresent(DndFormats.SourceContainer))
         {
@@ -708,7 +709,7 @@ public partial class BoxControl : UserControl
             return;
         }
 
-        var moved = DropHelper.AddToBox(targetBox, Host, e, _insertIndex);
+        var moved = await DropHelper.AddToBoxAsync(targetBox, Host, e, _insertIndex);
         RemoveDropIndicator();
         _insertIndex = -1;
 
@@ -837,7 +838,7 @@ public partial class BoxControl : UserControl
             if (Scroll.ActualWidth > w + 12) x = (Scroll.ActualWidth - w) / 2;
             if (Scroll.ActualHeight > h + 12) y = (Scroll.ActualHeight - h) / 2;
             _dropAdorner.UpdateGap(x, y, w, h);
-            _dropAdorner.Update(x + w/2, y, h);
+            _dropAdorner.Update(x + w / 2, y, h);
             ShowGapPlaceholder(visibleIndex);
             return;
         }
@@ -851,7 +852,7 @@ public partial class BoxControl : UserControl
             w = gapW;
             h = tileH;
             _dropAdorner.UpdateGap(x, y, w, h);
-            _dropAdorner.Update(x + gapW/2, y, h);
+            _dropAdorner.Update(x + gapW / 2, y, h);
             ShowGapPlaceholder(visibleIndex);
             return;
         }
@@ -859,7 +860,7 @@ public partial class BoxControl : UserControl
         {
             var c = visible[visCount - 1].container;
             var tl = c.TransformToAncestor(Scroll).Transform(new Point(0, 0));
-            x = tl.X + c.RenderSize.Width - gapW/2 + 1;
+            x = tl.X + c.RenderSize.Width - gapW / 2 + 1;
             double maxX = Scroll.ActualWidth - gapW - 1;
             if (x > maxX) x = maxX;
             if (x < 1) x = 1;
@@ -867,7 +868,7 @@ public partial class BoxControl : UserControl
             w = gapW;
             h = tileH;
             _dropAdorner.UpdateGap(x, y, w, h);
-            _dropAdorner.Update(x + gapW/2, y, h);
+            _dropAdorner.Update(x + gapW / 2, y, h);
             ShowGapPlaceholder(visibleIndex);
             return;
         }

@@ -1315,7 +1315,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         _tabHoverTimer.Start();
     }
 
-    private void TabItem_Drop(object sender, DragEventArgs e)
+    private async void TabItem_Drop(object sender, DragEventArgs e)
     {
         _tabHoverTimer?.Stop();
         _pendingHoverTab = null;
@@ -1330,7 +1330,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         // Direct drop onto tab appends to that box
         if (e.Data.GetDataPresent(DndFormats.BoxItems) || e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent("Shell IDList Array"))
         {
-            var moved = DropHelper.AddToBox(targetBox, _host, e, -1);
+            var moved = await DropHelper.AddToBoxAsync(targetBox, _host, e, -1);
             if (e.Handled)
             {
                 if (moved != null && moved.Count > 0)

@@ -304,4 +304,16 @@ public sealed class MainViewModel : ViewModelBase
 
         return _coordinator.DeleteItemAsync(vm.Model, permanent);
     }
+
+    /// <summary>Deletes a tracked item (Recycle Bin unless <paramref name="permanent"/>). The view-model is
+    /// removed from its box by the coordinator's model update.</summary>
+    public Task<bool> DeleteItems(IEnumerable<BoxItemViewModel> vms, bool permanent)
+    {
+        if (!(vms?.Any() == true))
+        {
+            return Task.FromResult(false);
+        }
+
+        return _coordinator.DeleteItemsAsync(vms.Select(d => d.Model).ToList(), permanent);
+    }
 }

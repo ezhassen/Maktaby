@@ -93,6 +93,103 @@ public sealed class FileOperationService : IFileOperationService
         return hr == 0 && op.fAnyOperationsAborted == 0;
     }
 
+    public Task<bool> DeleteAsync(IReadOnlyList<string> paths, bool permanent, CancellationToken cancellationToken = default)
+    {
+        if (paths == null || paths.Count == 0) return Task.FromResult(false);
+        var valid = paths.Where(p => !string.IsNullOrEmpty(p)).ToArray();
+        if (valid.Length == 0) return Task.FromResult(false);
+        if (cancellationToken.IsCancellationRequested) return Task.FromResult(false);
+
+        return RunOnStaThread(() =>
+        {
+            if (cancellationToken.IsCancellationRequested) return false;
+            ushort flags = permanent
+                ? Win32Apis.FOF_WANTNUKEWARNING
+                : (ushort)(Win32Apis.FOF_ALLOWUNDO | Win32Apis.FOF_NOCONFIRMATION | Win32Apis.FOF_SILENT | Win32Apis.FOF_NOERRORUI);
+
+            string multiFrom = BuildMultiString(valid);
+            var op = new ManualApis.SHFILEOPSTRUCT
+            {
+                hwnd = OwnerHandle(),
+                wFunc = Win32Apis.FO_DELETE,
+                pFrom = multiFrom,
+                pTo = null,
+                fFlags = flags,
+            };
+            int hr = Win32Apis.FileOperation(ref op);
+            return hr == 0 && op.fAnyOperationsAborted == 0;
+        }, cancellationToken);
+    }
+
+    public Task<bool> CopyAsync(IReadOnlyList<string> sources, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default)
+    {
+        if (sources == null || sources.Count == 0 || destinations == null || destinations.Count == 0) return Task.FromResult(false);
+        var validSources = sources.Where(s => !string.IsNullOrEmpty(s)).ToArray();
+        var validDests = destinations.Where(d => !string.IsNullOrEmpty(d)).ToArray();
+        if (validSources.Length == 0 || validDests.Length == 0) return Task.FromResult(false);
+        if (cancellationToken.IsCancellationRequested) return Task.FromResult(false);
+
+        // If single destination for multiple sources, treat as folder target for SHFileOperation
+        string multiFrom = BuildMultiString(validSources);
+        string multiTo;
+        if (validDests.Length == 1 && validSources.Length > 1)
+        {
+            // Single folder destination for multiple sources
+            multiTo = validDests[0] + "\0\0";
+        }
+        else if (validSources.Length == validDests.Length)
+        {
+            multiTo = BuildMultiString(validDests);
+        }
+        else
+        {
+            // Mismatched counts - fallback to single dest folder if possible
+            multiTo = BuildMultiString(validDests);
+        }
+
+        return RunOnStaThread(() =>
+        {
+            if (cancellationToken.IsCancellationRequested) return false;
+            var op = new ManualApis.SHFILEOPSTRUCT
+            {
+                hwnd = OwnerHandle(),
+                wFunc = Win32Apis.FO_COPY,
+                pFrom = multiFrom,
+                pTo = multiTo,
+                fFlags = (ushort)(Win32Apis.FOF_NOCONFIRMATION | Win32Apis.FOF_NOERRORUI | Win32Apis.FOF_ALLOWUNDO),
+            };
+            int hr = Win32Apis.FileOperation(ref op);
+            return hr == 0 && op.fAnyOperationsAborted == 0;
+        }, cancellationToken);
+    }
+
+    private static string BuildMultiString(IReadOnlyList<string> paths)
+    {
+        // SHFileOperation expects double-null terminated multi-string: "p1\0p2\0\0"
+        // The marshaler will add its own terminating null, so we build "p1\0p2\0\0" and let it add one more.
+        return string.Join("\0", paths) + "\0\0";
+    }
+
+    private static Task<T> RunOnStaThread<T>(Func<T> func, CancellationToken ct)
+    {
+        var tcs = new TaskCompletionSource<T>();
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                if (ct.IsCancellationRequested) tcs.TrySetCanceled(ct);
+                else tcs.TrySetResult(func());
+            }
+            catch (OperationCanceledException ex) { tcs.TrySetCanceled(ex.CancellationToken); }
+            catch (Exception ex) { tcs.TrySetException(ex); }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.IsBackground = true;
+        thread.Start();
+        ct.Register(() => tcs.TrySetCanceled(ct));
+        return tcs.Task;
+    }
+
     private static IntPtr OwnerHandle()
     {
         var app = Application.Current;
@@ -100,19 +197,41 @@ public sealed class FileOperationService : IFileOperationService
         {
             return IntPtr.Zero;
         }
-
-        // Use the app's own window handle as the operation owner rather than GetForegroundWindow(): the
-        // latter can return the desktop/explorer if focus has already shifted, which would let SHFileOperation
-        // parent its (progress/confirmation) UI to another process and pull focus away from us.
         IntPtr best = IntPtr.Zero;
-        foreach (Window window in app.Windows)
+        if (app.Dispatcher != null && !app.Dispatcher.CheckAccess())
         {
-            if (window is { IsVisible: true } w && new WindowInteropHelper(w).Handle != IntPtr.Zero)
+            app.Dispatcher.Invoke(() =>
             {
-                best = new WindowInteropHelper(w).Handle;
-                if (w.IsActive)
+                // Use the app's own window handle as the operation owner rather than GetForegroundWindow(): the
+                // latter can return the desktop/explorer if focus has already shifted, which would let SHFileOperation
+                // parent its (progress/confirmation) UI to another process and pull focus away from us.
+                foreach (Window window in app.Windows)
                 {
-                    break;
+                    if (window is { IsVisible: true } w && new WindowInteropHelper(w).Handle != IntPtr.Zero)
+                    {
+                        best = new WindowInteropHelper(w).Handle;
+                        if (w.IsActive)
+                        {
+                            break;
+                        }
+                    }
+                }
+            });
+        }
+        else
+        {
+            // Use the app's own window handle as the operation owner rather than GetForegroundWindow(): the
+            // latter can return the desktop/explorer if focus has already shifted, which would let SHFileOperation
+            // parent its (progress/confirmation) UI to another process and pull focus away from us.
+            foreach (Window window in app.Windows)
+            {
+                if (window is { IsVisible: true } w && new WindowInteropHelper(w).Handle != IntPtr.Zero)
+                {
+                    best = new WindowInteropHelper(w).Handle;
+                    if (w.IsActive)
+                    {
+                        break;
+                    }
                 }
             }
         }

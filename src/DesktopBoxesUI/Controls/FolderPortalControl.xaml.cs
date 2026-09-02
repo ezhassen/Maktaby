@@ -2,12 +2,16 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Services;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Views;
+using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 
 namespace DesktopBoxesUI.Controls;
@@ -268,8 +272,15 @@ public partial class FolderPortalControl : UserControl
         }
         else
         {
-            SelectOnly(vm);
+            if (!vm.IsSelected)
+                SelectOnly(vm);
+            else
+                _anchorIndex = Box?.FolderItems.IndexOf(vm) ?? -1;
         }
+
+        _dragStart = e.GetPosition(null);
+        _dragging = false;
+        _moved = false;
 
         if (e.ClickCount == 2)
         {
@@ -297,7 +308,85 @@ public partial class FolderPortalControl : UserControl
         e.Handled = true;
     }
 
-    private void ItemBorder_MouseMove(object sender, MouseEventArgs e) { }
+    private Point _dragStart;
+    private bool _dragging;
+    private bool _moved;
+    private bool _suppressDragUntilMouseUp;
+    private DragGhostWindow? _dragGhost;
+
+    private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (_suppressDragUntilMouseUp)
+        {
+            if (e.LeftButton == MouseButtonState.Released) _suppressDragUntilMouseUp = false;
+            return;
+        }
+        if (e.LeftButton != MouseButtonState.Pressed || _dragging) return;
+        if (sender is not FrameworkElement { DataContext: FolderItemViewModel vm } fe) return;
+        // Only drag from active window
+        if (Window.GetWindow(fe) is Window w && !w.IsActive) return;
+        var diff = e.GetPosition(null) - _dragStart;
+        if (Math.Abs(diff.X) <= SystemParameters.MinimumHorizontalDragDistance && Math.Abs(diff.Y) <= SystemParameters.MinimumVerticalDragDistance) return;
+
+        // Determine dragged set: all selected in current view, or just the item under cursor
+        List<FolderItemViewModel> dragged;
+        if (Box != null && Box.FolderItems.Any(i => i.IsSelected) && vm.IsSelected)
+            dragged = Box.FolderItems.Where(i => i.IsSelected).ToList();
+        else
+        {
+            // Ensure clicked item is selected
+            if (Box != null)
+            {
+                foreach (var it in Box.FolderItems) it.IsSelected = false;
+                vm.IsSelected = true;
+            }
+            dragged = new List<FolderItemViewModel> { vm };
+        }
+
+        var paths = dragged.Select(i => i.Path).Where(p => !string.IsNullOrEmpty(p) && (File.Exists(p) || Directory.Exists(p))).ToArray();
+        if (paths.Length == 0) return;
+
+        _dragging = true;
+        try
+        {
+            _dragGhost = new DragGhostWindow();
+            if (dragged.Count == 1)
+                _dragGhost.SetItem(dragged[0].Icon, dragged[0].DisplayName);
+            else
+                _dragGhost.SetItems(dragged[0].Icon, dragged.Count);
+            _dragGhost.Show();
+            PositionDragGhost(fe);
+            DragDrop.AddGiveFeedbackHandler(fe, OnGiveFeedback);
+            var data = new DataObject(DataFormats.FileDrop, paths);
+            // Also set as Shell IDList for virtual items if needed, but FileDrop covers most
+            DragDrop.DoDragDrop(fe, data, DragDropEffects.Copy | DragDropEffects.Link);
+        }
+        finally
+        {
+            DragDrop.RemoveGiveFeedbackHandler(fe, OnGiveFeedback);
+            _dragGhost?.Close();
+            _dragGhost = null;
+            _dragging = false;
+            _suppressDragUntilMouseUp = true;
+        }
+    }
+
+    private void OnGiveFeedback(object? sender, GiveFeedbackEventArgs e)
+    {
+        if (_dragGhost != null && sender is UIElement src)
+            PositionDragGhost(src);
+    }
+
+    private void PositionDragGhost(UIElement src)
+    {
+        if (_dragGhost == null) return;
+        if (!DesktopBoxesUI.Win32.NativeMethods.Win32Apis.GetCursorPos(out var pt)) return;
+        var dip = new Point(pt.X, pt.Y);
+        if (PresentationSource.FromVisual(_dragGhost)?.CompositionTarget is { } ct)
+            dip = ct.TransformFromDevice.Transform(dip);
+        _dragGhost.Left = dip.X;
+        _dragGhost.Top = dip.Y;
+    }
 
     private void OpenFolder_Click(object sender, RoutedEventArgs e)
     {
@@ -632,7 +721,12 @@ public partial class FolderPortalControl : UserControl
 
     private void ItemBorder_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: FolderItemViewModel vm }) return;
+        if (sender is not FrameworkElement { DataContext: FolderItemViewModel vm } fe) return;
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            _dragStart = e.GetPosition(null);
+            _dragging = false;
+        }
         if (e.ChangedButton == MouseButton.Middle)
         {
             OpenItemLocation(vm);
@@ -669,5 +763,10 @@ public partial class FolderPortalControl : UserControl
             System.Diagnostics.Process.Start(psi);
         }
         catch { }
+    }
+
+    private void FolderPortal_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (_suppressDragUntilMouseUp) _suppressDragUntilMouseUp = false;
     }
 }

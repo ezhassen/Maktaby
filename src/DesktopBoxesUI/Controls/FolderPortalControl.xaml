@@ -10,6 +10,7 @@
     d:DesignHeight="300"
     d:DesignWidth="400"
     PreviewMouseDown="Control_PreviewMouseDown"
+    PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
     mc:Ignorable="d">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
@@ -368,6 +369,8 @@
                         <EventSetter Event="MouseDoubleClick" Handler="DetailsItem_DoubleClick" />
                         <EventSetter Event="KeyDown" Handler="ItemBorder_KeyDown" />
                         <EventSetter Event="PreviewMouseDown" Handler="ItemBorder_PreviewMouseDown" />
+                        <EventSetter Event="MouseMove" Handler="ItemBorder_MouseMove" />
+                        <EventSetter Event="MouseLeftButtonUp" Handler="ItemBorder_MouseLeftButtonUp" />
                         <EventSetter Event="MouseRightButtonUp" Handler="ItemBorder_MouseRightButtonUp" />
                         <EventSetter Event="ContextMenuOpening" Handler="ItemBorder_ContextMenuOpening" />
                         <EventSetter Event="GotFocus" Handler="ItemBorder_GotFocus" />

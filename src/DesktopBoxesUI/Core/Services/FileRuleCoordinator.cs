@@ -1,10 +1,10 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Core.Services;
 using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Core.Models;
-using DesktopBoxesUI.Core.Services;
 
 namespace DesktopBoxesUI.Core.Services;
 
@@ -169,11 +169,11 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
         return Task.FromResult(true);
     }
 
-    public Task<bool> DeleteItemAsync(BoxItem item, bool permanent)
+    public async Task<bool> DeleteItemAsync(BoxItem item, bool permanent)
     {
         if (item is null)
         {
-            return Task.FromResult(false);
+            return false;
         }
 
         if (!string.IsNullOrEmpty(item.Path))
@@ -181,9 +181,9 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
             _watcher.Pause();
             try
             {
-                if (!_fileOps.Delete(item.Path, permanent))
+                if (!await _fileOps.DeleteAsync([item.Path], permanent))
                 {
-                    return Task.FromResult(false);
+                    return false;
                 }
             }
             finally
@@ -208,6 +208,51 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
         }
 
         _save();
-        return Task.FromResult(true);
+        return true;
+    }
+
+    public async Task<bool> DeleteItemsAsync(IEnumerable<BoxItem> items, bool permanent)
+    {
+        if (!(items?.Any() == true))
+        {
+            return false;
+        }
+        var itemsPaths = items.Where(d => !string.IsNullOrEmpty(d.Path)).Select(d => d.Path).ToList();
+        if (itemsPaths.Any())
+        {
+            _watcher.Pause();
+            try
+            {
+                if (!await _fileOps.DeleteAsync(itemsPaths, permanent))
+                {
+                    return false;
+                }
+            }
+            finally
+            {
+                _watcher.Resume();
+            }
+        }
+
+        foreach (var item in items)
+        {
+            // Remove the (now-deleted) item from every DesktopItems box it was tracked in.
+            foreach (var box in _boxService.GetBoxes())
+            {
+                if (box.BoxType != BoxType.DesktopItems)
+                {
+                    continue;
+                }
+
+                var existing = box.Items.FirstOrDefault(i => BoxItem.RefersToSame(i, item));
+                if (existing is not null)
+                {
+                    box.Items.Remove(existing);
+                }
+            }
+        }
+
+        _save();
+        return true;
     }
 }

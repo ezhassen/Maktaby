@@ -19,4 +19,12 @@ public interface IFileOperationService
     /// <summary>Copies the item at <paramref name="source"/> to <paramref name="destination"/> (file or
     /// directory), matching Explorer behaviour. Returns false if cancelled or failed.</summary>
     bool Copy(string source, string destination);
+
+    /// <summary>Deletes multiple items at <paramref name="paths"/>. Uses a single shell operation so the
+    /// progress dialog and undo are batched. Returns false if cancelled or failed.</summary>
+    Task<bool> DeleteAsync(IReadOnlyList<string> paths, bool permanent, CancellationToken cancellationToken = default);
+
+    /// <summary>Copies multiple items from <paramref name="sources"/> to <paramref name="destinations"/>
+    /// (one-to-one mapping). Uses a single shell operation. Returns false if cancelled or failed.</summary>
+    Task<bool> CopyAsync(IReadOnlyList<string> sources, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default);
 }
