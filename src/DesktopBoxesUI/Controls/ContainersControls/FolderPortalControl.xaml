@@ -274,9 +274,10 @@
                 CanUserAddRows="False"
                 CanUserDeleteRows="False"
                 CanUserReorderColumns="False"
+                CanUserResizeColumns="True"
                 CanUserResizeRows="False"
                 CanUserSortColumns="True"
-                EnableColumnVirtualization="True"
+                EnableColumnVirtualization="False"
                 EnableRowVirtualization="True"
                 Foreground="{DynamicResource BoxForeground}"
                 GridLinesVisibility="None"
@@ -287,7 +288,7 @@
                 RowHeaderWidth="0"
                 RowHeight="22"
                 ScrollViewer.CanContentScroll="True"
-                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                ScrollViewer.HorizontalScrollBarVisibility="Auto"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                 SelectionMode="Extended"
                 SelectionUnit="FullRow"
@@ -297,6 +298,21 @@
                 VirtualizingPanel.VirtualizationMode="Recycling"
                 Visibility="Collapsed">
                 <DataGrid.Resources>
+                    <!--  Dotted focus rectangle for the focused cell (replaces FocusVisualStyle={x:Null})  -->
+                    <Style x:Key="CellDottedFocusVisualStyle">
+                        <Setter Property="Control.Template">
+                            <Setter.Value>
+                                <ControlTemplate>
+                                    <Rectangle
+                                        Margin="1"
+                                        SnapsToDevicePixels="True"
+                                        Stroke="White"
+                                        StrokeDashArray="1 2"
+                                        StrokeThickness="1" />
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
                     <Style TargetType="{x:Type DataGridColumnHeader}">
                         <Setter Property="Background" Value="{DynamicResource BoxHeaderBackground}" />
                         <Setter Property="Foreground" Value="{DynamicResource BoxHeaderForeground}" />
@@ -308,60 +324,6 @@
                         <Setter Property="HorizontalContentAlignment" Value="Left" />
                         <Setter Property="VerticalContentAlignment" Value="Center" />
                         <Setter Property="SnapsToDevicePixels" Value="True" />
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="{x:Type DataGridColumnHeader}">
-                                    <Grid>
-                                        <Border
-                                            x:Name="HeaderBorder"
-                                            Padding="{TemplateBinding Padding}"
-                                            Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}">
-                                            <ContentPresenter
-                                                HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
-                                                VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
-                                                RecognizesAccessKey="True"
-                                                SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}" />
-                                        </Border>
-                                        <Thumb
-                                            x:Name="PART_HeaderGripper"
-                                            Width="8"
-                                            HorizontalAlignment="Right"
-                                            Background="Transparent"
-                                            Cursor="SizeWE">
-                                            <Thumb.Template>
-                                                <ControlTemplate TargetType="{x:Type Thumb}">
-                                                    <Border Width="8" Background="Transparent">
-                                                        <Rectangle
-                                                            Width="1"
-                                                            HorizontalAlignment="Center"
-                                                            Fill="{DynamicResource BoxBorder}" />
-                                                    </Border>
-                                                </ControlTemplate>
-                                            </Thumb.Template>
-                                        </Thumb>
-                                    </Grid>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsMouseOver" Value="True">
-                                            <Setter TargetName="HeaderBorder" Property="Background" Value="#3F3F46" />
-                                        </Trigger>
-                                        <Trigger Property="IsPressed" Value="True">
-                                            <Setter TargetName="HeaderBorder" Property="Background" Value="#2D2D30" />
-                                        </Trigger>
-                                        <Trigger Property="IsEnabled" Value="False">
-                                            <Setter Property="Foreground" Value="#888888" />
-                                        </Trigger>
-                                        <Trigger Property="SortDirection" Value="Ascending">
-                                            <Setter Property="Foreground" Value="{DynamicResource BoxHeaderForeground}" />
-                                        </Trigger>
-                                        <Trigger Property="SortDirection" Value="Descending">
-                                            <Setter Property="Foreground" Value="{DynamicResource BoxHeaderForeground}" />
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
                     </Style>
                     <Style TargetType="{x:Type ScrollViewer}">
                         <Setter Property="Background" Value="{DynamicResource BoxBackground}" />
@@ -372,7 +334,7 @@
                         <EventSetter Event="GotFocus" Handler="DetailsRow_GotFocus" />
                         <EventSetter Event="GotKeyboardFocus" Handler="DetailsRow_GotFocus" />
                         <Setter Property="Focusable" Value="True" />
-                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Background" Value="#01000000" />
                         <Setter Property="Foreground" Value="{DynamicResource BoxForeground}" />
                         <Setter Property="BorderThickness" Value="1" />
                         <Setter Property="BorderBrush" Value="Transparent" />
@@ -408,21 +370,26 @@
                 </DataGrid.RowStyle>
                 <DataGrid.CellStyle>
                     <Style TargetType="{x:Type DataGridCell}">
-                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="Background" Value="#01000000" />
                         <Setter Property="BorderThickness" Value="0" />
-                        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                        <Setter Property="Focusable" Value="True" />
+                        <Setter Property="IsTabStop" Value="False" />
+                        <Setter Property="FocusVisualStyle" Value="{StaticResource CellDottedFocusVisualStyle}" />
                         <Setter Property="Padding" Value="4,0" />
+                        <Setter Property="Margin" Value="2,0" />
                         <Setter Property="VerticalContentAlignment" Value="Center" />
                         <Setter Property="FontSize" Value="11" />
+                        <!--  Keep dotted focus visible even when selected  -->
+                        <Setter Property="BorderBrush" Value="{DynamicResource BoxBorder}" />
                         <Style.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="Background" Value="#01000000" />
                                 <Setter Property="Foreground" Value="{DynamicResource BoxForeground}" />
                                 <Setter Property="BorderBrush" Value="Transparent" />
                             </Trigger>
-                            <Trigger Property="IsFocused" Value="True">
-                                <Setter Property="BorderBrush" Value="Transparent" />
-                                <Setter Property="Background" Value="Transparent" />
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter Property="BorderBrush" Value="{DynamicResource BoxBorder}" />
+                                <Setter Property="BorderThickness" Value="1" />
                             </Trigger>
                         </Style.Triggers>
                     </Style>
@@ -430,6 +397,8 @@
                 <DataGrid.Columns>
                     <DataGridTemplateColumn
                         Width="220"
+                        MinWidth="60"
+                        CanUserResize="True"
                         CanUserSort="True"
                         Header="Name"
                         SortMemberPath="DisplayName">
@@ -454,6 +423,7 @@
                         Width="90"
                         MinWidth="60"
                         Binding="{Binding SizeText}"
+                        CanUserResize="True"
                         CanUserSort="True"
                         ElementStyle="{StaticResource {x:Type TextBlock}}"
                         Header="Size"
@@ -462,6 +432,7 @@
                         Width="90"
                         MinWidth="60"
                         Binding="{Binding TypeName}"
+                        CanUserResize="True"
                         CanUserSort="True"
                         Header="Type"
                         SortMemberPath="TypeName" />
@@ -469,6 +440,7 @@
                         Width="150"
                         MinWidth="60"
                         Binding="{Binding ModifiedText}"
+                        CanUserResize="True"
                         CanUserSort="True"
                         Header="Date modified"
                         SortMemberPath="ModifiedTime" />

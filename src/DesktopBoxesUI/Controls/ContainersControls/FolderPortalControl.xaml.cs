@@ -84,6 +84,10 @@ public partial class FolderPortalControl : UserControl
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         UpdateView();
+        // Ensure resizing cannot be blocked by style/asset defaults - force at runtime
+        DetailsGrid.CanUserResizeColumns = true;
+        foreach (var col in DetailsGrid.Columns)
+            col.CanUserResize = true;
         // DataGridRow events are often marked handled by DataGrid's internal selection logic.
         // Register with handledEventsToo so dragging / double-click / right-click / middle-click still fire.
         DetailsGrid.AddHandler(UIElement.PreviewMouseDownEvent, new MouseButtonEventHandler(DetailsGrid_OnPreviewMouseDown), true);
@@ -242,6 +246,14 @@ public partial class FolderPortalControl : UserControl
         UpdateSortArrows();
     }
 
+    public void UpdateChrome(bool show)
+    {
+        if (this.DataContext is null) return;
+        IconsScroll.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+        DetailsGrid.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+        DetailsGrid.HorizontalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+    }
+
     private static readonly string[] OriginalHeaders = ["Name", "Size", "Type", "Date modified"];
     private bool _isUpdatingSortUi;
 
@@ -364,6 +376,7 @@ public partial class FolderPortalControl : UserControl
     public void ClearSelectionOnDeactivate()
     {
         if (_renameService.IsEditing) return;
+        if (_dragging || _suppressDragUntilMouseUp) return;
         ClearSelection();
     }
 
@@ -606,6 +619,20 @@ public partial class FolderPortalControl : UserControl
         return null;
     }
 
+    private static DataGridCell? FindDataGridCell(DependencyObject src)
+    {
+        DependencyObject? cur = src;
+        while (cur != null)
+        {
+            if (cur is DataGridCell cell) return cell;
+            var visualParent = VisualTreeHelper.GetParent(cur);
+            if (visualParent != null) cur = visualParent;
+            else if (cur is FrameworkElement fe && fe.Parent is DependencyObject logical) cur = logical;
+            else cur = null;
+        }
+        return null;
+    }
+
     private void DetailsItem_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         // Handled at Root_PreviewMouseLeftButtonDown (ancestor TUNNEL) to suppress ListView Selector before it runs.
@@ -658,7 +685,37 @@ public partial class FolderPortalControl : UserControl
             }
         }
 
-        if (!row.IsKeyboardFocusWithin) { Keyboard.Focus(row); row.Focus(); }
+        // Move dotted focus rect to the clicked cell (not just the row). Keyboard navigation
+        // already moves CurrentCell; mouse must do the same otherwise dotted rect only follows arrows.
+        var cell = FindDataGridCell(src);
+        if (cell != null)
+        {
+            // Sync DataGrid.CurrentCell so arrow keys continue from the clicked column.
+            try { DetailsGrid.CurrentCell = new DataGridCellInfo(cell); } catch { }
+            if (!cell.IsKeyboardFocusWithin)
+            {
+                Keyboard.Focus(cell);
+                cell.Focus();
+            }
+            cell.BringIntoView();
+        }
+        else if (!row.IsKeyboardFocusWithin)
+        {
+            // Fallback: focus first realized cell so dotted rect still appears (row focus alone shows no cell rect)
+            var firstCell = FindVisualChild<DataGridCell>(row);
+            if (firstCell != null)
+            {
+                try { DetailsGrid.CurrentCell = new DataGridCellInfo(firstCell); } catch { }
+                Keyboard.Focus(firstCell);
+                firstCell.Focus();
+                firstCell.BringIntoView();
+            }
+            else
+            {
+                Keyboard.Focus(row);
+                row.Focus();
+            }
+        }
         _dragStart = e.GetPosition(null);
         _dragging = false;
         _moved = false;
@@ -819,7 +876,7 @@ public partial class FolderPortalControl : UserControl
 
     private void Control_IsKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
-        if ((bool)e.NewValue == false && !_renameService.IsEditing)
+        if ((bool)e.NewValue == false && !_renameService.IsEditing && !_dragging && !_suppressDragUntilMouseUp)
         {
             ClearSelection();
         }

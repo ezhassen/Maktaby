@@ -248,8 +248,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             ? Visibility.Visible
             : Visibility.Collapsed;
 
-        BoxContent.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
-
+        BoxContent?.UpdateChrome(show);
+        FolderPortalContent?.UpdateChrome(show);
         //SyncIconSizeChecks();
     }
 

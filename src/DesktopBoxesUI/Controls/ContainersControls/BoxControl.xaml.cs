@@ -71,7 +71,11 @@ public partial class BoxControl : UserControl
         get => (double)GetValue(IconSizeProperty);
         private set => SetValue(IconSizeProperty, value);
     }
-
+    public void UpdateChrome(bool show)
+    {
+        if (this.DataContext is null) return;
+        VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+    }
     /// <summary>Re-resolves the icon size from the current Box model and user defaults. Null default
     /// falls back to the LIVE desktop icon size (watched by DesktopIconSizeService).</summary>
     public void RefreshIconSize()
@@ -973,7 +977,7 @@ public partial class BoxControl : UserControl
     /// <summary>Called by owning window on Deactivated to avoid stale multi-selections persisting.</summary>
     public void ClearSelectionOnDeactivate()
     {
-        if (_marqueeActive || _editing || _dragging) return;
+        if (_marqueeActive || _editing || _dragging || _suppressDragUntilMouseUp) return;
         ClearSelection();
     }
 
@@ -1049,7 +1053,8 @@ public partial class BoxControl : UserControl
     {
         // Clear the selection when focus leaves the whole control (e.g. another window/app takes focus),
         // but keep it while an inline rename is in progress (the TextBox is inside this control).
-        if ((bool)e.NewValue == false && !_marqueeActive && !_editing)
+        // Do not clear while a drag is active or in the suppress window after DoDragDrop (Esc cancel, drop).
+        if ((bool)e.NewValue == false && !_marqueeActive && !_editing && !_dragging && !_suppressDragUntilMouseUp)
         {
             ClearSelection();
         }
