@@ -1,14 +1,16 @@
 using DesktopBoxesUI.Controls;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Services;
-using DesktopBoxesUI.Services;
+using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.Settings;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
+using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
 using DesktopBoxesUI.Win32APIs.Services;
+using DesktopBoxesUI.WPFServices;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;

@@ -1,7 +1,8 @@
-using System.Collections.ObjectModel;
-using System.Linq;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.WPFServices;
+using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace DesktopBoxesUI.ViewModels;
 

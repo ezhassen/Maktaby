@@ -4,6 +4,8 @@ This file describes how autonomous agents (and contributors) should work in this
 Follow it to keep the architecture clean and the build green.
 
 ## Golden rules
+
+- **Never** use scripts to edit project files, use only the Edit Tool
 - **Never** put WPF, Win32 P/Invoke, or Shell COM code in the `Core` project folders.
   Core may only define models, interfaces, and pure-.NET service implementations.
 - **Never** scatter `DllImport` / P/Invoke declarations outside `Win32APIs/NativeMethods`.
@@ -11,6 +13,7 @@ Follow it to keep the architecture clean and the build green.
   into `Win32APIs/NativeMethods/Win32Apis`. Call them only from `Win32APIs/Services`.
 - **Never** create a Window or native handle per `BoxItem`. A Box is one control/window
   holding many items.
+- Use **IDispatcher** **Helpers/WpfDispatcher** when needed. IDispatcher registered in App.Services
 - Use the term **Box** everywhere (code, comments, UI). Do **not** use "Fence".
 - Keep the NuGet surface small. Don't add packages without a reason. Currently allowed:
   `Microsoft.Extensions.DependencyInjection`, `Microsoft.Windows.CsWin32`,
@@ -21,21 +24,33 @@ Follow it to keep the architecture clean and the build green.
 - Build must stay warning-light and succeed in both Debug and Release.
 
 ## Layer responsibilities
+
 - **Core/Models** — add domain types here. Keep them simple and extensible.
 - **Core/Interfaces** — define contracts, including platform abstractions. Use Core geometry
   types (`RectD`, `PointD`, `SizeD`) instead of WPF/Win32 coordinate types.
 - **Core/Services** — only platform-independent implementations (no IO to OS specifics).
 - **Shell/** — Windows Shell behavior. Put Shell COM native interop in `Shell/Interop`.
 - **Win32APIs/** — raw Win32. `NativeMethods` for declarations, `Services` for the callers.
-- **Views / Controls / Converters / Resources / App.xaml** — WPF only (ViewModels use `CommunityToolkit.Mvvm` source generators: `[ObservableProperty]`, `[RelayCommand]`).
+- **Views / Controls / Converters / Resources / WPFServices/ AttachedProperties / Animation / App.xaml** — WPF only (ViewModels use `CommunityToolkit.Mvvm` source generators: `[ObservableProperty]`, `[RelayCommand]`).
+  - **Views/DebugViews/** Wpf debugging overlays
+  - **Views/AppWindows/** wpf main windows like settings and about etc
+  - **Views/Containers/** windows/containers that hosts app widgets/controls that is placed in the surface window
+  - **Views/HelpersViews/** for overlays, ghost windows etc that is not part of main user direct interactive windows
+- **Helpers/** static or sealed (shared) helper classes can have WPF types
+- **WPFServices/** Services that access WPF types directly (like ImageSource)
+- **CSSWidgets/** for built in app widgets
+- **AttachedProperties/** wpf Attached Properties
+- **Animations/** wpf Animations
 
 ## Dependency injection
+
 - All services are registered in `App.xaml.cs` (`ConfigureServices`). Register new services
   there behind their Core interface. Prefer `AddSingleton` for stateless platform services and
   `AddTransient`/`AddSingleton` for view models as appropriate.
 - View models get their dependencies via constructor injection resolved from `App.Services`.
 
 ## Adding a new native API (example)
+
  1. Add the API name to `Win32APIs/NativeMethods/NativeMethods.txt` (CsWin32 only auto-discovers this
     file at the project root, so it is also registered as an `AdditionalFiles` item in the csproj).
  2. Leave the rest to CsWin32: it generates the real P/Invoke into its own `Windows.Win32.PInvoke`
@@ -51,6 +66,7 @@ Follow it to keep the architecture clean and the build green.
  5. Expose behavior through a Core interface; inject the implementation in `App.xaml.cs`.
 
 ### When CsWin32 won't emit an API (WPF AnyCPU wpftmp trap)
+
  The WPF build compiles our code twice: once in the real project and once in a generated
  `DesktopBoxesUI_*` "temporary target assembly" (`wpftmp`) project that is ALWAYS `AnyCPU`.
  CsWin32 refuses to generate **architecture-specific** APIs under AnyCPU (e.g. `SHGetFileInfo`,
@@ -58,25 +74,30 @@ Follow it to keep the architecture clean and the build green.
  compiles `Win32Apis.cs`. Symptoms: build errors only about the new types, not the older APIs.
  Do NOT "fix" this by setting `<Platform>/<PlatformTarget>` to x64 — that makes CsWin32 emit nothing
  at all for this project. Instead:
-   - Keep CsWin32 for every normal API (leave it in `NativeMethods.txt`).
-   - For the architecture-specific few, declare them manually in
+
+- Keep CsWin32 for every normal API (leave it in `NativeMethods.txt`).
+- For the architecture-specific few, declare them manually in
      `Win32APIs/NativeMethods/ManualApis.cs` via `[DllImport]` (NOT `LibraryImport` — the source
      generator can't marshal structs like `SHFILEINFOW`). Re-expose them through `Win32Apis` so all
      native calls still flow through the one wrapper. This keeps raw P/Invoke inside `Win32APIs/NativeMethods`.
 
 ## Verifying changes
+
 After editing:
+
 1. `dotnet restore`
 2. `dotnet build` (fix all errors; avoid introducing warnings)
 3. If UI changed, run the app and confirm the WPF window opens and "New Box" works.
 
 ## Performance expectations
+
 - The app runs continuously. Avoid polling, timers, and excessive `Dispatcher` usage.
 - Use event-driven APIs (monitor/DPI/Explorer/filesystem notifications) wherever possible.
 - Cache icons and load them lazily. Don't retain Shell/COM objects longer than needed.
 - Avoid per-frame or per-item allocations in hot paths.
 
 ## Feature flags & desktop input detection
+
 There are two implementations of "detect a double-click on empty desktop" (the trigger for
 **Temp Hide All boxes**). The active one is selected by `GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface`
 (`bool?`, defined in `GlobalFeaturesSwitches.cs`). **It is currently `true`** — the global mouse hook is the
@@ -105,7 +126,12 @@ so the toggle is reversible. This is **session-only** (not persisted).
 that draws, at the cursor, the hit-test result, z-order, and the surface's style/ex-style. Use it (and the
 `DesktopSurface`'s published `Win32Apis.DesktopSurfaceHandle`) when debugging desktop/surface layering.
 
+## VirtualizingIconPanel
+
+- `Controls/VirtualizingIconPanel.cs` is a custom `VirtualizingPanel` + `IScrollInfo` for the Icons view (`ItemWidth`, `ItemHeight`, `HorizontalSpacing`, `VerticalSpacing`, `CacheRows`). It was created to virtualize the wrapping icon grid but currently has unresolved layout issues (on load `MeasureOverride` returned `PositiveInfinity` → `InvalidOperationException`; icons disappearing; high CPU/memory even for small collections; `ScrollViewer` not syncing and affecting `DetailsGrid` scrolling). **Icons view currently uses the simple `WrapPanel` (`FolderPortalControl.xaml:152` `ItemsControl` + `WrapPanel`) which works reliably.** Keep `VirtualizingIconPanel.cs` (and `IconContainer` `Controls/IconContainer.xaml`) for future work — do not delete — but do not switch Icons back to it without fixing measure/scroll and verifying with `dotnet build` + manual toggle Icons/Details.
+
 ## Known issues
+
 - **Custom `DesktopSurface` (flag `false`) is a work-in-progress and currently broken.** Recurring,
   hard-to-fix problems from past attempts:
   - A fully transparent (`AllowsTransparency`, alpha `0`) WPF window is skipped by `WindowFromPoint`, so it

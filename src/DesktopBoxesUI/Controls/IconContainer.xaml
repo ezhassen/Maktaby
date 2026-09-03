@@ -1,0 +1,42 @@
+<UserControl x:Class="DesktopBoxesUI.Controls.IconContainer"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
+             Focusable="True"
+             IsTabStop="False">
+    <Border x:Name="RootBorder"
+            BorderThickness="1"
+            Background="Transparent"
+            BorderBrush="Transparent"
+            Cursor="Arrow">
+        <Border.Style>
+            <Style TargetType="Border">
+                <Setter Property="BorderThickness" Value="1"/>
+                <Setter Property="BorderBrush" Value="Transparent"/>
+                <Setter Property="Background" Value="Transparent"/>
+                <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                        <Setter Property="Background" Value="#407FB2FF"/>
+                        <Setter Property="BorderBrush" Value="#FF7FB2FF"/>
+                    </DataTrigger>
+                </Style.Triggers>
+            </Style>
+        </Border.Style>
+        <StackPanel Orientation="Vertical" Margin="2">
+            <Image x:Name="IconImage"
+                   HorizontalAlignment="Center"
+                   Margin="0,2,0,0"
+                   RenderOptions.BitmapScalingMode="HighQuality"
+                   Source="{Binding Icon}"/>
+            <TextBlock x:Name="NameText"
+                       MaxHeight="32"
+                       Margin="0,4,0,0"
+                       FontSize="11"
+                       Foreground="{DynamicResource BoxForeground}"
+                       Text="{Binding DisplayName}"
+                       TextAlignment="Center"
+                       TextTrimming="CharacterEllipsis"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+    </Border>
+</UserControl>

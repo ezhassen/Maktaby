@@ -1,4 +1,5 @@
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.WPFServices;
 using System.Threading.Tasks;
 using System.Windows.Media;
 

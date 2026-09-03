@@ -1,6 +1,7 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.WPFServices;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Input;

@@ -1,5 +1,7 @@
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
 using Microsoft.Extensions.DependencyInjection;

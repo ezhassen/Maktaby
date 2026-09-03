@@ -1,12 +1,12 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Core.Services;
+using DesktopBoxesUI.WPFServices;
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
-using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Core.Models;
-using DesktopBoxesUI.Core.Services;
-using Microsoft.Extensions.DependencyInjection;
-using DesktopBoxesUI;
 
 namespace DesktopBoxesUI.ViewModels;
 
@@ -544,8 +544,10 @@ public sealed class BoxViewModel : ViewModelBase
                 if (was)
                 {
                     // _watcher is null after delete, _folderWatcher still active; restart both
-                    try { _watcher?.Dispose(); } catch { } _watcher = null;
-                    try { _folderWatcher?.Dispose(); } catch { } _folderWatcher = null;
+                    try { _watcher?.Dispose(); } catch { }
+                    _watcher = null;
+                    try { _folderWatcher?.Dispose(); } catch { }
+                    _folderWatcher = null;
                     _isWatching = false;
                     StartWatching();
                 }

@@ -7,4 +7,6 @@ namespace DesktopBoxesUI.Core.Interfaces;
 public interface IDispatcher
 {
     void Invoke(System.Action action);
+    Task InvokeAsync(Action action);
+    Task InvokeAsync(Func<Task> asyncAction);
 }

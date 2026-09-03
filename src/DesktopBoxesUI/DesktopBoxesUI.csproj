@@ -90,4 +90,8 @@
 		<Content Include="CSSWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Animations\" />
+	</ItemGroup>
+
 </Project>
