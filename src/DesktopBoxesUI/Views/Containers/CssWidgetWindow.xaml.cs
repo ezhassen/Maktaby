@@ -296,7 +296,7 @@ public partial class CssWidgetWindow : WidgetWindow
         bool show = (ShowChromeOnHover && _isHover) || _isActive || this.IsActive || this.IsFocused || (ShowChromeOnHover && IsMouseOver);
         return show;
     }
-    private void UpdateChrome()
+    public override void UpdateChrome()
     {
         EnsureChromeOverlay();
         //if (_drag is null) return;

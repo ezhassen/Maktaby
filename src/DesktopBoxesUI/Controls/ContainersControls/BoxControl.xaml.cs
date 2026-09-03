@@ -2,6 +2,7 @@ using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
+using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Views.HelpersViews;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.WPFServices;
@@ -29,6 +30,7 @@ public partial class BoxControl : UserControl
     private bool _dragging;
     private bool _moved;
     private bool _suppressDragUntilMouseUp;
+    public bool IsDragging => _dragging || _suppressDragUntilMouseUp;
     private static bool _suppressNextContextMenu;
     private DropIndicatorAdorner? _dropAdorner;
     private int _insertIndex = -1;
@@ -272,6 +274,7 @@ public partial class BoxControl : UserControl
             }
 
             _dragging = true;
+            WindowDragController.DraggingSourceWindow = Window.GetWindow(border);
             CollapseDraggedItems(dragged);
             _ghost = new DragGhostWindow();
             try
@@ -312,10 +315,16 @@ public partial class BoxControl : UserControl
                 _ghost?.Close();
                 _ghost = null;
                 _dragging = false;
+                if (WindowDragController.DraggingSourceWindow == Window.GetWindow(border))
+                    WindowDragController.DraggingSourceWindow = null;
                 RestoreCollapsedItems();
                 RemoveDropIndicator();
                 _insertIndex = -1;
                 _suppressDragUntilMouseUp = true;
+                Dispatcher.BeginInvoke(() =>
+                {
+                    foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+                }, System.Windows.Threading.DispatcherPriority.Input);
             }
         }
     }

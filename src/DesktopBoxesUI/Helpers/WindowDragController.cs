@@ -1,6 +1,7 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Views;
+using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
 using System;
 using System.Collections.Generic;
@@ -150,6 +151,8 @@ internal sealed class WindowDragController
     /// running for ANY container window. Item drag initiation in BoxControl checks this so a resize
     /// gesture can never morph into dragging a shortcut icon.</summary>
     public static bool IsNativeSizing;
+
+    public static Window? DraggingSourceWindow;
 
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
@@ -497,6 +500,7 @@ internal sealed class WindowDragController
                 }
 
                 _dragging = true;
+                DraggingSourceWindow = _window;
                 _dragOffset = current;
                 _window.CaptureMouse();
                 Mouse.OverrideCursor = Cursors.SizeAll;
@@ -537,11 +541,16 @@ internal sealed class WindowDragController
         }
 
         _dragging = false;
+        if (DraggingSourceWindow == _window) DraggingSourceWindow = null;
         _window.ReleaseMouseCapture();
         _overlay?.HideGuides();
         Mouse.OverrideCursor = null;
         _setBounds(RectD.FromXYWH(_window.Left, _window.Top, _window.Width, _window.Height));
         _onChanged();
+        foreach (Window w in Application.Current.Windows)
+        {
+            if (w is WidgetWindow ww) ww.UpdateChrome();
+        }
     }
 
     [StructLayout(LayoutKind.Sequential)]

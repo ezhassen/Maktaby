@@ -1,4 +1,5 @@
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.Shell.Services;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.Containers;
@@ -475,6 +476,7 @@ public partial class FolderPortalControl : UserControl
     private bool _dragging;
     private bool _moved;
     private bool _suppressDragUntilMouseUp;
+    public bool IsDragging => _dragging || _suppressDragUntilMouseUp;
     private DragGhostWindow? _dragGhost;
     private DataGridRow? _gridDragRow;
     private FolderItemViewModel? _gridDragVm;
@@ -511,6 +513,7 @@ public partial class FolderPortalControl : UserControl
         if (paths.Length == 0) return;
 
         _dragging = true;
+        WindowDragController.DraggingSourceWindow = Window.GetWindow(fe);
         try
         {
             _dragGhost = new DragGhostWindow();
@@ -531,7 +534,13 @@ public partial class FolderPortalControl : UserControl
             _dragGhost?.Close();
             _dragGhost = null;
             _dragging = false;
+            if (WindowDragController.DraggingSourceWindow == Window.GetWindow(fe))
+                WindowDragController.DraggingSourceWindow = null;
             _suppressDragUntilMouseUp = true;
+            Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+            }, System.Windows.Threading.DispatcherPriority.Input);
         }
     }
 

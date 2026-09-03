@@ -122,6 +122,10 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         DragOver += Window_DragOver;
         DragLeave += Window_DragLeave;
         Drop += Window_Drop;
+        // Keep chrome visible while any item drag is over this window (even when child already handled the event)
+        AddHandler(DragEnterEvent, new DragEventHandler(Window_DragAnyEnter), true);
+        AddHandler(DragOverEvent, new DragEventHandler(Window_DragAnyOver), true);
+        AddHandler(DragLeaveEvent, new DragEventHandler(Window_DragAnyLeave), true);
 
         ApplyAppearance();
 
@@ -233,10 +237,18 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     /// <summary>
     /// Shows the header buttons, tab strip and scrollbar only while the container is hovered or focused;
     /// otherwise only the title (and content) remain, giving a clean desktop look.
+    /// During an OLE drag the WPF `MouseLeave` fires (capture lost) while the physical cursor
+    /// is still over the window – keep chrome visible via drag state + Win32 hit-test.
     /// </summary>
-    private void UpdateChrome()
+    public override void UpdateChrome()
     {
         bool isBox = _vm.BoxContainerVm != null;
+        bool isDragging = IsAnyDragging();
+        if (isDragging)
+        {
+            // WPF MouseLeave is unreliable during capture (OLE drag) – sync _mouseOver from Win32 cursor
+            _mouseOver = IsCursorOverWindow();
+        }
         bool show = isBox && (_mouseOver || _keyboardFocused);
         Visibility headerButtonsVisibility = show ? Visibility.Visible : Visibility.Collapsed;
         MenuButton.Visibility = headerButtonsVisibility;
@@ -251,6 +263,15 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         BoxContent?.UpdateChrome(show);
         FolderPortalContent?.UpdateChrome(show);
         //SyncIconSizeChecks();
+    }
+
+    private bool IsCursorOverWindow()
+    {
+        if (!Win32Apis.GetCursorPos(out var pt)) return false;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero) return false;
+        if (!Win32Apis.GetWindowRect((Windows.Win32.Foundation.HWND)hwnd, out var rect)) return false;
+        return pt.X >= rect.left && pt.X <= rect.right && pt.Y >= rect.top && pt.Y <= rect.bottom;
     }
 
     /// <summary>Per-box icon size override from the menu: Auto/Default (null = follow the user
@@ -343,6 +364,14 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     {
         _mouseOver = false;
         UpdateChrome();
+    }
+
+    private bool IsAnyDragging()
+    {
+        if (_drag.IsDragging || _tabDragging
+            || BoxContent?.IsDragging == true || FolderPortalContent?.IsDragging == true)
+            return true;
+        return WindowDragController.DraggingSourceWindow != null;
     }
 
     private void Window_IsKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -1055,6 +1084,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             }
 
             _tabDragging = true;
+            WindowDragController.DraggingSourceWindow = this;
             Mouse.OverrideCursor = Cursors.SizeAll;
             // Chrome-like: collapse the dragged container so TabStripPanel snaps remaining tabs to fill its space.
             // The ghost shows the dragged tab; panel GapIndex will show insertion gap in target window.
@@ -1195,6 +1225,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             if (_dragContainer != null) { _dragContainer.Visibility = Visibility.Visible; _dragContainer = null; }
             else if (_dragButton != null) _dragButton.Visibility = Visibility.Visible;
             _tabDragging = false;
+            if (WindowDragController.DraggingSourceWindow == this) WindowDragController.DraggingSourceWindow = null;
+            foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
             ClearTabGap();
         }
         else if (_vm.BoxContainerVm != null)
@@ -1211,6 +1243,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         _dragButton = null;
         _dragTab = null;
         _tabDragging = false;
+        if (WindowDragController.DraggingSourceWindow == this) WindowDragController.DraggingSourceWindow = null;
+        foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1245,6 +1279,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         else if (_dragButton != null) _dragButton.Visibility = Visibility.Visible;
         _dragTab = null;
         _tabDragging = false;
+        if (WindowDragController.DraggingSourceWindow == this) WindowDragController.DraggingSourceWindow = null;
         _dragButton = null;
         Mouse.OverrideCursor = null;
         Mouse.Capture(null);
@@ -1780,6 +1815,19 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
         HideDropHighlight();
     }
+
+    private void Window_DragAnyEnter(object sender, DragEventArgs e)
+    {
+        foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+    }
+    private void Window_DragAnyOver(object sender, DragEventArgs e)
+    {
+        foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+    }
+    private void Window_DragAnyLeave(object sender, DragEventArgs e) => Dispatcher.BeginInvoke(() =>
+    {
+        foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+    }, System.Windows.Threading.DispatcherPriority.Input);
 
     private void Window_Drop(object sender, DragEventArgs e)
     {

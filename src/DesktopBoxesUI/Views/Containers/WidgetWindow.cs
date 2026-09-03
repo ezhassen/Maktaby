@@ -10,8 +10,10 @@ namespace DesktopBoxesUI.Views.Containers;
 /// <summary>
 /// base windows used for common props and methods for the Containers
 /// </summary>
-public class WidgetWindow : Window
+public abstract class WidgetWindow : Window
 {
+
+    public abstract void UpdateChrome();
     /*private const int WM_MOUSEACTIVATE = 0x0021;
     private const int MA_NOACTIVATE = 0x0003;
     private const int MA_ACTIVATE = 1;
