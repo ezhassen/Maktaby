@@ -281,6 +281,7 @@
                 Foreground="{DynamicResource BoxForeground}"
                 GridLinesVisibility="None"
                 HeadersVisibility="Column"
+                IsReadOnly="True"
                 ItemsSource="{Binding FolderItems}"
                 PreviewMouseLeftButtonDown="DetailsGrid_PreviewMouseLeftButtonDown"
                 RowHeaderWidth="0"
@@ -368,6 +369,9 @@
                 </DataGrid.Resources>
                 <DataGrid.RowStyle>
                     <Style TargetType="{x:Type DataGridRow}">
+                        <EventSetter Event="GotFocus" Handler="DetailsRow_GotFocus" />
+                        <EventSetter Event="GotKeyboardFocus" Handler="DetailsRow_GotFocus" />
+                        <Setter Property="Focusable" Value="True" />
                         <Setter Property="Background" Value="Transparent" />
                         <Setter Property="Foreground" Value="{DynamicResource BoxForeground}" />
                         <Setter Property="BorderThickness" Value="1" />
@@ -448,6 +452,7 @@
                     </DataGridTemplateColumn>
                     <DataGridTextColumn
                         Width="90"
+                        MinWidth="60"
                         Binding="{Binding SizeText}"
                         CanUserSort="True"
                         ElementStyle="{StaticResource {x:Type TextBlock}}"
@@ -455,12 +460,14 @@
                         SortMemberPath="FileSize" />
                     <DataGridTextColumn
                         Width="90"
+                        MinWidth="60"
                         Binding="{Binding TypeName}"
                         CanUserSort="True"
                         Header="Type"
                         SortMemberPath="TypeName" />
                     <DataGridTextColumn
                         Width="150"
+                        MinWidth="60"
                         Binding="{Binding ModifiedText}"
                         CanUserSort="True"
                         Header="Date modified"

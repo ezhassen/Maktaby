@@ -94,6 +94,11 @@ public partial class FolderPortalControl : UserControl
         DetailsGrid.AddHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler(DetailsGrid_OnLeftButtonUp), true);
         DetailsGrid.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(DetailsGrid_OnKeyDown), true);
         DetailsGrid.AddHandler(UIElement.GotFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
+        // WPF keyboard focus uses a separate routed event (Keyboard.GotKeyboardFocusEvent /
+        // UIElement.GotKeyboardFocusEvent). DataGrid cells/rows typically raise keyboard focus
+        // without raising logical GotFocus, so the handler above never fires. Listen for both.
+        DetailsGrid.AddHandler(UIElement.GotKeyboardFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
+        DetailsGrid.AddHandler(Keyboard.GotKeyboardFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
         DetailsGrid.AddHandler(FrameworkElement.ContextMenuOpeningEvent, new ContextMenuEventHandler(DetailsGrid_OnContextMenuOpening), true);
     }
 
@@ -155,9 +160,31 @@ public partial class FolderPortalControl : UserControl
 
     private void DetailsGrid_OnGotFocus(object sender, RoutedEventArgs e)
     {
-        var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
+        DependencyObject? d = e.OriginalSource as DependencyObject;
+        // KeyboardFocusChangedEventArgs.OriginalSource may be the focused element itself;
+        // also try NewFocus/OldFocus when available.
+        if (d == null && e is KeyboardFocusChangedEventArgs kf)
+            d = kf.NewFocus as DependencyObject;
+        var row = d != null ? FindDataGridRow(d) : null;
+        // Fallback: when focus lands directly on the DataGrid (e.g. after programmatic
+        // Keyboard.Focus(row) where row is not yet realized), use keyboard focus.
+        if (row == null && Keyboard.FocusedElement is DependencyObject kbd)
+            row = FindDataGridRow(kbd);
+        // Final fallback for virtualization: use selected item's container.
+        if (row == null && DetailsGrid.SelectedItem is FolderItemViewModel selVm)
+        {
+            row = DetailsGrid.ItemContainerGenerator.ContainerFromItem(selVm) as DataGridRow;
+            if (row != null) { ItemBorder_GotFocus(row, e); return; }
+        }
         if (row == null) return;
         ItemBorder_GotFocus(row, e);
+    }
+
+    // Direct per-row handler used by DataGrid.RowStyle EventSetters (reliable even when
+    // bubbling focus events are handled by DataGrid internals).
+    private void DetailsRow_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is DataGridRow row) ItemBorder_GotFocus(row, e);
     }
 
     private void DetailsGrid_OnLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -569,7 +596,12 @@ public partial class FolderPortalControl : UserControl
         while (cur != null)
         {
             if (cur is DataGridRow row) return row;
-            cur = VisualTreeHelper.GetParent(cur);
+            // VisualTreeHelper can return null at template boundaries (e.g. inside
+            // DataGridCell / ContentPresenter); fall back to logical parent.
+            var visualParent = VisualTreeHelper.GetParent(cur);
+            if (visualParent != null) cur = visualParent;
+            else if (cur is FrameworkElement fe && fe.Parent is DependencyObject logical) cur = logical;
+            else cur = null;
         }
         return null;
     }
