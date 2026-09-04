@@ -49,6 +49,8 @@ public partial class CssWidgetWindow : WidgetWindow
         Loaded += OnLoaded;
         SizeChanged += OnSizeChanged;
         LocationChanged += OnLocationChanged;
+        IsVisibleChanged += OnIsVisibleChanged;
+        StateChanged += OnStateChanged;
         this.LockMenuItem.IsChecked = vm.IsLocked;
         // Hover/focus over the WebView HWND does not raise WPF hover reliably; use the root border
         // as the single hover source for the whole widget. This avoids the header/host transition churn
@@ -492,6 +494,18 @@ public partial class CssWidgetWindow : WidgetWindow
         if (hwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(hwnd); } catch { }
         try { Detach(); } catch { }
         try { base.OnClosed(e); } catch { }
+    }
+
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (!IsVisible) _widgetControl?.Suspend();
+        else if (WindowState != WindowState.Minimized) _widgetControl?.Resume();
+    }
+
+    private void OnStateChanged(object? sender, EventArgs e)
+    {
+        if (WindowState == WindowState.Minimized) _widgetControl?.Suspend();
+        else if (IsVisible) _widgetControl?.Resume();
     }
 
     private void WidgetMenu_Opened(object sender, RoutedEventArgs e)

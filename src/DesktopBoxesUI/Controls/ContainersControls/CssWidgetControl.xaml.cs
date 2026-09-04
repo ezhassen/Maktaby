@@ -39,13 +39,17 @@ public partial class CssWidgetControl : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        try { IsVisibleChanged += OnIsVisibleChanged; } catch { }
         if (_isInitialized)
         {
             SubscribeTheme();
+            // Apply idle state based on current visibility
+            if (!IsVisible) Suspend(); else Resume();
             return;
         }
         SubscribeTheme();
         await EnsureWebViewAsync();
+        if (!IsVisible) Suspend();
         if (!string.IsNullOrEmpty(_pendingHtml))
         {
             NavigateToHtml(_pendingHtml);
@@ -56,8 +60,15 @@ public partial class CssWidgetControl : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         UnsubscribeTheme();
+        try { IsVisibleChanged -= OnIsVisibleChanged; } catch { }
         // Keep WebView alive for performance; disposal is handled by parent window's OnClosed
         // to avoid CoreWebView2Controller.IsVisible race during shutdown
+    }
+
+    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (!IsVisible) Suspend();
+        else Resume();
     }
 
     private void SubscribeTheme()
@@ -125,6 +136,58 @@ public partial class CssWidgetControl : UserControl
         var theme = GetEffectiveTheme();
         if (string.IsNullOrEmpty(theme)) return;
         try { WebView.CoreWebView2.ExecuteScriptAsync($"document.documentElement.setAttribute('data-theme','{theme}')"); } catch { }
+    }
+
+    public bool IsSuspended { get; private set; }
+
+    public int? BrowserProcessId
+    {
+        get
+        {
+            try
+            {
+                var pid = WebView?.CoreWebView2?.BrowserProcessId;
+                return pid.HasValue ? (int)pid.Value : null;
+            }
+            catch { return null; }
+        }
+    }
+
+    public async void Suspend()
+    {
+        if (IsSuspended) return;
+        if (WebView?.CoreWebView2 == null)
+        {
+            IsSuspended = true;
+            try { WebView?.CoreWebView2?.ExecuteScriptAsync("window.__suspended=true; window.dispatchEvent(new Event('suspend'));"); } catch { }
+            return;
+        }
+        try
+        {
+            // TrySuspendAsync available from WebView2 1.0.1245+
+            var ok = await WebView.CoreWebView2.TrySuspendAsync();
+            IsSuspended = ok;
+            if (!ok) throw new InvalidOperationException();
+        }
+        catch
+        {
+            try { await WebView.CoreWebView2.ExecuteScriptAsync("window.__suspended=true; window.dispatchEvent(new Event('suspend')); document.hidden=true;"); } catch { }
+            IsSuspended = true;
+        }
+    }
+
+    public void Resume()
+    {
+        if (!IsSuspended) return;
+        try
+        {
+            WebView?.CoreWebView2?.Resume();
+        }
+        catch { }
+        try { WebView?.CoreWebView2?.ExecuteScriptAsync("window.__suspended=false; window.dispatchEvent(new Event('resume')); document.hidden=false;"); } catch { }
+        IsSuspended = false;
+        // Re-apply theme after resume (WebView may have been frozen)
+        ApplyThemeToWebView();
     }
 
     public void RefreshTheme() => ApplyThemeToWebView();

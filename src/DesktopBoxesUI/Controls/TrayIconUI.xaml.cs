@@ -127,6 +127,20 @@ public partial class TrayIconUI
 
     private void DebugTree_Click(object sender, RoutedEventArgs e) => DebugTreeRequested?.Invoke(this, EventArgs.Empty);
 
+    private void PerformanceMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        Application.Current.Dispatcher.BeginInvoke(() =>
+        {
+            foreach (var w in Application.Current.Windows.OfType<Views.PerformanceMonitorWindow>())
+            {
+                if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
+                w.Activate();
+                return;
+            }
+            new Views.PerformanceMonitorWindow().Show();
+        });
+    }
+
     private void Theme_Click(object sender, RoutedEventArgs e)
     {
         if (sender is MenuItem item)

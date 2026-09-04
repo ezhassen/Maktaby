@@ -54,6 +54,12 @@
                 Click="Settings_Click"
                 Header="Settings"
                 Icon="{StaticResource ItemIcon_Settings}" />
+            <MenuItem
+                x:Name="menuPerformance"
+                Click="PerformanceMonitor_Click"
+                Header="Performance Monitor"
+                Icon="{StaticResource ItemIcon_DebugTree}"
+                ToolTip="WebView2 CPU / memory, idle suspend" />
             <MenuItem Header="Theme" Icon="{StaticResource ItemIcon_Theme}">
                 <MenuItem
                     x:Name="menu_theme_system"
@@ -79,12 +85,6 @@
             </MenuItem>
             <Separator />
             <MenuItem
-                x:Name="menuAbout"
-                Click="About_Click"
-                Header="About"
-                Icon="{StaticResource ItemIcon_About}" />
-            <Separator />
-            <MenuItem
                 x:Name="ToggleDebugTree"
                 Click="DebugTree_Click"
                 Header="Debug Desktop Tree"
@@ -97,6 +97,12 @@
                 Header="Test Button"
                 Icon="{StaticResource ItemIcon_Test}"
                 ToolTip="Used for tests" />
+            <MenuItem
+                x:Name="menuAbout"
+                Click="About_Click"
+                Header="About"
+                Icon="{StaticResource ItemIcon_About}" />
+            <Separator />
             <MenuItem
                 x:Name="menuExit"
                 Click="Exit_Click"
