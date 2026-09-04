@@ -8,6 +8,7 @@
     Height="700"
     MinWidth="900"
     MinHeight="500"
+    Icon="/Assets/app.ico"
     WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
@@ -21,7 +22,11 @@
             Title="Widget Editor"
             Grid.Row="0"
             ShowMaximize="True"
-            ShowMinimize="True" />
+            ShowMinimize="True">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Assets/app.ico" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <!--  Manifest fields  -->
         <Border

@@ -8,6 +8,7 @@
     Height="140"
     AllowsTransparency="True"
     Background="Transparent"
+    Icon="/Assets/app.ico"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
     Topmost="True"

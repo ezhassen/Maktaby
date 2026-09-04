@@ -37,7 +37,7 @@
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
 
-            <!-- Preview + Hex -->
+            <!--  Preview + Hex  -->
             <Grid Grid.Row="0" Margin="0,0,0,12">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="48" />
@@ -47,21 +47,36 @@
                     Grid.Column="0"
                     Width="48"
                     Height="48"
-                    CornerRadius="6"
                     BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
-                    BorderThickness="1">
+                    BorderThickness="1"
+                    CornerRadius="6">
                     <Border.Background>
                         <SolidColorBrush x:Name="PreviewBrush" Color="Transparent" />
                     </Border.Background>
                 </Border>
-                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
-                    <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="Hex" />
-                    <ui:TextBox x:Name="HexBox" Margin="0,4,0,0" TextChanged="HexBox_TextChanged" />
-                    <TextBlock x:Name="ValidationText" Margin="0,2,0,0" FontSize="11" Foreground="#F44336" Visibility="Collapsed" Text="Invalid hex" />
+                <StackPanel
+                    Grid.Column="1"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Center">
+                    <TextBlock
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="Hex" />
+                    <ui:TextBox
+                        x:Name="HexBox"
+                        Margin="0,4,0,0"
+                        TextChanged="HexBox_TextChanged" />
+                    <TextBlock
+                        x:Name="ValidationText"
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                        Foreground="#F44336"
+                        Text="Invalid hex"
+                        Visibility="Collapsed" />
                 </StackPanel>
             </Grid>
 
-            <!-- Sliders -->
+            <!--  Sliders  -->
             <StackPanel Grid.Row="1">
                 <Grid Margin="0,0,0,6">
                     <Grid.ColumnDefinitions>
@@ -69,9 +84,23 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="40" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="R" />
-                    <Slider x:Name="RSlider" Grid.Column="1" Maximum="255" Minimum="0" ValueChanged="Slider_ValueChanged" IsSnapToTickEnabled="True" TickFrequency="1" />
-                    <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Value, ElementName=RSlider, StringFormat={}{0:0}}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="R" />
+                    <Slider
+                        x:Name="RSlider"
+                        Grid.Column="1"
+                        IsSnapToTickEnabled="True"
+                        Maximum="255"
+                        Minimum="0"
+                        TickFrequency="1"
+                        ValueChanged="Slider_ValueChanged" />
+                    <TextBlock
+                        Grid.Column="2"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Text="{Binding Value, ElementName=RSlider, StringFormat={}{0:0}}" />
                 </Grid>
                 <Grid Margin="0,0,0,6">
                     <Grid.ColumnDefinitions>
@@ -79,9 +108,23 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="40" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="G" />
-                    <Slider x:Name="GSlider" Grid.Column="1" Maximum="255" Minimum="0" ValueChanged="Slider_ValueChanged" IsSnapToTickEnabled="True" TickFrequency="1" />
-                    <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Value, ElementName=GSlider, StringFormat={}{0:0}}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="G" />
+                    <Slider
+                        x:Name="GSlider"
+                        Grid.Column="1"
+                        IsSnapToTickEnabled="True"
+                        Maximum="255"
+                        Minimum="0"
+                        TickFrequency="1"
+                        ValueChanged="Slider_ValueChanged" />
+                    <TextBlock
+                        Grid.Column="2"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Text="{Binding Value, ElementName=GSlider, StringFormat={}{0:0}}" />
                 </Grid>
                 <Grid Margin="0,0,0,6">
                     <Grid.ColumnDefinitions>
@@ -89,9 +132,23 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="40" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="B" />
-                    <Slider x:Name="BSlider" Grid.Column="1" Maximum="255" Minimum="0" ValueChanged="Slider_ValueChanged" IsSnapToTickEnabled="True" TickFrequency="1" />
-                    <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Value, ElementName=BSlider, StringFormat={}{0:0}}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="B" />
+                    <Slider
+                        x:Name="BSlider"
+                        Grid.Column="1"
+                        IsSnapToTickEnabled="True"
+                        Maximum="255"
+                        Minimum="0"
+                        TickFrequency="1"
+                        ValueChanged="Slider_ValueChanged" />
+                    <TextBlock
+                        Grid.Column="2"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Text="{Binding Value, ElementName=BSlider, StringFormat={}{0:0}}" />
                 </Grid>
                 <Grid Margin="0,0,0,6">
                     <Grid.ColumnDefinitions>
@@ -99,21 +156,42 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="40" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="A" />
-                    <Slider x:Name="ASlider" Grid.Column="1" Maximum="255" Minimum="0" Value="255" ValueChanged="Slider_ValueChanged" IsSnapToTickEnabled="True" TickFrequency="1" />
-                    <TextBlock Grid.Column="2" Margin="8,0,0,0" VerticalAlignment="Center" Text="{Binding Value, ElementName=ASlider, StringFormat={}{0:0}}" />
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="A" />
+                    <Slider
+                        x:Name="ASlider"
+                        Grid.Column="1"
+                        IsSnapToTickEnabled="True"
+                        Maximum="255"
+                        Minimum="0"
+                        TickFrequency="1"
+                        ValueChanged="Slider_ValueChanged"
+                        Value="255" />
+                    <TextBlock
+                        Grid.Column="2"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        Text="{Binding Value, ElementName=ASlider, StringFormat={}{0:0}}" />
                 </Grid>
             </StackPanel>
 
-            <!-- Standard palette -->
+            <!--  Standard palette  -->
             <StackPanel Grid.Row="2" Margin="0,8,0,0">
-                <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="Standard" />
+                <TextBlock
+                    FontSize="11"
+                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                    Text="Standard" />
                 <WrapPanel x:Name="StandardPanel" Margin="0,4,0,0" />
             </StackPanel>
 
-            <!-- Recent -->
+            <!--  Recent  -->
             <StackPanel Grid.Row="3" Margin="0,8,0,0">
-                <TextBlock FontSize="11" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Text="Recent" />
+                <TextBlock
+                    FontSize="11"
+                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                    Text="Recent" />
                 <WrapPanel x:Name="RecentPanel" Margin="0,4,0,0" />
             </StackPanel>
         </Grid>

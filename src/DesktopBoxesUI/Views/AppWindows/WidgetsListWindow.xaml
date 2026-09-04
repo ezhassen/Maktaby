@@ -10,6 +10,7 @@
     Height="560"
     MinWidth="760"
     MinHeight="400"
+    Icon="/Assets/app.ico"
     WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
@@ -22,7 +23,11 @@
             Title="Widgets"
             Grid.Row="0"
             ShowMaximize="True"
-            ShowMinimize="True" />
+            ShowMinimize="True">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Assets/app.ico" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <Grid Grid.Row="1" Margin="16">
             <Grid.RowDefinitions>

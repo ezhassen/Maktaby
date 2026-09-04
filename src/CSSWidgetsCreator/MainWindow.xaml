@@ -13,6 +13,7 @@
     MinHeight="600"
     Background="{DynamicResource ApplicationBackgroundBrush}"
     ExtendsContentIntoTitleBar="True"
+    Icon="/Assets/app.ico"
     WindowBackdropType="Mica"
     WindowCornerPreference="Round"
     WindowStartupLocation="CenterScreen"
@@ -30,7 +31,11 @@
             Title="CSS Widgets Creator"
             Grid.Row="0"
             ShowMaximize="True"
-            ShowMinimize="True" />
+            ShowMinimize="True">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Assets/app.ico" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <!--  Toolbar: Load / Save  -->
         <Border

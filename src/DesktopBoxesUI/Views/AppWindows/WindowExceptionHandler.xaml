@@ -13,6 +13,7 @@
     d:DataContext="{d:DesignInstance Type=ui:FluentWindow}"
     Closing="OnWindowClosing"
     ExtendsContentIntoTitleBar="True"
+    Icon="/Assets/app.ico"
     Loaded="OnWindowLoaded"
     SizeToContent="Height"
     WindowBackdropType="Mica"
@@ -30,9 +31,12 @@
         <ui:TitleBar
             Title="Unexpected error"
             Grid.Row="0"
-            Icon="pack://application:,,,/Assets/app.ico"
             ShowMaximize="False"
-            ShowMinimize="True" />
+            ShowMinimize="True">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Assets/app.ico" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <!--  Content  -->
         <ScrollViewer

@@ -42,7 +42,11 @@
             Title="Settings"
             Grid.Row="0"
             ShowMaximize="True"
-            ShowMinimize="True" />
+            ShowMinimize="True">
+            <ui:TitleBar.Icon>
+                <ui:ImageIcon Source="/Assets/app.ico" />
+            </ui:TitleBar.Icon>
+        </ui:TitleBar>
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
