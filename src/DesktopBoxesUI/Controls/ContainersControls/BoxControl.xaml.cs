@@ -52,6 +52,7 @@ public partial class BoxControl : UserControl
     private readonly ItemRenameService _renameService = new();
 
     private static readonly bool _singleClick = ShellSettings.IsSingleClickToOpen();
+    private static DateTime _lastOpenUtc;
 
     public BoxControl()
     {
@@ -321,9 +322,12 @@ public partial class BoxControl : UserControl
                 RemoveDropIndicator();
                 _insertIndex = -1;
                 _suppressDragUntilMouseUp = true;
+                var srcWin = WindowDragController.DraggingSourceWindow;
+                if (WindowDragController.DraggingSourceWindow == Window.GetWindow(border))
+                    WindowDragController.DraggingSourceWindow = null;
                 Dispatcher.BeginInvoke(() =>
                 {
-                    foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+                    (srcWin as WidgetWindow)?.UpdateChrome();
                 }, System.Windows.Threading.DispatcherPriority.Input);
             }
         }
@@ -619,6 +623,7 @@ public partial class BoxControl : UserControl
 
     private static void OpenItem(BoxItemViewModel item)
     {
+        _lastOpenUtc = DateTime.UtcNow;
         if (!string.IsNullOrEmpty(item.Model.Pidl))
         {
             try
@@ -733,6 +738,14 @@ public partial class BoxControl : UserControl
                 {
                     vm.IsSelected = true;
                 }
+            }
+            // Focus first dropped item so keyboard navigation and dotted focus rect resume there
+            var firstVm = box.Items.FirstOrDefault(i => i.Model == moved[0]);
+            if (firstVm != null)
+            {
+                _focusedIndex = box.Items.IndexOf(firstVm);
+                _anchorIndex = _focusedIndex;
+                _ = Dispatcher.BeginInvoke(() => FocusItem(_focusedIndex), System.Windows.Threading.DispatcherPriority.Input);
             }
         }
 
@@ -987,6 +1000,7 @@ public partial class BoxControl : UserControl
     public void ClearSelectionOnDeactivate()
     {
         if (_marqueeActive || _editing || _dragging || _suppressDragUntilMouseUp) return;
+        if ((DateTime.UtcNow - _lastOpenUtc).TotalMilliseconds < 1200) return;
         ClearSelection();
     }
 
@@ -1065,6 +1079,7 @@ public partial class BoxControl : UserControl
         // Do not clear while a drag is active or in the suppress window after DoDragDrop (Esc cancel, drop).
         if ((bool)e.NewValue == false && !_marqueeActive && !_editing && !_dragging && !_suppressDragUntilMouseUp)
         {
+            if ((DateTime.UtcNow - _lastOpenUtc).TotalMilliseconds < 1200) return;
             ClearSelection();
         }
     }

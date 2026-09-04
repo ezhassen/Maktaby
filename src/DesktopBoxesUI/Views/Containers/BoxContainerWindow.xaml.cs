@@ -1225,8 +1225,9 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             if (_dragContainer != null) { _dragContainer.Visibility = Visibility.Visible; _dragContainer = null; }
             else if (_dragButton != null) _dragButton.Visibility = Visibility.Visible;
             _tabDragging = false;
+            var srcTabWin = WindowDragController.DraggingSourceWindow;
             if (WindowDragController.DraggingSourceWindow == this) WindowDragController.DraggingSourceWindow = null;
-            foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+            (srcTabWin as WidgetWindow)?.UpdateChrome();
             ClearTabGap();
         }
         else if (_vm.BoxContainerVm != null)
@@ -1243,8 +1244,9 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         _dragButton = null;
         _dragTab = null;
         _tabDragging = false;
+        var srcTabWin2 = WindowDragController.DraggingSourceWindow;
         if (WindowDragController.DraggingSourceWindow == this) WindowDragController.DraggingSourceWindow = null;
-        foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+        (srcTabWin2 as WidgetWindow)?.UpdateChrome();
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1818,15 +1820,18 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void Window_DragAnyEnter(object sender, DragEventArgs e)
     {
-        foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+        (WindowDragController.DraggingSourceWindow as WidgetWindow)?.UpdateChrome();
+        UpdateChrome();
     }
     private void Window_DragAnyOver(object sender, DragEventArgs e)
     {
-        foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+        (WindowDragController.DraggingSourceWindow as WidgetWindow)?.UpdateChrome();
+        UpdateChrome();
     }
     private void Window_DragAnyLeave(object sender, DragEventArgs e) => Dispatcher.BeginInvoke(() =>
     {
-        foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+        (WindowDragController.DraggingSourceWindow as WidgetWindow)?.UpdateChrome();
+        UpdateChrome();
     }, System.Windows.Threading.DispatcherPriority.Input);
 
     private void Window_Drop(object sender, DragEventArgs e)

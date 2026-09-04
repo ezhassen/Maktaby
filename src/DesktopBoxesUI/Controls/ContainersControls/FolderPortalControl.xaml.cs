@@ -98,6 +98,9 @@ public partial class FolderPortalControl : UserControl
         DetailsGrid.AddHandler(UIElement.PreviewMouseRightButtonUpEvent, new MouseButtonEventHandler(DetailsGrid_OnRightButtonUp), true);
         DetailsGrid.AddHandler(UIElement.MouseLeftButtonUpEvent, new MouseButtonEventHandler(DetailsGrid_OnLeftButtonUp), true);
         DetailsGrid.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler(DetailsGrid_OnKeyDown), true);
+        // ENTER in Details must be intercepted on Preview (tunnel) before DataGrid's class handler moves CurrentCell/Selection to next row
+        this.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(DetailsGrid_OnKeyDown), true);
+        DetailsGrid.AddHandler(UIElement.PreviewKeyDownEvent, new KeyEventHandler(DetailsGrid_OnKeyDown), true);
         DetailsGrid.AddHandler(UIElement.GotFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
         // WPF keyboard focus uses a separate routed event (Keyboard.GotKeyboardFocusEvent /
         // UIElement.GotKeyboardFocusEvent). DataGrid cells/rows typically raise keyboard focus
@@ -378,6 +381,7 @@ public partial class FolderPortalControl : UserControl
     {
         if (_renameService.IsEditing) return;
         if (_dragging || _suppressDragUntilMouseUp) return;
+        if ((DateTime.UtcNow - _lastOpenUtc).TotalMilliseconds < 1200) return;
         ClearSelection();
     }
 
@@ -477,6 +481,7 @@ public partial class FolderPortalControl : UserControl
     private bool _moved;
     private bool _suppressDragUntilMouseUp;
     public bool IsDragging => _dragging || _suppressDragUntilMouseUp;
+    private static DateTime _lastOpenUtc;
     private DragGhostWindow? _dragGhost;
     private DataGridRow? _gridDragRow;
     private FolderItemViewModel? _gridDragVm;
@@ -537,9 +542,12 @@ public partial class FolderPortalControl : UserControl
             if (WindowDragController.DraggingSourceWindow == Window.GetWindow(fe))
                 WindowDragController.DraggingSourceWindow = null;
             _suppressDragUntilMouseUp = true;
+            var srcWin = WindowDragController.DraggingSourceWindow;
+            if (WindowDragController.DraggingSourceWindow == Window.GetWindow(fe))
+                WindowDragController.DraggingSourceWindow = null;
             Dispatcher.BeginInvoke(() =>
             {
-                foreach (var w in Application.Current.Windows.OfType<WidgetWindow>()) w.UpdateChrome();
+                (srcWin as WidgetWindow)?.UpdateChrome();
             }, System.Windows.Threading.DispatcherPriority.Input);
         }
     }
@@ -660,6 +668,30 @@ public partial class FolderPortalControl : UserControl
         if (row == null) return; // empty area handled by DetailsGrid_PreviewMouseLeftButtonDown
         if (row.DataContext is not FolderItemViewModel vm) return;
         if (vm.IsEditing) { e.Handled = true; return; }
+
+        // Double-click in Details must be handled here (Preview tunnel) before drag/selection.
+        // MouseDoubleClick bubbling is suppressed when Preview is marked Handled, so handle ClickCount==2 directly.
+        if (e.ClickCount == 2)
+        {
+            bool alt = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+            if (alt)
+            {
+                ShowProperties(vm);
+            }
+            else if (vm.IsDirectory)
+            {
+                Box?.TryNavigateInto(vm);
+                RequestSave?.Invoke();
+                UpdateView();
+                if (Window.GetWindow(this) is BoxContainerWindow bcwDbl) bcwDbl.ManageFolderWatcher();
+            }
+            else
+            {
+                OpenItem(vm);
+            }
+            e.Handled = true;
+            return;
+        }
 
         // Remember origin for drag (used by DetailsGrid_OnMouseMove)
         _gridDragRow = row;
@@ -887,6 +919,7 @@ public partial class FolderPortalControl : UserControl
     {
         if ((bool)e.NewValue == false && !_renameService.IsEditing && !_dragging && !_suppressDragUntilMouseUp)
         {
+            if ((DateTime.UtcNow - _lastOpenUtc).TotalMilliseconds < 1200) return;
             ClearSelection();
         }
     }
@@ -1052,6 +1085,7 @@ public partial class FolderPortalControl : UserControl
 
     private static void OpenItem(FolderItemViewModel item)
     {
+        _lastOpenUtc = DateTime.UtcNow;
         try
         {
             var path = item.Path;

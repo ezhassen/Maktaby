@@ -541,16 +541,15 @@ internal sealed class WindowDragController
         }
 
         _dragging = false;
+        var src = DraggingSourceWindow;
         if (DraggingSourceWindow == _window) DraggingSourceWindow = null;
         _window.ReleaseMouseCapture();
         _overlay?.HideGuides();
         Mouse.OverrideCursor = null;
         _setBounds(RectD.FromXYWH(_window.Left, _window.Top, _window.Width, _window.Height));
         _onChanged();
-        foreach (Window w in Application.Current.Windows)
-        {
-            if (w is WidgetWindow ww) ww.UpdateChrome();
-        }
+        (src as WidgetWindow)?.UpdateChrome();
+        (_window as WidgetWindow)?.UpdateChrome();
     }
 
     [StructLayout(LayoutKind.Sequential)]
