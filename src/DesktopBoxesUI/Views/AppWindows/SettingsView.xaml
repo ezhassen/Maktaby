@@ -63,6 +63,7 @@
                     <ListBoxItem Content="Preview" Tag="SectionPreview" />
                     <ListBoxItem Content="Appearance" Tag="SectionAppearance" />
                     <ListBoxItem Content="Boxes" Tag="SectionBoxes" />
+                    <ListBoxItem Content="CSS Widgets" Tag="SectionCSSWidgets" />
                     <ListBoxItem Content="General" Tag="SectionGeneral" />
                     <ListBoxItem Content="Snapshot" Tag="SectionSnapshot" />
                 </ListBox>
@@ -360,6 +361,34 @@
                                     </StackPanel>
                                 </StackPanel>
                             </GroupBox>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox
+                        x:Name="SectionCSSWidgets"
+                        Margin="0,0,0,12"
+                        Header="CSS Widgets">
+                        <StackPanel Margin="8">
+                            <StackPanel Margin="0,0,0,8">
+                                <TextBlock FontWeight="Bold" Text="Default CSS Widgets theme" />
+                                <TextBlock
+                                    Margin="0,0,0,4"
+                                    FontSize="11"
+                                    Foreground="#999999"
+                                    Text="App = follow app theme. Used when widget CanSwitchTheme is null (indeterminate)." />
+                                <StackPanel Orientation="Horizontal">
+                                    <ComboBox
+                                        Width="200"
+                                        ItemsSource="{Binding CssWidgetThemeOptions}"
+                                        SelectedItem="{Binding DefaultCSSWidgetsThemeOption, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ui:Button
+                                        Command="{Binding ResetToDefaultCommand}"
+                                        CommandParameter="DefaultCSSWidgetsThemeOption"
+                                        Style="{StaticResource ResetButton}">
+                                        <ui:SymbolIcon Symbol="ArrowCounterclockwise24" />
+                                    </ui:Button>
+                                </StackPanel>
+                            </StackPanel>
                         </StackPanel>
                     </GroupBox>
 

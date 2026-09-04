@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Text;
 using Wpf.Ui.Appearance;
 
 namespace DesktopBoxesUI.Settings;
@@ -100,6 +97,17 @@ public class UserSettings
     /// </summary>
     [Category("Appearance_Boxes"), DefaultValue(null)]
     public int? DefaultBoxIconSize { get; set; }
+
+
+    #region CSSWidgets
+
+    /// <summary>
+    /// Default box Selected Theme, dark, light, (null= get app SelectedTheme)
+    /// </summary>
+    [Category("Appearance_CSSWidgets"), DefaultValue(null)]
+    public string? DefaultCSSWidgetsTheme { get; set; }
+
+    #endregion
 
 }
 

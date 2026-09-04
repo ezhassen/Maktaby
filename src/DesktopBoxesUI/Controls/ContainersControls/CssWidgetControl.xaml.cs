@@ -1,6 +1,7 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Core.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using System.Diagnostics;
@@ -71,26 +72,62 @@ public partial class CssWidgetControl : UserControl
 
     private void OnAppThemeChanged(ApplicationTheme current, System.Windows.Media.Color systemAccent)
     {
-        if (_currentManifest?.IsThemeSwitchable != true) return;
+        if (!ShouldSwitchTheme()) return;
         try { Dispatcher.BeginInvoke(() => ApplyThemeToWebView()); } catch { }
     }
 
-    private static string GetCurrentTheme()
+    private bool ShouldSwitchTheme()
     {
-        var app = ApplicationThemeManager.GetAppTheme();
-        if (app == ApplicationTheme.Dark) return "dark";
-        if (app == ApplicationTheme.Light) return "light";
-        var sys = ApplicationThemeManager.GetSystemTheme();
-        return sys == SystemTheme.Dark ? "dark" : "light";
+        if (_currentManifest == null) return false;
+        if (_currentManifest.CanSwitchTheme == true) return true;
+        if (_currentManifest.CanSwitchTheme == false) return false;
+        // null (indeterminate) -> follow global DefaultCSSWidgetsTheme
+        try
+        {
+            var global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultCSSWidgetsTheme;
+            // global null/App => follow app theme (still switchable)
+            // Dark/Light => switch to that global theme
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private string? GetEffectiveTheme()
+    {
+        return GetEffectiveThemeStatic(_currentManifest);
+    }
+
+    private static string? GetEffectiveThemeStatic(CssWidgetManifest? manifest)
+    {
+        //if false no theming
+        if (manifest?.CanSwitchTheme == false) return null;
+        try
+        {
+            //try get DefaultCSSWidgetsTheme setting 
+            var global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultCSSWidgetsTheme?.Trim().ToLowerInvariant();
+            if (global == "dark") return "dark";
+            if (global == "light") return "light";
+        }
+        catch { }
+
+        // use app theme
+        var app2 = ApplicationThemeManager.GetAppTheme();
+        if (app2 == ApplicationTheme.Dark) return "dark";
+        if (app2 == ApplicationTheme.Light) return "light";
+        var sys2 = ApplicationThemeManager.GetSystemTheme();
+        return sys2 == SystemTheme.Dark ? "dark" : "light";
     }
 
     private void ApplyThemeToWebView()
     {
-        if (_currentManifest?.IsThemeSwitchable != true) return;
         if (WebView?.CoreWebView2 == null) return;
-        var theme = GetCurrentTheme();
+        if (!ShouldSwitchTheme()) return;
+        var theme = GetEffectiveTheme();
+        if (string.IsNullOrEmpty(theme)) return;
         try { WebView.CoreWebView2.ExecuteScriptAsync($"document.documentElement.setAttribute('data-theme','{theme}')"); } catch { }
     }
+
+    public void RefreshTheme() => ApplyThemeToWebView();
 
     public void CleanupForShutdown()
     {
@@ -270,7 +307,11 @@ public partial class CssWidgetControl : UserControl
         _currentManifest = info.Manifest;
         ApplyNetworkFilter(info.Manifest);
         var doc = _widgetService.BuildDocument(info);
-        if (_currentManifest.IsThemeSwitchable) doc = InjectTheme(doc);
+        if (_currentManifest.IsThemeSwitchable)
+        {
+            var injectedTheme = InjectTheme(doc);
+            if (!string.IsNullOrEmpty(injectedTheme)) doc = injectedTheme;
+        }
         await EnsureAndNavigate(doc);
     }
 
@@ -302,13 +343,18 @@ public partial class CssWidgetControl : UserControl
         {
             doc = $"<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>{css}</style></head><body>{html}<script>{js}</script></body></html>";
         }
-        if (_currentManifest.IsThemeSwitchable) doc = InjectTheme(doc);
+        if (_currentManifest.IsThemeSwitchable)
+        {
+            var injectedTheme = InjectTheme(doc);
+            if (!string.IsNullOrEmpty(injectedTheme)) doc = injectedTheme;
+        }
         await EnsureAndNavigate(doc);
     }
 
-    private string InjectTheme(string html)
+    private string? InjectTheme(string html)
     {
-        var theme = GetCurrentTheme();
+        var theme = GetEffectiveTheme();
+        if (string.IsNullOrEmpty(theme)) return null;
         if (html.Contains("data-theme", StringComparison.OrdinalIgnoreCase)) return html;
         if (html.Contains("<html", StringComparison.OrdinalIgnoreCase))
             return html.Replace("<html", $"<html data-theme=\"{theme}\"", StringComparison.OrdinalIgnoreCase);

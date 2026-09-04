@@ -26,6 +26,9 @@ public sealed class SettingsViewModel : ViewModelBase
     // Box theme: "App" inherits the app theme (stored as null); otherwise an explicit dark/light override.
     public IReadOnlyList<string> BoxThemeOptions { get; } = new[] { "App", "Dark", "Light" };
 
+    // CSS Widgets theme: "App" follows app theme, otherwise Dark/Light override for switchable widgets (null = App)
+    public IReadOnlyList<string> CssWidgetThemeOptions { get; } = new[] { "App", "Dark", "Light" };
+
     /// <summary>True when the app is registered to launch on Windows startup.</summary>
     private bool _launchOnStartup;
     public bool LaunchOnStartup
@@ -60,6 +63,13 @@ public sealed class SettingsViewModel : ViewModelBase
     {
         get => _defaultBoxThemeOption;
         set => SetField(ref _defaultBoxThemeOption, value);
+    }
+
+    private string _defaultCssWidgetsThemeOption = "App";
+    public string DefaultCSSWidgetsThemeOption
+    {
+        get => _defaultCssWidgetsThemeOption;
+        set => SetField(ref _defaultCssWidgetsThemeOption, value);
     }
 
     private double _defaultBoxTransparencyValue;
@@ -145,6 +155,12 @@ public sealed class SettingsViewModel : ViewModelBase
             "light" => "Light",
             _ => "App"
         };
+        _defaultCssWidgetsThemeOption = s.DefaultCSSWidgetsTheme?.Trim().ToLowerInvariant() switch
+        {
+            "dark" => "Dark",
+            "light" => "Light",
+            _ => "App"
+        };
 
         _defaultBoxTransparencyValue = s.DefaultBoxTransparencyValue;
         _defaultBoxBackColor = s.DefaultBoxBackColor;
@@ -183,6 +199,12 @@ public sealed class SettingsViewModel : ViewModelBase
         if (name == nameof(DefaultBoxThemeOption))
         {
             DefaultBoxThemeOption = "App";
+            return;
+        }
+
+        if (name == nameof(DefaultCSSWidgetsThemeOption))
+        {
+            DefaultCSSWidgetsThemeOption = "App";
             return;
         }
 
@@ -238,6 +260,7 @@ public sealed class SettingsViewModel : ViewModelBase
     {
         SelectedTheme = OptionToStored(_selectedThemeOption),
         DefaultBoxTheme = OptionToStored(_defaultBoxThemeOption),
+        DefaultCSSWidgetsTheme = OptionToStored(_defaultCssWidgetsThemeOption),
         DefaultBoxTransparencyValue = _defaultBoxTransparencyValue,
         DefaultBoxBackColor = _defaultBoxBackColor,
         DefaultBoxForeColor = _defaultBoxForeColor,
@@ -254,6 +277,7 @@ public sealed class SettingsViewModel : ViewModelBase
         var s = _settingsService.UserSettings;
         s.SelectedTheme = OptionToStored(_selectedThemeOption);
         s.DefaultBoxTheme = OptionToStored(_defaultBoxThemeOption);
+        s.DefaultCSSWidgetsTheme = OptionToStored(_defaultCssWidgetsThemeOption);
         s.DefaultBoxTransparencyValue = _defaultBoxTransparencyValue;
         s.DefaultBoxBackColor = _defaultBoxBackColor;
         s.DefaultBoxForeColor = _defaultBoxForeColor;
@@ -266,6 +290,29 @@ public sealed class SettingsViewModel : ViewModelBase
         _settingsService.Save();
         App.ApplyTheme(s.SelectedTheme);
         App.ApplyBoxAppearance();
+        // Refresh all CSS widgets that follow the global theme (CanSwitchTheme=null) or app theme
+        try
+        {
+            foreach (var win in System.Windows.Application.Current.Windows.OfType<Views.Containers.CssWidgetWindow>())
+            {
+                try
+                {
+                    var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (field?.GetValue(win) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.RefreshTheme();
+                }
+                catch { }
+            }
+            foreach (var win in System.Windows.Application.Current.Windows.OfType<Views.WidgetDataWindow>())
+            {
+                try
+                {
+                    var field = typeof(Views.WidgetDataWindow).GetField("_previewControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (field?.GetValue(win) is Controls.ContainersControls.CssWidgetControl ctrl2) ctrl2.RefreshTheme();
+                }
+                catch { }
+            }
+        }
+        catch { }
         // Start/suspend the live desktop icon-size watcher to match the new setting.
         App.SyncDesktopIconSizeWatcher();
     }
