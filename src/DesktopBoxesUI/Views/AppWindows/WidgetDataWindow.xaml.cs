@@ -2,12 +2,12 @@ using DesktopBoxesUI.Controls.ContainersControls;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Views.Containers;
-using DesktopBoxesUI.WPFServices;
 using Microsoft.Extensions.DependencyInjection;
 using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Wpf.Ui.Controls;
+using WPFShared.Interfaces;
 
 namespace DesktopBoxesUI.Views;
 

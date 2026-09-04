@@ -1,0 +1,39 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<UseWPF>true</UseWPF>
+		<LangVersion>latest</LangVersion>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	</PropertyGroup>
+
+	<ItemGroup>
+	  <AdditionalFiles Include="Win32APIs\NativeMethods.txt" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Helpers\" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Windows.CsWin32" Version="0.3.321">
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+			<PrivateAssets>all</PrivateAssets>
+		</PackageReference>
+		<PackageReference Include="WPF-UI" Version="4.3.0" />
+
+		<PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4129.50" />
+		<PackageReference Include="MinVer" Version="7.0.0">
+			<PrivateAssets>all</PrivateAssets>
+			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- CsWin32 auto-discovers NativeMethods.txt only at the project root, so register our
+         isolated copy explicitly. All raw Win32 declarations live in this one file. -->
+		<AdditionalFiles Include="Win32APIs\NativeMethods.txt" />
+	</ItemGroup>
+</Project>

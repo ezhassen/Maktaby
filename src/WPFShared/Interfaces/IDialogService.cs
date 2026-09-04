@@ -1,7 +1,7 @@
 using System.Windows;
 using Wpf.Ui.Controls;
 
-namespace DesktopBoxesUI.WPFServices;
+namespace WPFShared.Interfaces;
 
 /// <summary>
 /// A window that can host WPF-UI content dialogs. The <see cref="IDialogService"/> renders dialogs

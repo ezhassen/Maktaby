@@ -18,6 +18,8 @@ using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Interop;
 using Wpf.Ui.Appearance;
+using WPFShared.Interfaces;
+using WPFShared.Services;
 
 namespace DesktopBoxesUI;
 

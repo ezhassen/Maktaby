@@ -1,5 +1,5 @@
 <ui:FluentWindow
-    x:Class="DesktopBoxesUI.Controls.DialogMessageBox"
+    x:Class="WPFShared.Controls.DialogMessageBox"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"

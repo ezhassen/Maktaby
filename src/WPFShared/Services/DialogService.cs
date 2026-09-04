@@ -1,8 +1,9 @@
-using DesktopBoxesUI.Controls;
 using System.Windows;
 using Wpf.Ui.Controls;
+using WPFShared.Controls;
+using WPFShared.Interfaces;
 
-namespace DesktopBoxesUI.WPFServices;
+namespace WPFShared.Services;
 
 /// <summary>
 /// Default <see cref="IDialogService"/> implementation that shows a standalone
@@ -78,7 +79,7 @@ public sealed class DialogService : IDialogService
         }
         catch (Exception ex)
         {
-            ex.Log_Error();
+            //ex.Log_Error();
             System.Windows.MessageBox.Show(ex.ToString(), "DialogService error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
             return Task.FromResult(ContentDialogResult.None);
         }

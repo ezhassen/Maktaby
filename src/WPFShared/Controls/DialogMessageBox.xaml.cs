@@ -1,12 +1,12 @@
-using DesktopBoxesUI.Win32.NativeMethods;
-using DesktopBoxesUI.WPFServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using Wpf.Ui.Controls;
+using WPFShared.Interfaces;
+using WPFShared.Win32APIs;
 
-namespace DesktopBoxesUI.Controls;
+namespace WPFShared.Controls;
 
 /// <summary>
 /// Custom modal message box that replaces WPF-UI's in-window <see cref="ContentDialog"/>.

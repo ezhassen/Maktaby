@@ -1,13 +1,12 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
-using DesktopBoxesUI.WPFServices;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using Wpf.Ui.Controls;
+using WPFShared.Interfaces;
 
 namespace DesktopBoxesUI.Views;
 

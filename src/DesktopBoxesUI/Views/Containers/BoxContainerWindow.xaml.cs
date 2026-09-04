@@ -5,7 +5,6 @@ using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.HelpersViews;
 using DesktopBoxesUI.Win32.NativeMethods;
-using DesktopBoxesUI.WPFServices;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Versioning;
 using System.Windows;
@@ -15,6 +14,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using WPFShared.Interfaces;
 
 namespace DesktopBoxesUI.Views.Containers;
 

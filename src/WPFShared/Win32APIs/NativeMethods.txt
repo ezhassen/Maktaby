@@ -1,0 +1,13 @@
+GetDesktopWindow
+GetShellWindow
+MonitorFromWindow
+MonitorFromRect
+GetMonitorInfo
+GetWindowRect
+SetWindowPos
+GetDpiForSystem
+GetDpiForWindow
+DestroyIcon
+FindWindowEx
+ShowWindow
+IsWindow
