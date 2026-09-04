@@ -246,6 +246,13 @@
                                             Stroke="{Binding DefaultBoxBackColor, Converter={StaticResource HexValidToBrush}}"
                                             StrokeThickness="1" />
                                         <ui:Button
+                                            Click="ColorPicker_Click"
+                                            Style="{StaticResource ResetButton}"
+                                            Tag="DefaultBoxBackColor"
+                                            ToolTip="Pick color">
+                                            <ui:SymbolIcon Symbol="Color24" />
+                                        </ui:Button>
+                                        <ui:Button
                                             Command="{Binding ResetToDefaultCommand}"
                                             CommandParameter="DefaultBoxBackColor"
                                             Style="{StaticResource ResetButton}">
@@ -265,6 +272,13 @@
                                             Fill="{Binding DefaultBoxForeColor, Converter={StaticResource HexToBrush}}"
                                             Stroke="{Binding DefaultBoxForeColor, Converter={StaticResource HexValidToBrush}}"
                                             StrokeThickness="1" />
+                                        <ui:Button
+                                            Click="ColorPicker_Click"
+                                            Style="{StaticResource ResetButton}"
+                                            Tag="DefaultBoxForeColor"
+                                            ToolTip="Pick color">
+                                            <ui:SymbolIcon Symbol="Color24" />
+                                        </ui:Button>
                                         <ui:Button
                                             Command="{Binding ResetToDefaultCommand}"
                                             CommandParameter="DefaultBoxForeColor"
@@ -286,6 +300,13 @@
                                             Stroke="{Binding DefaultBoxBorderColor, Converter={StaticResource HexValidToBrush}}"
                                             StrokeThickness="1" />
                                         <ui:Button
+                                            Click="ColorPicker_Click"
+                                            Style="{StaticResource ResetButton}"
+                                            Tag="DefaultBoxBorderColor"
+                                            ToolTip="Pick color">
+                                            <ui:SymbolIcon Symbol="Color24" />
+                                        </ui:Button>
+                                        <ui:Button
                                             Command="{Binding ResetToDefaultCommand}"
                                             CommandParameter="DefaultBoxBorderColor"
                                             Style="{StaticResource ResetButton}">
@@ -306,6 +327,13 @@
                                             Stroke="{Binding DefaultBoxTitleBarBackColor, Converter={StaticResource HexValidToBrush}}"
                                             StrokeThickness="1" />
                                         <ui:Button
+                                            Click="ColorPicker_Click"
+                                            Style="{StaticResource ResetButton}"
+                                            Tag="DefaultBoxTitleBarBackColor"
+                                            ToolTip="Pick color">
+                                            <ui:SymbolIcon Symbol="Color24" />
+                                        </ui:Button>
+                                        <ui:Button
                                             Command="{Binding ResetToDefaultCommand}"
                                             CommandParameter="DefaultBoxTitleBarBackColor"
                                             Style="{StaticResource ResetButton}">
@@ -325,6 +353,13 @@
                                             Fill="{Binding DefaultBoxTitleBarForeColor, Converter={StaticResource HexToBrush}}"
                                             Stroke="{Binding DefaultBoxTitleBarForeColor, Converter={StaticResource HexValidToBrush}}"
                                             StrokeThickness="1" />
+                                        <ui:Button
+                                            Click="ColorPicker_Click"
+                                            Style="{StaticResource ResetButton}"
+                                            Tag="DefaultBoxTitleBarForeColor"
+                                            ToolTip="Pick color">
+                                            <ui:SymbolIcon Symbol="Color24" />
+                                        </ui:Button>
                                         <ui:Button
                                             Command="{Binding ResetToDefaultCommand}"
                                             CommandParameter="DefaultBoxTitleBarForeColor"

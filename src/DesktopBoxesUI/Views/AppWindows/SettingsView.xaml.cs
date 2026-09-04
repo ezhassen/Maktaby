@@ -413,6 +413,36 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         return sp;
     }
 
+    private void ColorPicker_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement fe || fe.Tag is not string propName) return;
+        if (DataContext is not SettingsViewModel vm) return;
+        var prop = typeof(SettingsViewModel).GetProperty(propName);
+        if (prop == null || !prop.CanWrite) return;
+        var currentHex = prop.GetValue(vm) as string;
+        var initial = TryParseHex(currentHex) ?? Colors.Transparent;
+
+        var dialog = new Views.Dialogs.ColorPickerDialog(this, initial);
+        var result = dialog.ShowDialog();
+        if (result == true)
+        {
+            var c = dialog.SelectedColor;
+            string hex = c.A == 255 ? $"#{c.R:X2}{c.G:X2}{c.B:X2}" : $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}";
+            prop.SetValue(vm, hex);
+        }
+    }
+
+    private static Color? TryParseHex(string? hex)
+    {
+        if (string.IsNullOrWhiteSpace(hex)) return null;
+        try
+        {
+            var c = (Color)ColorConverter.ConvertFromString(hex.Trim());
+            return c;
+        }
+        catch { return null; }
+    }
+
     private void Save_Click(object sender, RoutedEventArgs e)
     {
         if (DataContext is SettingsViewModel vm)
