@@ -61,6 +61,7 @@ public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
             HeightBox.Text = (info.Manifest.Height ?? 220).ToString();
             ResizableBox.IsChecked = info.Manifest.IsResizable;
             NetworkBox.IsChecked = info.Manifest.IsNetworkAllowed;
+            ThemeSwitchBox.IsChecked = info.Manifest.CanSwitchTheme;
             HtmlBox.Text = File.Exists(info.HtmlPath) ? File.ReadAllText(info.HtmlPath) : "";
             CssBox.Text = File.Exists(info.CssPath) ? File.ReadAllText(info.CssPath) : "";
             JsBox.Text = File.Exists(info.JsPath) ? File.ReadAllText(info.JsPath) : "";
@@ -77,12 +78,15 @@ public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
             HeightBox.Text = "220";
             ResizableBox.IsChecked = true;
             NetworkBox.IsChecked = false;
+            ThemeSwitchBox.IsChecked = null;
             HtmlBox.Text = "<div style=\"display:flex;align-items:center;justify-content:center;height:100%;font-family:sans-serif;font-size:18px;\">Hello Widget</div>";
             CssBox.Text = "body { margin:0; background:transparent; }";
             JsBox.Text = "// console.log('loaded');";
         }
         RefreshPreview();
     }
+
+    private void ThemeSwitchBox_Changed(object sender, RoutedEventArgs e) => _debounce.Start();
 
     private void RefreshPreview()
     {
@@ -109,7 +113,8 @@ public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
             Width = w > 0 ? w : 300,
             Height = h > 0 ? h : 220,
             Resizable = ResizableBox.IsChecked ?? true,
-            AllowNetwork = NetworkBox.IsChecked ?? false
+            AllowNetwork = NetworkBox.IsChecked ?? false,
+            CanSwitchTheme = ThemeSwitchBox.IsChecked
         };
     }
 

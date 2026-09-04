@@ -83,6 +83,12 @@ namespace CSSWidgetsCreator
             }
         }
 
+        private void ThemeSwitchBox_Changed(object sender, RoutedEventArgs e)
+        {
+            UpdateManifestBox();
+            _debounce.Start();
+        }
+
         private void SetDefaultContent()
         {
             NameBox.Text = "MyWidget";
@@ -93,6 +99,7 @@ namespace CSSWidgetsCreator
             HeightBox.Text = "220";
             ResizableBox.IsChecked = true;
             NetworkBox.IsChecked = false;
+            ThemeSwitchBox.IsChecked = null;
             HtmlBox.Text = "<div style=\"display:flex;align-items:center;justify-content:center;height:100%;font-family:sans-serif;font-size:18px;background:#f0f0f0;border-radius:8px;\">Hello Widget</div>";
             CssBox.Text = "body { margin:0; background:transparent; }\n* { box-sizing:border-box; }";
             JsBox.Text = "// console.log('loaded');\ndocument.body.addEventListener('click', () => console.log('clicked'));";
@@ -113,7 +120,8 @@ namespace CSSWidgetsCreator
                 Width = w > 0 ? w : 300,
                 Height = h > 0 ? h : 220,
                 Resizable = ResizableBox.IsChecked ?? true,
-                AllowNetwork = NetworkBox.IsChecked ?? false
+                AllowNetwork = NetworkBox.IsChecked ?? false,
+                CanSwitchTheme = ThemeSwitchBox.IsChecked
             };
         }
 
@@ -287,6 +295,7 @@ namespace CSSWidgetsCreator
                     HeightBox.Text = (manifest.Height ?? 220).ToString();
                     ResizableBox.IsChecked = manifest.IsResizable;
                     NetworkBox.IsChecked = manifest.IsNetworkAllowed;
+                    ThemeSwitchBox.IsChecked = manifest.CanSwitchTheme;
                     HtmlBox.Text = html;
                     CssBox.Text = css;
                     JsBox.Text = js;

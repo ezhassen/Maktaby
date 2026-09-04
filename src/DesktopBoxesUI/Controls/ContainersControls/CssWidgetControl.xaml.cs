@@ -8,6 +8,7 @@ using System.Drawing;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using Wpf.Ui.Appearance;
 
 namespace DesktopBoxesUI.Controls.ContainersControls;
 
@@ -37,7 +38,12 @@ public partial class CssWidgetControl : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (_isInitialized) return;
+        if (_isInitialized)
+        {
+            SubscribeTheme();
+            return;
+        }
+        SubscribeTheme();
         await EnsureWebViewAsync();
         if (!string.IsNullOrEmpty(_pendingHtml))
         {
@@ -48,17 +54,53 @@ public partial class CssWidgetControl : UserControl
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        UnsubscribeTheme();
         // Keep WebView alive for performance; disposal is handled by parent window's OnClosed
         // to avoid CoreWebView2Controller.IsVisible race during shutdown
     }
 
+    private void SubscribeTheme()
+    {
+        try { ApplicationThemeManager.Changed += OnAppThemeChanged; } catch { }
+    }
+
+    private void UnsubscribeTheme()
+    {
+        try { ApplicationThemeManager.Changed -= OnAppThemeChanged; } catch { }
+    }
+
+    private void OnAppThemeChanged(ApplicationTheme current, System.Windows.Media.Color systemAccent)
+    {
+        if (_currentManifest?.IsThemeSwitchable != true) return;
+        try { Dispatcher.BeginInvoke(() => ApplyThemeToWebView()); } catch { }
+    }
+
+    private static string GetCurrentTheme()
+    {
+        var app = ApplicationThemeManager.GetAppTheme();
+        if (app == ApplicationTheme.Dark) return "dark";
+        if (app == ApplicationTheme.Light) return "light";
+        var sys = ApplicationThemeManager.GetSystemTheme();
+        return sys == SystemTheme.Dark ? "dark" : "light";
+    }
+
+    private void ApplyThemeToWebView()
+    {
+        if (_currentManifest?.IsThemeSwitchable != true) return;
+        if (WebView?.CoreWebView2 == null) return;
+        var theme = GetCurrentTheme();
+        try { WebView.CoreWebView2.ExecuteScriptAsync($"document.documentElement.setAttribute('data-theme','{theme}')"); } catch { }
+    }
+
     public void CleanupForShutdown()
     {
+        try { UnsubscribeTheme(); } catch { }
         try { _initTask = null; } catch { }
         try
         {
             if (WebView != null)
             {
+                try { WebView.NavigationCompleted -= OnWebViewNavigationCompleted; } catch { }
                 try { WebView.Visibility = Visibility.Collapsed; } catch { }
                 try
                 {
@@ -152,6 +194,7 @@ public partial class CssWidgetControl : UserControl
             //    this.PreviewMouseUp += (ss, ee) => { WidgetClicked?.Invoke(this, EventArgs.Empty); };
             //}
             WebView.CoreWebView2.WebMessageReceived += OnWebMessage;
+            WebView.NavigationCompleted += OnWebViewNavigationCompleted;
             const string domBridge = """(() => { let inside = false; function sendEnter() { if (!inside) { inside = true; try{chrome.webview.postMessage("enter");}catch(e){} } } function sendLeave() { if (inside) { inside = false; try{chrome.webview.postMessage("leave");}catch(e){} } } window.addEventListener("pointerenter", sendEnter); window.addEventListener("pointerleave", sendLeave); window.addEventListener("mouseenter", sendEnter); window.addEventListener("mouseleave", sendLeave); window.addEventListener("mousemove", () => { if (!inside) sendEnter(); }, { passive: true }); window.addEventListener("click", () => { try{chrome.webview.postMessage("click");}catch(e){} }); window.addEventListener("mousedown", (e) => { if (e.button !== 0) return; if (e.target.closest('button, a, input, select, textarea, [data-no-drag]')) return; try{chrome.webview.postMessage("mousedown");}catch(e){} }, { capture: true }); })();""";
             try
             {
@@ -195,6 +238,11 @@ public partial class CssWidgetControl : UserControl
         catch { }
     }
 
+    private void OnWebViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        ApplyThemeToWebView();
+    }
+
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
         if (_currentManifest?.IsNetworkAllowed == true) return;
@@ -222,6 +270,7 @@ public partial class CssWidgetControl : UserControl
         _currentManifest = info.Manifest;
         ApplyNetworkFilter(info.Manifest);
         var doc = _widgetService.BuildDocument(info);
+        if (_currentManifest.IsThemeSwitchable) doc = InjectTheme(doc);
         await EnsureAndNavigate(doc);
     }
 
@@ -253,7 +302,17 @@ public partial class CssWidgetControl : UserControl
         {
             doc = $"<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>{css}</style></head><body>{html}<script>{js}</script></body></html>";
         }
+        if (_currentManifest.IsThemeSwitchable) doc = InjectTheme(doc);
         await EnsureAndNavigate(doc);
+    }
+
+    private string InjectTheme(string html)
+    {
+        var theme = GetCurrentTheme();
+        if (html.Contains("data-theme", StringComparison.OrdinalIgnoreCase)) return html;
+        if (html.Contains("<html", StringComparison.OrdinalIgnoreCase))
+            return html.Replace("<html", $"<html data-theme=\"{theme}\"", StringComparison.OrdinalIgnoreCase);
+        return html;
     }
 
     private void ApplyNetworkFilter(CssWidgetManifest manifest)

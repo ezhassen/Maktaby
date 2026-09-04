@@ -7,5 +7,6 @@
   "Height": 240,
   "Resizable": true,
   "AllowNetwork": false,
+  "CanSwitchTheme": true,
   "Thumbnail": "thumbnail.png"
 }

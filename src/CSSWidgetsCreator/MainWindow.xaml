@@ -90,7 +90,10 @@
                             Width="110"
                             Margin="6,0,0,0"
                             SelectionChanged="ThemeSelector_SelectionChanged">
-                            <ComboBoxItem Content="System" Tag="System" IsSelected="True" />
+                            <ComboBoxItem
+                                Content="System"
+                                IsSelected="True"
+                                Tag="System" />
                             <ComboBoxItem Content="Light" Tag="Light" />
                             <ComboBoxItem Content="Dark" Tag="Dark" />
                         </ComboBox>
@@ -156,6 +159,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,4,0">
                             <TextBlock
@@ -196,6 +200,19 @@
                                 x:Name="NetworkBox"
                                 Content="Allow network"
                                 ToolTip="Allow fetch/XHR/WebSocket" />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="4"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Bottom">
+                            <CheckBox
+                                x:Name="ThemeSwitchBox"
+                                Checked="ThemeSwitchBox_Changed"
+                                Content="Can switch theme"
+                                Indeterminate="ThemeSwitchBox_Changed"
+                                IsThreeState="True"
+                                ToolTip="Widget adapts to Light/Dark app theme via data-theme attribute (indeterminate = inherited / null)"
+                                Unchecked="ThemeSwitchBox_Changed" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>
@@ -270,14 +287,14 @@
                             x:Name="ManifestBox"
                             AcceptsReturn="True"
                             AcceptsTab="True"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
                             FontFamily="Consolas"
                             FontSize="12"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                             HorizontalScrollBarVisibility="Auto"
                             IsReadOnly="True"
                             TextWrapping="NoWrap"
-                            VerticalScrollBarVisibility="Auto"
-                            Background="{DynamicResource ControlFillColorDefaultBrush}"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            VerticalScrollBarVisibility="Auto" />
                     </Grid>
                 </TabItem>
             </TabControl>
@@ -357,12 +374,12 @@
                                 x:Name="PreviewWidthSlider"
                                 Grid.Column="1"
                                 Margin="4,0"
+                                IsSnapToTickEnabled="True"
                                 Maximum="600"
                                 Minimum="150"
-                                Value="300"
+                                TickFrequency="10"
                                 ValueChanged="PreviewSizeSlider_ValueChanged"
-                                IsSnapToTickEnabled="True"
-                                TickFrequency="10" />
+                                Value="300" />
                             <TextBlock
                                 Grid.Column="2"
                                 VerticalAlignment="Center"
@@ -372,12 +389,12 @@
                                 x:Name="PreviewHeightSlider"
                                 Grid.Column="3"
                                 Margin="4,0"
+                                IsSnapToTickEnabled="True"
                                 Maximum="600"
                                 Minimum="150"
-                                Value="220"
+                                TickFrequency="10"
                                 ValueChanged="PreviewSizeSlider_ValueChanged"
-                                IsSnapToTickEnabled="True"
-                                TickFrequency="10" />
+                                Value="220" />
                             <ui:Button
                                 Grid.Column="4"
                                 Margin="4,0,0,0"
@@ -393,9 +410,9 @@
                     <ScrollViewer
                         Grid.Row="2"
                         Margin="8"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}"
                         HorizontalScrollBarVisibility="Auto"
-                        VerticalScrollBarVisibility="Auto"
-                        Background="{DynamicResource ControlFillColorDefaultBrush}">
+                        VerticalScrollBarVisibility="Auto">
                         <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Border
                                 x:Name="PreviewFrame"
@@ -422,10 +439,10 @@
                                             <ControlTemplate TargetType="Thumb">
                                                 <Grid Background="Transparent">
                                                     <Path
+                                                        Margin="2"
                                                         Data="M 12 0 L 12 12 L 0 12 Z M 8 12 L 12 12 L 12 8 Z"
                                                         Fill="#888"
-                                                        Stretch="Uniform"
-                                                        Margin="2" />
+                                                        Stretch="Uniform" />
                                                 </Grid>
                                             </ControlTemplate>
                                         </Thumb.Template>
@@ -443,8 +460,8 @@
                         <TextBlock
                             FontSize="11"
                             Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                            TextWrapping="Wrap"
-                            Text="Drag the corner thumb or use sliders to test how the widget adapts to different container sizes. Changes auto-refresh." />
+                            Text="Drag the corner thumb or use sliders to test how the widget adapts to different container sizes. Changes auto-refresh."
+                            TextWrapping="Wrap" />
                     </Border>
                 </Grid>
             </Border>

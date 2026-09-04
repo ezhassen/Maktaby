@@ -74,6 +74,7 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Grid.Column="0" Margin="0,0,4,0">
                             <TextBlock
@@ -112,6 +113,19 @@
                                 x:Name="NetworkBox"
                                 Content="Allow network"
                                 ToolTip="Allow fetch/XHR/WebSocket" />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="4"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Bottom">
+                            <CheckBox
+                                x:Name="ThemeSwitchBox"
+                                Checked="ThemeSwitchBox_Changed"
+                                Content="Can switch theme"
+                                Indeterminate="ThemeSwitchBox_Changed"
+                                IsThreeState="True"
+                                ToolTip="Widget adapts to Light/Dark app theme via data-theme (indeterminate = inherited / null)"
+                                Unchecked="ThemeSwitchBox_Changed" />
                         </StackPanel>
                     </Grid>
                 </StackPanel>

@@ -23,6 +23,14 @@ public sealed class CssWidgetManifest
     /// <summary>Thumbnail file relative to widget folder (default thumbnail.png).</summary>
     public string? Thumbnail { get; set; }
 
+    /// <summary>
+    /// Sets if the widget can switch theme light/dark
+    /// </summary>
+    public bool? CanSwitchTheme { get; set; }
+
+    [JsonIgnore]
+    public bool IsThemeSwitchable => CanSwitchTheme == true;
+
     [JsonIgnore]
     public bool IsResizable => Resizable ?? true;
 
