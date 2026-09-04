@@ -1,13 +1,475 @@
-<Window
+<ui:FluentWindow
     x:Class="CSSWidgetsCreator.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:WPFShared.Controls;assembly=WPFShared"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="clr-namespace:CSSWidgetsCreator"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    Title="MainWindow"
-    Width="800"
-    Height="450"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    Title="CSS Widgets Creator"
+    Width="1200"
+    Height="750"
+    MinWidth="1000"
+    MinHeight="600"
+    Background="{DynamicResource ApplicationBackgroundBrush}"
+    ExtendsContentIntoTitleBar="True"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
+    WindowStartupLocation="CenterScreen"
     mc:Ignorable="d">
-    <Grid />
-</Window>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ui:TitleBar
+            Title="CSS Widgets Creator"
+            Grid.Row="0"
+            ShowMaximize="True"
+            ShowMinimize="True" />
+
+        <!--  Toolbar: Load / Save  -->
+        <Border
+            Grid.Row="1"
+            Padding="12,8"
+            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,0,1">
+            <Grid>
+                <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                    <ui:Button
+                        Appearance="Secondary"
+                        Click="New_Click"
+                        Content="New"
+                        Icon="{ui:SymbolIcon DocumentAdd24}" />
+                    <ui:Button
+                        Margin="8,0,0,0"
+                        Appearance="Secondary"
+                        Click="LoadFromFolder_Click"
+                        Content="Load From Folder"
+                        Icon="{ui:SymbolIcon FolderOpen24}" />
+                    <ui:Button
+                        Margin="8,0,0,0"
+                        Appearance="Secondary"
+                        Click="SaveToFolder_Click"
+                        Content="Save To Folder"
+                        Icon="{ui:SymbolIcon Save24}" />
+                    <Separator Margin="12,0" Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
+                    <TextBlock
+                        x:Name="CurrentFolderLabel"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="No folder loaded"
+                        TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal">
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        Text="WPF-UI • WebView2" />
+                    <StackPanel
+                        Margin="12,0,0,0"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <TextBlock
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="Theme:" />
+                        <ComboBox
+                            x:Name="ThemeSelector"
+                            Width="110"
+                            Margin="6,0,0,0"
+                            SelectionChanged="ThemeSelector_SelectionChanged">
+                            <ComboBoxItem Content="System" Tag="System" IsSelected="True" />
+                            <ComboBoxItem Content="Light" Tag="Light" />
+                            <ComboBoxItem Content="Dark" Tag="Dark" />
+                        </ComboBox>
+                    </StackPanel>
+                    <ui:Button
+                        Margin="8,0,0,0"
+                        Appearance="Transparent"
+                        Click="PreviewRefresh_Click"
+                        Content="Refresh Preview"
+                        Icon="{ui:SymbolIcon ArrowClockwise24}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!--  Manifest fields  -->
+        <Border
+            Grid.Row="2"
+            Margin="12,8,12,8"
+            Padding="12"
+            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Margin="0,0,8,0">
+                    <TextBlock
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="NAME (FOLDER)" />
+                    <ui:TextBox
+                        x:Name="NameBox"
+                        Margin="0,4,0,8"
+                        PlaceholderText="MyWidget" />
+                    <TextBlock
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="AUTHOR" />
+                    <ui:TextBox
+                        x:Name="AuthorBox"
+                        Margin="0,4,0,0"
+                        PlaceholderText="Author" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Margin="8,0">
+                    <TextBlock
+                        FontSize="11"
+                        FontWeight="SemiBold"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="DESCRIPTION" />
+                    <ui:TextBox
+                        x:Name="DescBox"
+                        Margin="0,4,0,8"
+                        PlaceholderText="Description" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="WIDTH" />
+                            <ui:TextBox
+                                x:Name="WidthBox"
+                                Margin="0,4,0,0"
+                                PlaceholderText="300"
+                                TextChanged="ManifestField_TextChanged" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="4,0">
+                            <TextBlock
+                                FontSize="11"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="HEIGHT" />
+                            <ui:TextBox
+                                x:Name="HeightBox"
+                                Margin="0,4,0,0"
+                                PlaceholderText="220"
+                                TextChanged="ManifestField_TextChanged" />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Bottom">
+                            <CheckBox
+                                x:Name="ResizableBox"
+                                Content="Resizable"
+                                IsChecked="True" />
+                        </StackPanel>
+                        <StackPanel
+                            Grid.Column="3"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Bottom">
+                            <CheckBox
+                                x:Name="NetworkBox"
+                                Content="Allow network"
+                                ToolTip="Allow fetch/XHR/WebSocket" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+                <StackPanel
+                    Grid.Column="2"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Bottom">
+                    <TextBlock
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="VERSION" />
+                    <ui:TextBox
+                        x:Name="VersionBox"
+                        Width="100"
+                        Margin="0,4,0,0"
+                        PlaceholderText="1.0.0" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!--  Editors + Preview  -->
+        <Grid Grid.Row="3" Margin="12,0,12,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="420" />
+            </Grid.ColumnDefinitions>
+
+            <TabControl Grid.Column="0">
+                <TabItem Header="HTML (index.html)">
+                    <Grid>
+                        <TextBox
+                            x:Name="HtmlBox"
+                            AcceptsReturn="True"
+                            AcceptsTab="True"
+                            FontFamily="Consolas"
+                            FontSize="12"
+                            HorizontalScrollBarVisibility="Auto"
+                            TextWrapping="NoWrap"
+                            VerticalScrollBarVisibility="Auto" />
+                    </Grid>
+                </TabItem>
+                <TabItem Header="CSS (style.css)">
+                    <Grid>
+                        <TextBox
+                            x:Name="CssBox"
+                            AcceptsReturn="True"
+                            AcceptsTab="True"
+                            FontFamily="Consolas"
+                            FontSize="12"
+                            HorizontalScrollBarVisibility="Auto"
+                            TextWrapping="NoWrap"
+                            VerticalScrollBarVisibility="Auto" />
+                    </Grid>
+                </TabItem>
+                <TabItem Header="JavaScript (script.js)">
+                    <Grid>
+                        <TextBox
+                            x:Name="JsBox"
+                            AcceptsReturn="True"
+                            AcceptsTab="True"
+                            FontFamily="Consolas"
+                            FontSize="12"
+                            HorizontalScrollBarVisibility="Auto"
+                            TextWrapping="NoWrap"
+                            VerticalScrollBarVisibility="Auto" />
+                    </Grid>
+                </TabItem>
+                <TabItem Header="widget.json">
+                    <Grid>
+                        <TextBox
+                            x:Name="ManifestBox"
+                            AcceptsReturn="True"
+                            AcceptsTab="True"
+                            FontFamily="Consolas"
+                            FontSize="12"
+                            HorizontalScrollBarVisibility="Auto"
+                            IsReadOnly="True"
+                            TextWrapping="NoWrap"
+                            VerticalScrollBarVisibility="Auto"
+                            Background="{DynamicResource ControlFillColorDefaultBrush}"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    </Grid>
+                </TabItem>
+            </TabControl>
+
+            <GridSplitter
+                Grid.Column="1"
+                Width="8"
+                HorizontalAlignment="Center"
+                Background="Transparent" />
+
+            <Border
+                Grid.Column="2"
+                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!--  Preview header  -->
+                    <Border
+                        Grid.Row="0"
+                        Padding="8"
+                        Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                        CornerRadius="8,8,0,0">
+                        <Grid>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    FontWeight="SemiBold"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                    Text="PREVIEW" />
+                                <TextBlock
+                                    x:Name="PreviewSizeLabel"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                    Text="300 × 220" />
+                            </StackPanel>
+                            <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                                <ui:Button
+                                    Appearance="Transparent"
+                                    Click="PreviewRefresh_Click"
+                                    Content="Refresh"
+                                    Icon="{ui:SymbolIcon ArrowClockwise24}" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!--  Preview sizing controls  -->
+                    <Border
+                        Grid.Row="1"
+                        Padding="8,6"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Grid.Column="0"
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Text="W:" />
+                            <Slider
+                                x:Name="PreviewWidthSlider"
+                                Grid.Column="1"
+                                Margin="4,0"
+                                Maximum="600"
+                                Minimum="150"
+                                Value="300"
+                                ValueChanged="PreviewSizeSlider_ValueChanged"
+                                IsSnapToTickEnabled="True"
+                                TickFrequency="10" />
+                            <TextBlock
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Text="H:" />
+                            <Slider
+                                x:Name="PreviewHeightSlider"
+                                Grid.Column="3"
+                                Margin="4,0"
+                                Maximum="600"
+                                Minimum="150"
+                                Value="220"
+                                ValueChanged="PreviewSizeSlider_ValueChanged"
+                                IsSnapToTickEnabled="True"
+                                TickFrequency="10" />
+                            <ui:Button
+                                Grid.Column="4"
+                                Margin="4,0,0,0"
+                                Padding="6,2"
+                                Appearance="Secondary"
+                                Click="ResetPreviewSize_Click"
+                                Content="Reset"
+                                FontSize="11" />
+                        </Grid>
+                    </Border>
+
+                    <!--  Live preview host - resizable via container size to test adaptability  -->
+                    <ScrollViewer
+                        Grid.Row="2"
+                        Margin="8"
+                        HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Auto"
+                        Background="{DynamicResource ControlFillColorDefaultBrush}">
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Border
+                                x:Name="PreviewFrame"
+                                Width="300"
+                                Height="220"
+                                Background="White"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6">
+                                <Grid>
+                                    <controls:CssWidgetControl x:Name="PreviewControl" />
+                                    <!--  Drag thumb for live resizing  -->
+                                    <Thumb
+                                        x:Name="ResizeThumb"
+                                        Width="16"
+                                        Height="16"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Bottom"
+                                        Background="Transparent"
+                                        Cursor="SizeNWSE"
+                                        DragDelta="ResizeThumb_DragDelta"
+                                        Opacity="0.8">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Grid Background="Transparent">
+                                                    <Path
+                                                        Data="M 12 0 L 12 12 L 0 12 Z M 8 12 L 12 12 L 12 8 Z"
+                                                        Fill="#888"
+                                                        Stretch="Uniform"
+                                                        Margin="2" />
+                                                </Grid>
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </ScrollViewer>
+
+                    <Border
+                        Grid.Row="3"
+                        Padding="8,6"
+                        Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                        CornerRadius="0,0,8,8">
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                            TextWrapping="Wrap"
+                            Text="Drag the corner thumb or use sliders to test how the widget adapts to different container sizes. Changes auto-refresh." />
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border
+            Grid.Row="4"
+            Padding="12,8"
+            Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
+            <Grid>
+                <TextBlock
+                    VerticalAlignment="Center"
+                    FontSize="11"
+                    Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                    Text="Creates UserWidgets in %LocalAppData%\DesktopBoxes\UserWidgets or any folder via Save To Folder" />
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                    <ui:Button
+                        Appearance="Secondary"
+                        Click="OpenFolderInExplorer_Click"
+                        Content="Open Folder"
+                        Icon="{ui:SymbolIcon FolderOpen24}" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</ui:FluentWindow>
