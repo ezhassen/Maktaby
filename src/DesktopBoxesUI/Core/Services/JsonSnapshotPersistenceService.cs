@@ -18,11 +18,21 @@ public sealed class JsonSnapshotPersistenceService : IPersistenceService
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
+    // Single gate for all writers (sync + async) – prevents torn writes / File.Create truncation races
+    // when SaveAsync fire-and-forgets overlap (DesktopManager.SaveAsyncFireAndForget).
+    // Static so concurrent service instances (tests) still serialize.
+    private static readonly SemaphoreSlim _writeGate = new(1, 1);
+
     public string SnapshotFilePath => FilePath;
 
     public void DeleteSnapshotFile()
     {
-        if (File.Exists(FilePath)) File.Delete(FilePath);
+        _writeGate.Wait();
+        try
+        {
+            if (File.Exists(FilePath)) File.Delete(FilePath);
+        }
+        finally { _writeGate.Release(); }
     }
 
     public async Task<DesktopSnapshot?> LoadSnapshotAsync(CancellationToken cancellationToken = default)
@@ -34,7 +44,7 @@ public sealed class JsonSnapshotPersistenceService : IPersistenceService
 
         try
         {
-            await using var stream = File.OpenRead(FilePath);
+            await using var stream = new FileStream(FilePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
             return await JsonSerializer.DeserializeAsync<DesktopSnapshot>(stream, Options, cancellationToken).ConfigureAwait(false);
         }
         catch
@@ -42,17 +52,51 @@ public sealed class JsonSnapshotPersistenceService : IPersistenceService
             return null;
         }
     }
+
     public void SaveSnapshot(DesktopSnapshot snapshot)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        using var stream = File.Create(FilePath);
-        JsonSerializer.Serialize(stream, snapshot, Options);
+        _writeGate.Wait();
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            var tmpPath = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using var stream = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough);
+                JsonSerializer.Serialize(stream, snapshot, Options);
+                stream.Flush(true);
+            }
+            catch
+            {
+                try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+                throw;
+            }
+            File.Move(tmpPath, FilePath, overwrite: true);
+        }
+        finally { _writeGate.Release(); }
     }
+
     public async Task SaveSnapshotAsync(DesktopSnapshot snapshot, CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        await using var stream = File.Create(FilePath);
-        await JsonSerializer.SerializeAsync(stream, snapshot, Options, cancellationToken).ConfigureAwait(false);
+        await _writeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
+            var tmpPath = FilePath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                await using var stream = new FileStream(tmpPath, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.WriteThrough);
+                await JsonSerializer.SerializeAsync(stream, snapshot, Options, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+            }
+            catch
+            {
+                try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+                throw;
+            }
+            File.Move(tmpPath, FilePath, overwrite: true);
+        }
+        finally { _writeGate.Release(); }
     }
 
     public async Task<DesktopSnapshot?> LoadFromFileAsync(string path, CancellationToken cancellationToken = default)
@@ -64,7 +108,7 @@ public sealed class JsonSnapshotPersistenceService : IPersistenceService
 
         try
         {
-            await using var stream = File.OpenRead(path);
+            await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
             return await JsonSerializer.DeserializeAsync<DesktopSnapshot>(stream, Options, cancellationToken).ConfigureAwait(false);
         }
         catch
