@@ -59,7 +59,7 @@
                         Appearance="Transparent"
                         Click="ToggleLocked_Click"
                         Icon="{StaticResource ItemIcon_Locked}"
-                        ToolTip="Toggle Locked" />
+                        ToolTip="Toggle Locked state (Cannot Move or Resize the Window)" />
 
                     <ui:Button
                         x:Name="MenuButton"

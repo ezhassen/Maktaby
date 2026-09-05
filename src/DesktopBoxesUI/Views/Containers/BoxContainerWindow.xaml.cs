@@ -149,11 +149,22 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         Loaded += OnLoaded;
         Closed += OnClosed;
         BoxMenu.Opened += BoxMenu_Opened;
+        _vm.PropertyChanged += OnContainerPropertyChanged;
+    }
+
+    private void OnContainerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ContainerViewModel.IsLocked))
+        {
+            UpdateLockVisuals();
+            ApplyRoll();
+        }
     }
 
     private void BoxMenu_Opened(object sender, RoutedEventArgs e)
     {
         SyncIconSizeChecks();
+        SyncLockVisuals();
         //
         MenuSetRollDirAuto.IsChecked = _vm.RollDirection is null;
         MenuSetRollDirTop.IsChecked = _vm.RollDirection == RollDirection.Top;
@@ -202,6 +213,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         // guard existed) so the layout loads correctly.
         ClampBoundsToWorkArea();
         ApplyRoll();
+        UpdateLockVisuals();
         _drag.Attach();
     }
 
@@ -221,6 +233,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         RefreshRemoveTabMenu();
         MenuRollDir.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         RollButton.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
+        LockButton.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         BoxContent.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         Placeholder.Visibility = isBox ? Visibility.Collapsed : Visibility.Visible;
         UpdateChrome();
@@ -253,6 +266,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         Visibility headerButtonsVisibility = show ? Visibility.Visible : Visibility.Collapsed;
         MenuButton.Visibility = headerButtonsVisibility;
         RollButton.Visibility = headerButtonsVisibility;
+        LockButton.Visibility = headerButtonsVisibility;
 
         // The tab strip is always visible when there is more than one tab; the header buttons and
         // scrollbar stay hidden until the container is hovered or focused. While rolled it is hidden.
@@ -394,6 +408,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     private void OnClosed(object? sender, EventArgs e)
     {
         _mouseMonitor.MouseButtonDown -= OnGlobalMouseDown;
+        _vm.PropertyChanged -= OnContainerPropertyChanged;
         _drag.Detach();
         if (_watchedBox != null) { _watchedBox.StopWatching(); _watchedBox = null; }
         if (_vm.BoxContainerVm != null)
@@ -441,6 +456,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         TitleText.Foreground = palette.HeaderFore;
         MenuButton.Foreground = palette.HeaderFore;
         RollButton.Foreground = palette.HeaderFore;
+        LockButton.Foreground = palette.HeaderFore;
         //TabStrip.Background = palette.TabBack;
         TabStrip.BorderBrush = palette.HeaderBorder;
 
@@ -675,9 +691,37 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void RollButton_Click(object sender, RoutedEventArgs e)
     {
+        // Lock only blocks window move/resize — rolling is still allowed.
         _vm.IsRolled = !_vm.IsRolled;
         ApplyRoll();
         _save();
+    }
+
+    private void LockButton_Click(object sender, RoutedEventArgs e) => ToggleLock();
+
+    private void ToggleLock()
+    {
+        _vm.IsLocked = !_vm.IsLocked;
+        // UpdateLockVisuals + ApplyRoll also run via OnContainerPropertyChanged, but apply
+        // immediately so the title bar and menu stay in sync even if the event is delayed.
+        UpdateLockVisuals();
+        ApplyRoll();
+        _save();
+    }
+
+    /// <summary>Keeps the title-bar lock button and the context-menu lock item visually in sync.</summary>
+    private void UpdateLockVisuals() => SyncLockVisuals();
+
+    private void SyncLockVisuals()
+    {
+        bool locked = _vm.IsLocked;
+        LockIcon.Symbol = locked
+            ? Wpf.Ui.Controls.SymbolRegular.LockClosed24
+            : Wpf.Ui.Controls.SymbolRegular.LockOpen24;
+        //LockButton.ToolTip = locked ? "Unlock" : "Lock";
+        MenuLockItem.IsChecked = locked;
+        //MenuLockItem.Header = locked ? "Unlock" : "Lock";
+        MenuLockItem.Icon = Application.Current.FindResource(locked ? "ItemIcon_Locked" : "ItemIcon_UnLocked") as object ?? MenuLockItem.Icon;
     }
 
     /// <summary>
@@ -754,7 +798,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             BodyContent.Visibility = Visibility.Visible;
             MinHeight = 120;
             MinWidth = 160;
-            ResizeMode = ResizeMode.CanResize;
+            ResizeMode = _vm.IsLocked ? ResizeMode.NoResize : ResizeMode.CanResize;
             Left = _vm.Left;
             Top = _vm.Top;
             Width = _vm.Width;
@@ -762,6 +806,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             ApplyTitleOrientation(RollDirection.Top);
             UpdateChrome();
             UpdateRollIcon();
+            UpdateLockVisuals();
             ManageFolderWatcher();
             return;
         }
@@ -1010,11 +1055,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         Close();
     }
 
-    private void MenuLock_Click(object sender, RoutedEventArgs e)
-    {
-        _vm.IsLocked = !_vm.IsLocked;
-        _save();
-    }
+    private void MenuLock_Click(object sender, RoutedEventArgs e) => ToggleLock();
 
     // --- Tab drag (custom mouse-driven; no OLE, so the OS "no-drop" cursor never appears) ---
 
@@ -1065,6 +1106,11 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         }
 
         if (_dragTab == null)
+        {
+            return;
+        }
+
+        if (_vm.IsLocked)
         {
             return;
         }

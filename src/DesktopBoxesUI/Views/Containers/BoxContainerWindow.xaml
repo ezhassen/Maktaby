@@ -102,7 +102,7 @@
                     Background="#3f3f46"
                     CornerRadius="8,8,0,0"
                     DockPanel.Dock="Top">
-                    <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto">
+                    <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto, auto">
                         <Button
                             x:Name="MenuButton"
                             Grid.Column="0"
@@ -122,12 +122,13 @@
                                         Header="Hide"
                                         Icon="{StaticResource ItemIcon_HideBoxe}"
                                         Visibility="Collapsed" />
-                                    <!--  Not implemented yet  -->
                                     <MenuItem
+                                        x:Name="MenuLockItem"
                                         Click="MenuLock_Click"
-                                        Header="Lock / Unlock"
-                                        Icon="{StaticResource ItemIcon_Locked}"
-                                        Visibility="Collapsed" />
+                                        Header="Lock"
+                                        Icon="{StaticResource ItemIcon_UnLocked}"
+                                        IsCheckable="True"
+                                        ToolTip="Toggle Locked state (Cannot Move or Resize the Window)" />
                                     <!--<Separator />-->
                                     <MenuItem
                                         x:Name="MenuAddTab"
@@ -333,8 +334,24 @@
                         </Grid>
 
                         <Button
-                            x:Name="RollButton"
+                            x:Name="LockButton"
                             Grid.Column="2"
+                            Margin="0,0,4,0"
+                            Padding="0"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Click="LockButton_Click"
+                            Cursor="Arrow"
+                            Style="{StaticResource BorderlesButtonStyle}"
+                            ToolTip="Toggle Locked state (Cannot Move or Resize the Window)">
+                            <ui:SymbolIcon x:Name="LockIcon" Symbol="LockOpen24" />
+                        </Button>
+
+                        <Button
+                            x:Name="RollButton"
+                            Grid.Column="3"
+                            Margin="4,0,0,0"
+                            Padding="0"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Click="RollButton_Click"
