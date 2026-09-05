@@ -154,6 +154,30 @@ internal sealed class WindowDragController
 
     public static Window? DraggingSourceWindow;
 
+    /// <summary>Bumped whenever a native shell context menu opens/closes in any window.
+    /// Item-drag arming records the epoch at MouseDown and MouseMove requires a match, so a
+    /// press eaten by the menu's modal loop can never start a drag from a stale origin.</summary>
+    public static long InputEpoch;
+
+    public static void InvalidateItemDrags() => Interlocked.Increment(ref InputEpoch);
+
+    public static long CurrentInputEpoch => Volatile.Read(ref InputEpoch);
+
+    /// <summary>Tick (<see cref="Environment.TickCount"/>) when the last native shell menu closed.
+    /// The press that dismisses the menu is physically older but delivered to WPF afterwards —
+    /// arming sites compare <see cref="System.Windows.Input.InputEventArgs.Timestamp"/> against
+    /// this to recognise (and not arm from) that eaten press.</summary>
+    public static int MenuCloseTick;
+
+    public static void NoteMenuClosed()
+    {
+        MenuCloseTick = Environment.TickCount;
+        InvalidateItemDrags();
+    }
+
+    public static bool IsFreshPress(System.Windows.Input.MouseButtonEventArgs e)
+        => unchecked(e.Timestamp - Volatile.Read(ref MenuCloseTick)) > 0;
+
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         switch (msg)

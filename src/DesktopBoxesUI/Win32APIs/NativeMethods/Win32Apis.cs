@@ -44,6 +44,19 @@ internal static class Win32Apis
     /// unlike <see cref="Mouse.GetPosition"/> which is suppressed by the drag-drop capture).</summary>
     public static bool GetCursorPos(out ManualApis.POINT pt) => ManualApis.GetCursorPos(out pt);
 
+    /// <summary>Native drag throttle with Explorer semantics: captures the mouse to
+    /// <paramref name="hwnd"/> and returns true only once the cursor leaves the system drag rect
+    /// from its current position, false if the button releases first (a click, never a drag).
+    /// Call only after the cheap threshold check passed — this blocks the UI thread until the
+    /// press/release decision, exactly like the native control does.</summary>
+    public static bool ConfirmDrag(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+        if (!GetCursorPos(out var pt)) return true;
+        try { return ManualApis.DragDetect(hwnd, pt); }
+        catch { return true; }
+    }
+
     /// <summary>Shell file operation (rename / delete / recycle). Wraps the manual
     /// <see cref="ManualApis.SHFileOperationW"/> so every native call flows through this wrapper.</summary>
     public static int FileOperation(ref ManualApis.SHFILEOPSTRUCT op) => ManualApis.SHFileOperationW(ref op);

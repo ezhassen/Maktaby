@@ -134,6 +134,12 @@ public partial class FolderPortalControl : UserControl
         var row = _gridDragRow;
         var vm = _gridDragVm;
         if (row == null || vm == null) return;
+        if (_gridDragEpoch != WindowDragController.CurrentInputEpoch)
+        {
+            _gridDragRow = null;
+            _gridDragVm = null;
+            return;
+        }
         // Still verify left button pressed and window active inside ItemBorder_MouseMove
         ItemBorder_MouseMove(row, e);
     }
@@ -149,7 +155,9 @@ public partial class FolderPortalControl : UserControl
     {
         var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
         if (row == null) return;
+        DisarmDrag();
         ItemBorder_MouseRightButtonUp(row, e);
+        DisarmDrag();
         // Suppress DataGrid's default context menu
         e.Handled = true;
     }
@@ -206,10 +214,12 @@ public partial class FolderPortalControl : UserControl
             _gridDragRow = null;
             _gridDragVm = null;
         }
+        _dragOrigin = null;
     }
 
     private void DetailsGrid_OnContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
+        DisarmDrag();
         var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
         if (row == null) return;
         ItemBorder_ContextMenuOpening(row, e);
@@ -404,6 +414,8 @@ public partial class FolderPortalControl : UserControl
     private void IconsHost_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is DependencyObject src && FindItemBorder(src) != null) return;
+        // Press began on empty space — must never start an item drag from here.
+        _dragOrigin = null;
         if (_renameService.IsEditing) return;
         bool additive = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
         if (!additive) ClearSelection();
@@ -422,11 +434,21 @@ public partial class FolderPortalControl : UserControl
 
     // ---- Icons view handlers ----
 
+    private void DisarmDrag()
+    {
+        _dragOrigin = null;
+        _dragging = false;
+        _moved = false;
+        _gridDragRow = null;
+        _gridDragVm = null;
+        WindowDragController.InvalidateItemDrags();
+    }
+
     private void ItemBorder_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (sender is not Border { DataContext: FolderItemViewModel vm } border) return;
         border.Focus();
-        if (vm.IsEditing) { e.Handled = true; return; }
+        if (vm.IsEditing) { _dragOrigin = null; e.Handled = true; return; }
 
         bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
@@ -447,11 +469,15 @@ public partial class FolderPortalControl : UserControl
         }
 
         _dragStart = e.GetPosition(null);
+        _dragOrigin = WindowDragController.IsFreshPress(e) ? border : null;
+        _dragEpoch = WindowDragController.CurrentInputEpoch;
         _dragging = false;
         _moved = false;
 
         if (e.ClickCount == 2)
         {
+            // Double-click opens — never arms a drag from here.
+            _dragOrigin = null;
             bool alt = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
             if (alt)
             {
@@ -482,9 +508,12 @@ public partial class FolderPortalControl : UserControl
     private bool _suppressDragUntilMouseUp;
     public bool IsDragging => _dragging || _suppressDragUntilMouseUp;
     private static DateTime _lastOpenUtc;
+    private FrameworkElement? _dragOrigin;
+    private long _dragEpoch;
     private DragGhostWindow? _dragGhost;
     private DataGridRow? _gridDragRow;
     private FolderItemViewModel? _gridDragVm;
+    private long _gridDragEpoch;
 
     private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     {
@@ -494,11 +523,36 @@ public partial class FolderPortalControl : UserControl
             return;
         }
         if (e.LeftButton != MouseButtonState.Pressed || _dragging) return;
+        // Only start a drag when the press began on this same item; a native shell menu
+        // eats presses in every window, so also require a matching input epoch.
+        if (_dragOrigin is null || !ReferenceEquals(sender, _dragOrigin))
+        {
+            return;
+        }
+        if (_dragEpoch != WindowDragController.CurrentInputEpoch)
+        {
+            _dragOrigin = null;
+            return;
+        }
         if (sender is not FrameworkElement { DataContext: FolderItemViewModel vm } fe) return;
         // Only drag from active window
         if (Window.GetWindow(fe) is Window w && !w.IsActive) return;
         var diff = e.GetPosition(null) - _dragStart;
         if (Math.Abs(diff.X) <= SystemParameters.MinimumHorizontalDragDistance && Math.Abs(diff.Y) <= SystemParameters.MinimumVerticalDragDistance) return;
+
+        // Native throttle (DragDetect, same as Explorer): captures the mouse and decides
+        // press-vs-drag authoritatively. A menu-dismiss click releases inside the system
+        // drag rect -> FALSE -> treated as a click, never a random drag, no matter which
+        // window's menu ate the original press.
+        var throttleWin = Window.GetWindow(fe);
+        var throttleHwnd = throttleWin != null ? new WindowInteropHelper(throttleWin).Handle : IntPtr.Zero;
+        if (!Win32Apis.ConfirmDrag(throttleHwnd))
+        {
+            _dragOrigin = null;
+            _gridDragRow = null;
+            _gridDragVm = null;
+            return;
+        }
 
         _moved = true;
 
@@ -539,6 +593,7 @@ public partial class FolderPortalControl : UserControl
             _dragGhost?.Close();
             _dragGhost = null;
             _dragging = false;
+            _dragOrigin = null;
             if (WindowDragController.DraggingSourceWindow == Window.GetWindow(fe))
                 WindowDragController.DraggingSourceWindow = null;
             _suppressDragUntilMouseUp = true;
@@ -594,6 +649,7 @@ public partial class FolderPortalControl : UserControl
                 SelectOnly(vmUp);
             }
         }
+        _dragOrigin = null;
     }
 
     private void ItemBorder_GotFocus(object sender, RoutedEventArgs e)
@@ -615,6 +671,10 @@ public partial class FolderPortalControl : UserControl
                 cur = VisualTreeHelper.GetParent(cur);
             }
         }
+        // Press began on empty space — must never start a row drag from here.
+        _gridDragRow = null;
+        _gridDragVm = null;
+        _dragOrigin = null;
         if (_renameService.IsEditing) return;
         bool additive = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
         if (!additive) ClearSelection();
@@ -693,9 +753,14 @@ public partial class FolderPortalControl : UserControl
             return;
         }
 
-        // Remember origin for drag (used by DetailsGrid_OnMouseMove)
+        // Remember origin for drag (used by DetailsGrid_OnMouseMove). ItemBorder_MouseMove
+        // also requires the shared icons-origin to match, so arm it here too — the Details
+        // template has no per-item MouseDown to do it.
         _gridDragRow = row;
         _gridDragVm = vm;
+        _gridDragEpoch = WindowDragController.CurrentInputEpoch;
+        _dragOrigin = WindowDragController.IsFreshPress(e) ? row : null;
+        _dragEpoch = _gridDragEpoch;
 
         bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         bool shift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
@@ -1105,13 +1170,20 @@ public partial class FolderPortalControl : UserControl
     private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not FolderItemViewModel vm) return;
+        DisarmDrag();
         var window = Window.GetWindow(this);
         var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
         ShellContextMenu.ShowForPath(hwnd, vm.Path);
+        DisarmDrag();
+        WindowDragController.NoteMenuClosed();
         e.Handled = true;
     }
 
-    private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e) => e.Handled = true;
+    private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        DisarmDrag();
+        e.Handled = true;
+    }
 
     private void Control_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
@@ -1142,6 +1214,8 @@ public partial class FolderPortalControl : UserControl
         if (e.ChangedButton == MouseButton.Left)
         {
             _dragStart = e.GetPosition(null);
+            _dragOrigin = WindowDragController.IsFreshPress(e) ? fe : null;
+            _dragEpoch = WindowDragController.CurrentInputEpoch;
             _dragging = false;
             _moved = false;
         }
@@ -1185,6 +1259,7 @@ public partial class FolderPortalControl : UserControl
 
     private void FolderPortal_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        _dragOrigin = null;
         if (_suppressDragUntilMouseUp) _suppressDragUntilMouseUp = false;
     }
 

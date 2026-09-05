@@ -212,6 +212,13 @@ internal static class ManualApis
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool GetCursorPos(out POINT lpPoint);
 
+    /// <summary>Native drag throttle (same call Explorer/ListView use): captures the mouse to
+    /// <paramref name="hWnd"/> and returns true only once the cursor leaves the system drag rect
+    /// around <paramref name="pt"/> (physical screen pixels), false if the button releases first.</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool DragDetect(IntPtr hWnd, POINT pt);
+
     [DllImport("user32.dll")]
     public static extern IntPtr WindowFromPoint(POINT pt);
 

@@ -29,6 +29,8 @@ public partial class BoxControl : UserControl
     private Point _dragStart;
     private bool _dragging;
     private bool _moved;
+    private Border? _dragOrigin;
+    private long _dragEpoch;
     private bool _suppressDragUntilMouseUp;
     public bool IsDragging => _dragging || _suppressDragUntilMouseUp;
     private static bool _suppressNextContextMenu;
@@ -165,6 +167,7 @@ public partial class BoxControl : UserControl
 
         if (vm.IsEditing)
         {
+            _dragOrigin = null;
             e.Handled = true;
             return;
         }
@@ -194,7 +197,10 @@ public partial class BoxControl : UserControl
             }
         }
 
-        if (!_singleClick && e.ClickCount == 2)
+        // Double-click opens — never arms a drag from here (the opened app deactivates
+        // our window, breaking the press sequence for any subsequent move).
+        bool isDoubleOpen = !_singleClick && e.ClickCount == 2;
+        if (isDoubleOpen)
         {
             if ((Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt)
             {
@@ -210,6 +216,10 @@ public partial class BoxControl : UserControl
         e.Handled = true;
 
         _dragStart = e.GetPosition(null);
+        // A press that dismissed a native menu is delivered after the menu closes but is
+        // physically older (message timestamp) — it must select, but never arm a drag.
+        _dragOrigin = (isDoubleOpen || !WindowDragController.IsFreshPress(e)) ? null : border;
+        _dragEpoch = WindowDragController.CurrentInputEpoch;
         _dragging = false;
         _moved = false;
     }
@@ -225,6 +235,21 @@ public partial class BoxControl : UserControl
 
         if (e.LeftButton != MouseButtonState.Pressed || _dragging)
         {
+            return;
+        }
+
+        // Only start a drag when the press began on this same item. Prevents accidental
+        // drags when the button was pressed on empty space and the cursor slides over items.
+        if (_dragOrigin is null || !ReferenceEquals(sender, _dragOrigin))
+        {
+            return;
+        }
+
+        // The press sequence must still be valid: any native shell menu opened in any
+        // window runs its own modal loop and eats the press, leaving a stale origin armed.
+        if (_dragEpoch != WindowDragController.CurrentInputEpoch)
+        {
+            _dragOrigin = null;
             return;
         }
 
@@ -251,6 +276,22 @@ public partial class BoxControl : UserControl
         if (Math.Abs(diff.X) <= SystemParameters.MinimumHorizontalDragDistance && Math.Abs(diff.Y) <= SystemParameters.MinimumVerticalDragDistance)
         {
             return;
+        }
+
+        // Native throttle (DragDetect, same as Explorer): captures the mouse and decides
+        // press-vs-drag authoritatively. A menu-dismiss click releases inside the system
+        // drag rect -> FALSE -> treated as a click, never a random drag, no matter which
+        // window's menu ate the original press.
+        if (sender is Border throttleBorder)
+        {
+            var throttleHwnd = Window.GetWindow(throttleBorder) is Window throttleWin
+                ? new WindowInteropHelper(throttleWin).Handle
+                : IntPtr.Zero;
+            if (!Win32Apis.ConfirmDrag(throttleHwnd))
+            {
+                _dragOrigin = null;
+                return;
+            }
         }
 
         _moved = true;
@@ -321,6 +362,7 @@ public partial class BoxControl : UserControl
                 RestoreCollapsedItems();
                 RemoveDropIndicator();
                 _insertIndex = -1;
+                _dragOrigin = null;
                 _suppressDragUntilMouseUp = true;
                 var srcWin = WindowDragController.DraggingSourceWindow;
                 if (WindowDragController.DraggingSourceWindow == Window.GetWindow(border))
@@ -390,6 +432,8 @@ public partial class BoxControl : UserControl
                 OpenItem(item);
             }
         }
+
+        _dragOrigin = null;
     }
 
     private async void ItemBorder_KeyDown(object sender, KeyEventArgs e)
@@ -926,6 +970,9 @@ public partial class BoxControl : UserControl
             ClearSelection();
         }
 
+        // Press began outside any item — it must never start an item drag even if the
+        // cursor later slides over an item while held down (marquee owns this gesture).
+        _dragOrigin = null;
         _marqueeBase = additive ? new HashSet<BoxItemViewModel>(Box?.Items.Where(i => i.IsSelected) ?? Enumerable.Empty<BoxItemViewModel>()) : null;
         _marqueeStart = e.GetPosition(ItemsList);
         if (!_marqueeActive)
@@ -965,6 +1012,7 @@ public partial class BoxControl : UserControl
 
     private void BoxControl_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        _dragOrigin = null;
         if (!_marqueeActive)
         {
             // Even when marquee not active, clear drag suppress on left up
@@ -980,6 +1028,7 @@ public partial class BoxControl : UserControl
 
     private void BoxControl_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        _dragOrigin = null;
         if (_suppressDragUntilMouseUp) _suppressDragUntilMouseUp = false;
     }
 
@@ -1205,11 +1254,20 @@ public partial class BoxControl : UserControl
         return null;
     }
 
+    private void DisarmDrag(string reason)
+    {
+        _dragOrigin = null;
+        _dragging = false;
+        _moved = false;
+        WindowDragController.InvalidateItemDrags();
+    }
+
     private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_suppressNextContextMenu)
         {
             _suppressNextContextMenu = false;
+            DisarmDrag("suppress-menu");
             e.Handled = true;
             return;
         }
@@ -1219,6 +1277,11 @@ public partial class BoxControl : UserControl
             return;
         }
 
+        // The native shell menu runs its own modal loop and eats mouse presses in every
+        // window — disarm before and after so no stale origin can start a random drag.
+        // NoteMenuClosed additionally records the close tick so the dismissing press
+        // (delivered late, but with an older message timestamp) can't re-arm a drag.
+        DisarmDrag("menu-open");
         var window = Window.GetWindow(this);
         var hwnd = new WindowInteropHelper(window).Handle;
 
@@ -1231,11 +1294,16 @@ public partial class BoxControl : UserControl
             ShellContextMenu.ShowForPath(hwnd, vm.Path);
         }
 
+        _dragOrigin = null;
+        _dragging = false;
+        _moved = false;
+        WindowDragController.NoteMenuClosed();
         e.Handled = true;
     }
 
     private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
+        DisarmDrag("context-menu");
         if (_suppressNextContextMenu)
         {
             _suppressNextContextMenu = false;
