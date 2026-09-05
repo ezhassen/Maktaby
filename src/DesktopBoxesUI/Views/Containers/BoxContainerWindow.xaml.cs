@@ -28,6 +28,7 @@ namespace DesktopBoxesUI.Views.Containers;
 [SupportedOSPlatform("windows10.0.14393")]
 public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvider
 {
+    public override ContainerViewModel ContainerViewModel => _vm;
     private readonly ContainerViewModel _vm;
     private readonly MainViewModel _host;
     private readonly IWindowPositioningService _positioning;
@@ -187,7 +188,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     /// <summary>Re-applies the window geometry from the view-model bounds (handles both the rolled and
     /// unrolled states). Used after a display/DPI/resolution change rescales the layout.</summary>
-    internal void ApplyGeometry() => ApplyRoll();
+    public override void ApplyGeometry() => ApplyRoll();
 
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {

@@ -221,6 +221,24 @@ public sealed class DesktopManager
         }
     }
 
+    private const double MinContainerWidth = 160;
+    private const double MinContainerHeight = 120;
+
+    /// <summary>Clamps a rescaled width/height to the window minimums and the work-area extent.</summary>
+    private static double ClampRescaledExtent(double value, double workExtent, double min)
+    {
+        if (workExtent <= 0) return Math.Max(min, value);
+        return Math.Clamp(value, min, Math.Max(min, workExtent));
+    }
+
+    /// <summary>Clamps a rescaled left/top so the (already-clamped) window stays inside the work area.</summary>
+    private static double ClampRescaledOrigin(double value, double workStart, double workEnd, double extent)
+    {
+        double max = workEnd - extent;
+        if (max <= workStart) return workStart;
+        return Math.Clamp(value, workStart, max);
+    }
+
     /// <summary>
     /// The primary work area in WPF logical (DIP) coordinates. Container <c>Bounds</c> are always stored
     /// in this same space (the WPF window geometry), so this is the correct basis for the persisted
@@ -234,11 +252,15 @@ public sealed class DesktopManager
     }
 
     /// <summary>
-    /// Reacts to a screen/DPI/resolution change by proportionally rescaling the container layout against the
-    /// previously applied work area, pushing the new geometry to the live windows and re-laying the surface.
-    /// Runs on the UI thread (marshalled via the dispatcher if the system event arrives off-thread).
+    /// Display-change entry points (<see cref="SystemEvents.DisplaySettingsChanged"/> for resolution /
+    /// primary-monitor switches, per-window <c>DpiChanged</c> for DPI-only changes which never raise
+    /// the former) are debounced into a single <see cref="RescaleToCurrent"/>: the OS fires bursts
+    /// with transient intermediate values, and <see cref="SystemParameters.WorkArea"/> only refreshes
+    /// after WPF processes the broadcast — rescaling immediately would compound stale factors.
     /// </summary>
-    private void OnDisplaySettingsChanged(object? sender, EventArgs e)
+    private System.Windows.Threading.DispatcherTimer? _rescaleDebounce;
+
+    private void ScheduleRescale()
     {
         var app = Application.Current;
         if (app is null)
@@ -246,27 +268,61 @@ public sealed class DesktopManager
             return;
         }
 
-        if (app.Dispatcher.CheckAccess())
+        if (!app.Dispatcher.CheckAccess())
         {
-            RescaleToCurrent();
+            app.Dispatcher.InvokeAsync(ScheduleRescale);
+            return;
         }
-        else
+
+        _rescaleDebounce ??= new System.Windows.Threading.DispatcherTimer
         {
-            app.Dispatcher.InvokeAsync(RescaleToCurrent);
-        }
+            Interval = TimeSpan.FromMilliseconds(800)
+        };
+        _rescaleDebounce.Tick -= RescaleDebounceTick;
+        _rescaleDebounce.Tick += RescaleDebounceTick;
+        _rescaleDebounce.Stop();
+        _rescaleDebounce.Start();
     }
+
+    private void RescaleDebounceTick(object? sender, EventArgs e)
+    {
+        if (_rescaleDebounce != null)
+        {
+            _rescaleDebounce.Stop();
+            _rescaleDebounce.Tick -= RescaleDebounceTick;
+        }
+        RescaleToCurrent();
+    }
+
+    private void OnDisplaySettingsChanged(object? sender, EventArgs e) => ScheduleRescale();
+
+    private void OnWindowDpiChanged(object? sender, System.Windows.DpiChangedEventArgs e) => ScheduleRescale();
 
     private void RescaleToCurrent()
     {
-        var current = GetPrimaryWorkAreaDip();
-        if (current.Width <= 0 || current.Height <= 0 ||
-            _appliedResolution.Width <= 0 || _appliedResolution.Height <= 0)
+        // Never rescale mid-gesture: a native move/size loop owns the geometry until it exits.
+        if (Helpers.WindowDragController.IsNativeSizing)
         {
+            ScheduleRescale();
+            return;
+        }
+
+        var current = GetPrimaryWorkAreaDip();
+        if (current.Width <= 0 || current.Height <= 0)
+        {
+            return;
+        }
+
+        if (_appliedResolution.Width <= 0 || _appliedResolution.Height <= 0)
+        {
+            _appliedResolution = current;
             return;
         }
 
         if (current.Width == _appliedResolution.Width && current.Height == _appliedResolution.Height)
         {
+            // Same size — re-baseline anyway so rounding drift can never accumulate.
+            _appliedResolution = current;
             return;
         }
 
@@ -275,30 +331,23 @@ public sealed class DesktopManager
 
         foreach (var vm in _mainVm.Containers)
         {
-            vm.Left *= sx;
-            vm.Top *= sy;
-            vm.Width *= sx;
-            vm.Height *= sy;
+            // Minimums must match each window type (BoxContainerWindow 160x120,
+            // CssWidgetWindow 120x80) — otherwise a shrink would inflate small widgets.
+            double minW = vm.Type == DesktopItemContainerType.CssWidget ? 120 : MinContainerWidth;
+            double minH = vm.Type == DesktopItemContainerType.CssWidget ? 80 : MinContainerHeight;
+            vm.Width = ClampRescaledExtent(vm.Width * sx, current.Width, minW);
+            vm.Height = ClampRescaledExtent(vm.Height * sy, current.Height, minH);
+            vm.Left = ClampRescaledOrigin(vm.Left * sx, current.X, current.Right, vm.Width);
+            vm.Top = ClampRescaledOrigin(vm.Top * sy, current.Y, current.Bottom, vm.Height);
         }
 
         _appliedResolution = current;
 
         foreach (var window in _windows.Values)
         {
-            if (window is BoxContainerWindow boxWindow)
+            if (window is WidgetWindow widgetWindow)
             {
-                boxWindow.ApplyGeometry();
-            }
-            else if (window is CssWidgetWindow widgetWindow)
-            {
-                widgetWindow.Left = widgetWindow.DataContext is ContainerViewModel vm ? vm.Left : widgetWindow.Left;
-                widgetWindow.Top = widgetWindow.DataContext is ContainerViewModel wvm ? wvm.Top : widgetWindow.Top;
-                // Size also scaled via vm already; window will follow via binding or we set explicitly
-                if (window.DataContext is ContainerViewModel cvm)
-                {
-                    window.Width = cvm.Width;
-                    window.Height = cvm.Height;
-                }
+                widgetWindow.ApplyGeometry();
             }
         }
 
@@ -728,6 +777,9 @@ public sealed class DesktopManager
         }
 
         _windows[vm.Id] = window;
+        // Per-window DPI changes never raise DisplaySettingsChanged — observe them directly so
+        // DPI-only switches (same resolution, different scale) also funnel into the rescale path.
+        window.DpiChanged += OnWindowDpiChanged;
         // RegisterBoxWindow is done inside each window's OnLoaded for CssWidget; keep for BoxContainer compat
         try { Win32Apis.RegisterBoxWindow(new WindowInteropHelper(window).Handle); } catch { }
         //IntPtr? foregroundWindowHwnd = null;
@@ -867,6 +919,7 @@ public sealed class DesktopManager
     {
         if (_windows.TryGetValue(id, out var window))
         {
+            try { window.DpiChanged -= OnWindowDpiChanged; } catch { }
             var handle = new WindowInteropHelper(window).Handle;
             Win32Apis.UnregisterBoxWindow(handle);
             //Win32Apis.AllowHide(handle);

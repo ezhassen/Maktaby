@@ -1,3 +1,7 @@
+using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -13,70 +17,39 @@ namespace DesktopBoxesUI.Views.Containers;
 public abstract class WidgetWindow : Window
 {
 
+    public abstract ContainerViewModel ContainerViewModel { get; }
+
     public abstract void UpdateChrome();
-    /*private const int WM_MOUSEACTIVATE = 0x0021;
-    private const int MA_NOACTIVATE = 0x0003;
-    private const int MA_ACTIVATE = 1;
-    const int WM_NCHITTEST = 0x0084; // 132
-    const int WM_MOUSEMOVE = 0x0200; // 512
 
-    protected override void OnSourceInitialized(EventArgs e)
+    /// <summary>
+    /// Applies the window geometry from the view-model bounds <see cref="ContainerViewModel"/> in a
+    /// single native placement (<see cref="IWindowPositioningService.SetBounds"/>), instead of four
+    /// separate <c>Left/Top/Width/Height</c> assignments that would each run layout and fire
+    /// <c>SizeChanged</c>/<c>LocationChanged</c> with intermediate states. Model bounds are DIPs, so
+    /// they are scaled to physical pixels with the window's DPI first. Falls back to the property
+    /// sets when no handle exists yet (pre-show).
+    /// </summary>
+    public virtual void ApplyGeometry()
     {
-        base.OnSourceInitialized(e);
-
-        //if (PresentationSource.FromVisual(this) is HwndSource source)
-        //{
-        //    source.AddHook(WndProc);
-        //}
-    }
-
-    private IntPtr WndProc(
-        IntPtr hwnd,
-        int msg,
-        IntPtr wParam,
-        IntPtr lParam,
-        ref bool handled)
-    {
-
-        *//*switch (msg)
+        var bounds = ContainerViewModel.Bounds;
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd != IntPtr.Zero)
         {
-            case WM_NCHITTEST:
-                {
-                    var result = Win32.NativeMethods.ManualApis.DefWindowProc(hwnd, (uint)msg, wParam, lParam);
-
-                    Debug.WriteLine($"NCHITTEST: {result}");
-
-                    return result;
-                }
-
-            case WM_MOUSEMOVE:
-                {
-                    Debug.WriteLine("WM_MOUSEMOVE");
-                    break;
-                }
-
-            case WM_MOUSEACTIVATE:
-                {
-                    Debug.WriteLine("WM_MOUSEACTIVATE");
-                    break;
-                }
-        }*//*
-
+            try
+            {
+                double scale = App.Services.GetRequiredService<IDpiService>().GetDpiForWindow(hwnd) / 96.0;
+                App.Services.GetRequiredService<IWindowPositioningService>().SetBounds(hwnd, RectD.FromXYWH(
+                    bounds.X * scale, bounds.Y * scale, bounds.Width * scale, bounds.Height * scale));
+                UpdateChrome();
+                return;
+            }
+            catch { }
+        }
+        this.Left = bounds.X;
+        this.Top = bounds.Y;
+        this.Width = bounds.Width;
+        this.Height = bounds.Height;
         //
-        //when ShowActivated is false there is an issue with mouse move events not working
-        //so this is the workaround for it
-        //if (!ShowActivated && msg == WM_MOUSEACTIVATE)
-        //{
-        //    handled = true;
-        //    return (IntPtr)MA_ACTIVATE;
-        //}
-        //this is for never activate the window
-        *//*if (!ShowActivated && msg == WM_MOUSEACTIVATE)
-        {
-            handled = true;
-            return (IntPtr)MA_NOACTIVATE;
-        }*//*
-
-        return IntPtr.Zero;
-    }*/
+        UpdateChrome();
+    }
 }

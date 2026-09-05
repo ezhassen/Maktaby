@@ -15,7 +15,7 @@ namespace DesktopBoxesUI.Views.Containers;
 
 public partial class CssWidgetWindow : WidgetWindow
 {
-    internal ContainerViewModel ContainerViewModel { get; }
+    public override ContainerViewModel ContainerViewModel { get; }
     private readonly DesktopItemContainer _container;
     private readonly ICssWidgetService _widgetService;
     private CssWidgetControl? _widgetControl;
@@ -31,6 +31,7 @@ public partial class CssWidgetWindow : WidgetWindow
     public CssWidgetWindow(ContainerViewModel vm)
     {
         InitializeComponent();
+        //DataContext = vm;
         ContainerViewModel = vm;
         _container = vm.Model;
         _widgetService = App.Services.GetRequiredService<ICssWidgetService>();
