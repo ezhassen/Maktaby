@@ -703,9 +703,14 @@ public sealed class DesktopManager
     {
         if (_windows.ContainsKey(vm.Id))
         {
+            if (!vm.IsVisible)
+            {//if is not set to be visible hide it
+                this.HideContainer(vm.Id);
+            }
             return;
         }
-
+        //if is not set to be visible do not add it
+        if (!vm.IsVisible) return;
         Window window;
         if (vm.Type == DesktopItemContainerType.CssWidget)
         {
@@ -994,6 +999,35 @@ public sealed class DesktopManager
         if (vm is not null) _mainVm.RemoveContainer(vm);
         else _containers.RemoveContainer(id);
         _ = SaveAsync();
+    }
+
+    /// <summary>Hides a container's window and marks the model not visible. Never saves the
+    /// snapshot — callers (menus) save explicitly; the Settings containers list must not save.</summary>
+    public void HideContainer(Guid id)
+    {
+        var vm = _mainVm.Containers.FirstOrDefault(c => c.Id == id);
+        if (vm is null) return;
+        vm.IsVisible = false;
+        RemoveWindow(id);
+    }
+
+    /// <summary>Marks a container visible and (re)shows its window. Never saves the snapshot.</summary>
+    public void ShowContainer(Guid id, bool showActivated = false)
+    {
+        var vm = _mainVm.Containers.FirstOrDefault(c => c.Id == id);
+        if (vm is null) return;
+        vm.IsVisible = true;
+        if (_windows.TryGetValue(id, out var existing))
+        {
+            try
+            {
+                if (!existing.IsVisible) existing.Show();
+                if (showActivated) existing.Activate();
+            }
+            catch { }
+            return;
+        }
+        AddWindow(vm, showActivated: showActivated);
     }
 
     public DesktopSnapshot GetCurrentDesktopSnapshot()

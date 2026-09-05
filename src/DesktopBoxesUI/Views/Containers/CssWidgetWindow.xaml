@@ -46,6 +46,14 @@
                     Click="Lock_Click"
                     Header="Lock"
                     IsCheckable="True" />
+                <MenuItem
+                    x:Name="HideMenuItem"
+                    Click="Hide_Click"
+                    Header="Hide">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="EyeOff24" />
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator />
                 <MenuItem
                     Click="Delete_Click"

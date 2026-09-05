@@ -36,6 +36,8 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         // Keep the preview in sync with every edit (the VM raises PropertyChanged per field).
         vm.PropertyChanged += (_, _) => UpdatePreview();
         UpdatePreview();
+
+        Closed += (_, _) => (DataContext as IDisposable)?.Dispose();
     }
 
     // The global dialog service renders WPF-UI content dialogs on this host.
@@ -44,7 +46,7 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
     private readonly IDialogService _dialogs = App.Services!.GetRequiredService<IDialogService>();
 
     private static readonly string[] _sectionNames =
-        { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionCSSWidgets", "SectionGeneral", "SectionSnapshot" };
+        { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionCSSWidgets", "SectionContainers", "SectionGeneral", "SectionSnapshot" };
 
     // Clicking a tab scrolls its section to the top of the viewport and plays a brief orange focus border.
     private void CategoryList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -441,6 +443,21 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
             return c;
         }
         catch { return null; }
+    }
+
+    // Space on a focused containers-grid row toggles its Visible checkbox. The keyboard
+    // focus sits on the DataGridCell (not inside the CheckBox), so Space would otherwise
+    // do nothing — handle it on the tunnel and toggle exactly once.
+    private void ContainersGrid_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space) return;
+        var grid = (System.Windows.Controls.DataGrid)sender;
+        var rows = grid.SelectedItems.Cast<ContainerVisibilityRow>().ToList();
+        if (rows.Count == 0 && grid.SelectedItem is ContainerVisibilityRow selected) rows.Add(selected);
+        if (rows.Count == 0 && grid.CurrentItem is ContainerVisibilityRow current) rows.Add(current);
+        if (rows.Count == 0) return;
+        foreach (var row in rows) row.IsVisible = !row.IsVisible;
+        e.Handled = true;
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

@@ -1,13 +1,74 @@
 using DesktopBoxesUI.Core.Interfaces;
+using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Settings;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32APIs.Services;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Reflection;
 using System.Windows.Input;
 
 namespace DesktopBoxesUI.ViewModels;
+
+/// <summary>
+/// One row of the Settings "Containers" list. Toggling <see cref="IsVisible"/> shows/hides the
+/// live window immediately via <see cref="DesktopManager"/> without saving the snapshot, and
+/// mirrors visibility changes made outside the Settings window (menus) through
+/// <see cref="ContainerViewModel.PropertyChanged"/>.
+/// </summary>
+public sealed class ContainerVisibilityRow : ViewModelBase, IDisposable
+{
+    private readonly ContainerViewModel _container;
+    private readonly DesktopManager _manager;
+    private bool _disposed;
+
+    public ContainerVisibilityRow(ContainerViewModel container, DesktopManager manager)
+    {
+        _container = container;
+        _manager = manager;
+        _container.PropertyChanged += OnContainerPropertyChanged;
+    }
+
+    public Guid ContainerId => _container.Id;
+
+    public string Title => _container.Title;
+
+    public string TypeDisplay => _container.Type switch
+    {
+        DesktopItemContainerType.BoxContainer => "Box",
+        DesktopItemContainerType.CssWidget => "Widget",
+        _ => _container.Type.ToString(),
+    };
+
+    public bool IsVisible
+    {
+        get => _container.IsVisible;
+        set
+        {
+            if (_container.IsVisible == value) return;
+            if (value) _manager.ShowContainer(_container.Id);
+            else _manager.HideContainer(_container.Id);
+            OnPropertyChanged();
+        }
+    }
+
+    private void OnContainerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ContainerViewModel.IsVisible))
+            OnPropertyChanged(nameof(IsVisible));
+        else if (e.PropertyName == nameof(ContainerViewModel.Title))
+            OnPropertyChanged(nameof(Title));
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _container.PropertyChanged -= OnContainerPropertyChanged;
+    }
+}
 
 /// <summary>
 /// Drives <see cref="Views.SettingsView"/>. Edits the persisted <see cref="Settings.UserSettings"/>
@@ -16,9 +77,15 @@ namespace DesktopBoxesUI.ViewModels;
 /// toggle (mirrored to <see cref="StartupManager"/>) and a per-setting "reset to default" command that
 /// reads each property's <see cref="DefaultValueAttribute"/>.
 /// </summary>
-public sealed class SettingsViewModel : ViewModelBase
+public sealed class SettingsViewModel : ViewModelBase, IDisposable
 {
     private readonly ISettingsService _settingsService;
+    private readonly MainViewModel _mainVm;
+    private readonly DesktopManager _desktopManager;
+    private bool _disposed;
+
+    /// <summary>Live list of all containers for the Settings "Containers" section.</summary>
+    public ObservableCollection<ContainerVisibilityRow> Containers { get; } = new();
 
     // App theme: "System" follows the Windows light/dark setting (stored as null).
     public IReadOnlyList<string> AppThemeOptions { get; } = new[] { "System", "Dark", "Light" };
@@ -138,9 +205,14 @@ public sealed class SettingsViewModel : ViewModelBase
 
     public ICommand SaveCommand { get; }
 
-    public SettingsViewModel(ISettingsService settingsService)
+    public SettingsViewModel(ISettingsService settingsService, MainViewModel mainVm, DesktopManager desktopManager)
     {
         _settingsService = settingsService;
+        _mainVm = mainVm;
+        _desktopManager = desktopManager;
+        foreach (var c in _mainVm.Containers)
+            Containers.Add(new ContainerVisibilityRow(c, _desktopManager));
+        _mainVm.Containers.CollectionChanged += OnContainersChanged;
         var s = _settingsService.UserSettings;
 
         _selectedThemeOption = s.SelectedTheme?.Trim().ToLowerInvariant() switch
@@ -176,6 +248,41 @@ public sealed class SettingsViewModel : ViewModelBase
 
         SaveCommand = new RelayCommand(_ => Save());
         ResetToDefaultCommand = new RelayCommand(ResetToDefault);
+    }
+
+    private void OnContainersChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            foreach (var r in Containers) r.Dispose();
+            Containers.Clear();
+            return;
+        }
+        if (e.OldItems != null)
+        {
+            foreach (ContainerViewModel vm in e.OldItems)
+            {
+                var row = Containers.FirstOrDefault(r => r.ContainerId == vm.Id);
+                if (row != null)
+                {
+                    Containers.Remove(row);
+                    row.Dispose();
+                }
+            }
+        }
+        if (e.NewItems != null)
+        {
+            foreach (ContainerViewModel vm in e.NewItems)
+                Containers.Add(new ContainerVisibilityRow(vm, _desktopManager));
+        }
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _mainVm.Containers.CollectionChanged -= OnContainersChanged;
+        foreach (var r in Containers) r.Dispose();
     }
 
     /// <summary>

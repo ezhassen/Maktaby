@@ -1050,9 +1050,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void MenuHide_Click(object sender, RoutedEventArgs e)
     {
-        _vm.IsVisible = false;
+        App.Services.GetRequiredService<DesktopManager>().HideContainer(_vm.Id);
         _save();
-        Close();
     }
 
     private void MenuLock_Click(object sender, RoutedEventArgs e) => ToggleLock();

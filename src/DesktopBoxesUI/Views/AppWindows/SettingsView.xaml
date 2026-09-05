@@ -68,6 +68,7 @@
                     <ListBoxItem Content="Appearance" Tag="SectionAppearance" />
                     <ListBoxItem Content="Boxes" Tag="SectionBoxes" />
                     <ListBoxItem Content="CSS Widgets" Tag="SectionCSSWidgets" />
+                    <ListBoxItem Content="Containers" Tag="SectionContainers" />
                     <ListBoxItem Content="General" Tag="SectionGeneral" />
                     <ListBoxItem Content="Snapshot" Tag="SectionSnapshot" />
                 </ListBox>
@@ -428,6 +429,59 @@
                                     </ui:Button>
                                 </StackPanel>
                             </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
+
+                    <GroupBox
+                        x:Name="SectionContainers"
+                        Margin="0,0,0,12"
+                        Header="Containers">
+                        <StackPanel Margin="8">
+                            <TextBlock FontWeight="Bold" Text="Containers visibility" />
+                            <TextBlock
+                                Margin="0,0,0,4"
+                                FontSize="11"
+                                Foreground="#999999"
+                                Text="Toggling takes effect immediately and does not save the snapshot." />
+                            <DataGrid
+                                x:Name="ContainersGrid"
+                                MaxHeight="220"
+                                AutoGenerateColumns="False"
+                                CanUserAddRows="False"
+                                CanUserDeleteRows="False"
+                                CanUserReorderColumns="False"
+                                GridLinesVisibility="Horizontal"
+                                HeadersVisibility="Column"
+                                IsReadOnly="False"
+                                ItemsSource="{Binding Containers}"
+                                PreviewKeyDown="ContainersGrid_PreviewKeyDown"
+                                RowHeaderWidth="0"
+                                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                SelectionMode="Single"
+                                SelectionUnit="FullRow">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn
+                                        Width="*"
+                                        Binding="{Binding Title}"
+                                        Header="Title"
+                                        IsReadOnly="True" />
+                                    <DataGridTextColumn
+                                        Width="90"
+                                        Binding="{Binding TypeDisplay}"
+                                        Header="Type"
+                                        IsReadOnly="True" />
+                                    <DataGridTemplateColumn Width="70" Header="Visible">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <CheckBox
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    IsChecked="{Binding IsVisible, UpdateSourceTrigger=PropertyChanged}" />
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
                         </StackPanel>
                     </GroupBox>
 

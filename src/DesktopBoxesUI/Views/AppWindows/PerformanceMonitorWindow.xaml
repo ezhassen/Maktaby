@@ -178,15 +178,16 @@
                     HeadersVisibility="Column"
                     IsReadOnly="True"
                     ItemsSource="{Binding Items}"
+                    PreviewMouseRightButtonDown="WindowsGrid_PreviewMouseRightButtonDown"
                     RowHeaderWidth="0"
-                    PreviewMouseRightButtonDown="WindowsGrid_PreviewMouseRightButtonDown">
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <DataGrid.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Header="Hide" Click="HideSelected_Click" />
-                            <MenuItem Header="Show" Click="ShowSelected_Click" />
+                            <MenuItem Click="HideSelected_Click" Header="Hide" />
+                            <MenuItem Click="ShowSelected_Click" Header="Show" />
                             <Separator />
-                            <MenuItem Header="Suspend" Click="SuspendSelected_Click" />
-                            <MenuItem Header="Resume" Click="ResumeSelected_Click" />
+                            <MenuItem Click="SuspendSelected_Click" Header="Suspend" />
+                            <MenuItem Click="ResumeSelected_Click" Header="Resume" />
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>

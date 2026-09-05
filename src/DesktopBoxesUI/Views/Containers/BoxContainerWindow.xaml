@@ -116,12 +116,6 @@
                             <ui:SymbolIcon Symbol="Navigation24" />
                             <Button.ContextMenu>
                                 <ContextMenu x:Name="BoxMenu">
-                                    <!--  Not implemented yet  -->
-                                    <MenuItem
-                                        Click="MenuHide_Click"
-                                        Header="Hide"
-                                        Icon="{StaticResource ItemIcon_HideBoxe}"
-                                        Visibility="Collapsed" />
                                     <MenuItem
                                         x:Name="MenuLockItem"
                                         Click="MenuLock_Click"
@@ -129,7 +123,12 @@
                                         Icon="{StaticResource ItemIcon_UnLocked}"
                                         IsCheckable="True"
                                         ToolTip="Toggle Locked state (Cannot Move or Resize the Window)" />
-                                    <!--<Separator />-->
+                                    <MenuItem
+                                        x:Name="MenuHideItem"
+                                        Click="MenuHide_Click"
+                                        Header="Hide"
+                                        Icon="{StaticResource ItemIcon_HideBoxe}" />
+                                    <Separator />
                                     <MenuItem
                                         x:Name="MenuAddTab"
                                         Click="AddTab_Click"
