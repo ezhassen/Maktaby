@@ -72,10 +72,16 @@ public sealed class PlaybackMonitor : IDisposable
         }
     }
 
+    private static readonly uint OwnPid = (uint)Environment.ProcessId;
+
     private static ForegroundInfo? CaptureForeground()
     {
         var hwnd = User32.GetForegroundWindow();
         if (hwnd == IntPtr.Zero || !User32.IsWindowVisible(hwnd)) return null;
+        // Never pause for our own windows (boxes, settings, dialogs): interacting with
+        // the app itself must not count as covering the wallpaper.
+        User32.GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == OwnPid) return null;
         var sb = new StringBuilder(256);
         User32.GetClassNameW(hwnd, sb, sb.Capacity);
         User32.GetWindowRect(hwnd, out var rect);
