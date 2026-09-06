@@ -109,6 +109,22 @@ public class UserSettings
 
     #endregion
 
+    #region LiveWallpaper
+
+    /// <summary>Full path of the live wallpaper video (.mp4). Null/empty = no wallpaper.</summary>
+    [Category("LiveWallpaper"), DefaultValue(null)]
+    public string? LiveWallpaperPath { get; set; }
+
+    /// <summary>Master switch. When false all wallpaper windows are closed (settings kept).</summary>
+    [Category("LiveWallpaper"), DefaultValue(true)]
+    public bool LiveWallpaperEnabled { get; set; } = false;
+
+    /// <summary>User Play/Pause intent. Auto-pause (fullscreen cover) is runtime-only.</summary>
+    [Category("LiveWallpaper"), DefaultValue(true)]
+    public bool LiveWallpaperPlaying { get; set; } = true;
+
+    #endregion
+
 }
 
 

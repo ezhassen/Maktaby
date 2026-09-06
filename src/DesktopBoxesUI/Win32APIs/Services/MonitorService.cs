@@ -23,7 +23,57 @@ public sealed class MonitorService : IMonitorService
         => GetWorkArea(Win32Apis.MonitorFromWindow((HWND)(IntPtr)0, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY));
 
     public IReadOnlyList<RectD> GetMonitorWorkAreas()
-        => new[] { GetPrimaryWorkArea() };
+        => GetAllMonitors().Select(m => m.WorkArea).ToList();
+
+    public IReadOnlyList<MonitorInfo> GetAllMonitors()
+    {
+        var list = new List<MonitorInfo>();
+        try
+        {
+            Win32Apis.EnumDisplayMonitors((IntPtr hMonitor, IntPtr hdc, ref Windows.Win32.Foundation.RECT rect, IntPtr data) =>
+            {
+                try
+                {
+                    var info = new ManualApis.MONITORINFOEX
+                    {
+                        cbSize = (uint)Marshal.SizeOf<ManualApis.MONITORINFOEX>()
+                    };
+                    if (!Win32Apis.GetMonitorInfoEx(hMonitor, ref info))
+                    {
+                        return true;
+                    }
+
+                    Win32Apis.TryGetDpiForMonitor(hMonitor, out uint dpiX, out uint dpiY);
+                    list.Add(new MonitorInfo
+                    {
+                        DeviceName = info.szDevice ?? string.Empty,
+                        Bounds = RectD.FromXYWH(info.rcMonitor.left, info.rcMonitor.top,
+                            info.rcMonitor.right - info.rcMonitor.left, info.rcMonitor.bottom - info.rcMonitor.top),
+                        WorkArea = RectD.FromXYWH(info.rcWork.left, info.rcWork.top,
+                            info.rcWork.right - info.rcWork.left, info.rcWork.bottom - info.rcWork.top),
+                        IsPrimary = (info.dwFlags & ManualApis.MONITORINFOF_PRIMARY) != 0,
+                        DpiX = dpiX,
+                        DpiY = dpiY,
+                    });
+                }
+                catch { }
+                return true;
+            });
+        }
+        catch { }
+        if (list.Count == 0)
+        {
+            var wa = GetPrimaryWorkArea();
+            list.Add(new MonitorInfo
+            {
+                DeviceName = "PRIMARY",
+                Bounds = wa,
+                WorkArea = wa,
+                IsPrimary = true,
+            });
+        }
+        return list;
+    }
 
     public RectD GetWorkAreaContaining(PointD point)
     {

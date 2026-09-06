@@ -13,5 +13,8 @@ public interface IMonitorService
 
     IReadOnlyList<RectD> GetMonitorWorkAreas();
 
+    /// <summary>All connected monitors with physical bounds, work areas and per-monitor DPI.</summary>
+    IReadOnlyList<MonitorInfo> GetAllMonitors();
+
     RectD GetWorkAreaContaining(PointD point);
 }

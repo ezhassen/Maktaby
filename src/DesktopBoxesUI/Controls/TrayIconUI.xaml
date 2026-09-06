@@ -60,6 +60,34 @@
                 Header="Performance Monitor"
                 Icon="{StaticResource ItemIcon_DebugTree}"
                 ToolTip="WebView2 CPU / memory, idle suspend" />
+            <MenuItem
+                Name="menuLiveWallpaper"
+                Header="Live Wallpaper"
+                Icon="{StaticResource ItemIcon_Gallery}">
+                <MenuItem
+                    x:Name="menuLiveWallpaperEnable"
+                    Click="LiveWallpaperEnable_Click"
+                    Header="Enable"
+                    Icon="{StaticResource ItemIcon_Enable}"
+                    IsCheckable="True" />
+                <MenuItem
+                    x:Name="menuLiveWallpaperPlayPause"
+                    Click="LiveWallpaperPlayPause_Click"
+                    Header="Pause"
+                    Icon="{StaticResource ItemIcon_HideAllBoxes_Hide}" />
+                <Separator />
+                <MenuItem
+                    x:Name="menuLiveWallpaperChange"
+                    Click="LiveWallpaperChange_Click"
+                    Header="Change..."
+                    Icon="{StaticResource ItemIcon_FolderPortal}" />
+                <MenuItem
+                    x:Name="menuLiveWallpaperRemove"
+                    Click="LiveWallpaperRemove_Click"
+                    Foreground="OrangeRed"
+                    Header="Remove"
+                    Icon="{StaticResource ItemIcon_Delete}" />
+            </MenuItem>
             <MenuItem Header="Theme" Icon="{StaticResource ItemIcon_Theme}">
                 <MenuItem
                     x:Name="menu_theme_system"

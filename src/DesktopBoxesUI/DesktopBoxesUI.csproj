@@ -93,8 +93,9 @@
 	  <Folder Include="Animations\" />
 	</ItemGroup>
 
-	<ItemGroup>
+  <ItemGroup>
+	  <ProjectReference Include="..\DesktopLiveWallPaperEngine\DesktopLiveWallPaperEngine.csproj" />
 	  <ProjectReference Include="..\WPFShared\WPFShared.csproj" />
-	</ItemGroup>
+  </ItemGroup>
 
 </Project>

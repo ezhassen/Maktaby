@@ -19,7 +19,11 @@ namespace DesktopBoxesUI;
 
 public static class Logging
 {
+#if DEBUG
+    public const Serilog.Events.LogEventLevel DefaultLogEventLevel = Serilog.Events.LogEventLevel.Debug;
+#else
     public const Serilog.Events.LogEventLevel DefaultLogEventLevel = Serilog.Events.LogEventLevel.Warning;
+#endif
     private static LoggingLevelSwitch? levelSwitch;
     public static LoggingLevelSwitch LevelSwitch
     {
@@ -97,7 +101,7 @@ public static class Logging
         if (_log is null)
         {
             _log = GetNewLogger("DesktopBoxes.log", LevelSwitch);
-
+            Serilog.Log.Logger = _log;
             if (_watcher is null)
             {
                 // Setup file watcher to reload settings on change

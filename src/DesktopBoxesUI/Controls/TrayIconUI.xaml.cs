@@ -32,6 +32,10 @@ public partial class TrayIconUI
     public event EventHandler? ToggleHideAllRequested;
     public event EventHandler? DebugTreeRequested;
     public event EventHandler? MenuToggleDisableClick;
+    public event EventHandler? LiveWallpaperToggleEnable;
+    public event EventHandler? LiveWallpaperTogglePlayPause;
+    public event EventHandler? LiveWallpaperChangeRequested;
+    public event EventHandler? LiveWallpaperRemoveRequested;
 
     public TrayIconUI()
     {
@@ -58,6 +62,13 @@ public partial class TrayIconUI
         menu_theme_system.IsChecked = _settingsService.UserSettings.SelectedTheme_IsSystem();
         menu_theme_light.IsChecked = _settingsService.UserSettings.SelectedTheme_IsLight();
         menu_theme_dark.IsChecked = _settingsService.UserSettings.SelectedTheme_IsDark();
+        // Live Wallpaper submenu reflects manager state (independent from boxes).
+        var liveWallpaper = App.Services.GetService<LiveWallpaperManager>();
+        menuLiveWallpaperEnable.IsChecked = liveWallpaper?.IsEnabled == true;
+        bool hasWallpaper = liveWallpaper?.HasWallpaper == true && liveWallpaper?.IsEnabled == true;
+        menuLiveWallpaperPlayPause.IsEnabled = hasWallpaper;
+        menuLiveWallpaperPlayPause.Header = liveWallpaper?.IsPlaying == true ? "Pause" : "Play";
+        menuLiveWallpaperRemove.IsEnabled = liveWallpaper?.HasWallpaper == true;
         //
         bool isDisabled = dtMan.IsDisabled;
         MenuToggleDisable.Header = isDisabled ? "Enable Desktop Boxes" : "Disable Desktop Boxes";
@@ -70,7 +81,7 @@ public partial class TrayIconUI
         foreach (var item in contextMenu.Items)
         {
             // disable all menu items except MenuToggleDisable, exit, about
-            if (item == MenuToggleDisable || item == menuExit || item == menuAbout) continue;
+            if (item == MenuToggleDisable || item == menuExit || item == menuAbout || item == menuLiveWallpaper) continue;
             if (item is not MenuItem mItem) continue;
             mItem.IsEnabled = !isDisabled;
         }
@@ -126,6 +137,14 @@ public partial class TrayIconUI
     private void ToggleHideAll_Click(object sender, RoutedEventArgs e) => ToggleHideAllRequested?.Invoke(this, EventArgs.Empty);
 
     private void DebugTree_Click(object sender, RoutedEventArgs e) => DebugTreeRequested?.Invoke(this, EventArgs.Empty);
+
+    private void LiveWallpaperEnable_Click(object sender, RoutedEventArgs e) => LiveWallpaperToggleEnable?.Invoke(this, EventArgs.Empty);
+
+    private void LiveWallpaperPlayPause_Click(object sender, RoutedEventArgs e) => LiveWallpaperTogglePlayPause?.Invoke(this, EventArgs.Empty);
+
+    private void LiveWallpaperChange_Click(object sender, RoutedEventArgs e) => LiveWallpaperChangeRequested?.Invoke(this, EventArgs.Empty);
+
+    private void LiveWallpaperRemove_Click(object sender, RoutedEventArgs e) => LiveWallpaperRemoveRequested?.Invoke(this, EventArgs.Empty);
 
     private void PerformanceMonitor_Click(object sender, RoutedEventArgs e)
     {

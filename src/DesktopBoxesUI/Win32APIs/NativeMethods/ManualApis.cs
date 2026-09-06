@@ -78,8 +78,10 @@ internal static class ManualApis
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
-    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
+    [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", SetLastError = true)]
     public static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+
+
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -167,6 +169,10 @@ internal static class ManualApis
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+    public const int SW_HIDE = 0;
+    public const int SW_SHOWNOACTIVATE = 4;
+    public const int WS_CLIPCHILDREN = 0x02000000;
+
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
@@ -190,6 +196,9 @@ internal static class ManualApis
     [DllImport("user32.dll", CharSet = CharSet.Auto)]
     public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
 
+
+
+    public const uint GW_HWNDFIRST = 0;
     public const uint GW_OWNER = 4;
     public const uint GW_CHILD = 5;
     public const uint GW_HWNDNEXT = 2;
@@ -238,6 +247,10 @@ internal static class ManualApis
     public const int SM_CXDOUBLECLK = 36;
     public const int SM_CYDOUBLECLK = 37;
     public const int SM_CXICON = 11;
+    public const int SM_XVIRTUALSCREEN = 76;
+    public const int SM_YVIRTUALSCREEN = 77;
+    public const int SM_CXVIRTUALSCREEN = 78;
+    public const int SM_CYVIRTUALSCREEN = 79;
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
@@ -348,6 +361,12 @@ internal static class ManualApis
     public const uint TPM_RETURNCMD = 0x0100;
     public const uint TPM_RIGHTBUTTON = 0x0002;
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern IntPtr FindWindow(string className, string? windowName);
+
+    [DllImport("psapi.dll")]
+    public static extern int EmptyWorkingSet(IntPtr hProcess);
+
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string lpszClass, string? lpszWindow);
 
@@ -369,6 +388,8 @@ internal static class ManualApis
 
     public const int GWL_STYLE = -16;
     public const int GWL_HWNDPARENT = -8;
+
+
     public const int WS_MAXIMIZEBOX = 0x00010000;
     public const int WS_MINIMIZEBOX = 0x00020000;
     public const int WsPopup = unchecked((int)0x80000000);
@@ -453,6 +474,42 @@ internal static class ManualApis
         public int iGroup;
     }
 
+
+    // --- Multi-monitor enumeration + DWM cloaked check (live wallpaper). EnumDisplayMonitors
+    // takes a managed callback, so manual declaration is used instead of CsWin32 function
+    // pointers; everything still lives in NativeMethods and is called via Win32Apis. ---
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct MONITORINFOEX
+    {
+        public uint cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public uint dwFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string szDevice;
+    }
+
+    public const uint MONITORINFOF_PRIMARY = 1;
+
+    public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+
+    [DllImport("user32.dll", EntryPoint = "GetMonitorInfoW", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetMonitorInfoEx(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+    public const uint DWMWA_CLOAKED = 14;
+
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    public static extern int DwmGetWindowAttribute(IntPtr hwnd, uint dwAttribute, out int pvAttribute, int cbAttribute);
+
+    public const int MDT_EFFECTIVE_DPI = 0;
+
+    [DllImport("shcore.dll")]
+    public static extern int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     public const uint TME_LEAVE = 0x00000002;
     [DllImport("user32.dll")]

@@ -14,6 +14,8 @@ using DesktopBoxesUI.WPFServices;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using Serilog.Core;
+using System.Diagnostics;
+using System.IO;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Interop;
@@ -63,6 +65,7 @@ public partial class App : Application
 #endif
         //
         AppJSettings.Reload();
+        Logging.InitializeDefaultLogger();
         //
 
         var services = new ServiceCollection();
@@ -119,6 +122,8 @@ public partial class App : Application
         // Stop the minimize-prevention hooks from fighting window teardown (owned chains collapsing
         // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
         Win32Apis.SystemTeardown = true;
+        try { Services.GetRequiredService<LiveWallpaperManager>().Shutdown(); } catch { }
+
 
         var mang = Services.GetRequiredService<DesktopManager>();
         if (!mang.IsDisabled)
@@ -253,6 +258,7 @@ public partial class App : Application
         services.AddSingleton<IDesktopService, DesktopService>();
 
         // UI services and view models
+        services.AddSingleton<LiveWallpaperManager>();
         services.AddSingleton<IconImageService>();
         services.AddSingleton<MainViewModel>();
         services.AddTransient<SettingsViewModel>();
@@ -363,6 +369,8 @@ public partial class App : Application
                     ReplaceTrayIcon(Services);
                     if (!isDisabled)
                         Services.GetRequiredService<DesktopManager>().RecoverAfterShellRestart();
+                    // Wallpaper is independent from boxes: always re-glue it.
+                    Services.GetRequiredService<LiveWallpaperManager>().RecoverAfterShellRestart();
                     Log.Information("Shell restarted — tray icon recovered{Recovery}", isDisabled ? " (layer suspended)" : " + desktop layer");
                 }
                 catch (System.Exception ex)
@@ -393,6 +401,31 @@ public partial class App : Application
         tray.NewBoxFolderPortalRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewFolderPortal();
         tray.NewWidgetRequested += (_, _) => ShowWidgetsList(selectMode: true);
         tray.ManageWidgetsRequested += (_, _) => ShowWidgetsList(selectMode: false);
+        tray.LiveWallpaperToggleEnable += (_, _) =>
+        {
+            var lw = Services.GetRequiredService<LiveWallpaperManager>();
+            lw.SetEnabled(!lw.IsEnabled);
+        };
+        tray.LiveWallpaperTogglePlayPause += (_, _) =>
+        {
+            var lw = Services.GetRequiredService<LiveWallpaperManager>();
+            lw.SetPlaying(!lw.IsPlaying);
+        };
+        tray.LiveWallpaperChangeRequested += (_, _) =>
+        {
+            //var newFile = DesktopLiveWallPaperEngine.WallPaperFilePicker.PickMedia(Process.GetCurrentProcess().Handle);
+            //if (string.IsNullOrEmpty(newFile) || !File.Exists(newFile)) return;
+            //Services.GetRequiredService<LiveWallpaperManager>().SetWallpaper(newFile);
+            var dlg = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Choose live wallpaper video",
+                Filter = "Video files (*.mp4;*.m4v;*.wmv;*.mov)|*.mp4;*.m4v;*.wmv;*.mov|All files (*.*)|*.*",
+                Multiselect = false
+            };
+            if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.FileName))
+                Services.GetRequiredService<LiveWallpaperManager>().SetWallpaper(dlg.FileName);
+        };
+        tray.LiveWallpaperRemoveRequested += (_, _) => Services.GetRequiredService<LiveWallpaperManager>().Remove();
         tray.ResetRequested += async (_, _) =>
         {
             var confirmed = await Services.GetRequiredService<IDialogService>().ShowConfirmAsync(

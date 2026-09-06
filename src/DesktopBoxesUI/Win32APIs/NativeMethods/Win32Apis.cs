@@ -29,6 +29,39 @@ internal static class Win32Apis
 
     public static HMONITOR MonitorFromWindow(HWND hwnd, MONITOR_FROM_FLAGS flags) => PInvoke.MonitorFromWindow(hwnd, flags);
 
+    /// <summary>Enumerates all display monitors. The callback runs synchronously, so the caller
+    /// may keep the delegate in a local.</summary>
+    public static bool EnumDisplayMonitors(ManualApis.MonitorEnumProc proc)
+        => ManualApis.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, proc, IntPtr.Zero);
+
+    public static bool GetMonitorInfoEx(IntPtr hMonitor, ref ManualApis.MONITORINFOEX info)
+        => ManualApis.GetMonitorInfoEx(hMonitor, ref info);
+
+    /// <summary>Effective DPI for a monitor (per-monitor, unlike GetDpiForSystem).</summary>
+    public static bool TryGetDpiForMonitor(IntPtr hMonitor, out uint dpiX, out uint dpiY)
+    {
+        dpiX = dpiY = 96;
+        try
+        {
+            int hr = ManualApis.GetDpiForMonitor(hMonitor, ManualApis.MDT_EFFECTIVE_DPI, out dpiX, out dpiY);
+            return hr == 0 && dpiX > 0 && dpiY > 0;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>True when the window is cloaked by DWM (UWP splash, virtual-desktop hidden, ...).
+    /// Cloaked windows must not count as visible fullscreen covers.</summary>
+    public static bool IsWindowCloaked(IntPtr hwnd)
+    {
+        try
+        {
+            if (ManualApis.DwmGetWindowAttribute(hwnd, ManualApis.DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0)
+                return cloaked != 0;
+        }
+        catch { }
+        return false;
+    }
+
     public static HMONITOR MonitorFromRect(in RECT rect, MONITOR_FROM_FLAGS flags) => PInvoke.MonitorFromRect(in rect, flags);
 
     public static BOOL GetMonitorInfo(HMONITOR hMonitor, ref MONITORINFO monitorInfo) => PInvoke.GetMonitorInfo(hMonitor, ref monitorInfo);
@@ -93,6 +126,14 @@ internal static class Win32Apis
     public static IntPtr LoadArrowCursor() => ManualApis.LoadCursor(IntPtr.Zero, (IntPtr)32512 /* IDC_ARROW */);
 
     public static IntPtr SetCursor(IntPtr hCursor) => ManualApis.SetCursor(hCursor);
+
+    public const uint SWP_SHOWWINDOW = 0x0040;
+    public const int WM_DISPLAYCHANGE = 0x007E;
+
+    public static void TrimWorkingSet()
+    {
+        try { ManualApis.EmptyWorkingSet(System.Diagnostics.Process.GetCurrentProcess().Handle); } catch { }
+    }
 
     /// <summary>Registers a system broadcast message (e.g. "TaskbarCreated" after Explorer restarts).</summary>
     public static bool SetCursorPos(int X, int Y) => ManualApis.SetCursorPos(X, Y);

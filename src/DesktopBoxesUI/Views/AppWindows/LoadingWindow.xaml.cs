@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 
 namespace DesktopBoxesUI.Views;
@@ -32,6 +33,9 @@ public partial class LoadingWindow : Window
         try
         {
             await _manager.InitializeAsync();
+
+            // Standalone live wallpaper (own windows, own lifecycle — independent from DesktopManager).
+            try { App.Services.GetRequiredService<LiveWallpaperManager>().Initialize(); } catch { }
         }
         finally
         {
