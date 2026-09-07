@@ -16,6 +16,8 @@ namespace DesktopBoxesUI.Views;
 /// Full-screen, transparent, click-through-visually-but-hit-testable window sitting behind all Box
 /// windows. It owns the empty desktop area: dropping an item (from another Box, the Start Menu, or
 /// File Explorer) onto empty space creates a new Box at the cursor and drops the item into it.
+/// The <see cref="DesktopManager"/> hides this window while desktop icons are shown (native input
+/// then reaches Explorer directly) and re-shows it when icons are hidden again.
 /// </summary>
 public sealed partial class DesktopSurface : Window
 {

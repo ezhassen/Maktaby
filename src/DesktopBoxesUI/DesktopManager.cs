@@ -46,6 +46,12 @@ public sealed class DesktopManager
     private DesktopSurface? _surface;
     private bool _allBoxesHidden;
 
+    // WinEvent watch for desktop-icon show/hide toggles (e.g. via Explorer's own menu):
+    // the hook handle, the rooted callback delegate, and the list-view handle it filters on.
+    private IntPtr _iconWatchHook;
+    private WinEventProc? _iconWatchProc;
+    private IntPtr _iconWatchListView;
+
     /// <summary>When true all app functionality is suspended: boxes, surface, watchers and shell
     /// hooks are stopped. Only the tray icon remains. <see cref="ToggleDisableAsync"/> flips it.</summary>
     public bool IsDisabled { get; private set; }
@@ -119,6 +125,7 @@ public sealed class DesktopManager
         _mainVm.Containers.CollectionChanged += Containers_CollectionChanged;
 
         EnsureSurface();
+        StartIconVisibilityWatch();
 
         // Show the first container right away so the desktop isn't empty, then lazily stream the
         // remaining container windows in the background (after the splash closes) for an instant startup.
@@ -352,6 +359,8 @@ public sealed class DesktopManager
         }
 
         _surface?.Relayout();
+        SyncSurfaceWithIconVisibility();
+        StartIconVisibilityWatch();
 
         _ = SaveAsync();
     }
@@ -845,8 +854,9 @@ public sealed class DesktopManager
 
     /// <summary>
     /// Temporarily hides every open box window. The <see cref="Win32Apis.MinimizePreventionHook"/> would
-    /// otherwise re-show them, so each hide is wrapped in <see cref="Win32Apis.AllowHide"/>. The desktop
-    /// surface and tray host are deliberately left visible so the toggle can be reversed.
+    /// otherwise re-show them, so each hide is wrapped in <see cref="Win32Apis.AllowHide"/>. The tray host
+    /// is deliberately left visible so the toggle can be reversed; the desktop surface keeps whatever
+    /// visibility <see cref="SyncSurfaceWithIconVisibility"/> assigned it (hidden while icons are shown).
     /// </summary>
     public void HideAllBoxes()
     {
@@ -965,6 +975,7 @@ public sealed class DesktopManager
 
     public void CloseAll()
     {
+        StopIconVisibilityWatch();
         _coordinator.Stop();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
 
@@ -1386,10 +1397,7 @@ public sealed class DesktopManager
         if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == false)
         {
             _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
-            if (!_surface.IsVisible)
-            {
-                _surface.Show();
-            }
+            SyncSurfaceWithIconVisibility();
         }
         else
         {
@@ -1415,6 +1423,248 @@ public sealed class DesktopManager
     }
 
     /// <summary>
+    /// Live desktop-icon check (not the cached service flag, which goes stale when the
+    /// user toggles icons via Explorer's own menu): true = icons visible, false = hidden,
+    /// null = shell unreachable (Explorer dead/restarting).
+    /// </summary>
+    private static bool? AreDesktopIconsShownLive()
+    {
+        try
+        {
+            var listView = Win32.Services.ExplorerDesktopService.FindDesktopListView();
+            if (listView == IntPtr.Zero || !Win32Apis.IsWindow(listView))
+            {
+                return null;
+            }
+
+            return Win32Apis.IsWindowVisible(listView);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Hides the surface window in place so native desktop input reaches Explorer directly.
+    /// Boxes keep their windows, ownership and z-order — hiding (unlike minimizing) an owner
+    /// never hides owned windows, and the published handle stays valid so re-show is cheap.
+    /// </summary>
+    public void HideSurface()
+    {
+        var surface = _surface;
+        if (surface is null)
+        {
+            return;
+        }
+
+        IntPtr hwnd;
+        try
+        {
+            hwnd = new WindowInteropHelper(surface).Handle;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (hwnd == IntPtr.Zero)
+        {
+            return;
+        }
+
+        try
+        {
+            ManualApis.ReleaseCapture();
+        }
+        catch
+        {
+            // Releasing when nothing is captured is a no-op by design; aborting a
+            // mid-marquee capture here keeps the hook state consistent after hiding.
+        }
+
+        // Same AllowHide wrapping as HideAllBoxes: a plain Hide() posts lParam 0 (not
+        // SW_PARENTCLOSING, so the minimize-prevention hook would leave it alone), but
+        // this guards against any future hook tightening at zero cost.
+        Win32Apis.AllowHide(hwnd);
+        try
+        {
+            surface.Hide();
+        }
+        finally
+        {
+            Win32Apis.DisallowHide(hwnd);
+        }
+    }
+
+    /// <summary>
+    /// Re-shows a hidden surface (creating it first when needed) and re-establishes
+    /// glue, anchor and geometry. No-op when the global-hook path is active (no surface
+    /// exists there by design) and when already visible.
+    /// </summary>
+    public void ShowSurface()
+    {
+        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface != false)
+        {
+            return;
+        }
+
+        _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
+        if (_surface.IsVisible)
+        {
+            return;
+        }
+
+        // Appear without stealing foreground: the re-show is triggered by an icon toggle
+        // performed in Explorer, which must keep the foreground.
+        _surface.ShowActivated = false;
+        _surface.Show();
+        var hwnd = new WindowInteropHelper(_surface).Handle;
+        if (hwnd != IntPtr.Zero && Win32Apis.IsWindow(hwnd))
+        {
+            Win32Apis.GlueToDesktopSurface(hwnd);
+            _surface.Relayout();
+        }
+    }
+
+    /// <summary>
+    /// Applies the standing rule: desktop icons shown ⇒ surface hidden (native input flows
+    /// to Explorer untouched, boxes stay); icons hidden ⇒ surface shown. Unknown shell
+    /// state leaves the surface as-is; shell recovery re-syncs afterwards.
+    /// </summary>
+    public void SyncSurfaceWithIconVisibility()
+    {
+        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface != false)
+        {
+            return;
+        }
+
+        var shown = AreDesktopIconsShownLive();
+        if (shown == true)
+        {
+            HideSurface();
+        }
+        else if (shown == false)
+        {
+            ShowSurface();
+        }
+    }
+
+    /// <summary>
+    /// Arms the event-driven watch for desktop-icon show/hide toggles (e.g. via Explorer's
+    /// own context menu, which bypasses our services): SHOW/HIDE/DESTROY on the Explorer
+    /// SysListView32, filtered to that exact window. The callback marshals the sync onto
+    /// the UI thread. Idempotent; re-arm after shell restarts (new Explorer PID/handles).
+    /// </summary>
+    private void StartIconVisibilityWatch()
+    {
+        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface != false)
+        {
+            return;
+        }
+
+        if (_iconWatchHook != IntPtr.Zero && Win32Apis.IsWindow(_iconWatchListView))
+        {
+            return;
+        }
+
+        StopIconVisibilityWatch();
+        IntPtr listView;
+        try
+        {
+            listView = Win32.Services.ExplorerDesktopService.FindDesktopListView();
+            if (listView == IntPtr.Zero || !Win32Apis.IsWindow(listView))
+            {
+                return;
+            }
+
+            Win32Apis.GetWindowThreadProcessId(listView, out uint explorerPid);
+            if (explorerPid == 0)
+            {
+                return;
+            }
+
+            _iconWatchProc = OnIconVisibilityEvent;
+            _iconWatchListView = listView;
+            _iconWatchHook = Win32Apis.SetWinEventHook(
+                ManualApis.EVENT_OBJECT_DESTROY, ManualApis.EVENT_OBJECT_HIDE,
+                IntPtr.Zero, _iconWatchProc, explorerPid, 0, ManualApis.WINEVENT_OUTOFCONTEXT);
+            if (_iconWatchHook == IntPtr.Zero)
+            {
+                _iconWatchProc = null;
+                _iconWatchListView = IntPtr.Zero;
+            }
+        }
+        catch
+        {
+            StopIconVisibilityWatch();
+        }
+    }
+
+    private void StopIconVisibilityWatch()
+    {
+        if (_iconWatchHook != IntPtr.Zero)
+        {
+            try
+            {
+                Win32Apis.UnhookWinEvent(_iconWatchHook);
+            }
+            catch
+            {
+                // Best effort; a dead hook unhooks to false and that is fine.
+            }
+
+            _iconWatchHook = IntPtr.Zero;
+        }
+
+        _iconWatchProc = null;
+        _iconWatchListView = IntPtr.Zero;
+    }
+
+    private void OnIconVisibilityEvent(
+        IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint idEventThread, uint dwmsEventTime)
+    {
+        try
+        {
+            if (idObject != ManualApis.OBJID_WINDOW)
+            {
+                return;
+            }
+
+            if (hwnd == IntPtr.Zero || hwnd != _iconWatchListView)
+            {
+                return;
+            }
+
+            if (eventType == ManualApis.EVENT_OBJECT_DESTROY)
+            {
+                // List-view itself is going away (Explorer crash/restart): stop watching;
+                // RecoverAfterShellRestart re-arms against the new shell.
+                StopIconVisibilityWatch();
+                return;
+            }
+
+            if (eventType is not (ManualApis.EVENT_OBJECT_SHOW or ManualApis.EVENT_OBJECT_HIDE))
+            {
+                return;
+            }
+
+            var app = Application.Current;
+            if (app is null)
+            {
+                return;
+            }
+
+            // The hook fires on a system thread — the window Hide/Show must run on the UI thread.
+            app.Dispatcher.BeginInvoke(new Action(SyncSurfaceWithIconVisibility));
+        }
+        catch
+        {
+            // Diagnostics must never break the hook pump.
+        }
+    }
+
+    /// <summary>
     /// Rebuilds the desktop-layer bindings after Explorer crashed/restarted: the old Progman/WorkerW
     /// windows (and every handle we cached against them) are gone, so the surface must be recreated
     /// or re-glued above the NEW anchor and every box re-owned. Triggered from App's
@@ -1428,6 +1678,7 @@ public sealed class DesktopManager
 
         // Surface: it may have died together with its old owner window — recreate when needed,
         // otherwise just re-glue (owner + NOACTIVATE + insert-above-anchor) and refresh caches.
+        // Visibility follows the live icon state (never show over visible icons).
         if (customSurface)
         {
             if (_surface is not null)
@@ -1441,10 +1692,6 @@ public sealed class DesktopManager
             }
 
             _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
-            if (!_surface.IsVisible)
-            {
-                _surface.Show();
-            }
 
             var sHwnd = new WindowInteropHelper(_surface).Handle;
             _surface.InvalidateShellHandles();
@@ -1453,6 +1700,9 @@ public sealed class DesktopManager
                 Win32Apis.GlueToDesktopSurface(sHwnd);
                 _surface.Relayout();
             }
+
+            SyncSurfaceWithIconVisibility();
+            StartIconVisibilityWatch();
         }
         else
         {

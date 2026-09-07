@@ -47,6 +47,15 @@ internal static class ManualApis
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool UnhookWinEvent(IntPtr hWinEventHook);
 
+    // WinEvent notification used to observe desktop icon show/hide toggles
+    // (EVENT_OBJECT_SHOW/HIDE on the Explorer SysListView32) without polling.
+    public const uint EVENT_OBJECT_DESTROY = 0x8001;
+    public const uint EVENT_OBJECT_SHOW = 0x8002;
+    public const uint EVENT_OBJECT_HIDE = 0x8003;
+    public const int OBJID_WINDOW = 0;
+    public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    public const uint WINEVENT_SKIPOWNPROCESS = 0x0002;
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATAW lpdata);
 
