@@ -42,6 +42,16 @@
         FontSize="16"
         Symbol="EyeOff20" />
     <ui:SymbolIcon
+        x:Key="ItemIcon_Play"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Play20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Pause"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Pause20" />
+    <ui:SymbolIcon
         x:Key="ItemIcon_HideBoxe"
         x:Shared="False"
         FontSize="16"

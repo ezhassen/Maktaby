@@ -69,12 +69,14 @@
                     Click="LiveWallpaperEnable_Click"
                     Header="Enable"
                     Icon="{StaticResource ItemIcon_Enable}"
-                    IsCheckable="True" />
+                    IsCheckable="True"
+                    StaysOpenOnClick="True" />
                 <MenuItem
                     x:Name="menuLiveWallpaperPlayPause"
                     Click="LiveWallpaperPlayPause_Click"
                     Header="Pause"
-                    Icon="{StaticResource ItemIcon_HideAllBoxes_Hide}" />
+                    Icon="{StaticResource ItemIcon_Play}"
+                    StaysOpenOnClick="True" />
                 <Separator />
                 <MenuItem
                     x:Name="menuLiveWallpaperChange"
@@ -86,7 +88,8 @@
                     Click="LiveWallpaperRemove_Click"
                     Foreground="OrangeRed"
                     Header="Remove"
-                    Icon="{StaticResource ItemIcon_Delete}" />
+                    Icon="{StaticResource ItemIcon_Delete}"
+                    StaysOpenOnClick="True" />
             </MenuItem>
             <MenuItem Header="Theme" Icon="{StaticResource ItemIcon_Theme}">
                 <MenuItem

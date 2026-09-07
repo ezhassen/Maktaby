@@ -62,13 +62,9 @@ public partial class TrayIconUI
         menu_theme_system.IsChecked = _settingsService.UserSettings.SelectedTheme_IsSystem();
         menu_theme_light.IsChecked = _settingsService.UserSettings.SelectedTheme_IsLight();
         menu_theme_dark.IsChecked = _settingsService.UserSettings.SelectedTheme_IsDark();
+        //
         // Live Wallpaper submenu reflects manager state (independent from boxes).
-        var liveWallpaper = App.Services.GetService<LiveWallpaperManager>();
-        menuLiveWallpaperEnable.IsChecked = liveWallpaper?.IsEnabled == true;
-        bool hasWallpaper = liveWallpaper?.HasWallpaper == true && liveWallpaper?.IsEnabled == true;
-        menuLiveWallpaperPlayPause.IsEnabled = hasWallpaper;
-        menuLiveWallpaperPlayPause.Header = liveWallpaper?.IsPlaying == true ? "Pause" : "Play";
-        menuLiveWallpaperRemove.IsEnabled = liveWallpaper?.HasWallpaper == true;
+        SyncMenuItemState_LiveWallPaperItems();
         //
         bool isDisabled = dtMan.IsDisabled;
         MenuToggleDisable.Header = isDisabled ? "Enable Desktop Boxes" : "Disable Desktop Boxes";
@@ -80,12 +76,29 @@ public partial class TrayIconUI
 
         foreach (var item in contextMenu.Items)
         {
-            // disable all menu items except MenuToggleDisable, exit, about
+            // disable all menu items except MenuToggleDisable, exit, about, liveWallpaper
             if (item == MenuToggleDisable || item == menuExit || item == menuAbout || item == menuLiveWallpaper) continue;
             if (item is not MenuItem mItem) continue;
             mItem.IsEnabled = !isDisabled;
         }
     }
+
+    #region Sync Menu Items States
+
+
+    void SyncMenuItemState_LiveWallPaperItems()
+    {
+        // Live Wallpaper submenu reflects manager state (independent from boxes).
+        var liveWallpaper = App.Services.GetService<LiveWallpaperManager>();
+        menuLiveWallpaperEnable.IsChecked = liveWallpaper?.IsEnabled == true;
+        bool hasWallpaper = liveWallpaper?.HasWallpaper == true && liveWallpaper?.IsEnabled == true;
+        menuLiveWallpaperPlayPause.IsEnabled = hasWallpaper;
+        menuLiveWallpaperPlayPause.Header = liveWallpaper?.IsPlaying == true ? "Pause" : "Play";
+        menuLiveWallpaperPlayPause.Icon = Application.Current.FindResource(liveWallpaper?.IsPlaying == true ? "ItemIcon_Pause" : "ItemIcon_Play") as object;
+        menuLiveWallpaperRemove.IsEnabled = liveWallpaper?.HasWallpaper == true;
+    }
+
+    #endregion
 
     /// <summary>Loads the app's own icon (largest embedded size) for the tray; falls back to the
     /// desktop folder glyph if the resource is unavailable.</summary>
@@ -138,13 +151,33 @@ public partial class TrayIconUI
 
     private void DebugTree_Click(object sender, RoutedEventArgs e) => DebugTreeRequested?.Invoke(this, EventArgs.Empty);
 
-    private void LiveWallpaperEnable_Click(object sender, RoutedEventArgs e) => LiveWallpaperToggleEnable?.Invoke(this, EventArgs.Empty);
+    private void LiveWallpaperEnable_Click(object sender, RoutedEventArgs e)
+    {
+        LiveWallpaperToggleEnable?.Invoke(this, EventArgs.Empty);
+        // Menu stays open (StaysOpenOnClick), so refresh check/enabled state immediately.
+        SyncMenuItemState_LiveWallPaperItems();
+    }
 
-    private void LiveWallpaperPlayPause_Click(object sender, RoutedEventArgs e) => LiveWallpaperTogglePlayPause?.Invoke(this, EventArgs.Empty);
+    private void LiveWallpaperPlayPause_Click(object sender, RoutedEventArgs e)
+    {
+        LiveWallpaperTogglePlayPause?.Invoke(this, EventArgs.Empty);
+        // Menu stays open (StaysOpenOnClick), so refresh Play/Pause header immediately.
+        SyncMenuItemState_LiveWallPaperItems();
+    }
 
-    private void LiveWallpaperChange_Click(object sender, RoutedEventArgs e) => LiveWallpaperChangeRequested?.Invoke(this, EventArgs.Empty);
+    private void LiveWallpaperChange_Click(object sender, RoutedEventArgs e)
+    {
+        LiveWallpaperChangeRequested?.Invoke(this, EventArgs.Empty);
+        // Menu stays open (StaysOpenOnClick); file dialog may have changed state.
+        SyncMenuItemState_LiveWallPaperItems();
+    }
 
-    private void LiveWallpaperRemove_Click(object sender, RoutedEventArgs e) => LiveWallpaperRemoveRequested?.Invoke(this, EventArgs.Empty);
+    private void LiveWallpaperRemove_Click(object sender, RoutedEventArgs e)
+    {
+        LiveWallpaperRemoveRequested?.Invoke(this, EventArgs.Empty);
+        // Menu stays open (StaysOpenOnClick), so refresh enabled state immediately.
+        SyncMenuItemState_LiveWallPaperItems();
+    }
 
     private void PerformanceMonitor_Click(object sender, RoutedEventArgs e)
     {
