@@ -133,6 +133,7 @@ public sealed class DesktopManager
         if (_mainVm.Containers.Count > 0)
         {
             AddWindow(_mainVm.Containers[0], showActivated: false);//focusWorkaround: true
+            EnsureDesktopZOrder();
         }
 
         _ = StreamRemainingContainersAsync();
@@ -360,6 +361,7 @@ public sealed class DesktopManager
 
         _surface?.Relayout();
         SyncSurfaceWithIconVisibility();
+        EnsureDesktopZOrder();
         StartIconVisibilityWatch();
 
         _ = SaveAsync();
@@ -915,6 +917,10 @@ public sealed class DesktopManager
                 AddWindow(vm, showActivated: false);
                 await Task.Yield();
             }
+
+            // Settle the desktop z-band once streaming ends: boxes above the surface, so
+            // hover/clicks reach boxes from the first frame without needing a click first.
+            EnsureDesktopZOrder();
             //await Task.Delay(TimeSpan.FromSeconds(1));
             //_surface!.Focus();
             //_surface!.Activate();
@@ -1525,6 +1531,8 @@ public sealed class DesktopManager
             Win32Apis.GlueToDesktopSurface(hwnd);
             _surface.Relayout();
         }
+
+        EnsureDesktopZOrder();
     }
 
     /// <summary>
@@ -1547,6 +1555,72 @@ public sealed class DesktopManager
         else if (shown == false)
         {
             ShowSurface();
+        }
+    }
+
+    /// <summary>
+    /// Re-asserts the desktop z-band once startup settles: every box directly above the
+    /// surface (chained bottom-to-top in creation order), the surface itself already pinned
+    /// above the desktop anchor by its own guard. Verified need: at startup the surface can
+    /// lose the initial z-race and end up ABOVE its owned boxes; being hit-testable everywhere,
+    /// it then swallows all box input (no hover, no chrome) until the first click/activation
+    /// recomputes owned-above-owner and drops the boxes back on top. A deterministic re-assert
+    /// removes the dead-hover window entirely. Never touches application windows (insert-after
+    /// chain stays inside our own desktop band) and never activates (NOACTIVATE throughout).
+    /// No-op without a live surface (global-hook path, teardown, dead shell).
+    /// </summary>
+    private void EnsureDesktopZOrder()
+    {
+        if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface != false)
+        {
+            return;
+        }
+
+        IntPtr surface;
+        try
+        {
+            surface = Win32Apis.DesktopSurfaceHandle;
+        }
+        catch
+        {
+            return;
+        }
+
+        if (surface == IntPtr.Zero || !Win32Apis.IsWindow(surface))
+        {
+            return;
+        }
+
+        IntPtr after = surface;
+        foreach (var window in _windows.Values)
+        {
+            IntPtr hwnd;
+            try
+            {
+                hwnd = new WindowInteropHelper(window).Handle;
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (hwnd == IntPtr.Zero || !Win32Apis.IsWindow(hwnd))
+            {
+                continue;
+            }
+
+            try
+            {
+                // Pure z-order change: no move/size (KeepBelowApps passes those through
+                // untouched), no activation, no visibility change.
+                ManualApis.SetWindowPos(hwnd, after, 0, 0, 0, 0,
+                    ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+                after = hwnd;
+            }
+            catch
+            {
+                // Best effort per window; one bad handle must not break the rest.
+            }
         }
     }
 
@@ -1720,6 +1794,8 @@ public sealed class DesktopManager
                 Win32Apis.GlueToDesktop(hwnd, owner);
             }
         }
+
+        EnsureDesktopZOrder();
     }
     #endregion
 
