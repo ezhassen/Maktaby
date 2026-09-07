@@ -32,6 +32,16 @@ public sealed class Engine : IDisposable
     private bool _reapplying;
     private string _originalWallpaper = "";
 
+    /// <summary>Guards <see cref="_teardownTask"/>. All public engine methods run on the
+    /// main thread; only the teardown body runs on the pool, touching its snapshot.</summary>
+    private readonly object _gate = new();
+    private Task? _teardownTask;
+
+    /// <summary>Bumped on Disable/ReapplyAll: transitions computed by an in-flight poll
+    /// before the bump name windows that no longer exist, and must not land on the
+    /// same-named fresh windows created after it.</summary>
+    private int _pauseEpoch;
+
     private string StaticDir => Path.Combine(_appDataDir, "static");
     private string OriginalWallpaperFile => Path.Combine(_appDataDir, "original-wallpaper.txt");
     private string OriginalDesktopWallpapersFile => Path.Combine(_appDataDir, "original-vd-wallpapers.tsv");
@@ -47,10 +57,26 @@ public sealed class Engine : IDisposable
     public bool IsEnabled { get; private set; }
 
     /// <summary>
-    /// Start/Enable the engine
+    /// Start/Enable the engine. Waits (bounded) for a previous background teardown:
+    /// it owns the original-wallpaper files this method re-reads, and its windows
+    /// must be gone before new ones attach.
     /// </summary>
     public void Enable()
     {
+        // New session, new generation: transitions computed before this point name
+        // windows from older sessions and must be dropped (see _pauseEpoch).
+        Interlocked.Increment(ref _pauseEpoch);
+        Task? previous;
+        lock (_gate) previous = _teardownTask;
+        if (previous is not null && !previous.IsCompleted)
+        {
+            try
+            {
+                if (!previous.Wait(TimeSpan.FromSeconds(10)))
+                    Serilog.Log.Warning("Previous teardown still running after 10 s — enabling anyway");
+            }
+            catch (Exception ex) { Serilog.Log.Warning($"Teardown wait failed: {ex.Message}"); }
+        }
         _messageWindow = new MessageWindow(this);
         WtsApi32.WTSRegisterSessionNotification(_messageWindow.Hwnd, WtsApi32.NOTIFY_FOR_THIS_SESSION);
         _power = new PowerNotifications(_messageWindow.Hwnd);
@@ -61,13 +87,21 @@ public sealed class Engine : IDisposable
         // GPU, and produces a fresh device anyway — so it clears any device-loss failure history.
         _host = new();
         _deviceLoss = new();
-        _host.LayerLost += () => RunOnMainThread(() => { _deviceLoss.Reset(); ReapplyAll(); });
+        _host.LayerLost += OnLayerLost;
         _host.EnsureLayer();
 
         //_tray = new TrayIcon(_messageWindow.Hwnd);
 
         _playback = new PlaybackMonitor(() => _config.Pause);
-        _playback.PauseStateChanged += OnPauseStateChanged;
+        _playback.PauseStateChanged += (device, reason) =>
+        {
+            var epoch = Volatile.Read(ref _pauseEpoch);
+            RunOnMainThread(() =>
+            {
+                if (epoch != Volatile.Read(ref _pauseEpoch)) return;
+                OnPauseStateChanged(device, reason);
+            });
+        };
         ApplyFromConfig();
         IsEnabled = true;
     }
@@ -77,28 +111,89 @@ public sealed class Engine : IDisposable
     }
 
     /// <summary>
-    /// Stop/Disable the engine
+    /// Stop/Disable the engine. Returns fast: the playback monitor stops and the field
+    /// snapshot is taken synchronously, while MF pipeline teardown, D3D release and the
+    /// SetWallpaper restore run on the thread pool. Previously all of that blocked the
+    /// calling (UI) thread — MF topology teardown and the shell wallpaper broadcast are
+    /// the stalls users felt as a hang.
     /// </summary>
     public void Disable()
     {
-        IsEnabled = false;
-        RestoreOriginalWallpaper();
-        _playback?.Dispose();
-
-        _playback = null;
-        foreach (var window in _windows.Values) window.Dispose();
-        _windows.Clear();
-        _power?.Dispose(); // before the window — the handles are registered against its hwnd
-        _power = null;
-        if (_messageWindow is not null)
+        TeardownSnapshot? snapshot = null;
+        lock (_gate)
         {
-            WtsApi32.WTSUnRegisterSessionNotification(_messageWindow.Hwnd);
-            _messageWindow.Dispose();
+            // A previous teardown is still draining (only possible after an Enable timed
+            // out waiting for it). If this session left nothing live, there is nothing
+            // to snapshot; otherwise drain it too — disjoint objects, idempotent restore.
+            bool draining = _teardownTask is { IsCompleted: false };
+            bool live = _playback is not null || _windows.Count > 0 || _power is not null
+                || _messageWindow is not null || _host is not null;
+            if (draining && !live)
+            {
+                IsEnabled = false;
+                return;
+            }
+            IsEnabled = false;
+            // Unsubscribe first: a dead host must never fire rebuilds into a newer
+            // session (overlapping rebuild paths double-dispose native objects).
+            if (_host is not null) _host.LayerLost -= OnLayerLost;
+            Interlocked.Increment(ref _pauseEpoch);
+            _playback?.Dispose();
+            _playback = null;
+            var messageHwnd = _messageWindow?.Hwnd ?? IntPtr.Zero;
+            snapshot = new TeardownSnapshot(
+                [.. _windows.Values], _power, _messageWindow, messageHwnd, _host,
+                _appDataDir, _originalWallpaper);
+            _windows.Clear();
+            _power = null;
+            _messageWindow = null;
+            _host = null;
+            _deviceLoss = null;
+            Task? task = null;
+            task = Task.Run(() =>
+            {
+                try { snapshot.Run(); }
+                catch (Exception ex) { Serilog.Log.Error("Background teardown failed", ex); }
+                finally { lock (_gate) { if (ReferenceEquals(_teardownTask, task)) _teardownTask = null; } }
+            });
+            _teardownTask = task;
         }
-        _host?.Dispose();
-        _host = null;
-        _deviceLoss = null;
     }
+
+    /// <summary>Everything a teardown needs, owned exclusively by the background task.
+    /// Main-thread entry points can no longer reach these objects once Disable clears
+    /// the fields, so no lock is needed inside <see cref="Run"/>.</summary>
+    private sealed class TeardownSnapshot(
+        List<WallpaperWindow> windows,
+        IDisposable? power,
+        IDisposable? messageWindow,
+        IntPtr messageHwnd,
+        IDisposable? layerHost,
+        string appDataDir,
+        string originalWallpaper)
+    {
+        public void Run()
+        {
+            // Windows first: visuals die in milliseconds with no COM teardown yet.
+            foreach (var window in windows)
+            {
+                try { window.Dispose(); } catch (Exception ex) { Serilog.Log.Error("Window teardown failed", ex); }
+            }
+            // Stranded MF worker threads + finalizable COM. Blocking GC, hence here.
+            try { VideoRenderer.ReclaimMediaPipeline(); } catch (Exception ex) { Serilog.Log.Error("Pipeline reclaim failed", ex); }
+            try { power?.Dispose(); } catch (Exception ex) { Serilog.Log.Error("Power teardown failed", ex); }
+            try
+            {
+                if (messageHwnd != IntPtr.Zero) WtsApi32.WTSUnRegisterSessionNotification(messageHwnd);
+                messageWindow?.Dispose();
+            }
+            catch (Exception ex) { Serilog.Log.Error("Message window teardown failed", ex); }
+            try { layerHost?.Dispose(); } catch (Exception ex) { Serilog.Log.Error("Layer teardown failed", ex); }
+            RestoreOriginalWallpaper(appDataDir, originalWallpaper);
+        }
+    }
+
+    //public bool IsPlayStarted { get; private set; } = true;
 
     public void PlayStart()
     {
@@ -112,10 +207,16 @@ public sealed class Engine : IDisposable
                 Serilog.Log.Information($"Resumed By PlayStart");
             }
         });
+        // After the resume above: re-poll immediately so a covering fullscreen app
+        // re-pauses through the normal event path instead of playing over it.
+        _playback?.Resume();
     }
 
     public void PlayPause()
     {
+        // Suspend auto evaluation first: no transitions can fire while user-paused
+        // (previously a closing fullscreen app auto-resumed behind the user's back).
+        _playback?.Suspend();
         // Fires on the monitor's timer thread; _windows belongs to the main thread.
         RunOnMainThread(() =>
         {
@@ -290,16 +391,21 @@ public sealed class Engine : IDisposable
     /// nothing until the user re-applied by hand.</summary>
     private void OnDeviceLost()
     {
-        if (_deviceLoss is not null && !_deviceLoss.TryBegin())
-        {
-            if (_deviceLoss.GaveUp)
-                Serilog.Log.Error($"GPU device lost {DeviceLossGuard.MaxConsecutiveAttempts} times in a row — " +
-                          "giving up on automatic recovery. Re-apply the wallpaper from the tray once the display driver is stable.");
-            return;
-        }
-
+        // Called from arbitrary surface threads: capture the generation and touch shared
+        // state only inside the posted main-thread action, so a torn-down session can
+        // neither NRE on a nulled guard nor rebuild into a newer session.
+        var epoch = Volatile.Read(ref _pauseEpoch);
         RunOnMainThread(() =>
         {
+            if (epoch != Volatile.Read(ref _pauseEpoch)) return;
+            var guard = _deviceLoss;
+            if (guard is not null && !guard.TryBegin())
+            {
+                if (guard.GaveUp)
+                    Serilog.Log.Error($"GPU device lost {DeviceLossGuard.MaxConsecutiveAttempts} times in a row — " +
+                              "giving up on automatic recovery. Re-apply the wallpaper from the tray once the display driver is stable.");
+                return;
+            }
             try
             {
                 Serilog.Log.Warning("GPU device lost — rebuilding the composition tree");
@@ -312,7 +418,7 @@ public sealed class Engine : IDisposable
                 // is already dead and will never present again to say so. The guard held that
                 // signal; act on it. Re-entry is bounded by the same attempt budget, and
                 // RunOnMainThread only ever enqueues, so this is a queued retry, not recursion.
-                if (_deviceLoss is not null && _deviceLoss.Complete())
+                if (guard is not null && guard.Complete())
                 {
                     Serilog.Log.Warning("GPU device lost again during recovery — rebuilding once more");
                     OnDeviceLost();
@@ -321,16 +427,36 @@ public sealed class Engine : IDisposable
         });
     }
 
+    /// <summary>Named (not a lambda) so <see cref="Disable"/> can unsubscribe: a torn-down
+    /// host firing into a newer session would overlap two rebuild paths over the same
+    /// native objects. The epoch drops transitions already in flight when unsubscribed.</summary>
+    private void OnLayerLost()
+    {
+        var epoch = Volatile.Read(ref _pauseEpoch);
+        RunOnMainThread(() =>
+        {
+            if (epoch != Volatile.Read(ref _pauseEpoch)) return;
+            _deviceLoss?.Reset();
+            ReapplyAll();
+        });
+    }
+
     private void ReapplyAll()
     {
         if (_reapplying) return;
+        // A stale queued rebuild (display-change/taskbar/watch event posted before a
+        // Disable) must not resurrect windows after teardown.
+        if (!IsEnabled) return;
+        Interlocked.Increment(ref _pauseEpoch);
         _reapplying = true;
         try
         {
             Serilog.Log.Information("Re-applying all wallpapers");
             foreach (var window in _windows.Values) window.Dispose();
             _windows.Clear();
-            VideoRenderer.ReclaimMediaPipeline(); // disposed players hold their MF threads until collected
+            // Deferred: the full blocking GC is the stall here, and reclamation is
+            // eventual by design — the rebuild below must not wait for it.
+            Task.Run(VideoRenderer.ReclaimMediaPipeline);
             _host?.EnsureLayer();
             ApplyFromConfig();
         }
@@ -417,26 +543,31 @@ public sealed class Engine : IDisposable
         }
     }
 
-    private void RestoreOriginalWallpaper()
+    /// <summary>Static + best-effort so background teardown can run it without touching
+    /// engine state. Behavior unchanged: per-desktop restore, file cleanup, then the
+    /// (slow, shell-broadcasting) SetWallpaper restore.</summary>
+    private static void RestoreOriginalWallpaper(string appDataDir, string originalWallpaper)
     {
+        string tsv = Path.Combine(appDataDir, "original-vd-wallpapers.tsv");
+        string txt = Path.Combine(appDataDir, "original-wallpaper.txt");
         try
         {
-            if (File.Exists(OriginalDesktopWallpapersFile))
+            if (File.Exists(tsv))
             {
                 var saved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var line in File.ReadAllLines(OriginalDesktopWallpapersFile))
+                foreach (var line in File.ReadAllLines(tsv))
                 {
                     int tab = line.IndexOf('\t');
                     if (tab > 0) saved[line[..tab]] = line[(tab + 1)..];
                 }
                 VirtualDesktopWallpaper.Restore(saved);
-                File.Delete(OriginalDesktopWallpapersFile);
+                File.Delete(tsv);
             }
 
-            if (!string.IsNullOrEmpty(_originalWallpaper))
-                DesktopWallpaper.RestoreCurrent(_originalWallpaper);
-            if (File.Exists(OriginalWallpaperFile))
-                File.Delete(OriginalWallpaperFile);
+            if (!string.IsNullOrEmpty(originalWallpaper))
+                DesktopWallpaper.RestoreCurrent(originalWallpaper);
+            if (File.Exists(txt))
+                File.Delete(txt);
         }
         catch (Exception ex)
         {
@@ -563,8 +694,18 @@ public sealed class Engine : IDisposable
 
 
 
+    /// <summary>Synchronous-looking shutdown: launches the background teardown, then
+    /// waits for it bounded so the original wallpaper is actually restored before the
+    /// process exits. The OS reclaims anything still in flight past the cap.</summary>
     public void Dispose()
     {
         Disable();
+        Task? teardown;
+        lock (_gate) teardown = _teardownTask;
+        if (teardown is not null && !teardown.IsCompleted)
+        {
+            try { teardown.Wait(TimeSpan.FromSeconds(8)); }
+            catch (Exception ex) { Serilog.Log.Warning($"Teardown wait failed: {ex.Message}"); }
+        }
     }
 }

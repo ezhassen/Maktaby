@@ -46,7 +46,8 @@ public sealed class WallpaperWindow : Win32Window
         Renderer = renderer;
         if (previous is null) return;
         previous.Dispose();
-        VideoRenderer.ReclaimMediaPipeline(); // see the note there — Dispose alone strands MF threads
+        // Deferred: full blocking GC, eventual by design — never stall swapping here.
+        Task.Run(VideoRenderer.ReclaimMediaPipeline);
     }
 
     protected override IntPtr HandleMessage(uint msg, IntPtr wParam, IntPtr lParam)

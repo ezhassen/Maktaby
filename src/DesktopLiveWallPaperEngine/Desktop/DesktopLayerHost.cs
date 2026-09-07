@@ -1,4 +1,5 @@
 using DesktopLiveWallPaperEngine.Interop;
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using static DesktopLiveWallPaperEngine.Interop.Win32Constants;
 
@@ -24,8 +25,17 @@ public sealed class DesktopLayerHost : IDisposable
     private const uint WM_SPAWN_WORKER = 0x052C;
 
     private readonly List<IntPtr> _attached = [];
+    private readonly object _attachSync = new();
     private User32.WinEventProc? _winEventProc; // rooted while hook lives
     private IntPtr _winEventHook;
+
+    /// <summary>Every installed hook procedure, rooted for the process lifetime.
+    /// UnhookWinEvent stops new callbacks but cannot recall one already dispatched —
+    /// and a full GC (pipeline reclaim runs them) can suspend its thread mid-flight
+    /// for an unbounded time. If the delegate were collected in between, the late
+    /// landing fail-fasts the process ("callback on a collected delegate"). One entry
+    /// per Enable is ~100 bytes; never removed, by design.</summary>
+    private static readonly ConcurrentDictionary<User32.WinEventProc, byte> HookRoots = new();
 
     public DesktopLayerInfo Layer { get; private set; } = new(DesktopTopology.ClassicWorkerW, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 
@@ -125,7 +135,7 @@ public sealed class DesktopLayerHost : IDisposable
             EnsureWorkerWAtBottom();
         }
 
-        _attached.Add(hwnd);
+        lock (_attachSync) _attached.Add(hwnd);
         Serilog.Log.Information($"Attached 0x{hwnd:X} at {client} ({Layer.Topology})");
     }
 
@@ -167,6 +177,7 @@ public sealed class DesktopLayerHost : IDisposable
         _winEventProc = OnWinEvent;
         _winEventHook = User32.SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY,
             IntPtr.Zero, _winEventProc, pid, 0, WINEVENT_OUTOFCONTEXT);
+        if (_winEventHook != IntPtr.Zero) HookRoots.TryAdd(_winEventProc, 0);
     }
 
     private void OnWinEvent(IntPtr hook, uint eventId, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
@@ -186,7 +197,7 @@ public sealed class DesktopLayerHost : IDisposable
             User32.UnhookWinEvent(_winEventHook);
             _winEventHook = IntPtr.Zero;
         }
-        _attached.Clear();
+        lock (_attachSync) _attached.Clear();
         LayerLost?.Invoke();
     }
 

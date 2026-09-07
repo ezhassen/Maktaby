@@ -276,8 +276,8 @@ public sealed class VideoRenderer : IWallpaperRenderer
     ///
     /// Left alone this compounds — every display change, monitor hot-plug or explorer restart
     /// stranded ~27 threads and ~24 MB, taking a long-running instance past 500 MB and 129
-    /// threads. Teardown happens only on those rare events, never per frame, so a blocking
-    /// collect here is cheap and keeps the process flat.</summary>
+    /// threads. All callers run this pooled: it blocks on the finalizer queue by design and
+    /// must never run on the UI thread.</summary>
     public static void ReclaimMediaPipeline()
     {
         GC.Collect();

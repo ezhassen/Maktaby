@@ -7,12 +7,20 @@ using Timer = System.Threading.Timer;
 namespace DesktopLiveWallPaperEngine.Playback;
 
 /// <summary>Polls (500 ms) the foreground/system state and reports per-monitor pause
-/// transitions. Polling beats WinEvent location hooks here (too chatty/unreliable).</summary>
+/// transitions. Polling beats WinEvent location hooks here (too chatty/unreliable).
+/// Polling can be <see cref="Suspend"/>ed while the user has paused playback manually —
+/// that also fixes spurious auto-resumes (fullscreen closes while user-paused used to
+/// resume playback behind the user's back) — and <see cref="Resume"/>d on PlayStart
+/// with an immediate re-evaluation.</summary>
 public sealed class PlaybackMonitor : IDisposable
 {
+    private const int PeriodMs = 500;
+
     private readonly Timer _timer;
     private readonly Func<Config.PauseConfig> _config;
     private readonly Dictionary<string, PauseReason> _state = new(StringComparer.OrdinalIgnoreCase);
+    private volatile bool _suspended;
+    private bool _disposed;
 
     /// <summary>Set from session-change notifications on the message window.</summary>
     public volatile bool SessionLocked;
@@ -33,13 +41,31 @@ public sealed class PlaybackMonitor : IDisposable
     public PlaybackMonitor(Func<Config.PauseConfig> config)
     {
         _config = config;
-        _timer = new Timer(_ => Poll(), null, 1000, 500);
+        _timer = new Timer(_ => Poll(), null, 1000, PeriodMs);
+    }
+
+    /// <summary>Stops polling (idempotent, thread-safe). In-flight polls finish harmlessly.</summary>
+    public void Suspend()
+    {
+        _suspended = true;
+        try { _timer.Change(Timeout.Infinite, Timeout.Infinite); }
+        catch (ObjectDisposedException) { }
+    }
+
+    /// <summary>Restarts polling with an immediate evaluation (idempotent, thread-safe).</summary>
+    public void Resume()
+    {
+        if (_disposed) return;
+        _suspended = false;
+        try { _timer.Change(0, PeriodMs); }
+        catch (ObjectDisposedException) { }
     }
 
     private void Poll()
     {
         try
         {
+            if (_suspended) return;
             if (_invalidated)
             {
                 _invalidated = false;
@@ -104,5 +130,10 @@ public sealed class PlaybackMonitor : IDisposable
     private static bool IsD3DFullscreen() =>
         Shell32.SHQueryUserNotificationState(out int state) == 0 && state == Shell32.QUNS_RUNNING_D3D_FULL_SCREEN;
 
-    public void Dispose() => _timer.Dispose();
+    public void Dispose()
+    {
+        _disposed = true;
+        _suspended = true;
+        _timer.Dispose();
+    }
 }

@@ -23,28 +23,55 @@ public static class DesktopWallpaper
             : "";
     }
 
+    /// <summary>Whether the IDesktopWallpaper COM server exists on this machine. It is absent
+    /// on some builds (REGDB_E_CLASSNOTREG on every activation — e.g. Win11 25H2 dev),
+    /// where per-monitor SetWallpaper is impossible and SPI is the only path. Probed once
+    /// per process; a missing server is an environmental fact, not a per-call error.</summary>
+    private static readonly Lazy<bool> ComAvailable = new(() =>
+    {
+        try
+        {
+            _ = new DesktopWallpaperClass();
+            return true;
+        }
+        catch (Exception ex) when (ex.HResult == unchecked((int)0x80040154))
+        {
+            Serilog.Log.Information("IDesktopWallpaper COM server is not registered on this build; per-monitor wallpaper falls back to SPI");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning($"IDesktopWallpaper probe failed ({ex.Message}); per-monitor wallpaper falls back to SPI");
+            return false;
+        }
+    });
+
     /// <summary>Sets the wallpaper for one monitor (by device name, e.g. \\.\DISPLAY1) via the
     /// modern per-monitor API, falling back to the single-wallpaper API.</summary>
     public static void SetForMonitor(string monitorDevice, RECT monitorBounds, string imagePath)
     {
-        try
+        if (ComAvailable.Value)
         {
-            var dw = (IDesktopWallpaper)new DesktopWallpaperClass();
-            try { dw.SetPosition(DesktopWallpaperPosition.Fill); } catch { }
-
-            string? monitorId = FindMonitorId(dw, monitorBounds);
-            if (monitorId is not null)
+            try
             {
-                dw.SetWallpaper(monitorId, imagePath);
+                var dw = (IDesktopWallpaper)new DesktopWallpaperClass();
+                try { dw.SetPosition(DesktopWallpaperPosition.Fill); } catch { }
+
+                string? monitorId = FindMonitorId(dw, monitorBounds);
+                if (monitorId is not null)
+                {
+                    dw.SetWallpaper(monitorId, imagePath);
+                    return;
+                }
+                dw.SetWallpaper(null, imagePath); // all monitors
                 return;
             }
-            dw.SetWallpaper(null, imagePath); // all monitors
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning($"IDesktopWallpaper failed ({ex.Message}); using SPI");
+            }
         }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning($"IDesktopWallpaper failed ({ex.Message}); using SPI");
-            SetSingle(imagePath);
-        }
+        SetSingle(imagePath);
     }
 
     /// <summary>Sets a single wallpaper for all monitors (SystemParametersInfoW takes a raw
