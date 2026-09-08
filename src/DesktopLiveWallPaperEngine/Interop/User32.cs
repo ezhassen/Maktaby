@@ -46,6 +46,9 @@ public static partial class User32
     public static extern bool PostMessageW(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern bool PostThreadMessageW(uint threadId, uint msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     public static extern IntPtr SendMessageW(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -105,6 +108,9 @@ public static partial class User32
 
     [DllImport("user32.dll")]
     public static extern bool IsZoomed(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsIconic(IntPtr hwnd);
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
@@ -167,6 +173,9 @@ public static partial class User32
 
     [DllImport("user32.dll")]
     public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
 
     [DllImport("user32.dll")]
     public static extern int GetSystemMetrics(int index);
@@ -268,6 +277,7 @@ public static class Win32Constants
     public const uint GW_CHILD = 5;
 
     // Messages
+    public const uint WM_QUIT = 0x0012;
     public const uint WM_DESTROY = 0x0002;
     public const uint WM_PAINT = 0x000F;
     public const uint WM_CLOSE = 0x0010;
@@ -300,12 +310,20 @@ public static class Win32Constants
     public static readonly IntPtr HWND_BROADCAST = new(0xFFFF);
 
     // WinEvents
+    public const uint EVENT_SYSTEM_FOREGROUND = 0x0003;
+    public const uint EVENT_SYSTEM_MOVESIZEEND = 0x000B;
+    public const uint EVENT_SYSTEM_MINIMIZESTART = 0x0016;
+    public const uint EVENT_SYSTEM_MINIMIZEEND = 0x0017;
+    public const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
     public const uint EVENT_OBJECT_DESTROY = 0x8001;
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+    public const uint WINEVENT_SKIPOWNPROCESS = 0x0002;
     public const int OBJID_WINDOW = 0;
 
     // Monitors
     public const uint MONITOR_DEFAULTTONEAREST = 2;
+    // DWM window attributes (dwmapi)
+    public const uint DWMWA_CLOAKED = 14;
     public const int SM_REMOTESESSION = 0x1000;
     public const int SM_XVIRTUALSCREEN = 76;
     public const int SM_YVIRTUALSCREEN = 77;

@@ -12,6 +12,7 @@ namespace DesktopLiveWallPaperEngine.Playback;
 /// that also fixes spurious auto-resumes (fullscreen closes while user-paused used to
 /// resume playback behind the user's back) — and <see cref="Resume"/>d on PlayStart
 /// with an immediate re-evaluation.</summary>
+[Obsolete("Superseded by PlaybackSupervisor: fully event-driven (WinEvent hooks plus pushed power/session notifications) with no polling loop and no timers. This class is kept for reference only.", error: false)]
 public sealed class PlaybackMonitor : IDisposable
 {
     private const int PeriodMs = 500;
@@ -34,6 +35,16 @@ public sealed class PlaybackMonitor : IDisposable
     /// <summary>Forget cached per-monitor state so the next poll re-fires transitions —
     /// call after creating a renderer while a pause condition may already hold.</summary>
     public void Invalidate() => _invalidated = true;
+
+    /// <summary>Last evaluated pause reason for a monitor (None when unknown). Thread-safe:
+    /// diagnostics UI reads this off-thread while the poll writes it.</summary>
+    public PauseReason GetPauseReason(string monitorDevice)
+    {
+        lock (_state)
+        {
+            return _state.TryGetValue(monitorDevice, out var reason) ? reason : PauseReason.None;
+        }
+    }
 
     /// <summary>(monitorDevice, reason) — reason None means resume. Fires on the timer thread.</summary>
     public event Action<string, PauseReason>? PauseStateChanged;
@@ -69,7 +80,7 @@ public sealed class PlaybackMonitor : IDisposable
             if (_invalidated)
             {
                 _invalidated = false;
-                _state.Clear();
+                lock (_state) _state.Clear();
             }
             var flags = new SystemFlags(
                 SessionLocked,
@@ -85,9 +96,14 @@ public sealed class PlaybackMonitor : IDisposable
             {
                 var handle = MonitorHandle(monitor.Bounds);
                 var reason = PauseDecision.Evaluate(foreground, monitor.Bounds, monitor.WorkArea, handle, flags, config);
-                if (!_state.TryGetValue(monitor.Device, out var previous) || previous != reason)
+                bool changed;
+                lock (_state)
                 {
-                    _state[monitor.Device] = reason;
+                    changed = !_state.TryGetValue(monitor.Device, out var previous) || previous != reason;
+                    if (changed) _state[monitor.Device] = reason;
+                }
+                if (changed)
+                {
                     PauseStateChanged?.Invoke(monitor.Device, reason);
                 }
             }

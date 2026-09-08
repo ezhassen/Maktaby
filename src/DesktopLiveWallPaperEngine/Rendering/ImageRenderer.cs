@@ -33,7 +33,7 @@ public sealed class ImageRenderer : IWallpaperRenderer
         _onStaticFrame = onStaticFrame;
         _surface = host.CreateContent(width, height);
     }
-
+    bool loaded;
     public void Load(string path)
     {
         var image = Image.FromFile(path);
@@ -57,7 +57,12 @@ public sealed class ImageRenderer : IWallpaperRenderer
                 DrawAndPresent(image, highQuality: true);
             }
             CaptureStatic();
+            loaded = true;
         }
+    }
+    public bool IsLoaded()
+    {
+        return loaded;
     }
 
     private void CaptureStatic()
@@ -131,7 +136,15 @@ public sealed class ImageRenderer : IWallpaperRenderer
             }
         }
     }
-
+    public bool IsPaused()
+    {
+        lock (_sync)
+        {
+            // A static image is neither playing nor pausable — only an animated GIF has a
+            // stoppable timeline. Reporting "paused" for statics spammed Resume calls/logs.
+            return _animated is not null && !_animating;
+        }
+    }
     public void Resume()
     {
         lock (_sync)
@@ -141,6 +154,13 @@ public sealed class ImageRenderer : IWallpaperRenderer
                 ImageAnimator.Animate(_animated, OnFrameChanged);
                 _animating = true;
             }
+        }
+    }
+    public bool IsPlaying()
+    {
+        lock (_sync)
+        {
+            return _animated is not null && _animating;
         }
     }
 

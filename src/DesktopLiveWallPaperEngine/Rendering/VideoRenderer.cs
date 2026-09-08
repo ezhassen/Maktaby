@@ -40,6 +40,9 @@ public sealed class VideoRenderer : IWallpaperRenderer
     private bool _staticCaptured;
     private int _frameCount;
     private bool _pauseDeferred;
+    /// <summary>Explicit desired-state ( Pause() sets, Resume()/Load() clears). MediaPlayer.CurrentState
+    /// transitions asynchronously through Opening/Buffering, so it cannot answer "should I pause now".</summary>
+    private bool _paused;
 
     public VideoRenderer(CompositionHost host, int width, int height, FitMode fit, bool muted, double volume,
         string? staticFramePath = null, Action? onStaticFrame = null)
@@ -92,6 +95,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
     public void Load(string path)
     {
         if (_player is null) return;
+        lock (_sync) { _paused = false; _pauseDeferred = false; }
         _path = path;
         // Identifies this selection for the delayed retry below. Without it, a retry armed for the
         // previous file lands a second later and reinstates a source that Load has already disposed
@@ -104,6 +108,10 @@ public sealed class VideoRenderer : IWallpaperRenderer
         previous?.Dispose(); // a re-Load would otherwise strand the old source
         _player.Play();
         Serilog.Log.Information($"Video loaded: {path}");
+    }
+    public bool IsLoaded()
+    {
+        lock (_sync) return _player is not null && _player.Source is not null;
     }
 
     private void OnMediaOpened(MediaPlayer sender, object args)
@@ -145,6 +153,13 @@ public sealed class VideoRenderer : IWallpaperRenderer
                 {
                     // Letterbox: draw into a centered sub-rect over a black clear.
                     _targetRect = new Windows.Foundation.Rect(fit.X, fit.Y, fit.Width, fit.Height);
+                }
+                // A Pause that landed while the player was still opening would otherwise be lost
+                // (Pause defers only for static capture, and Play() already ran in Load).
+                // The deferred path captures first and pauses after; re-assert only the rest.
+                if (_paused && !_pauseDeferred)
+                {
+                    try { _player?.Pause(); } catch { }
                 }
             }
             Serilog.Log.Information($"Media opened {videoW}x{videoH} for {_width}x{_height}, fit: {fit}, surface: {_surfaceHost.Width}x{_surfaceHost.Height}");
@@ -261,20 +276,38 @@ public sealed class VideoRenderer : IWallpaperRenderer
 
     public void Pause()
     {
-        // Defer pausing until the static desktop-switch frame is captured — otherwise a
-        // wallpaper applied while a fullscreen app is active would never capture one.
-        if (!_staticCaptured && _staticFramePath is not null)
+        lock (_sync)
         {
-            _pauseDeferred = true;
-            return;
+            _paused = true;
+            // Defer pausing until the static desktop-switch frame is captured — otherwise a
+            // wallpaper applied while a fullscreen app is active would never capture one.
+            if (!_staticCaptured && _staticFramePath is not null)
+            {
+                _pauseDeferred = true;
+                return;
+            }
+            try { _player?.Pause(); } catch { }
         }
-        _player?.Pause();
+    }
+
+    public bool IsPaused()
+    {
+        lock (_sync) return _paused;
     }
 
     public void Resume()
     {
-        _pauseDeferred = false;
-        _player?.Play();
+        lock (_sync)
+        {
+            _paused = false;
+            _pauseDeferred = false;
+            try { _player?.Play(); } catch { }
+        }
+    }
+
+    public bool IsPlaying()
+    {
+        lock (_sync) return !_paused && _player is not null && _player.Source is not null;
     }
 
     public void Paint(IntPtr hdc) { /* composition-presented; nothing to do on WM_PAINT */ }

@@ -20,7 +20,7 @@ public sealed class Engine : IDisposable
     private readonly EngineConfig _config;
     private readonly string _appDataDir;
     private DesktopLayerHost? _host;
-    private readonly Dictionary<string, WallpaperWindow> _windows = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, WallpaperWindow> _windows = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentQueue<Action> _mainThreadActions = new();
     private DeviceLossGuard? _deviceLoss;
     private readonly uint _taskbarCreatedMessage = User32.RegisterWindowMessageW("TaskbarCreated");
@@ -28,7 +28,7 @@ public sealed class Engine : IDisposable
     private MessageWindow? _messageWindow;
     private PowerNotifications? _power;
 
-    private PlaybackMonitor? _playback;
+    private PlaybackSupervisor? _playback;
     private bool _reapplying;
     private string _originalWallpaper = "";
 
@@ -92,7 +92,7 @@ public sealed class Engine : IDisposable
 
         //_tray = new TrayIcon(_messageWindow.Hwnd);
 
-        _playback = new PlaybackMonitor(() => _config.Pause);
+        _playback = new PlaybackSupervisor(() => _config.Pause);
         _playback.PauseStateChanged += (device, reason) =>
         {
             var epoch = Volatile.Read(ref _pauseEpoch);
@@ -207,7 +207,7 @@ public sealed class Engine : IDisposable
                 Serilog.Log.Information($"Resumed By PlayStart");
             }
         });
-        // After the resume above: re-poll immediately so a covering fullscreen app
+        // After the resume above: re-evaluate immediately so a covering fullscreen app
         // re-pauses through the normal event path instead of playing over it.
         _playback?.Resume();
     }
@@ -382,8 +382,7 @@ public sealed class Engine : IDisposable
         }
         else if (setting == PowerNotifications.PowerSavingStatus || setting == PowerNotifications.AcDcPowerSource)
         {
-            // The pause poll reads battery saver directly; nudging it just makes the transition
-            // land immediately instead of up to 500 ms later.
+            // Battery state is only read at evaluation time; invalidate to apply it now.
             _playback?.Invalidate();
         }
     }
@@ -484,16 +483,23 @@ public sealed class Engine : IDisposable
         // Fires on the monitor's timer thread; _windows belongs to the main thread.
         RunOnMainThread(() =>
         {
+            // PauseStateChanged arrives on the supervisor's hook thread; windows live here.
             if (!_windows.TryGetValue(monitorDevice, out var window) || window.Renderer is null) return;
             if (reason == PauseReason.None)
             {
-                window.Renderer.Resume();
-                Serilog.Log.Information($"Resumed {monitorDevice}");
+                if (window.Renderer.IsPaused())
+                {
+                    window.Renderer.Resume();
+                    Serilog.Log.Information("Resumed monitor: {monitorDevice}", monitorDevice);
+                }
             }
             else
             {
-                window.Renderer.Pause();
-                Serilog.Log.Information($"Paused {monitorDevice}: {reason}");
+                if (window.Renderer.IsPlaying())
+                {
+                    window.Renderer.Pause();
+                    Serilog.Log.Information("Paused monitor: {monitorDevice}, Reason: {reason}", monitorDevice, reason);
+                }
             }
         });
     }
@@ -628,6 +634,56 @@ public sealed class Engine : IDisposable
     }
 
     // ---- diagnostics --------------------------------------------------------------------------
+
+    /// <summary>Per-monitor live-wallpaper snapshot for diagnostics UI (e.g. the performance
+    /// monitor). Best-effort and thread-safe: the UI polls this on its own timer while the
+    /// engine mutates windows on its main thread.</summary>
+    public sealed record MonitorWallpaperState(
+        string Device, string Bounds, string File, string Renderer,
+        bool IsLoaded, bool IsPaused, bool IsPlaying, string PauseReason);
+
+    public IReadOnlyList<MonitorWallpaperState> GetMonitorStates()
+    {
+        var list = new List<MonitorWallpaperState>();
+        try
+        {
+            foreach (var entry in _windows.ToArray())
+            {
+                try
+                {
+                    var window = entry.Value;
+                    var renderer = window.Renderer;
+                    string file;
+                    try { file = Path.GetFileName(_config.WallpaperFor(entry.Key) ?? ""); }
+                    catch { file = ""; }
+                    string kind = renderer is VideoRenderer ? "Video"
+                        : renderer is ImageRenderer ? "Image"
+                        : renderer is null ? "-" : renderer.GetType().Name;
+                    bool loaded = false, paused = false, playing = false;
+                    try
+                    {
+                        if (renderer is not null)
+                        {
+                            loaded = renderer.IsLoaded();
+                            paused = renderer.IsPaused();
+                            playing = renderer.IsPlaying();
+                        }
+                    }
+                    catch { }
+                    string reason = PauseReason.None.ToString();
+                    try { reason = _playback?.GetPauseReason(entry.Key).ToString() ?? reason; }
+                    catch { }
+                    string bounds;
+                    try { bounds = window.Monitor.Bounds.ToString(); }
+                    catch { bounds = ""; }
+                    list.Add(new MonitorWallpaperState(entry.Key, bounds, file, kind, loaded, paused, playing, reason));
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return list;
+    }
 
     public string Diagnostics()
     {

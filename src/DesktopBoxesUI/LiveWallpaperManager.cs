@@ -45,6 +45,18 @@ public sealed class LiveWallpaperManager
 
     public bool IsPlaying => _settings.UserSettings.LiveWallpaperPlaying;
 
+    /// <summary>Engine alive (created and not torn down). The settings flags alone cannot tell
+    /// whether windows/pause state actually exist — this can.</summary>
+    public bool EngineIsLive => _engine?.IsEnabled == true;
+
+    /// <summary>Per-monitor engine snapshot for diagnostics UI. Empty when the engine was never
+    /// created or is disabled; never throws (the UI polls this on its own timer).</summary>
+    public IReadOnlyList<DesktopLiveWallPaperEngine.Engine.MonitorWallpaperState> GetMonitorStates()
+    {
+        try { return _engine?.GetMonitorStates() ?? []; }
+        catch { return []; }
+    }
+
     private bool ShouldShow => IsEnabled && HasWallpaper;
     Engine? GetEngine()
     {

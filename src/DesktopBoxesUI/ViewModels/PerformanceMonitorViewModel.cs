@@ -32,6 +32,36 @@ namespace DesktopBoxesUI.ViewModels
         public System.Windows.Window? WindowRef { get; set; }
     }
 
+    public sealed class LiveWallpaperMonitorItem : ViewModelBase
+    {
+        private string _device = "";
+        public string Device { get => _device; set => SetField(ref _device, value); }
+
+        private string _bounds = "";
+        public string Bounds { get => _bounds; set => SetField(ref _bounds, value); }
+
+        private string _file = "";
+        public string File { get => _file; set => SetField(ref _file, value); }
+
+        private string _renderer = "";
+        public string Renderer { get => _renderer; set => SetField(ref _renderer, value); }
+
+        private bool _isLoaded;
+        public bool IsLoaded { get => _isLoaded; set => SetField(ref _isLoaded, value); }
+
+        private bool _isPaused;
+        public bool IsPaused { get => _isPaused; set => SetField(ref _isPaused, value); }
+
+        private bool _isPlaying;
+        public bool IsPlaying { get => _isPlaying; set => SetField(ref _isPlaying, value); }
+
+        private string _pauseReason = "";
+        public string PauseReason { get => _pauseReason; set => SetField(ref _pauseReason, value); }
+
+        private string _status = "";
+        public string Status { get => _status; set => SetField(ref _status, value); }
+    }
+
     public sealed class PerformanceMonitorViewModel : ViewModelBase, IDisposable
     {
         private readonly DispatcherTimer _timer;
@@ -41,6 +71,14 @@ namespace DesktopBoxesUI.ViewModels
         private readonly int _processorCount = Environment.ProcessorCount;
 
         public ObservableCollection<PerformanceItem> Items { get; } = new();
+
+        public ObservableCollection<LiveWallpaperMonitorItem> LiveWallpaperMonitors { get; } = new();
+
+        private string _liveWallpaperSummary = "";
+        public string LiveWallpaperSummary { get => _liveWallpaperSummary; set => SetField(ref _liveWallpaperSummary, value); }
+
+        private bool _liveWallpaperEnabled;
+        public bool LiveWallpaperEnabled { get => _liveWallpaperEnabled; set => SetField(ref _liveWallpaperEnabled, value); }
 
         private long _totalMemoryMB;
         public long TotalMemoryMB { get => _totalMemoryMB; set => SetField(ref _totalMemoryMB, value); }
@@ -180,6 +218,56 @@ namespace DesktopBoxesUI.ViewModels
                 bool allHidden = dm?.AllBoxesHidden == true;
                 bool anyVisibleWidget = Items.Any(i => i.Type == "Widget" && i.IsVisible && !i.IsSuspended);
                 IsIdleMode = allHidden || !anyVisibleWidget;
+
+                RefreshLiveWallpaper();
+            }
+            catch { }
+        }
+
+        private void RefreshLiveWallpaper()
+        {
+            try
+            {
+                var lw = App.Services?.GetService<LiveWallpaperManager>();
+                if (lw is null)
+                {
+                    LiveWallpaperEnabled = false;
+                    LiveWallpaperSummary = "unavailable";
+                    LiveWallpaperMonitors.Clear();
+                    return;
+                }
+                LiveWallpaperEnabled = lw.IsEnabled;
+                int paused = 0, playing = 0;
+                var states = lw.GetMonitorStates();
+                var toRemove = LiveWallpaperMonitors.ToList();
+                foreach (var s in states)
+                {
+                    if (s.IsPaused) paused++;
+                    if (s.IsPlaying) playing++;
+                    var existing = LiveWallpaperMonitors.FirstOrDefault(i => string.Equals(i.Device, s.Device, StringComparison.OrdinalIgnoreCase));
+                    if (existing is null)
+                    {
+                        existing = new LiveWallpaperMonitorItem { Device = s.Device };
+                        LiveWallpaperMonitors.Add(existing);
+                    }
+                    toRemove.Remove(existing);
+                    existing.Bounds = s.Bounds;
+                    existing.File = s.File;
+                    existing.Renderer = s.Renderer;
+                    existing.IsLoaded = s.IsLoaded;
+                    existing.IsPaused = s.IsPaused;
+                    existing.IsPlaying = s.IsPlaying;
+                    existing.PauseReason = s.PauseReason;
+                    existing.Status = !lw.EngineIsLive ? "Engine down"
+                        : s.IsPaused ? $"Paused"
+                        : s.IsPlaying ? "Playing"
+                        : s.IsLoaded ? "Loaded" : "Loading";
+                }
+                foreach (var r in toRemove) LiveWallpaperMonitors.Remove(r);
+                LiveWallpaperSummary = !lw.IsEnabled ? "Disabled"
+                    : !lw.HasWallpaper ? "Enabled, no file"
+                    : !lw.EngineIsLive ? $"Enabled, engine down ({states.Count} windows)"
+                    : $"{states.Count} monitor(s), {playing} playing, {paused} paused";
             }
             catch { }
         }

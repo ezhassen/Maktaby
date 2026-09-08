@@ -4,6 +4,10 @@ namespace DesktopLiveWallPaperEngine.Playback;
 
 public sealed record ForegroundInfo(string ClassName, RECT WindowRect, bool IsZoomed, IntPtr MonitorHandle);
 
+/// <summary>A visible top-level candidate window for coverage checks — foreground or not.
+/// Minimized, cloaked, shell and own-process windows never make it into the capture.</summary>
+public sealed record TopWindowInfo(IntPtr Hwnd, string ClassName, RECT WindowRect, bool IsZoomed, IntPtr MonitorHandle);
+
 /// <summary><paramref name="DisplayOff"/> comes from GUID_CONSOLE_DISPLAY_STATE as a pushed
 /// notification, not from a poll — see PowerNotifications.</summary>
 public sealed record SystemFlags(bool SessionLocked, bool RemoteSession, bool BatterySaver, bool D3DFullscreen,
@@ -42,6 +46,26 @@ public static class PauseDecision
         SystemFlags flags,
         Config.PauseConfig config)
     {
+        // Legacy single-window entry: the foreground window is simply the only candidate.
+        // (Kept for the polling monitor; the supervisor evaluates the full window list.)
+        List<TopWindowInfo> windows = [];
+        if (foreground is not null && !IsShellOrOwnWindow(foreground.ClassName))
+            windows.Add(new TopWindowInfo(IntPtr.Zero, foreground.ClassName, foreground.WindowRect, foreground.IsZoomed, foreground.MonitorHandle));
+        return EvaluateForMonitor(windows, monitorBounds, monitorWorkArea, monitorHandle, flags, config);
+    }
+
+    /// <summary>A monitor pauses when ANY qualifying top-level window covers it — a fullscreen app
+    /// keeps its monitor paused even while unfocused (e.g. the user clicked over to the other
+    /// screen). Foreground-only checks wrongly resume the fullscreen monitor the moment focus
+    /// leaves it, which is exactly the multi-monitor flap in the field.</summary>
+    public static PauseReason EvaluateForMonitor(
+        IReadOnlyList<TopWindowInfo> windows,
+        in RECT monitorBounds,
+        in RECT monitorWorkArea,
+        IntPtr monitorHandle,
+        SystemFlags flags,
+        Config.PauseConfig config)
+    {
         // Outranks everything, and is not configurable: there is no reading of "pause on
         // fullscreen: off" under which the user wants frames decoded into a dark panel.
         if (flags.DisplayOff) return PauseReason.DisplayOff;
@@ -50,9 +74,11 @@ public static class PauseDecision
         if (config.OnBatterySaver && flags.BatterySaver) return PauseReason.BatterySaver;
         if (!config.OnFullscreen) return PauseReason.None;
         if (flags.D3DFullscreen) return PauseReason.Fullscreen;
-        if (foreground is null || IsShellOrOwnWindow(foreground.ClassName)) return PauseReason.None;
-        return CoversMonitor(foreground.WindowRect, monitorBounds, monitorWorkArea, foreground.IsZoomed, foreground.MonitorHandle, monitorHandle)
-            ? PauseReason.Fullscreen
-            : PauseReason.None;
+        foreach (var w in windows)
+        {
+            if (CoversMonitor(w.WindowRect, monitorBounds, monitorWorkArea, w.IsZoomed, w.MonitorHandle, monitorHandle))
+                return PauseReason.Fullscreen;
+        }
+        return PauseReason.None;
     }
 }

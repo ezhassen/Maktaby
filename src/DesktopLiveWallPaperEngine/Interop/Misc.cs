@@ -40,6 +40,9 @@ public static class Kernel32
     public static extern IntPtr GetModuleHandleW(string? moduleName);
 
     [DllImport("kernel32.dll")]
+    public static extern uint GetCurrentThreadId();
+
+    [DllImport("kernel32.dll")]
     public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS status);
 
     [DllImport("kernel32.dll", SetLastError = true)]
@@ -69,4 +72,10 @@ public static class ComDlg32
     public const uint OFN_NOCHANGEDIR = 0x00000008;
     public const uint OFN_EXPLORER = 0x00080000;
     public const uint OFN_ENABLESIZING = 0x00800000;
+}
+
+public static class DwmApi
+{
+    [DllImport("dwmapi.dll")]
+    public static extern int DwmGetWindowAttribute(IntPtr hwnd, uint attribute, out int value, uint valueSize);
 }
