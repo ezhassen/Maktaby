@@ -78,6 +78,20 @@ public static partial class User32
     public static extern IntPtr SetParent(IntPtr child, IntPtr newParent);
 
     [DllImport("user32.dll")]
+    public static extern IntPtr GetParent(IntPtr hwnd);
+
+    // Per-thread DPI awareness. MonitorTracker pins these around enumeration (see below).
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetThreadDpiAwarenessContext();
+
+    [DllImport("user32.dll")]
+    public static extern IntPtr SetThreadDpiAwarenessContext(IntPtr context);
+
+    // Pseudo-handles (valid on any thread): UNAWARE=-1, SYSTEM_AWARE=-2, PER_MONITOR=-3, V2=-4.
+    public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE = new(-3);
+    public static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new(-4);
+
+    [DllImport("user32.dll")]
     public static extern IntPtr GetWindow(IntPtr hwnd, uint cmd);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]

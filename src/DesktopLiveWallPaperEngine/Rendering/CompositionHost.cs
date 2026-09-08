@@ -94,27 +94,50 @@ public sealed class CompositionHost : IDisposable
     /// <summary>The main wallpaper surface (opaque). Recreatable for cover-crop layouts.</summary>
     public CompositionSurface CreateContent(int width, int height, int offsetX = 0, int offsetY = 0)
     {
+        lock (_tree) return CreateContentCore(width, height, offsetX, offsetY);
+    }
+
+    /// <summary>Atomically replaces the content surface only if <paramref name="current"/> is still
+    /// the live one; otherwise returns <paramref name="current"/> untouched.
+    ///
+    /// A wallpaper change installs a newer renderer while the old player's MediaOpened may still
+    /// be in flight. A plain check-then-replace races: the stale handler can pass the currency
+    /// check, be preempted by the newer install, then resume and yank the new surface out from
+    /// under the live video — freezing that monitor on a wrong-sized frame (seen as a
+    /// zoomed/cropped wallpaper that a disable/re-enable heals). The check and the replace must
+    /// be one critical section, which is what this method is.</summary>
+    internal CompositionSurface ReplaceContentIfCurrent(CompositionSurface current, int width, int height, int offsetX, int offsetY)
+    {
         lock (_tree)
         {
-            Content?.Dispose();
-            Content = new CompositionSurface(this, width, height, premultipliedAlpha: false, offsetX, offsetY);
-            Content.DeviceLost += RaiseDeviceLost;
-            _rootVisual.AddVisual(Content.Visual, false, null);
-
-            // Then lift every overlay back above it. A null reference visual does not mean
-            // "bottom-most" — it makes the flag a position in the child list — so content added
-            // that way lands in front of the widgets and hides them. Verified: the clock vanished.
-            // Naming one overlay as the reference would only order content against that one, so
-            // each is re-inserted explicitly against the new content.
-            foreach (var overlay in _overlays.Values)
-            {
-                _rootVisual.RemoveVisual(overlay.Visual);
-                _rootVisual.AddVisual(overlay.Visual, true, Content.Visual);
-            }
-
-            _dcompDevice.Commit();
-            return Content;
+            // Volatile read on purpose: IsDisposed takes no lock (see the flag) so there is no
+            // tree -> surface-gate ordering to invert against Dispose's gate -> tree path.
+            if (!ReferenceEquals(Content, current) || current.VolatileDisposed) return current;
+            return CreateContentCore(width, height, offsetX, offsetY);
         }
+    }
+
+    /// <summary>Caller holds <see cref="_tree"/>.</summary>
+    private CompositionSurface CreateContentCore(int width, int height, int offsetX, int offsetY)
+    {
+        Content?.Dispose();
+        Content = new CompositionSurface(this, width, height, premultipliedAlpha: false, offsetX, offsetY);
+        Content.DeviceLost += RaiseDeviceLost;
+        _rootVisual.AddVisual(Content.Visual, false, null);
+
+        // Then lift every overlay back above it. A null reference visual does not mean
+        // "bottom-most" — it makes the flag a position in the child list — so content added
+        // that way lands in front of the widgets and hides them. Verified: the clock vanished.
+        // Naming one overlay as the reference would only order content against that one, so
+        // each is re-inserted explicitly against the new content.
+        foreach (var overlay in _overlays.Values)
+        {
+            _rootVisual.RemoveVisual(overlay.Visual);
+            _rootVisual.AddVisual(overlay.Visual, true, Content.Visual);
+        }
+
+        _dcompDevice.Commit();
+        return Content;
     }
 
     public CompositionSurface? GetOverlay(string key)
@@ -219,12 +242,13 @@ public sealed class CompositionSurface : IDisposable
     /// without this, a frame landing mid-teardown called Present on a disposed swapchain
     /// (Vortice reports it as a NULL native pointer → NullReferenceException).</summary>
     private readonly Lock _gate = new();
-    private bool _disposed;
+    private volatile bool _disposed;
 
-    public bool IsDisposed
-    {
-        get { lock (_gate) return _disposed; }
-    }
+    public bool IsDisposed => _disposed;
+
+    /// <summary>Lock-free disposed read for use under the host's tree lock.
+    /// IsDisposed takes no lock (see above) so there is no lock-ordering issue.</summary>
+    internal bool VolatileDisposed => _disposed;
 
     public IDXGISwapChain1 SwapChain { get; private set; }
     public ID3D11Texture2D BackBuffer { get; private set; }

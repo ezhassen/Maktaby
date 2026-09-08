@@ -7,7 +7,34 @@ public sealed record MonitorInfo(string Device, RECT Bounds, RECT WorkArea, bool
 
 public static class MonitorTracker
 {
+    /// <summary>Enumerates monitors with physical-pixel bounds, regardless of the calling
+    /// thread's DPI awareness.
+    ///
+    /// GetMonitorInfoW virtualizes rects for non-per-monitor threads: a system-aware thread on
+    /// a 125%-primary box reports the 100% secondary scaled by 1.25 (e.g. 1920x1200 becomes
+    /// 2400x1500). The tray Change path hits exactly that — the legacy file dialog flips the UI
+    /// thread to system-aware — so the renderer was sized 2400x1500 inside a 1920x1200 window:
+    /// zoomed/cropped on the secondary until a disable/re-enable re-enumerated on a sane thread.
+    /// Pinning per-monitor awareness here makes every caller deterministic.</summary>
     public static List<MonitorInfo> Enumerate()
+    {
+        var previous = User32.GetThreadDpiAwarenessContext();
+        // Prefer V2 (matches the WPF UI thread); fall back to V1 pre-1703.
+        var pinned = User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+        if (pinned == IntPtr.Zero)
+            User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
+        try
+        {
+            return EnumerateCore();
+        }
+        finally
+        {
+            if (previous != IntPtr.Zero)
+                User32.SetThreadDpiAwarenessContext(previous);
+        }
+    }
+
+    private static List<MonitorInfo> EnumerateCore()
     {
         var monitors = new List<MonitorInfo>();
         User32.MonitorEnumProc callback = (IntPtr hMonitor, IntPtr _, ref RECT _, IntPtr _) =>

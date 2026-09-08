@@ -265,6 +265,13 @@ public sealed class Engine : IDisposable
             window.EnsureHost();
             _windows[monitor.Device] = window;
         }
+        else
+        {
+            // The window outlives wallpaper changes: re-assert its placement against the
+            // current layer geometry. A stale rect (shell moved the parent under us) renders
+            // offset/clipped on that monitor until something recreates the window.
+            _host?.ReassertPlacement(window.Hwnd, monitor.Bounds);
+        }
         var host = window.EnsureHost();
 
         // When the first frame is captured, set it as the OS static wallpaper so a
@@ -302,7 +309,7 @@ public sealed class Engine : IDisposable
         renderer.Load(path);
 
         _playback?.Invalidate(); // re-evaluate pause state for the fresh renderer
-        Serilog.Log.Information($"Wallpaper applied on {monitor.Device}: {path}");
+        Serilog.Log.Information($"Wallpaper applied on {monitor.Device} {monitor.Bounds}: {path}");
     }
 
     public void ApplyUserSelection(string path, string monitorDevice = "*")

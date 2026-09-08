@@ -125,9 +125,17 @@ public sealed class VideoRenderer : IWallpaperRenderer
                     // Cover-crop: content surface sized to the scaled video, the window
                     // clips the overflow. (CopyFrameToVideoSurface mishandles rects that
                     // overflow the surface, so never pass those.)
+                    //
+                    // The replace is atomic against newer wallpaper installs sharing this host:
+                    // a superseded (or dead) surface is returned untouched, and this stale
+                    // renderer then drops out without disturbing the live video.
+                    var previous = _surfaceHost;
+                    var replacement = _hostComposition.ReplaceContentIfCurrent(previous, fit.Width, fit.Height, fit.X, fit.Y);
+                    if (ReferenceEquals(replacement, previous))
+                        return;
                     _surface?.Dispose();
                     _surface = null;
-                    _surfaceHost = _hostComposition.CreateContent(fit.Width, fit.Height, fit.X, fit.Y);
+                    _surfaceHost = replacement;
                     WrapBackBuffer();
                     _targetRect = null;
                     _staticCropX = -fit.X; // visible monitor region within the oversized surface
@@ -139,7 +147,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
                     _targetRect = new Windows.Foundation.Rect(fit.X, fit.Y, fit.Width, fit.Height);
                 }
             }
-            Serilog.Log.Information($"Media opened {videoW}x{videoH}, fit: {fit}");
+            Serilog.Log.Information($"Media opened {videoW}x{videoH} for {_width}x{_height}, fit: {fit}, surface: {_surfaceHost.Width}x{_surfaceHost.Height}");
         }
         catch (Exception ex)
         {

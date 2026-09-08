@@ -147,6 +147,40 @@ public sealed class DesktopLayerHost : IDisposable
         AssertOverlayZOrder(hwnd);
     }
 
+    /// <summary>Re-asserts a reused wallpaper window's placement without rebuilding it.
+    ///
+    /// ApplyToMonitor reuses windows across wallpaper changes (only disable/enable recreates
+    /// them), so a window can outlive the geometry it was attached with. A window that lost
+    /// its parent is fully re-attached; a window whose rect merely drifted is only LOGGED for
+    /// now — repositioning a child from parent-relative math proved unsafe on multi-monitor
+    /// setups (it shifted the second monitor's window left), so drift needs a confirmed
+    /// mapping before it is auto-corrected.</summary>
+    public void ReassertPlacement(IntPtr hwnd, RECT screenBounds)
+    {
+        IntPtr parent = Layer.Topology == DesktopTopology.RaisedDesktop ? Layer.Progman : Layer.WorkerW;
+        if (parent == IntPtr.Zero || !User32.IsWindow(hwnd)) return;
+
+        // Fell out of the layer entirely (explorer recycled the parent) — full re-attach.
+        if (User32.GetParent(hwnd) != parent)
+        {
+            Serilog.Log.Information($"Wallpaper window 0x{hwnd:X} lost its parent — re-attaching at {screenBounds}");
+            Attach(hwnd, screenBounds);
+            return;
+        }
+
+        User32.GetWindowRect(parent, out var parentRect);
+        var expected = MonitorTracker.ScreenToParentClient(screenBounds, parentRect);
+        // Window rects are screen coords; the expected client rect is parent-relative.
+        int expLeft = parentRect.Left + expected.Left;
+        int expTop = parentRect.Top + expected.Top;
+        User32.GetWindowRect(hwnd, out var current);
+        if (current.Left != expLeft || current.Top != expTop ||
+            current.Width != expected.Width || current.Height != expected.Height)
+        {
+            Serilog.Log.Information($"Wallpaper window 0x{hwnd:X} drifted: actual {current}, expected {screenBounds} (parent {parentRect}) — leaving in place, see log");
+        }
+    }
+
     /// <summary>Keeps an overlay above the wallpaper surfaces after a new wallpaper attach.</summary>
     public void AssertOverlayZOrder(IntPtr hwnd)
     {
