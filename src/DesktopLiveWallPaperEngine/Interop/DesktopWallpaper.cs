@@ -80,7 +80,7 @@ public static class DesktopWallpaper
     /// Deliberately omits SPIF_SENDCHANGE: that flag makes SystemParametersInfo broadcast
     /// WM_SETTINGCHANGE to every top-level window and wait for each one to answer, so a single
     /// app that is not pumping messages blocks the call indefinitely. Restore runs on the UI
-    /// thread inside <see cref="Engine.Dispose"/>, so that hang left featherwall.exe alive
+    /// thread inside <see cref="Engine.Dispose"/>, so that hang left the app alive
     /// forever after --exit / tray Quit / logoff. The wallpaper still applies without the flag;
     /// other apps are notified asynchronously instead.</summary>
     public static void SetSingle(string imagePath)

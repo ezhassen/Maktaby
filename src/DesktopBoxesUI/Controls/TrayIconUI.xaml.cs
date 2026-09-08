@@ -169,7 +169,7 @@ public partial class TrayIconUI
     {
         LiveWallpaperChangeRequested?.Invoke(this, EventArgs.Empty);
         // Menu stays open (StaysOpenOnClick); file dialog may have changed state.
-        SyncMenuItemState_LiveWallPaperItems();
+        //SyncMenuItemState_LiveWallPaperItems();
     }
 
     private void LiveWallpaperRemove_Click(object sender, RoutedEventArgs e)

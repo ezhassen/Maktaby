@@ -121,7 +121,7 @@ public sealed class PowerNotifications : IDisposable
     /// only dereference on this path.
     ///
     /// Not a security boundary and not sold as one: a same-integrity caller can already terminate
-    /// FeatherWall outright. It stops a wild pointer from turning a stray message into a crash.</summary>
+    /// the app outright. It stops a wild pointer from turning a stray message into a crash.</summary>
     private static bool Readable(IntPtr address, int bytes)
     {
         if (address == IntPtr.Zero || bytes <= 0) return false;

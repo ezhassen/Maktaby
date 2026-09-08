@@ -94,7 +94,7 @@
 	</ItemGroup>
 
   <ItemGroup>
-	  <ProjectReference Include="..\DesktopLiveWallPaperEngine\DesktopLiveWallPaperEngine.csproj" />
+	  <ProjectReference Include="..\DesktopLiveWallPaperEngine\DesktopLiveWallpaperEngine.csproj" />
 	  <ProjectReference Include="..\WPFShared\WPFShared.csproj" />
   </ItemGroup>
 

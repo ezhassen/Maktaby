@@ -413,17 +413,13 @@ public partial class App : Application
         };
         tray.LiveWallpaperChangeRequested += (_, _) =>
         {
-            //var newFile = DesktopLiveWallPaperEngine.WallPaperFilePicker.PickMedia(Process.GetCurrentProcess().Handle);
-            //if (string.IsNullOrEmpty(newFile) || !File.Exists(newFile)) return;
-            //Services.GetRequiredService<LiveWallpaperManager>().SetWallpaper(newFile);
-            var dlg = new Microsoft.Win32.OpenFileDialog
-            {
-                Title = "Choose live wallpaper video",
-                Filter = "Video files (*.mp4;*.m4v;*.wmv;*.mov)|*.mp4;*.m4v;*.wmv;*.mov|All files (*.*)|*.*",
-                Multiselect = false
-            };
-            if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.FileName))
-                Services.GetRequiredService<LiveWallpaperManager>().SetWallpaper(dlg.FileName);
+            // Filter comes from the engine itself (WallPaperFilePicker builds it from
+            // Engine.ImageExtensions + CodecSupport.VideoExtensions), so it never drifts
+            // from what the renderers can actually play. No owner HWND here (tray menu),
+            // so the parameterless overload passes IntPtr.Zero — never a process handle.
+            var newFile = DesktopLiveWallPaperEngine.WallpaperFilePicker.PickMedia();
+            if (string.IsNullOrEmpty(newFile) || !File.Exists(newFile)) return;
+            Services.GetRequiredService<LiveWallpaperManager>().SetWallpaper(newFile);
         };
         tray.LiveWallpaperRemoveRequested += (_, _) => Services.GetRequiredService<LiveWallpaperManager>().Remove();
         tray.ResetRequested += async (_, _) =>

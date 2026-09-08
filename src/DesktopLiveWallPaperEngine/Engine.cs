@@ -14,7 +14,7 @@ namespace DesktopLiveWallPaperEngine;
 /// clock widget, pause monitor, tray UI, config persistence.</summary>
 public sealed class Engine : IDisposable
 {
-    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    public static readonly IReadOnlySet<string> ImageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff" };
 
     private readonly EngineConfig _config;

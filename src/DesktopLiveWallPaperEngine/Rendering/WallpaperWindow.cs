@@ -8,7 +8,7 @@ namespace DesktopLiveWallPaperEngine.Rendering;
 /// <summary>One borderless surface window per monitor, living inside the wallpaper layer.</summary>
 public sealed class WallpaperWindow : Win32Window
 {
-    public const string ClassName = "FeatherWallSurface";
+    public const string ClassName = "DLWEngineSurface";
 
     public MonitorInfo Monitor { get; }
     public IWallpaperRenderer? Renderer { get; private set; }

@@ -17,7 +17,7 @@ public static class PauseDecision
     private static readonly HashSet<string> ShellOrOwnClasses = new(StringComparer.Ordinal)
     {
         "Progman", "WorkerW", "Shell_TrayWnd", "SHELLDLL_DefView", "SysListView32",
-        "FeatherWallSurface", "FeatherWallClock", "FeatherWallMessage",
+        Rendering.WallpaperWindow.ClassName,
     };
 
     public const double CoverageThreshold = 0.95;

@@ -214,6 +214,18 @@ public sealed class CompositionSurface : IDisposable
     private readonly bool _premultiplied;
     private ID2D1RenderTarget? _d2dTarget;
 
+    /// <summary>Serializes Present/draw calls against Dispose. MediaPlayer frame callbacks
+    /// arrive on a worker thread while the engine tears the host down on the main thread —
+    /// without this, a frame landing mid-teardown called Present on a disposed swapchain
+    /// (Vortice reports it as a NULL native pointer → NullReferenceException).</summary>
+    private readonly Lock _gate = new();
+    private bool _disposed;
+
+    public bool IsDisposed
+    {
+        get { lock (_gate) return _disposed; }
+    }
+
     public IDXGISwapChain1 SwapChain { get; private set; }
     public ID3D11Texture2D BackBuffer { get; private set; }
     public ID3D11RenderTargetView Rtv { get; private set; }
@@ -261,18 +273,35 @@ public sealed class CompositionSurface : IDisposable
         Visual.SetOffsetY(y);
     });
 
-    public void ClearBlack() => _host.Context.ClearRenderTargetView(Rtv, new Color4(0f, 0f, 0f, 1f));
+    public void ClearBlack()
+    {
+        lock (_gate)
+        {
+            if (_disposed || Rtv.NativePointer == IntPtr.Zero) return;
+            _host.Context.ClearRenderTargetView(Rtv, new Color4(0f, 0f, 0f, 1f));
+        }
+    }
 
     public void Present()
     {
-        var result = SwapChain.Present(0, PresentFlags.None);
-        if (result.Code == Vortice.DXGI.ResultCode.DeviceRemoved.Code ||
-            result.Code == Vortice.DXGI.ResultCode.DeviceReset.Code)
+        int code;
+        lock (_gate)
+        {
+            if (_disposed || SwapChain.NativePointer == IntPtr.Zero) return;
+            try
+            {
+                code = SwapChain.Present(0, PresentFlags.None).Code;
+            }
+            catch (ObjectDisposedException) { return; } // lost the race with Dispose — shutting down
+            catch (NullReferenceException) { return; } // Vortice NULL native pointer — shutting down
+        }
+        if (code == Vortice.DXGI.ResultCode.DeviceRemoved.Code ||
+            code == Vortice.DXGI.ResultCode.DeviceReset.Code)
         {
             // GPU reset / driver update. The whole host owns the device; rebuilding just this
             // swapchain against the (also dead) device won't help — the engine's re-apply
             // path rebuilds everything. Log loudly.
-            Serilog.Log.Warning($"Present reported device loss (0x{result.Code:X8}) — wallpaper re-apply required");
+            Serilog.Log.Warning($"Present reported device loss (0x{code:X8}) — wallpaper re-apply required");
             DeviceLost?.Invoke();
         }
     }
@@ -283,30 +312,34 @@ public sealed class CompositionSurface : IDisposable
     /// (Flip-model backbuffers only accept render operations — CPU copies are ignored.)</summary>
     public void PresentBitmap(System.Drawing.Bitmap bitmap)
     {
-        if (_d2dTarget is null)
+        lock (_gate)
         {
-            using var dxgiSurface = BackBuffer.QueryInterface<IDXGISurface>();
-            _d2dTarget = _host.Factories.D2d.CreateDxgiSurfaceRenderTarget(dxgiSurface, new RenderTargetProperties(
-                new Vortice.DCommon.PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied)));
-        }
+            if (_disposed || SwapChain.NativePointer == IntPtr.Zero) return;
+            if (_d2dTarget is null)
+            {
+                using var dxgiSurface = BackBuffer.QueryInterface<IDXGISurface>();
+                _d2dTarget = _host.Factories.D2d.CreateDxgiSurfaceRenderTarget(dxgiSurface, new RenderTargetProperties(
+                    new Vortice.DCommon.PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied)));
+            }
 
-        var bits = bitmap.LockBits(
-            new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
-            System.Drawing.Imaging.ImageLockMode.ReadOnly,
-            System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
-        try
-        {
-            using var d2dBitmap = _d2dTarget.CreateBitmap(
-                new SizeI(bitmap.Width, bitmap.Height), bits.Scan0, (uint)bits.Stride,
-                new BitmapProperties(new Vortice.DCommon.PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied)));
-            _d2dTarget.BeginDraw();
-            _d2dTarget.Clear(new Color4(0f, 0f, 0f, 0f));
-            _d2dTarget.DrawBitmap(d2dBitmap, new Rect(0, 0, Width, Height), 1f, Vortice.Direct2D1.BitmapInterpolationMode.Linear, null);
-            _d2dTarget.EndDraw();
-        }
-        finally
-        {
-            bitmap.UnlockBits(bits);
+            var bits = bitmap.LockBits(
+                new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly,
+                System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            try
+            {
+                using var d2dBitmap = _d2dTarget.CreateBitmap(
+                    new SizeI(bitmap.Width, bitmap.Height), bits.Scan0, (uint)bits.Stride,
+                    new BitmapProperties(new Vortice.DCommon.PixelFormat(Format.B8G8R8A8_UNorm, Vortice.DCommon.AlphaMode.Premultiplied)));
+                _d2dTarget.BeginDraw();
+                _d2dTarget.Clear(new Color4(0f, 0f, 0f, 0f));
+                _d2dTarget.DrawBitmap(d2dBitmap, new Rect(0, 0, Width, Height), 1f, Vortice.Direct2D1.BitmapInterpolationMode.Linear, null);
+                _d2dTarget.EndDraw();
+            }
+            finally
+            {
+                bitmap.UnlockBits(bits);
+            }
         }
         Present();
     }
@@ -316,65 +349,79 @@ public sealed class CompositionSurface : IDisposable
     /// (flip-model backbuffer contents are undefined afterward).</summary>
     public void SaveRegionPng(int cropX, int cropY, int w, int h, string path)
     {
-        cropX = Math.Clamp(cropX, 0, Math.Max(Width - 1, 0));
-        cropY = Math.Clamp(cropY, 0, Math.Max(Height - 1, 0));
-        w = Math.Min(w, Width - cropX);
-        h = Math.Min(h, Height - cropY);
-        if (w <= 0 || h <= 0) return;
-
-        var desc = new Texture2DDescription
+        lock (_gate)
         {
-            Width = (uint)w,
-            Height = (uint)h,
-            MipLevels = 1,
-            ArraySize = 1,
-            Format = Format.B8G8R8A8_UNorm,
-            SampleDescription = new SampleDescription(1, 0),
-            Usage = ResourceUsage.Staging,
-            BindFlags = BindFlags.None,
-            CPUAccessFlags = CpuAccessFlags.Read,
-        };
-        using var staging = _host.Device.CreateTexture2D(desc);
-        var box = new Box(cropX, cropY, 0, cropX + w, cropY + h, 1);
-        _host.Context.CopySubresourceRegion(staging, 0, 0, 0, 0, BackBuffer, 0, box);
+            if (_disposed || SwapChain.NativePointer == IntPtr.Zero) return;
+            cropX = Math.Clamp(cropX, 0, Math.Max(Width - 1, 0));
+            cropY = Math.Clamp(cropY, 0, Math.Max(Height - 1, 0));
+            w = Math.Min(w, Width - cropX);
+            h = Math.Min(h, Height - cropY);
+            if (w <= 0 || h <= 0) return;
 
-        var map = _host.Context.Map(staging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
-        try
-        {
-            using var bmp = new System.Drawing.Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            var bits = bmp.LockBits(new System.Drawing.Rectangle(0, 0, w, h),
-                System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            var desc = new Texture2DDescription
+            {
+                Width = (uint)w,
+                Height = (uint)h,
+                MipLevels = 1,
+                ArraySize = 1,
+                Format = Format.B8G8R8A8_UNorm,
+                SampleDescription = new SampleDescription(1, 0),
+                Usage = ResourceUsage.Staging,
+                BindFlags = BindFlags.None,
+                CPUAccessFlags = CpuAccessFlags.Read,
+            };
             try
             {
-                unsafe
+                using var staging = _host.Device.CreateTexture2D(desc);
+                var box = new Box(cropX, cropY, 0, cropX + w, cropY + h, 1);
+                _host.Context.CopySubresourceRegion(staging, 0, 0, 0, 0, BackBuffer, 0, box);
+
+                var map = _host.Context.Map(staging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
+                try
                 {
-                    byte* src = (byte*)map.DataPointer;
-                    byte* dst = (byte*)bits.Scan0;
-                    for (int y = 0; y < h; y++)
-                        Buffer.MemoryCopy(src + (long)y * map.RowPitch, dst + (long)y * bits.Stride, w * 4, w * 4);
+                    using var bmp = new System.Drawing.Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                    var bits = bmp.LockBits(new System.Drawing.Rectangle(0, 0, w, h),
+                        System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                    try
+                    {
+                        unsafe
+                        {
+                            byte* src = (byte*)map.DataPointer;
+                            byte* dst = (byte*)bits.Scan0;
+                            for (int y = 0; y < h; y++)
+                                Buffer.MemoryCopy(src + (long)y * map.RowPitch, dst + (long)y * bits.Stride, w * 4, w * 4);
+                        }
+                    }
+                    finally
+                    {
+                        bmp.UnlockBits(bits);
+                    }
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+                    bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                }
+                finally
+                {
+                    _host.Context.Unmap(staging, 0);
                 }
             }
-            finally
-            {
-                bmp.UnlockBits(bits);
-            }
-            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-            bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
-        }
-        finally
-        {
-            _host.Context.Unmap(staging, 0);
+            catch (ObjectDisposedException) { return; } // lost the race with host teardown
+            catch (NullReferenceException) { return; } // Vortice NULL native pointer — shutting down
         }
     }
 
     public void Dispose()
     {
-        _d2dTarget?.Dispose();
-        _d2dTarget = null;
-        try { _host.RemoveVisual(Visual); } catch { /* host may be tearing down */ }
-        Visual.Dispose();
-        Rtv.Dispose();
-        BackBuffer.Dispose();
-        SwapChain.Dispose();
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _d2dTarget?.Dispose();
+            _d2dTarget = null;
+            try { _host.RemoveVisual(Visual); } catch { /* host may be tearing down */ }
+            try { Visual.Dispose(); } catch { }
+            try { Rtv.Dispose(); } catch { }
+            try { BackBuffer.Dispose(); } catch { }
+            try { SwapChain.Dispose(); } catch { }
+        }
     }
 }

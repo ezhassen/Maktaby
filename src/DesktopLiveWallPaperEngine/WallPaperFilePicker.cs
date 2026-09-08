@@ -1,16 +1,32 @@
 using DesktopLiveWallPaperEngine.Interop;
+using DesktopLiveWallPaperEngine.Playback;
 using System.Runtime.InteropServices;
 
 namespace DesktopLiveWallPaperEngine;
 
-public static class WallPaperFilePicker
+public static class WallpaperFilePicker
 {
-    private const string Filter =
-        "Images & videos\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff;*.mp4;*.m4v;*.mov;*.avi;*.wmv;*.mkv;*.webm\0" +
-        "Images\0*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff\0" +
-        "Videos\0*.mp4;*.m4v;*.mov;*.avi;*.wmv;*.mkv;*.webm\0" +
-        "All files\0*.*\0\0";
+    private static string BuildFilter()
+    {
+        // Single source of truth: exactly what the engine can render.
+        // Images -> ImageRenderer, videos -> VideoRenderer (MediaPlayer).
+        string images = string.Join(";", Engine.ImageExtensions.Select(e => "*" + e));
+        string videos = string.Join(";", CodecSupport.VideoExtensions.Select(e => "*" + e));
+        string all = images + ";" + videos;
+        return
+            "Images & videos\0" + all + "\0" +
+            "Images\0" + images + "\0" +
+            "Videos\0" + videos + "\0" +
+            "All files\0*.*\0\0";
+    }
 
+    /// <summary>No-owner overload for WPF callers (e.g. tray menu) that have no HWND.
+    /// Passes <see cref="IntPtr.Zero"/> so the dialog is top-level.</summary>
+    public static string? PickMedia() => PickMedia(IntPtr.Zero);
+
+    /// <summary>Shows the open-file dialog filtered to engine-supported formats.</summary>
+    /// <param name="owner">Owning <c>HWND</c> (e.g. from <c>WindowInteropHelper.Handle</c>),
+    /// or <see cref="IntPtr.Zero"/> for no owner. NOT a process handle.</param>
     public static string? PickMedia(IntPtr owner)
     {
         const int bufferChars = 4096;
@@ -24,11 +40,12 @@ public static class WallPaperFilePicker
             {
                 StructSize = (uint)Marshal.SizeOf<OPENFILENAME>(),
                 HwndOwner = owner,
-                Filter = Filter,
+                Filter = BuildFilter(),
                 File = buffer,
                 MaxFile = bufferChars,
                 Title = "Choose a wallpaper (image or video)",
-                Flags = ComDlg32.OFN_FILEMUSTEXIST | ComDlg32.OFN_PATHMUSTEXIST | ComDlg32.OFN_NOCHANGEDIR,
+                Flags = ComDlg32.OFN_EXPLORER | ComDlg32.OFN_ENABLESIZING |
+                        ComDlg32.OFN_FILEMUSTEXIST | ComDlg32.OFN_PATHMUSTEXIST | ComDlg32.OFN_NOCHANGEDIR,
             };
             return ComDlg32.GetOpenFileNameW(ref ofn) ? Marshal.PtrToStringUni(buffer) : null;
         }

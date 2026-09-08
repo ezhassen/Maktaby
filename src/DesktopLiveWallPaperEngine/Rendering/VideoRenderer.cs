@@ -71,6 +71,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
 
     private void WrapBackBuffer()
     {
+        if (_surfaceHost.IsDisposed) return;
         _surface?.Dispose();
         using var dxgiSurface = _surfaceHost.BackBuffer.QueryInterface<IDXGISurface>();
         _surface = Interop.Direct3DInterop.CreateSurfaceFromDxgi(dxgiSurface.NativePointer);
@@ -153,7 +154,10 @@ public sealed class VideoRenderer : IWallpaperRenderer
     {
         try
         {
-            if (_disposed) return;
+            lock (_sync)
+            {
+                if (_disposed) return;
+            }
             sender.PlaybackSession.Position = TimeSpan.Zero;
             sender.Play();
         }
@@ -202,7 +206,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
     {
         lock (_sync)
         {
-            if (_disposed || _surface is null) return;
+            if (_disposed || _surface is null || _surfaceHost.IsDisposed) return;
             try
             {
                 if (_targetRect is { } rect)
@@ -238,6 +242,8 @@ public sealed class VideoRenderer : IWallpaperRenderer
 
                 _surfaceHost.Present();
             }
+            catch (ObjectDisposedException) { /* lost the race with teardown — shutting down */ }
+            catch (NullReferenceException) { /* Vortice NULL native pointer — shutting down */ }
             catch (Exception ex)
             {
                 Serilog.Log.Error("Frame present failed", ex);

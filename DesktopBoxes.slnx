@@ -14,6 +14,6 @@
   <Project Path="src/DesktopBoxesUI/DesktopBoxesUI.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
-  <Project Path="src/DesktopLiveWallPaperEngine/DesktopLiveWallPaperEngine.csproj" Id="34ac74dd-ecef-4511-990e-09b07d714091" />
+  <Project Path="src/DesktopLiveWallPaperEngine/DesktopLiveWallPaperEngine.csproj" Id="34ac74dd-ecef-4511-990e-09b07d714091" DisplayName="DesktopLiveWallpaperEngine" />
   <Project Path="src/WPFShared/WPFShared.csproj" Id="8b255fd0-c0c5-4e2c-96d2-7815d83abad8" />
 </Solution>
