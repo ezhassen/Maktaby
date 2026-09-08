@@ -365,3 +365,4 @@ icon/*.*
 tools/make-icon.ps1
 Installer/*.*
 BuildVersion.inc
+/.cpmigrate_backup

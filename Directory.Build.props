@@ -1,0 +1,26 @@
+<Project>
+	<PropertyGroup>
+
+		<SharedTargetFramework>net10.0</SharedTargetFramework>
+		<SharedTargetFrameworWindows>net10.0-windows10.0.19041.0</SharedTargetFrameworWindows>
+		<SharedTargetPlatformMinVersion>10.0.17763.0</SharedTargetPlatformMinVersion>
+
+		<!--<GlobalLangVersion>14.0</GlobalLangVersion>-->
+		<GlobalLangVersion>preview</GlobalLangVersion>
+
+		<!--Used to Debug and directly edit EzzHelper projects. DO NOT USE Any more-->
+		<UseEzzHelperProjectsAsProjectReference>False</UseEzzHelperProjectsAsProjectReference>
+		<ImplicitUsings>enable</ImplicitUsings>
+
+		<!--<Platforms>AnyCPU;x86;x64</Platforms>-->
+		<Configurations>Debug;Release;</Configurations>
+		<Platforms>AnyCPU;x64</Platforms>
+		<!--<Platforms>AnyCPU;x86;x64;ARM64</Platforms>-->
+
+
+		<EnableIsAotCompatible>false</EnableIsAotCompatible>
+		<IncloudeILLinkPackageReference>false</IncloudeILLinkPackageReference>
+		
+		<!--<DisableAutoVersion>false</DisableAutoVersion>-->
+	</PropertyGroup>
+</Project>

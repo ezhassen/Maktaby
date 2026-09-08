@@ -1,0 +1,54 @@
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<PropertyGroup>
+		<!--<RootNamespace>$(AssemblyName)</RootNamespace>
+    <PackageId>$(AssemblyName)</PackageId>
+    <Product>$(AssemblyName)</Product>-->
+
+		<Authors>Ezz Hassan</Authors>
+		<Company>Ezz Hassan</Company>
+		<PublisherName>Ezz Hassan</PublisherName>
+		<Copyright>Copyright © 2026</Copyright>
+
+		<LangVersion>latest</LangVersion>
+
+		<!-- https://docs.microsoft.com/en-us/visualstudio/code-quality/disable-code-analysis?view=vs-2019 -->
+		<!-- Fix slow writing https://github.com/dotnet/roslyn/issues/24513#issuecomment-556406880 -->
+		<!-- <RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild> -->
+		<RunAnalyzersDuringLiveAnalysis>false</RunAnalyzersDuringLiveAnalysis>
+		<!-- <RunAnalyzers>false</RunAnalyzers> -->
+
+		<!--Build acceleration-->
+		<!--https://github.com/dotnet/project-system/blob/main/docs/build-acceleration.md-->
+		<!--You may disable build acceleration for specific projects in your solution by redefining the AccelerateBuildsInVisualStudio property as false in those projects.-->
+		<AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
+		<DebugVersionCachePath>$(MSBuildThisFileDirectory)obj\DebugVersion.props</DebugVersionCachePath>
+		<!---->
+
+		<!-- Version comes from GIT TAGS via MinVer (tag = exact version; commits after a tag get a
+		     prerelease label + height). Tag v1.2.3 for release 1.2.3, or v1.2.3-beta.1 for betas
+		     (e.g. on develop). No manual <Version> here anymore. -->
+		<MinVerTagPrefix>v</MinVerTagPrefix>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(EnableIsAotCompatible)' == 'true' And $([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">
+		<IsAotCompatible>true</IsAotCompatible>
+		<IsTrimmable>true</IsTrimmable>
+		<EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+		<EnableAotAnalyzer>true</EnableAotAnalyzer>
+		<!--<EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>-->
+		<!--<VerifyReferenceTrimCompatibility>true</VerifyReferenceTrimCompatibility>-->
+	</PropertyGroup>
+
+	<ItemGroup Condition="'$(ManagePackageVersionsCentrally)' == 'true' and (('$(EnableIsAotCompatible)' == 'true' or '$(IncloudeILLinkPackageReference)' == 'true') And $([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0')))">
+		<PackageReference Include="Microsoft.NET.ILLink.Tasks" PrivateAssets="all" />
+	</ItemGroup>
+
+	<PropertyGroup Condition="'$(IsAotCompatible)' == 'true'">
+		<DefineConstants>$(DefineConstants);AOT_COMPATIBLE</DefineConstants>
+	</PropertyGroup>
+
+	<PropertyGroup Condition="'$(PublishAot)' == 'true'">
+		<DefineConstants>$(DefineConstants);NATIVEAOT</DefineConstants>
+	</PropertyGroup>
+
+</Project>

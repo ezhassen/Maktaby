@@ -7,6 +7,9 @@
     <File Path="agents.md" />
     <File Path="build.ps1" />
     <File Path="build_publish.ps1" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
     <File Path="installer.iss" />
     <File Path="README.md" />
   </Folder>
@@ -14,6 +17,7 @@
   <Project Path="src/DesktopBoxesUI/DesktopBoxesUI.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>
-  <Project Path="src/DesktopLiveWallPaperEngine/DesktopLiveWallPaperEngine.csproj" Id="34ac74dd-ecef-4511-990e-09b07d714091" DisplayName="DesktopLiveWallpaperEngine" />
+  <Project Path="src/DesktopLiveWallPaperEngine/DesktopLiveWallPaperEngine.csproj" Id="34ac74dd-ecef-4511-990e-09b07d714091" />
+  <Project Path="src/WindowsNative/WindowsNative.csproj" Id="a76d5e12-6c95-49bd-a18e-55c916af14a6" />
   <Project Path="src/WPFShared/WPFShared.csproj" Id="8b255fd0-c0c5-4e2c-96d2-7815d83abad8" />
 </Solution>

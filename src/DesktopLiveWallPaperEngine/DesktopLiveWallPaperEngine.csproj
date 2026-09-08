@@ -1,21 +1,18 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
 	<PropertyGroup>
-		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
-		<SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+		<TargetFramework>$(SharedTargetFrameworWindows)</TargetFramework>
+		<TargetPlatformMinVersion>$(SharedTargetPlatformMinVersion)</TargetPlatformMinVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<LangVersion>latest</LangVersion>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Windows.Compatibility" Version="10.0.11" />
-		<PackageReference Include="Serilog" Version="4.4.0" />
-		<PackageReference Include="System.Drawing.Common" Version="10.0.11" />
-		<PackageReference Include="Vortice.Direct2D1" Version="3.8.3" />
-		<PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
-		<PackageReference Include="Vortice.DirectComposition" Version="3.8.3" />
+		<PackageReference Include="Serilog" />
+		<PackageReference Include="Microsoft.Windows.Compatibility" />
+		<PackageReference Include="System.Drawing.Common" />
+		<PackageReference Include="Vortice.Direct2D1" />
+		<PackageReference Include="Vortice.Direct3D11" />
+		<PackageReference Include="Vortice.DirectComposition" />
 	</ItemGroup>
-
 </Project>
