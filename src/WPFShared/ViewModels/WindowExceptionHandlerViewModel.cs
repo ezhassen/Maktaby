@@ -1,16 +1,20 @@
-using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using System.Windows;
 
-namespace DesktopBoxesUI.ViewModels;
+namespace WPFShared.ViewModels;
 
 public partial class WindowExceptionHandlerViewModel : ObservableObject
 {
     [ObservableProperty]
-    private Exception _exception = null!;
+    [NotifyPropertyChangedFor(nameof(HasInnerException))]
+    public partial Exception Exception { get; set; }
 
     [ObservableProperty]
-    private string? _exceptionType;
+    public partial string? ExceptionType { get; set; }
+
+    /// <summary>False when there is no inner exception to show — the dialog collapses that section.</summary>
+    public bool HasInnerException => !string.IsNullOrEmpty(Exception?.InnerException?.ToString());
 
     /// <summary>True after the user explicitly chooses Continue.</summary>
     public bool HasChosenContinue { get; private set; }

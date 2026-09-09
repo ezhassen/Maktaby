@@ -1,8 +1,8 @@
 using System.ComponentModel;
 using System.Windows;
-using DesktopBoxesUI.ViewModels;
+using WPFShared.ViewModels;
 
-namespace DesktopBoxesUI.Views
+namespace WPFShared.Controls
 {
     /// <summary>
     /// Modern fluent error dialog (light / dark via WPF-UI). Offers <c>Continue</c> (keep app alive)

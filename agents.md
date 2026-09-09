@@ -17,6 +17,10 @@ Follow it to keep the architecture clean and the build green.
   holding many items.
 - Use **IDispatcher** **Helpers/WpfDispatcher** when needed. IDispatcher registered in App.Services
 - Use the term **Box** everywhere (code, comments, UI). Do **not** use "Fence".
+- With CommunityToolkit.Mvvm, prefer `public partial` properties over private backing fields
+  for `[ObservableProperty]` wherever the generator supports it (it does since 8.4):
+  `[ObservableProperty] public partial string Name { get; set; }` instead of
+  `[ObservableProperty] private string _name;`.
 - Keep the NuGet surface small. Don't add packages without a reason. Currently allowed:
   `Microsoft.Extensions.DependencyInjection`,
   `CommunityToolkit.Mvvm`, `Wpf.Ui` (v4.3.0) and `Wpf.Ui.Tray` (v4.3.0) — the user explicitly asked for
@@ -147,10 +151,12 @@ that draws, at the cursor, the hit-test result, z-order, and the surface's style
      (around `BoxContainerWindow.xaml.cs:824`) uses `PointToScreen` instead of `GetCursorPos` combined with
      per-monitor DPI. `Shcore.GetDpiForMonitorTyped` + `User32.MonitorFromPoint` already live in
      `WindowsNative` but are not yet wrapped in `Win32Apis`.
-- **`WindowExceptionHandler` unhandled-exception flow:** The `DispatcherUnhandledException` / `AppDomain` /
-  `TaskScheduler` handlers are wired in `App.xaml.cs:OnStartup` (`#if !DEBUG` gate). The dialog is a
-  `Wpf.Ui.Controls.FluentWindow` (`Views/WindowExceptionHandler.xaml`) bound to
-  `WindowExceptionHandlerViewModel` (`CommunityToolkit.Mvvm`: `[ObservableProperty]`, `[RelayCommand]`).
+- **`WindowExceptionHandler` unhandled-exception flow (lives in WPFShared):** `WPFShared.Helpers.ExceptionHandler.Register(app, options)`
+  wires `DispatcherUnhandledException` / `AppDomain` / `TaskScheduler` (returns `IDisposable` to unwire);
+  `App.xaml.cs:OnStartup` calls it (`#if !DEBUG` gate) with the app-specific ignorable check and log sinks.
+  The dialog is a `Wpf.Ui.Controls.FluentWindow` (`WPFShared/Controls/WindowExceptionHandler.xaml`, no host
+  assets referenced) bound to `WindowExceptionHandlerViewModel` (`WPFShared/ViewModels`, `CommunityToolkit.Mvvm`:
+  `[ObservableProperty]`, `[RelayCommand]`).
   It offers **Continue** (keep app alive, `HasChosenContinue=true`, no shutdown) and **Exit Application**
   (`Danger`), plus **Copy details**; only **Exit Application** shuts down — closing via the X button,
   Alt+F4 or any system close just dismisses the dialog (treated as Continue). If you add new global

@@ -16,6 +16,7 @@
 
 	<ItemGroup>
 		<PackageReference Include="Serilog" />
+		<PackageReference Include="CommunityToolkit.Mvvm" />
 		<PackageReference Include="WPF-UI" />
 		<PackageReference Include="Microsoft.Web.WebView2" />
 	</ItemGroup>

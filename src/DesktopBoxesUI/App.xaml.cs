@@ -58,10 +58,14 @@ public partial class App : Application
             Shutdown();
             return;
         }
-#if !DEBUG   
-        DispatcherUnhandledException += Application_DispatcherUnhandledException;
-        AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
-        TaskScheduler.UnobservedTaskException += TaskScheduler_UnobservedTaskException;
+#if !DEBUG
+        WPFShared.Helpers.ExceptionHandler.Register(this, new WPFShared.Helpers.ExceptionHandler.Options
+        {
+            IsIgnorable = ex => IsIgnorableWebViewShutdownException(ex) || Win32Apis.SystemTeardown,
+            LogError = (ex, msg) => Logging.Log.Error(ex, msg),
+            LogFatal = (ex, msg) => Logging.Log.Fatal(ex, msg),
+            LogWarning = (msg) => Logging.Log.Warning(msg),
+        });
 #endif
         //
         AppJSettings.Reload();
@@ -148,38 +152,6 @@ public partial class App : Application
         Helpers.ApplicationSingleInstance.Release();
         base.OnExit(e);
     }
-    private void Application_DispatcherUnhandledException(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs e)
-    {
-        //#if !DEBUG
-        // Suppress known WebView2 shutdown race: CoreWebView2Controller.IsVisible is set by WPF
-        // during visual tree teardown after CoreWebView2 is already disposed. This is harmless
-        // and should not show the crash dialog, especially during app exit.
-        if (IsIgnorableWebViewShutdownException(e.Exception) || Win32Apis.SystemTeardown)
-        {
-            Logging.Log.Debug(e.Exception, "Suppressed WebView2 shutdown race");
-            e.Handled = true;
-            return;
-        }
-        Logging.Log.Error(e.Exception, "UnhandledException");
-        e.Handled = true;
-        Application.Current.Dispatcher.BeginInvoke(new Action(() =>
-        {
-            var vm = new ViewModels.WindowExceptionHandlerViewModel(e.Exception);
-            var exceptionWindow = new Views.WindowExceptionHandler
-            {
-                DataContext = vm
-            };
-            exceptionWindow.ShowDialog();
-            // Window owns the shutdown decision: only Exit Application shuts down;
-            // Continue and any system close (X / Alt+F4) just dismiss the dialog.
-            if (vm.HasChosenContinue)
-            {
-                Logging.Log.Warning("User chose to continue after unhandled exception {Type}", vm.ExceptionType);
-            }
-        }));
-        //#endif
-    }
-
     private static bool IsIgnorableWebViewShutdownException(Exception? ex)
     {
         if (ex == null) return false;
@@ -195,25 +167,6 @@ public partial class App : Application
         if (ex.InnerException != null && IsIgnorableWebViewShutdownException(ex.InnerException))
             return true;
         return false;
-    }
-
-    private void CurrentDomain_UnhandledException(object? sender, UnhandledExceptionEventArgs e)
-    {
-        try
-        {
-            Logging.Log.Fatal(e.ExceptionObject as Exception, "CurrentDomain_UnhandledException IsTerminating={IsTerminating}", e.IsTerminating);
-        }
-        catch { }
-    }
-
-    private void TaskScheduler_UnobservedTaskException(object? sender, UnobservedTaskExceptionEventArgs e)
-    {
-        try
-        {
-            Logging.Log.Error(e.Exception, "UnobservedTaskException");
-            e.SetObserved();
-        }
-        catch { }
     }
 
     [SupportedOSPlatform("windows10.0.14393")]
