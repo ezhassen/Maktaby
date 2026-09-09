@@ -4,7 +4,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Interop;
-using DesktopBoxesUI.Shell.Interop;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Wpf.Ui.Appearance;
 
@@ -18,7 +19,7 @@ internal static class ShellContextMenu
 {
     public static void ShowForPath(IntPtr hwnd, string path)
     {
-        if (ShellNative.SHCreateItemFromParsingName(path, IntPtr.Zero, ShellNative.IID_IShellItem, out IShellItem item) != 0 || item is null)
+        if (Shell32.SHCreateItemFromParsingName(path, IntPtr.Zero, Shell32.IID_IShellItem, out IShellItem item) != 0 || item is null)
         {
             return;
         }
@@ -51,14 +52,14 @@ internal static class ShellContextMenu
     // execute) we must build an absolute PIDL by combining it with the Desktop folder's own PIDL.
     private static void ShowContextMenuForRelativePidl(IntPtr hwnd, IntPtr relativePidl)
     {
-        if (ManualApis.SHGetSpecialFolderLocation(IntPtr.Zero, 0 /* CSIDL_DESKTOP */, out IntPtr deskPidl) != 0 || deskPidl == IntPtr.Zero)
+        if (Shell32.SHGetSpecialFolderLocation(IntPtr.Zero, 0 /* CSIDL_DESKTOP */, out IntPtr deskPidl) != 0 || deskPidl == IntPtr.Zero)
         {
             return;
         }
 
         try
         {
-            IntPtr absPidl = ManualApis.ILCombine(deskPidl, relativePidl);
+            IntPtr absPidl = Shell32.ILCombine(deskPidl, relativePidl);
             if (absPidl == IntPtr.Zero)
             {
                 return;
@@ -66,7 +67,7 @@ internal static class ShellContextMenu
 
             try
             {
-                if (ShellNative.SHCreateItemFromIDList(absPidl, ShellNative.IID_IShellItem, out IShellItem item) != 0 || item is null)
+                if (Shell32.SHCreateItemFromIDList(absPidl, Shell32.IID_IShellItem, out IShellItem item) != 0 || item is null)
                 {
                     return;
                 }
@@ -82,12 +83,12 @@ internal static class ShellContextMenu
             }
             finally
             {
-                ManualApis.ILFree(absPidl);
+                Shell32.ILFree(absPidl);
             }
         }
         finally
         {
-            ManualApis.ILFree(deskPidl);
+            Shell32.ILFree(deskPidl);
         }
     }
 
@@ -97,7 +98,7 @@ internal static class ShellContextMenu
         // resolves every item type correctly (crucially .lnk files, whose "Open" fails when the menu is
         // taken via the desktop folder's GetUIObjectOf with a relative PIDL).
         var bhId = BHID_SFUIObject;
-        var iid = ShellNative.IID_IContextMenu;
+        var iid = Shell32.IID_IContextMenu;
         if (item.BindToHandler(IntPtr.Zero, ref bhId, ref iid, out IntPtr ctxPtr) != 0 || ctxPtr == IntPtr.Zero)
         {
             return;
@@ -128,7 +129,7 @@ internal static class ShellContextMenu
 
             try
             {
-                var hMenu = ManualApis.CreatePopupMenu();
+                var hMenu = User32.CreatePopupMenu();
                 if (hMenu == IntPtr.Zero)
                 {
                     return;
@@ -148,13 +149,13 @@ internal static class ShellContextMenu
                     // Anchor the menu at the real cursor position. GetCursorPos returns true physical
                     // screen pixels (what TrackPopupMenuEx expects); using WPF's PointToScreen with a
                     // manual DPI scale was landing the menu too far to the right.
-                    ManualApis.GetCursorPos(out ManualApis.POINT cursor);
+                    User32.GetCursorPos(out POINT cursor);
                     int cmd;
                     try
                     {
-                        cmd = ManualApis.TrackPopupMenuEx(
+                        cmd = User32.TrackPopupMenuEx(
                             hMenu,
-                            ManualApis.TPM_RETURNCMD | ManualApis.TPM_RIGHTBUTTON,
+                            TPM_RETURNCMD | TPM_RIGHTBUTTON,
                             cursor.X,
                             cursor.Y,
                             hwnd,
@@ -226,7 +227,7 @@ internal static class ShellContextMenu
                 }
                 finally
                 {
-                    ManualApis.DestroyMenu(hMenu);
+                    User32.DestroyMenu(hMenu);
                 }
             }
             finally

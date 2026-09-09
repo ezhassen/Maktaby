@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine.Interop;
 
@@ -121,24 +123,4 @@ public static class DesktopWallpaper
         }
         return null;
     }
-}
-
-internal enum DesktopWallpaperPosition { Center = 0, Tile = 1, Stretch = 2, Fit = 3, Fill = 4, Span = 5 }
-
-[ComImport, Guid("C2CF3110-460B-4d97-BF42-7ED4146F695C")]
-internal class DesktopWallpaperClass { }
-
-[ComImport, Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B"),
- InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IDesktopWallpaper
-{
-    void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string? monitorId, [MarshalAs(UnmanagedType.LPWStr)] string wallpaper);
-    [return: MarshalAs(UnmanagedType.LPWStr)] string GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string? monitorId);
-    [return: MarshalAs(UnmanagedType.LPWStr)] string GetMonitorDevicePathAt(uint monitorIndex);
-    uint GetMonitorDevicePathCount();
-    RECT GetMonitorRECT([MarshalAs(UnmanagedType.LPWStr)] string monitorId);
-    void SetBackgroundColor(uint color);
-    uint GetBackgroundColor();
-    void SetPosition(DesktopWallpaperPosition position);
-    DesktopWallpaperPosition GetPosition();
 }

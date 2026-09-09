@@ -1,7 +1,7 @@
 using DesktopLiveWallPaperEngine.Common;
 using DesktopLiveWallPaperEngine.Desktop;
-using DesktopLiveWallPaperEngine.Interop;
-using static DesktopLiveWallPaperEngine.Interop.Win32Constants;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine.Rendering;
 

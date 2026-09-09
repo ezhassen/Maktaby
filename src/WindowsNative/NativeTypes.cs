@@ -1,6 +1,9 @@
 using System.Runtime.InteropServices;
 
-namespace DesktopLiveWallPaperEngine.Interop;
+namespace WindowsNative;
+
+/// <summary>Shared blittable Win32 types. Single canonical home for every native struct used by
+/// DesktopBoxesUI, DesktopLiveWallPaperEngine and WPFShared — hand-rolled DllImport only.</summary>
 
 [StructLayout(LayoutKind.Sequential)]
 public struct POINT
@@ -63,7 +66,7 @@ public struct WNDCLASSEX
 {
     public uint Size;
     public uint Style;
-    public IntPtr WndProc;
+    public WndProc WndProc;
     public int ClsExtra;
     public int WndExtra;
     public IntPtr Instance;
@@ -83,6 +86,15 @@ public struct MONITORINFOEX
     public RECT Work;
     public uint Flags;
     [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string Device;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct MONITORINFO
+{
+    public uint Size;
+    public RECT Monitor;
+    public RECT Work;
+    public uint Flags;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -112,6 +124,15 @@ public struct NOTIFYICONDATA
     public uint InfoFlags;
     public Guid GuidItem;
     public IntPtr BalloonIcon;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct NOTIFYICONIDENTIFIER
+{
+    public uint Size;
+    public IntPtr Hwnd;
+    public uint Id;
+    public Guid GuidItem;
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
@@ -151,4 +172,155 @@ public struct SYSTEM_POWER_STATUS
     public byte SystemStatusFlag; // 1 = battery saver on
     public uint BatteryLifeTime;
     public uint BatteryFullLifeTime;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct POWERBROADCAST_SETTING
+{
+    public Guid PowerSetting;
+    public uint DataLength;
+    public byte Data; // first byte; every setting used here is a single DWORD whose low byte carries the state
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct MEMORY_BASIC_INFORMATION
+{
+    public IntPtr BaseAddress;
+    public IntPtr AllocationBase;
+    public uint AllocationProtect;
+    public IntPtr RegionSize;
+    public uint State;
+    public uint Protect;
+    public uint Type;
+}
+
+/// <summary>SHFILEINFO for SHGetFileInfo.</summary>
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct SHFILEINFOW
+{
+    public IntPtr hIcon;
+    public int iIcon;
+    public uint dwAttributes;
+
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+    public string szDisplayName;
+
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 80)]
+    public string szTypeName;
+}
+
+/// <summary>Flags for SHGetFileInfo.</summary>
+[Flags]
+public enum SHGFI : uint
+{
+    Icon = 0x00000100,
+    SmallIcon = 0x00000001,
+    LargeIcon = 0x00000000,
+    UseFileAttributes = 0x00000010,
+    AddOverlays = 0x00000020,
+    OpenIcon = 0x00000002,
+    Pidl = 0x00000008,
+}
+
+/// <summary>Flags for ShellExecuteEx.</summary>
+[Flags]
+public enum SEE_MASK : uint
+{
+    IDLIST = 0x00000004,
+    NO_UI = 0x00000400,
+    INVOKEIDLIST = 0x0000000C,
+}
+
+/// <summary>Used by ShellExecuteEx to launch a shell item by PIDL.</summary>
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct SHELLEXECUTEINFO
+{
+    public int cbSize;
+    public SEE_MASK fMask;
+    public IntPtr hwnd;
+    public string? lpVerb;
+    public string? lpFile;
+    public string? lpParameters;
+    public string? lpDirectory;
+    public int nShow;
+    public IntPtr hInstApp;
+    public IntPtr lpIDList;
+    public string? lpClass;
+    public IntPtr hkeyClass;
+    public uint dwHotKey;
+    public IntPtr hIconOrMonitor;
+    public IntPtr hProcess;
+}
+
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct SHFILEOPSTRUCT
+{
+    public IntPtr hwnd;
+    public uint wFunc;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string? pFrom;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string? pTo;
+    public uint fFlags;
+    public int fAnyOperationsAborted;
+    public IntPtr hNameMappings;
+    [MarshalAs(UnmanagedType.LPWStr)]
+    public string? lpszProgressTitle;
+}
+
+/// <summary>Hit-test info for LVM_HITTEST (desktop icon vs empty area).</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct LVHITTESTINFO
+{
+    public POINT pt;
+    public uint flags;
+    public int iItem;
+    public int iSubItem;
+    public int iGroup;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct TRACKMOUSEEVENT
+{
+    public uint cbSize;
+    public uint dwFlags;
+    public IntPtr hwndTrack;
+    public uint dwHoverTime;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct PAINTSTRUCT
+{
+    public IntPtr Hdc;
+    public bool Erase;
+    public RECT Paint;
+    public bool Restore;
+    public bool IncUpdate;
+    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public byte[] Reserved;
+}
+
+[StructLayout(LayoutKind.Sequential)]
+public struct SHChangeNotifyEntry
+{
+    public IntPtr pidl;
+    public int fRecursive;
+}
+
+[Flags]
+public enum SHCNRF : int
+{
+    InterruptLevel = 0x0001,
+    ShellLevel = 0x0002,
+    RecursiveInterrupt = 0x1000,
+    NewDelivery = 0x8000,
+}
+
+[Flags]
+public enum SHCNE : int
+{
+    RENAMEITEM = 0x0001,
+    CREATE = 0x0002,
+    DELETE = 0x0004,
+    RENAMEFOLDER = 0x0008,
+    UPDATEITEM = 0x00002000,
 }

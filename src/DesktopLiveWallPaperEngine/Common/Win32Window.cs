@@ -1,7 +1,7 @@
-using DesktopLiveWallPaperEngine.Interop;
+using WindowsNative;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using static DesktopLiveWallPaperEngine.Interop.Win32Constants;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine.Common;
 
@@ -11,7 +11,7 @@ public abstract class Win32Window : IDisposable
 {
     private static readonly ConcurrentDictionary<IntPtr, Win32Window> Instances = new();
     private static readonly HashSet<string> RegisteredClasses = [];
-    private static readonly User32.WndProc StaticWndProcDelegate = StaticWndProc; // rooted for the process lifetime
+    private static readonly WndProc StaticWndProcDelegate = StaticWndProc; // rooted for the process lifetime
     private static readonly object RegisterSync = new();
 
     public IntPtr Hwnd { get; private set; }
@@ -34,7 +34,8 @@ public abstract class Win32Window : IDisposable
             var wc = new WNDCLASSEX
             {
                 Size = (uint)Marshal.SizeOf<WNDCLASSEX>(),
-                WndProc = Marshal.GetFunctionPointerForDelegate(StaticWndProcDelegate),
+                Style = 0,
+                WndProc = StaticWndProcDelegate,
                 Instance = Kernel32.GetModuleHandleW(null),
                 Cursor = User32.LoadCursorW(IntPtr.Zero, new IntPtr(32512) /* IDC_ARROW */),
                 ClassName = className,

@@ -101,7 +101,7 @@ public static class HelperUI
         if (hwnd == IntPtr.Zero)
             return;
 
-        Win32.NativeMethods.ManualApis.ReleaseCapture();
-        Win32.NativeMethods.ManualApis.SendMessage(hwnd, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
+        WindowsNative.User32.ReleaseCapture();
+        WindowsNative.User32.SendMessage(hwnd, WM_NCLBUTTONDOWN, HT_CAPTION, 0);
     }
 }

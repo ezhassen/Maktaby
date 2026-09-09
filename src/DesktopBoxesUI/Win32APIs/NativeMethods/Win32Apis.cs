@@ -5,37 +5,33 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Gdi;
-using Windows.Win32.UI.Shell;
-using Windows.Win32.UI.WindowsAndMessaging;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Win32.NativeMethods;
 
 /// <summary>
-/// Single, isolated home for every Win32 P/Invoke call used by this application. CsWin32
-/// generates the common APIs into <c>Windows.Win32.PInvoke</c>; the few architecture-specific APIs
-/// (SHGetFileInfo, SetWinEventHook) are declared manually in <see cref="ManualApis"/> (still inside
-/// this NativeMethods folder). This thin, explicitly named wrapper keeps all native declarations
-/// behind one type so none are scattered through ViewModels or Views.
+/// Single, isolated home for every Win32 call used by this application. All raw declarations
+/// live in the shared <c>WindowsNative</c> project (hand-rolled DllImport, no CsWin32); this
+/// thin, explicitly named wrapper keeps call sites behind one type so none are scattered
+/// through ViewModels or Views.
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
 internal static class Win32Apis
 {
-    public static HWND GetDesktopWindow() => PInvoke.GetDesktopWindow();
+    public static IntPtr GetDesktopWindow() => User32.GetDesktopWindow();
 
-    public static HWND GetShellWindow() => PInvoke.GetShellWindow();
+    public static IntPtr GetShellWindow() => User32.GetShellWindow();
 
-    public static HMONITOR MonitorFromWindow(HWND hwnd, MONITOR_FROM_FLAGS flags) => PInvoke.MonitorFromWindow(hwnd, flags);
+    public static IntPtr MonitorFromWindow(IntPtr hwnd, uint flags) => User32.MonitorFromWindow(hwnd, flags);
 
     /// <summary>Enumerates all display monitors. The callback runs synchronously, so the caller
     /// may keep the delegate in a local.</summary>
-    public static bool EnumDisplayMonitors(ManualApis.MonitorEnumProc proc)
-        => ManualApis.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, proc, IntPtr.Zero);
+    public static bool EnumDisplayMonitors(MonitorEnumProc proc)
+        => User32.EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, proc, IntPtr.Zero);
 
-    public static bool GetMonitorInfoEx(IntPtr hMonitor, ref ManualApis.MONITORINFOEX info)
-        => ManualApis.GetMonitorInfoEx(hMonitor, ref info);
+    public static bool GetMonitorInfoEx(IntPtr hMonitor, ref MONITORINFOEX info)
+        => User32.GetMonitorInfoEx(hMonitor, ref info);
 
     /// <summary>Effective DPI for a monitor (per-monitor, unlike GetDpiForSystem).</summary>
     public static bool TryGetDpiForMonitor(IntPtr hMonitor, out uint dpiX, out uint dpiY)
@@ -43,7 +39,7 @@ internal static class Win32Apis
         dpiX = dpiY = 96;
         try
         {
-            int hr = ManualApis.GetDpiForMonitor(hMonitor, ManualApis.MDT_EFFECTIVE_DPI, out dpiX, out dpiY);
+            int hr = Shcore.GetDpiForMonitorTyped(hMonitor, MDT_EFFECTIVE_DPI, out dpiX, out dpiY);
             return hr == 0 && dpiX > 0 && dpiY > 0;
         }
         catch { return false; }
@@ -55,27 +51,27 @@ internal static class Win32Apis
     {
         try
         {
-            if (ManualApis.DwmGetWindowAttribute(hwnd, ManualApis.DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0)
+            if (DwmApi.DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0)
                 return cloaked != 0;
         }
         catch { }
         return false;
     }
 
-    public static HMONITOR MonitorFromRect(in RECT rect, MONITOR_FROM_FLAGS flags) => PInvoke.MonitorFromRect(in rect, flags);
+    public static IntPtr MonitorFromRect(in RECT rect, uint flags) => User32.MonitorFromRect(in rect, flags);
 
-    public static BOOL GetMonitorInfo(HMONITOR hMonitor, ref MONITORINFO monitorInfo) => PInvoke.GetMonitorInfo(hMonitor, ref monitorInfo);
+    public static bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO monitorInfo) => User32.GetMonitorInfo(hMonitor, ref monitorInfo);
 
-    public static BOOL GetWindowRect(HWND hWnd, out RECT rect) => PInvoke.GetWindowRect(hWnd, out rect);
+    public static bool GetWindowRect(IntPtr hWnd, out RECT rect) => User32.GetWindowRect(hWnd, out rect);
 
-    public static BOOL SetWindowPos(HWND hWnd, HWND hWndInsertAfter, int x, int y, int cx, int cy, SET_WINDOW_POS_FLAGS uFlags)
-        => PInvoke.SetWindowPos(hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
+    public static bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags)
+        => User32.SetWindowPos(hWnd, hWndInsertAfter, x, y, cx, cy, uFlags);
 
-    public static uint GetDpiForSystem() => PInvoke.GetDpiForSystem();
+    public static uint GetDpiForSystem() => User32.GetDpiForSystem();
 
     /// <summary>Gets the current cursor position in physical screen pixels (works during a drag operation,
     /// unlike <see cref="Mouse.GetPosition"/> which is suppressed by the drag-drop capture).</summary>
-    public static bool GetCursorPos(out ManualApis.POINT pt) => ManualApis.GetCursorPos(out pt);
+    public static bool GetCursorPos(out POINT pt) => User32.GetCursorPos(out pt);
 
     /// <summary>Native drag throttle with Explorer semantics: captures the mouse to
     /// <paramref name="hwnd"/> and returns true only once the cursor leaves the system drag rect
@@ -86,59 +82,47 @@ internal static class Win32Apis
     {
         if (hwnd == IntPtr.Zero) return false;
         if (!GetCursorPos(out var pt)) return true;
-        try { return ManualApis.DragDetect(hwnd, pt); }
+        try { return User32.DragDetect(hwnd, pt); }
         catch { return true; }
     }
 
-    /// <summary>Shell file operation (rename / delete / recycle). Wraps the manual
-    /// <see cref="ManualApis.SHFileOperationW"/> so every native call flows through this wrapper.</summary>
-    public static int FileOperation(ref ManualApis.SHFILEOPSTRUCT op) => ManualApis.SHFileOperationW(ref op);
-
-    public const uint FO_MOVE = 0x0001;
-    public const uint FO_COPY = 0x0002;
-    public const uint FO_DELETE = 0x0003;
-    public const ushort FOF_ALLOWUNDO = 0x0040;
-    public const ushort FOF_NOCONFIRMATION = 0x0010;
-    public const ushort FOF_SILENT = 0x0004;
-    public const ushort FOF_NOERRORUI = 0x0400;
-    public const ushort FOF_WANTNUKEWARNING = 0x4000;
+    /// <summary>Shell file operation (rename / delete / recycle). Wraps
+    /// <see cref="Shell32.SHFileOperationW"/> so every native call flows through this wrapper.</summary>
+    public static int FileOperation(ref SHFILEOPSTRUCT op) => Shell32.SHFileOperationW(ref op);
 
     /// <summary>The foreground window handle (used as the owner for shell file-operation dialogs).</summary>
-    public static IntPtr GetForegroundWindow() => ManualApis.GetForegroundWindow();
+    public static IntPtr GetForegroundWindow() => User32.GetForegroundWindow();
 
-    public static uint GetDpiForWindow(HWND hWnd) => PInvoke.GetDpiForWindow(hWnd);
+    public static uint GetDpiForWindow(IntPtr hWnd) => User32.GetDpiForWindow(hWnd);
 
-    public static BOOL DestroyIcon(IntPtr hIcon) => PInvoke.DestroyIcon((HICON)hIcon);
+    public static bool DestroyIcon(IntPtr hIcon) => User32.DestroyIcon(hIcon);
 
-    public static void DeleteObject(IntPtr hBitmap) => ManualApis.DeleteObject(hBitmap);
+    public static void DeleteObject(IntPtr hBitmap) => Gdi32.DeleteObject(hBitmap);
 
-    public static HWND FindWindowEx(HWND hWndParent, HWND hWndChildAfter, string? lpClassName, string? lpWindowName)
-        => PInvoke.FindWindowEx(hWndParent, hWndChildAfter, lpClassName, lpWindowName);
+    public static IntPtr FindWindowEx(IntPtr hWndParent, IntPtr hWndChildAfter, string? lpClassName, string? lpWindowName)
+        => User32.FindWindowEx(hWndParent, hWndChildAfter, lpClassName, lpWindowName);
 
-    public static BOOL ShowWindow(HWND hWnd, int nCmdShow) => PInvoke.ShowWindow(hWnd, (SHOW_WINDOW_CMD)nCmdShow);
+    public static bool ShowWindow(IntPtr hWnd, int nCmdShow) => User32.ShowWindow(hWnd, nCmdShow);
 
-    public static bool IsWindowVisible(IntPtr hWnd) => ManualApis.IsWindowVisible(hWnd);
+    public static bool IsWindowVisible(IntPtr hWnd) => User32.IsWindowVisible(hWnd);
 
-    public static bool IsWindow(IntPtr hWnd) => PInvoke.IsWindow((HWND)hWnd);
+    public static bool IsWindow(IntPtr hWnd) => User32.IsWindow(hWnd);
 
-    public static IntPtr GetWindow(IntPtr hWnd, uint uCmd) => ManualApis.GetWindow(hWnd, uCmd);
+    public static IntPtr GetWindow(IntPtr hWnd, uint uCmd) => User32.GetWindow(hWnd, uCmd);
 
-    public static IntPtr LoadArrowCursor() => ManualApis.LoadCursor(IntPtr.Zero, (IntPtr)32512 /* IDC_ARROW */);
+    public static IntPtr LoadArrowCursor() => User32.LoadCursor(IntPtr.Zero, (IntPtr)32512 /* IDC_ARROW */);
 
-    public static IntPtr SetCursor(IntPtr hCursor) => ManualApis.SetCursor(hCursor);
-
-    public const uint SWP_SHOWWINDOW = 0x0040;
-    public const int WM_DISPLAYCHANGE = 0x007E;
+    public static IntPtr SetCursor(IntPtr hCursor) => User32.SetCursor(hCursor);
 
     public static void TrimWorkingSet()
     {
-        try { ManualApis.EmptyWorkingSet(System.Diagnostics.Process.GetCurrentProcess().Handle); } catch { }
+        try { PsApi.EmptyWorkingSet(System.Diagnostics.Process.GetCurrentProcess().Handle); } catch { }
     }
 
     /// <summary>Registers a system broadcast message (e.g. "TaskbarCreated" after Explorer restarts).</summary>
-    public static bool SetCursorPos(int X, int Y) => ManualApis.SetCursorPos(X, Y);
+    public static bool SetCursorPos(int X, int Y) => User32.SetCursorPos(X, Y);
 
-    public static uint RegisterWindowMessage(string message) => ManualApis.RegisterWindowMessage(message);
+    public static uint RegisterWindowMessage(string message) => User32.RegisterWindowMessage(message);
 
     /// <summary>Nudges the cursor by 1px — forces the OS to deliver a fresh
     /// WM_MOUSEMOVE to whatever window is under it, priming WPF's hover state.</summary>
@@ -159,7 +143,7 @@ internal static class Win32Apis
         }
 
         var sb = new StringBuilder(256);
-        return ManualApis.GetClassName(hwnd, sb, 256) != 0 ? sb.ToString() : string.Empty;
+        return User32.GetClassName(hwnd, sb, 256) != 0 ? sb.ToString() : string.Empty;
     }
 
     /// <summary>
@@ -185,8 +169,8 @@ internal static class Win32Apis
     {
         try
         {
-            int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
-            ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_TRANSPARENT);
+            int ex = User32.GetWindowLong(hwnd, GWL_EXSTYLE);
+            User32.SetWindowLong(hwnd, GWL_EXSTYLE, ex | (int)WS_EX_TRANSPARENT);
         }
         catch (Exception)
         {
@@ -210,61 +194,61 @@ internal static class Win32Apis
         }
 
         const uint WmCommand = 0x0111;
-        ManualApis.SendMessage(defView, WmCommand, (IntPtr)0x7402, IntPtr.Zero);
+        User32.SendMessage(defView, WmCommand, (IntPtr)0x7402, IntPtr.Zero);
     }
 
     private static IntPtr FindDesktopFolderView()
     {
-        HWND progman = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, "Progman", "Program Manager");
-        HWND defView = Win32Apis.FindWindowEx(progman, HWND.Null, "SHELLDLL_DefView", null);
-        if ((IntPtr)defView != IntPtr.Zero)
+        IntPtr progman = Win32Apis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, "Progman", "Program Manager");
+        IntPtr defView = Win32Apis.FindWindowEx(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
+        if (defView != IntPtr.Zero)
         {
-            return (IntPtr)defView;
+            return defView;
         }
 
-        HWND worker = Win32Apis.FindWindowEx(HWND.Null, HWND.Null, "WorkerW", null);
-        while ((IntPtr)worker != IntPtr.Zero)
+        IntPtr worker = Win32Apis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, "WorkerW", null);
+        while (worker != IntPtr.Zero)
         {
-            defView = Win32Apis.FindWindowEx(worker, HWND.Null, "SHELLDLL_DefView", null);
-            if ((IntPtr)defView != IntPtr.Zero)
+            defView = Win32Apis.FindWindowEx(worker, IntPtr.Zero, "SHELLDLL_DefView", null);
+            if (defView != IntPtr.Zero)
             {
-                return (IntPtr)defView;
+                return defView;
             }
 
-            worker = Win32Apis.FindWindowEx(HWND.Null, worker, "WorkerW", null);
+            worker = Win32Apis.FindWindowEx(IntPtr.Zero, worker, "WorkerW", null);
         }
 
         return IntPtr.Zero;
     }
 
     public static int SHGetFileInfo(string? pszPath, uint dwFileAttributes, ref SHFILEINFOW psfi, uint cbFileInfo, SHGFI uFlags)
-        => ManualApis.SHGetFileInfo(pszPath, dwFileAttributes, ref psfi, cbFileInfo, (uint)uFlags);
+        => Shell32.SHGetFileInfo(pszPath, dwFileAttributes, ref psfi, cbFileInfo, (uint)uFlags);
 
     public static int SHGetFileInfo(IntPtr pidl, uint dwFileAttributes, ref SHFILEINFOW psfi, uint cbFileInfo, SHGFI uFlags)
-        => ManualApis.SHGetFileInfoPidl(pidl, dwFileAttributes, ref psfi, cbFileInfo, (uint)uFlags | (uint)SHGFI.Pidl);
+        => Shell32.SHGetFileInfoPidl(pidl, dwFileAttributes, ref psfi, cbFileInfo, (uint)uFlags | (uint)SHGFI.Pidl);
 
     public static IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventProc pfnWinEventProc, uint idProcess, uint idThread, uint dwFlags)
-        => ManualApis.SetWinEventHook(eventMin, eventMax, hmodWinEventProc, pfnWinEventProc, idProcess, idThread, dwFlags);
+        => User32.SetWinEventHook(eventMin, eventMax, hmodWinEventProc, pfnWinEventProc, idProcess, idThread, dwFlags);
 
     public static bool UnhookWinEvent(IntPtr hWinEventHook)
-        => ManualApis.UnhookWinEvent(hWinEventHook);
+        => User32.UnhookWinEvent(hWinEventHook);
 
-    public static bool ShellNotifyIcon(uint dwMessage, ref NOTIFYICONDATAW data)
-        => ManualApis.Shell_NotifyIcon(dwMessage, ref data);
+    public static bool ShellNotifyIcon(uint dwMessage, ref NOTIFYICONDATA data)
+        => Shell32.Shell_NotifyIcon(dwMessage, ref data);
 
     /// <summary>Returns the bounding rectangle of the tray icon in physical screen pixels (S_OK on success).</summary>
     public static bool ShellNotifyIconGetRect(IntPtr hWnd, uint uID, out RECT rect)
     {
-        var id = new ManualApis.NOTIFYICONIDENTIFIER
+        var id = new NOTIFYICONIDENTIFIER
         {
-            cbSize = (uint)Marshal.SizeOf<ManualApis.NOTIFYICONIDENTIFIER>(),
-            hWnd = hWnd,
-            uID = uID,
+            Size = (uint)Marshal.SizeOf<NOTIFYICONIDENTIFIER>(),
+            Hwnd = hWnd,
+            Id = uID,
         };
-        return ManualApis.Shell_NotifyIconGetRect(ref id, out rect) == 0;
+        return Shell32.Shell_NotifyIconGetRect(ref id, out rect) == 0;
     }
 
-    public static short GetAsyncKeyState(int vKey) => ManualApis.GetAsyncKeyState(vKey);
+    public static short GetAsyncKeyState(int vKey) => User32.GetAsyncKeyState(vKey);
 
     /// <summary>
     /// One entry extracted from a "Shell IDList Array" drag blob: either a real filesystem
@@ -305,7 +289,7 @@ internal static class Win32Apis
                 for (int i = 1; i <= cidl; i++)
                 {
                     IntPtr item = IntPtr.Add(basePtr, BitConverter.ToInt32(cida, 4 + i * 4));
-                    IntPtr absolute = ManualApis.ILCombine(parent, item);
+                    IntPtr absolute = Shell32.ILCombine(parent, item);
                     if (absolute == IntPtr.Zero)
                     {
                         continue;
@@ -315,7 +299,7 @@ internal static class Win32Apis
                     try
                     {
                         var sb = new StringBuilder(260);
-                        if (ManualApis.SHGetPathFromIDListW(absolute, sb) != 0 && sb.Length > 0)
+                        if (Shell32.SHGetPathFromIDListW(absolute, sb) != 0 && sb.Length > 0)
                         {
                             entry.FilePath = sb.ToString();
                         }
@@ -324,7 +308,7 @@ internal static class Win32Apis
                     }
                     finally
                     {
-                        ManualApis.ILFree(absolute);
+                        Shell32.ILFree(absolute);
                     }
 
                     result.Add(entry);
@@ -399,7 +383,7 @@ internal static class Win32Apis
 
         try
         {
-            if (ShellNative.SHCreateItemFromIDList(ptr, ShellNative.IID_IShellItem, out IShellItem item) != 0 || item == null)
+            if (Shell32.SHCreateItemFromIDList(ptr, Shell32.IID_IShellItem, out IShellItem item) != 0 || item == null)
             {
                 return string.Empty;
             }
@@ -475,7 +459,7 @@ internal static class Win32Apis
 
         try
         {
-            if (ShellNative.SHCreateItemFromIDList(ptr, ShellNative.IID_IShellItem, out IShellItem item) != 0 || item is null)
+            if (Shell32.SHCreateItemFromIDList(ptr, Shell32.IID_IShellItem, out IShellItem item) != 0 || item is null)
             {
                 return IntPtr.Zero;
             }
@@ -484,7 +468,7 @@ internal static class Win32Apis
             {
                 if (item is IShellItemImageFactory factory)
                 {
-                    var size = new SIZE { cx = 32, cy = 32 };
+                    var size = new SIZE { Cx = 32, Cy = 32 };
                     const uint SIIGBF_ICONONLY = 0x00000004;
                     if (factory.GetImage(size, SIIGBF_ICONONLY, out IntPtr hbmp) == 0 && hbmp != IntPtr.Zero)
                     {
@@ -517,7 +501,7 @@ internal static class Win32Apis
     {
         try
         {
-            if (ShellNative.SHCreateItemFromParsingName(path, IntPtr.Zero, ShellNative.IID_IShellItem, out IShellItem item) != 0 || item is null)
+            if (Shell32.SHCreateItemFromParsingName(path, IntPtr.Zero, Shell32.IID_IShellItem, out IShellItem item) != 0 || item is null)
             {
                 return IntPtr.Zero;
             }
@@ -526,7 +510,7 @@ internal static class Win32Apis
             {
                 if (item is IShellItemImageFactory factory)
                 {
-                    var size = new SIZE { cx = 32, cy = 32 };
+                    var size = new SIZE { Cx = 32, Cy = 32 };
                     const uint SIIGBF_ICONONLY = 0x00000004;
                     if (factory.GetImage(size, SIIGBF_ICONONLY, out IntPtr hbmp) == 0 && hbmp != IntPtr.Zero)
                     {
@@ -559,7 +543,7 @@ internal static class Win32Apis
         try
         {
             var sb = new StringBuilder(260);
-            if (ManualApis.SHGetPathFromIDListW(ptr, sb) != 0 && sb.Length > 0)
+            if (Shell32.SHGetPathFromIDListW(ptr, sb) != 0 && sb.Length > 0)
             {
                 return sb.ToString();
             }
@@ -584,7 +568,7 @@ internal static class Win32Apis
 
         try
         {
-            var linkType = Type.GetTypeFromCLSID(ShellNative.CLSID_ShellLink);
+            var linkType = Type.GetTypeFromCLSID(Shell32.CLSID_ShellLink);
             if (linkType == null)
             {
                 return false;
@@ -647,18 +631,18 @@ internal static class Win32Apis
                         lpFile = path,
                         nShow = 1, // SW_SHOWNORMAL
                     };
-                    if (ManualApis.ShellExecuteEx(ref direct))
+                    if (Shell32.ShellExecuteEx(ref direct))
                         return;
                     // Direct failed (e.g., user profile, known folder) -> try IDLIST from parsing name with NO_UI to avoid MessageBox
                     try
                     {
-                        if (ShellNative.SHCreateItemFromParsingName(path, IntPtr.Zero, ShellNative.IID_IShellItem, out var item) == 0 && item != null)
+                        if (Shell32.SHCreateItemFromParsingName(path, IntPtr.Zero, Shell32.IID_IShellItem, out var item) == 0 && item != null)
                         {
                             IntPtr punk = IntPtr.Zero;
                             try
                             {
                                 punk = Marshal.GetIUnknownForObject(item);
-                                if (ShellNative.SHGetIDListFromObject(punk, out IntPtr pidl) == 0 && pidl != IntPtr.Zero)
+                                if (Shell32.SHGetIDListFromObject(punk, out IntPtr pidl) == 0 && pidl != IntPtr.Zero)
                                 {
                                     try
                                     {
@@ -671,7 +655,7 @@ internal static class Win32Apis
                                             lpIDList = pidl,
                                             nShow = 1,
                                         };
-                                        if (ManualApis.ShellExecuteEx(ref idlInfo))
+                                        if (Shell32.ShellExecuteEx(ref idlInfo))
                                             return;
                                     }
                                     finally { Marshal.FreeCoTaskMem(pidl); }
@@ -698,13 +682,13 @@ internal static class Win32Apis
                         lpFile = path,
                         nShow = 1,
                     };
-                    if (ManualApis.ShellExecuteEx(ref direct2))
+                    if (Shell32.ShellExecuteEx(ref direct2))
                         return;
                 }
                 // For known folders like user profile where ShellExecuteEx fails, try SHObjectProperties directly (no error UI)
                 if (!string.IsNullOrWhiteSpace(path))
                 {
-                    try { if (ManualApis.SHObjectProperties(hwnd, 2 /*SHOP_FILEPATH*/, path, null)) return; } catch { }
+                    try { if (Shell32.SHObjectProperties(hwnd, 2 /*SHOP_FILEPATH*/, path, null)) return; } catch { }
                 }
             }
 
@@ -723,11 +707,11 @@ internal static class Win32Apis
             {
                 try
                 {
-                    if (ManualApis.SHGetSpecialFolderLocation(IntPtr.Zero, 0 /* CSIDL_DESKTOP */, out IntPtr deskPidl) == 0 && deskPidl != IntPtr.Zero)
+                    if (Shell32.SHGetSpecialFolderLocation(IntPtr.Zero, 0 /* CSIDL_DESKTOP */, out IntPtr deskPidl) == 0 && deskPidl != IntPtr.Zero)
                     {
                         try
                         {
-                            IntPtr absPidl = ManualApis.ILCombine(deskPidl, relPtr);
+                            IntPtr absPidl = Shell32.ILCombine(deskPidl, relPtr);
                             if (absPidl != IntPtr.Zero)
                             {
                                 try
@@ -735,11 +719,11 @@ internal static class Win32Apis
                                     info.fMask = SEE_MASK.INVOKEIDLIST;
                                     info.lpIDList = absPidl;
                                     info.lpFile = null;
-                                    ManualApis.ShellExecuteEx(ref info);
+                                    Shell32.ShellExecuteEx(ref info);
                                 }
                                 finally
                                 {
-                                    ManualApis.ILFree(absPidl);
+                                    Shell32.ILFree(absPidl);
                                 }
 
                                 return;
@@ -747,7 +731,7 @@ internal static class Win32Apis
                         }
                         finally
                         {
-                            ManualApis.ILFree(deskPidl);
+                            Shell32.ILFree(deskPidl);
                         }
                     }
                 }
@@ -760,7 +744,7 @@ internal static class Win32Apis
                 return;
             }
 
-            ManualApis.ShellExecuteEx(ref info);
+            Shell32.ShellExecuteEx(ref info);
         }
         catch
         {
@@ -789,7 +773,7 @@ internal static class Win32Apis
                 nShow = 1, // SW_SHOWNORMAL
             };
 
-            return ManualApis.ShellExecuteEx(ref info);
+            return Shell32.ShellExecuteEx(ref info);
         }
         catch
         {
@@ -831,7 +815,7 @@ internal static class Win32Apis
         pidl = null;
         try
         {
-            if (ShellNative.SHCreateItemFromParsingName(parsing, IntPtr.Zero, ShellNative.IID_IShellItem, out IShellItem item) != 0 || item == null)
+            if (Shell32.SHCreateItemFromParsingName(parsing, IntPtr.Zero, Shell32.IID_IShellItem, out IShellItem item) != 0 || item == null)
             {
                 return false;
             }
@@ -841,7 +825,7 @@ internal static class Win32Apis
                 var pUnk = Marshal.GetIUnknownForObject(item);
                 try
                 {
-                    if (ShellNative.SHGetIDListFromObject(pUnk, out var pidlPtr) != 0 || pidlPtr == IntPtr.Zero)
+                    if (Shell32.SHGetIDListFromObject(pUnk, out var pidlPtr) != 0 || pidlPtr == IntPtr.Zero)
                     {
                         return false;
                     }
@@ -853,7 +837,7 @@ internal static class Win32Apis
                     }
                     finally
                     {
-                        ShellNative.ILFree(pidlPtr);
+                        Shell32.ILFree(pidlPtr);
                     }
                 }
                 finally
@@ -881,16 +865,16 @@ internal static class Win32Apis
     {
         //try
         //{
-        int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
-        ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_TOOLWINDOW);
-        ManualApis.SetWindowPos(
+        int ex = User32.GetWindowLong(hwnd, GWL_EXSTYLE);
+        User32.SetWindowLong(hwnd, GWL_EXSTYLE, ex | (int)WS_EX_TOOLWINDOW);
+        User32.SetWindowPos(
             hwnd,
             IntPtr.Zero,
             0,
             0,
             0,
             0,
-            ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOZORDER | ManualApis.SWP_FRAMECHANGED | ManualApis.SWP_NOACTIVATE);
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
         //}
         //catch
         //{
@@ -918,7 +902,7 @@ internal static class Win32Apis
         var ownerHwnd = owner ?? IntPtr.Zero;
         if (ownerHwnd == IntPtr.Zero || !IsWindow(ownerHwnd))
         {
-            ownerHwnd = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
+            ownerHwnd = User32.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
         }
 
         if (ownerHwnd == IntPtr.Zero)
@@ -926,7 +910,7 @@ internal static class Win32Apis
             return;
         }
 
-        ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, ownerHwnd);
+        User32.SetWindowLongPtr(hwnd, GWL_HWNDPARENT, ownerHwnd);
 
         // Enforce tool-window semantics on every glue: after an Explorer restart the new taskbar can
         // briefly classify re-owned boxes as regular windows (stale-owner / WPF style churn), which
@@ -938,8 +922,8 @@ internal static class Win32Apis
         // box in the correct z-band: above the desktop content but below all running applications.
         // Using the owner handle (not HWND_TOP/HWND_BOTTOM) means the OS maintains the ordering
         // through the ownership chain — no fighting with other windows.
-        ManualApis.SetWindowPos(hwnd, ownerHwnd, 0, 0, 0, 0,
-            ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+        User32.SetWindowPos(hwnd, ownerHwnd, 0, 0, 0, 0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         //}
         //catch (Exception)
         //{
@@ -964,7 +948,7 @@ internal static class Win32Apis
         var defView = ExplorerDesktopService.FindDesktopSHELLDLL_DefView();
         if (defView != IntPtr.Zero)
         {
-            var parent = ManualApis.GetParent(defView);
+            var parent = User32.GetParent(defView);
             if (parent != IntPtr.Zero)
             {
                 return parent;
@@ -972,7 +956,7 @@ internal static class Win32Apis
         }
 
         // Fallback: any Progman window.
-        var progman = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
+        var progman = User32.FindWindowEx(IntPtr.Zero, IntPtr.Zero, ShellWindowClasses.Progman, null);
         if (progman != IntPtr.Zero)
         {
             return progman;
@@ -1024,9 +1008,9 @@ internal static class Win32Apis
         // Walk up while the window is still a child (WS_CHILD); the first non-child ancestor of the
         // inner window is its hosting top-level root.
         IntPtr h = inner;
-        while (h != IntPtr.Zero && (ManualApis.GetWindowLong(h, ManualApis.GWL_STYLE) & ManualApis.WS_CHILD) != 0)
+        while (h != IntPtr.Zero && (User32.GetWindowLong(h, GWL_STYLE) & WS_CHILD) != 0)
         {
-            var parent = ManualApis.GetParent(h);
+            var parent = User32.GetParent(h);
             if (parent == IntPtr.Zero)
             {
                 break;
@@ -1035,7 +1019,7 @@ internal static class Win32Apis
             h = parent;
         }
 
-        if (h != IntPtr.Zero && (ManualApis.GetWindowLong(h, ManualApis.GWL_STYLE) & ManualApis.WS_CHILD) == 0
+        if (h != IntPtr.Zero && (User32.GetWindowLong(h, GWL_STYLE) & WS_CHILD) == 0
             && IsDesktopLayerTopLevel(h))
         {
             return h;
@@ -1066,7 +1050,7 @@ internal static class Win32Apis
         // BEHIND its non-layered siblings (the Explorer DefView/list-view). So we stay a top-level layered
         // window, own it to the desktop root, stop it being minimised, and finally insert it just above
         // that root — so the final z-order (below every real app) is the one we want.
-        ManualApis.SetWindowLongPtr(hwnd, ManualApis.GWL_HWNDPARENT, root);
+        User32.SetWindowLongPtr(hwnd, GWL_HWNDPARENT, root);
         PreventMinimize(hwnd);
 
         // Same self-healing as GlueToDesktop: after an Explorer restart the new taskbar may classify
@@ -1081,11 +1065,11 @@ internal static class Win32Apis
         // -> MA_ACTIVATE for any button while keeping OLE drop path intact.
         // Also strip WS_EX_TOPMOST if anything set it: a topmost-band window floats above every normal
         // app window regardless of what insert-after handle the z-order guard forces.
-        int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
-        ex &= ~ManualApis.WS_EX_TOPMOST;
-        ex &= ~ManualApis.WS_EX_NOACTIVATE;
-        ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex);
-        //ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_NOACTIVATE);
+        int ex = User32.GetWindowLong(hwnd, GWL_EXSTYLE);
+        ex &= ~(int)WS_EX_TOPMOST;
+        ex &= ~(int)WS_EX_NOACTIVATE;
+        User32.SetWindowLong(hwnd, GWL_EXSTYLE, ex);
+        //User32.SetWindowLong(hwnd, GWL_EXSTYLE, ex | WS_EX_NOACTIVATE);
 
         PositionSurfaceOverDesktop(hwnd);
     }
@@ -1106,24 +1090,24 @@ internal static class Win32Apis
             return;
         }
 
-        var hmon = PInvoke.MonitorFromWindow((HWND)hwnd, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
+        var hmon = User32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
         MONITORINFO mi = default;
-        mi.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
-        if (!PInvoke.GetMonitorInfo(hmon, ref mi))
+        mi.Size = (uint)Marshal.SizeOf<MONITORINFO>();
+        if (!User32.GetMonitorInfo(hmon, ref mi))
         {
             return;
         }
 
-        RECT wa = mi.rcWork;
+        RECT wa = mi.Work;
         // Top-level window: screen coordinates, inserted just above the desktop root.
-        ManualApis.SetWindowPos(
+        User32.SetWindowPos(
             hwnd,
             root,
-            wa.left,
-            wa.top,
-            wa.right - wa.left,
-            wa.bottom - wa.top,
-            ManualApis.SWP_NOACTIVATE);
+            wa.Left,
+            wa.Top,
+            wa.Right - wa.Left,
+            wa.Bottom - wa.Top,
+            SWP_NOACTIVATE);
     }
 
     /// <summary>
@@ -1133,42 +1117,42 @@ internal static class Win32Apis
     /// </summary>
     public static (int left, int top, int right, int bottom)? GetMonitorWorkArea(IntPtr hwnd)
     {
-        var hmon = PInvoke.MonitorFromWindow((HWND)hwnd, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
-        if (hmon == HWND.Null)
+        var hmon = User32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        if (hmon == IntPtr.Zero)
         {
             return null;
         }
 
         MONITORINFO mi = default;
-        mi.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
-        if (!PInvoke.GetMonitorInfo(hmon, ref mi))
+        mi.Size = (uint)Marshal.SizeOf<MONITORINFO>();
+        if (!User32.GetMonitorInfo(hmon, ref mi))
         {
             return null;
         }
 
-        return (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom);
+        return (mi.Work.Left, mi.Work.Top, mi.Work.Right, mi.Work.Bottom);
     }
 
     /// <summary>Work area (physical screen pixels) of the monitor containing a point, taskbar excluded.
     /// Used to keep popups anchored at raw points inside visible desktop space.</summary>
-    public static (int left, int top, int right, int bottom)? GetMonitorWorkAreaAtPoint(ManualApis.POINT pt)
+    public static (int left, int top, int right, int bottom)? GetMonitorWorkAreaAtPoint(POINT pt)
     {
-        var hmon = PInvoke.MonitorFromRect(
-            new RECT { left = pt.X, top = pt.Y, right = pt.X + 1, bottom = pt.Y + 1 },
-            MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
-        if (hmon == HWND.Null)
+        var hmon = User32.MonitorFromRect(
+            new RECT(pt.X, pt.Y, pt.X + 1, pt.Y + 1),
+            MONITOR_DEFAULTTONEAREST);
+        if (hmon == IntPtr.Zero)
         {
             return null;
         }
 
         MONITORINFO mi = default;
-        mi.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
-        if (!PInvoke.GetMonitorInfo(hmon, ref mi))
+        mi.Size = (uint)Marshal.SizeOf<MONITORINFO>();
+        if (!User32.GetMonitorInfo(hmon, ref mi))
         {
             return null;
         }
 
-        return (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom);
+        return (mi.Work.Left, mi.Work.Top, mi.Work.Right, mi.Work.Bottom);
     }
 
     /// <summary>
@@ -1177,20 +1161,20 @@ internal static class Win32Apis
     /// </summary>
     public static void PreventMinimize(IntPtr hwnd)
     {
-        int style = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_STYLE);
-        style = (style & ~ManualApis.WS_MAXIMIZEBOX) & ~ManualApis.WS_MINIMIZEBOX;
-        ManualApis.SetWindowLong(hwnd, ManualApis.GWL_STYLE, style);
+        int style = User32.GetWindowLong(hwnd, GWL_STYLE);
+        style = (style & ~WS_MAXIMIZEBOX) & ~WS_MINIMIZEBOX;
+        User32.SetWindowLong(hwnd, GWL_STYLE, style);
 
         // Flush the style change without disturbing the z-order (SWP_NOZORDER keeps whatever position the
         // caller established) so this never bumps the surface above application windows.
-        ManualApis.SetWindowPos(
+        User32.SetWindowPos(
             hwnd,
-            ManualApis.HWND_TOP,
+            HWND_TOP,
             0,
             0,
             0,
             0,
-            ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_FRAMECHANGED | ManualApis.SWP_NOACTIVATE | ManualApis.SWP_NOZORDER);
+            SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOZORDER);
     }
 
     private static readonly HashSet<IntPtr> _allowHide = new();
@@ -1259,7 +1243,7 @@ internal static class Win32Apis
 
                 if (!allowed)
                 {
-                    ManualApis.ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                    User32.ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                     handled = true;
                     return IntPtr.Zero;
                 }
@@ -1271,38 +1255,38 @@ internal static class Win32Apis
 
     // --- Low-level mouse hook (used to detect clicks outside the app, e.g. the bare desktop) ---
 
-    public const int WH_MOUSE_LL = ManualApis.WH_MOUSE_LL;
+    public const int WH_MOUSE_LL = 14;
 
-    public static IntPtr SetWindowsHookEx(int idHook, ManualApis.HookProc lpfn, IntPtr hMod, uint dwThreadId)
-        => ManualApis.SetWindowsHookEx(idHook, lpfn, hMod, dwThreadId);
+    public static IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId)
+        => User32.SetWindowsHookEx(idHook, lpfn, hMod, dwThreadId);
 
-    public static bool UnhookWindowsHookEx(IntPtr hhk) => ManualApis.UnhookWindowsHookEx(hhk);
+    public static bool UnhookWindowsHookEx(IntPtr hhk) => User32.UnhookWindowsHookEx(hhk);
 
     public static IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam)
-        => ManualApis.CallNextHookEx(hhk, nCode, wParam, lParam);
+        => User32.CallNextHookEx(hhk, nCode, wParam, lParam);
 
     public static uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId)
-        => ManualApis.GetWindowThreadProcessId(hWnd, out lpdwProcessId);
+        => User32.GetWindowThreadProcessId(hWnd, out lpdwProcessId);
 
-    public static IntPtr GetModuleHandle(string? moduleName) => ManualApis.GetModuleHandle(moduleName);
+    public static IntPtr GetModuleHandle(string? moduleName) => Kernel32.GetModuleHandle(moduleName);
 
-    public static IntPtr WindowFromPoint(ManualApis.POINT pt) => ManualApis.WindowFromPoint(pt);
+    public static IntPtr WindowFromPoint(POINT pt) => User32.WindowFromPoint(pt);
 
     /// <summary>Moves focus to <paramref name="hWnd"/> (e.g. the desktop shell window) so a previously
     /// focused window loses focus. Used to defocus the active box when the user clicks empty desktop.</summary>
-    public static bool SetForegroundWindow(IntPtr hWnd) => ManualApis.SetForegroundWindow(hWnd);
+    public static bool SetForegroundWindow(IntPtr hWnd) => User32.SetForegroundWindow(hWnd);
 
     /// <summary>Registers the window to receive <c>WM_MOUSELEAVE</c> when the cursor leaves its bounds.</summary>
     public static bool TrackMouseEvent(IntPtr hwnd)
     {
-        var tme = new ManualApis.TRACKMOUSEEVENT
+        var tme = new TRACKMOUSEEVENT
         {
-            cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<ManualApis.TRACKMOUSEEVENT>(),
-            dwFlags = ManualApis.TME_LEAVE,
+            cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<TRACKMOUSEEVENT>(),
+            dwFlags = TME_LEAVE,
             hwndTrack = hwnd,
             dwHoverTime = 0,
         };
-        return ManualApis.TrackMouseEvent(ref tme);
+        return User32.TrackMouseEvent(ref tme);
     }
 
     /// <summary>True when <paramref name="hwnd"/> is a <c>SysListView32</c> (the desktop list-view among others).</summary>
@@ -1314,7 +1298,7 @@ internal static class Win32Apis
         }
 
         var sb = new StringBuilder(256);
-        return ManualApis.GetClassName(hwnd, sb, 256) != 0 && sb.ToString() == ShellWindowClasses.SysListView32; //"SysListView32";
+        return User32.GetClassName(hwnd, sb, 256) != 0 && sb.ToString() == ShellWindowClasses.SysListView32; //"SysListView32";
     }
 
     /// <summary>
@@ -1330,7 +1314,7 @@ internal static class Win32Apis
         for (int i = 0; i < 16 && h != IntPtr.Zero; i++)
         {
             var sb = new StringBuilder(256);
-            if (ManualApis.GetClassName(h, sb, 256) != 0)
+            if (User32.GetClassName(h, sb, 256) != 0)
             {
                 string cls = sb.ToString();
                 if (cls == ShellWindowClasses.ShellDefView || cls == ShellWindowClasses.Progman || cls == ShellWindowClasses.WorkerW || cls == ShellWindowClasses.SysListView32)
@@ -1339,7 +1323,7 @@ internal static class Win32Apis
                 }
             }
 
-            h = ManualApis.GetParent(h);
+            h = User32.GetParent(h);
         }
 
         return false;
@@ -1381,7 +1365,7 @@ internal static class Win32Apis
     /// back to the canonical remote-buffer technique: allocate the <c>LVHITTESTINFO</c> in Explorer's
     /// address space, send, read back.
     /// </summary>
-    public static bool TryHitTestDesktopList(IntPtr listViewHwnd, ManualApis.POINT clientPt, out uint flags, out int item)
+    public static bool TryHitTestDesktopList(IntPtr listViewHwnd, POINT clientPt, out uint flags, out int item)
     {
         flags = 0;
         item = -1;
@@ -1401,11 +1385,11 @@ internal static class Win32Apis
         // pointer the list-view could not legally read. Only trust in-process results, and even then
         // only when the struct was actually filled (flags/iItem of exactly 0/0 is impossible for a
         // real hit-test: empty points yield LVHT_NOWHERE + iItem -1).
-        bool sameProcess = procId == ManualApis.GetCurrentProcessId();
+        bool sameProcess = procId == Kernel32.GetCurrentProcessId();
         if (sameProcess)
         {
-            var local = new ManualApis.LVHITTESTINFO { pt = clientPt };
-            ManualApis.SendMessage(listViewHwnd, ManualApis.LVM_HITTEST, IntPtr.Zero, ref local);
+            var local = new LVHITTESTINFO { pt = clientPt };
+            User32.SendMessage(listViewHwnd, LVM_HITTEST, IntPtr.Zero, ref local);
             if (local.flags != 0 || local.iItem != 0)
             {
                 flags = local.flags;
@@ -1417,8 +1401,8 @@ internal static class Win32Apis
         }
 
         // Remote path.
-        IntPtr hProc = ManualApis.OpenProcess(
-            ManualApis.PROCESS_VM_OPERATION | ManualApis.PROCESS_VM_READ | ManualApis.PROCESS_VM_WRITE,
+        IntPtr hProc = Kernel32.OpenProcess(
+            PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE,
             false,
             procId);
         if (hProc == IntPtr.Zero)
@@ -1433,8 +1417,8 @@ internal static class Win32Apis
             const uint MEM_RELEASE = 0x8000;
             const uint PAGE_READWRITE = 0x04;
 
-            uint size = (uint)Marshal.SizeOf<ManualApis.LVHITTESTINFO>();
-            IntPtr remote = ManualApis.VirtualAllocEx(hProc, IntPtr.Zero, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            uint size = (uint)Marshal.SizeOf<LVHITTESTINFO>();
+            IntPtr remote = Kernel32.VirtualAllocEx(hProc, IntPtr.Zero, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
             if (remote == IntPtr.Zero)
             {
                 return false;
@@ -1448,14 +1432,14 @@ internal static class Win32Apis
                     (byte)clientPt.X, (byte)(clientPt.X >> 8), (byte)(clientPt.X >> 16), (byte)(clientPt.X >> 24),
                     (byte)clientPt.Y, (byte)(clientPt.Y >> 8), (byte)(clientPt.Y >> 16), (byte)(clientPt.Y >> 24),
                 };
-                if (!ManualApis.WriteProcessMemory(hProc, remote, input, (uint)input.Length, out _))
+                if (!Kernel32.WriteProcessMemory(hProc, remote, input, (uint)input.Length, out _))
                 {
                     return false;
                 }
 
-                ManualApis.SendMessage(listViewHwnd, ManualApis.LVM_HITTEST, IntPtr.Zero, remote);
+                User32.SendMessage(listViewHwnd, LVM_HITTEST, IntPtr.Zero, remote);
                 var outBytes = new byte[size];
-                if (!ManualApis.ReadProcessMemory(hProc, remote, outBytes, size, out _) || outBytes.Length < 16)
+                if (!Kernel32.ReadProcessMemory(hProc, remote, outBytes, size, out _) || outBytes.Length < 16)
                 {
                     return false;
                 }
@@ -1466,12 +1450,12 @@ internal static class Win32Apis
             }
             finally
             {
-                ManualApis.VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+                Kernel32.VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
             }
         }
         finally
         {
-            ManualApis.CloseHandle(hProc);
+            Kernel32.CloseHandle(hProc);
         }
     }
 
@@ -1480,7 +1464,7 @@ internal static class Win32Apis
     /// within the given desktop list-view — i.e. not on a desktop icon. Uses <c>LVM_HITTEST</c> so a
     /// double-click that hits an icon leaves the icon's own open behavior intact.
     /// </summary>
-    public static bool IsDesktopEmptyPoint(IntPtr listViewHwnd, ManualApis.POINT screenPt)
+    public static bool IsDesktopEmptyPoint(IntPtr listViewHwnd, POINT screenPt)
     {
         if (listViewHwnd == IntPtr.Zero || !Win32Apis.IsSysListView32(listViewHwnd))
         {
@@ -1496,7 +1480,7 @@ internal static class Win32Apis
         }
 
         var client = screenPt;
-        if (!ManualApis.ScreenToClient(listViewHwnd, ref client))
+        if (!User32.ScreenToClient(listViewHwnd, ref client))
         {
             return false;
         }
@@ -1506,7 +1490,7 @@ internal static class Win32Apis
             return false;
         }
 
-        return (flags & ManualApis.LVHT_NOWHERE) != 0 || item < 0;
+        return (flags & LVHT_NOWHERE) != 0 || item < 0;
     }
 
     /// <summary>
@@ -1522,14 +1506,14 @@ internal static class Win32Apis
         {
             // 1) Per-window immersive dark (titlebar + popup frame on Win11 22H2+). Harmless if unsupported.
             int v = isDark ? 1 : 0;
-            ManualApis.DwmSetWindowAttribute(hwnd, ManualApis.DWMWA_USE_IMMERSIVE_DARK_MODE, ref v, sizeof(int));
+            DwmApi.DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref v, sizeof(int));
         }
         catch { }
 
         try
         {
             // 2) Per-theme for classic menus: "DarkMode_Explorer" vs "Explorer" controls menu rendering.
-            ManualApis.SetWindowTheme(hwnd, isDark ? "DarkMode_Explorer" : "Explorer", null);
+            UxTheme.SetWindowTheme(hwnd, isDark ? "DarkMode_Explorer" : "Explorer", null);
         }
         catch { }
 
@@ -1538,8 +1522,8 @@ internal static class Win32Apis
         // Values: 0 Default, 1 AllowDark, 2 ForceDark, 3 ForceLight, 4 Max. Guarded for older OS.
         try
         {
-            ManualApis.SetPreferredAppMode(isDark ? 2 /*ForceDark*/ : 3 /*ForceLight*/);
-            ManualApis.FlushMenuThemes();
+            UxTheme.SetPreferredAppMode(isDark ? 2 /*ForceDark*/ : 3 /*ForceLight*/);
+            UxTheme.FlushMenuThemes();
             flushed = true;
         }
         catch { }
@@ -1549,7 +1533,7 @@ internal static class Win32Apis
 
     public static void TryPopDarkMenuMode(IntPtr _)
     {
-        try { ManualApis.SetPreferredAppMode(0 /*Default*/); ManualApis.FlushMenuThemes(); } catch { }
+        try { UxTheme.SetPreferredAppMode(0 /*Default*/); UxTheme.FlushMenuThemes(); } catch { }
         // Do not touch SetWindowTheme / DwmSetWindowAttribute here: those are per-window and owned by
         // Wpf.Ui's ApplicationThemeManager. Resetting them to "Explorer" / 0 would fight the app theme
         // (e.g. leave a dark window with a light popup theme until the next theme apply).
@@ -1565,16 +1549,16 @@ internal static class Win32Apis
         bool visible = false;
         try
         {
-            ManualApis.EnumWindows((hWnd, _) =>
+            User32.EnumWindows((hWnd, _) =>
             {
-                if (!ManualApis.IsWindowVisible(hWnd)) return true;
+                if (!User32.IsWindowVisible(hWnd)) return true;
                 var sb = new StringBuilder(256);
-                ManualApis.GetClassName(hWnd, sb, sb.Capacity);
+                User32.GetClassName(hWnd, sb, sb.Capacity);
                 string cls = sb.ToString();
                 if (cls == "Windows.UI.Core.CoreWindow" || cls == "XAML Explorer Host Island Window" || cls == "XamlExplorerHostIslandWindow")
                 {
                     var tb = new StringBuilder(256);
-                    ManualApis.GetWindowText(hWnd, tb, tb.Capacity);
+                    User32.GetWindowText(hWnd, tb, tb.Capacity);
                     string title = tb.ToString();
                     if (title.Equals("Start", StringComparison.OrdinalIgnoreCase) || title.Equals("Search", StringComparison.OrdinalIgnoreCase))
                     {
@@ -1586,7 +1570,7 @@ internal static class Win32Apis
                 if (cls == "ApplicationFrameWindow")
                 {
                     var tb = new StringBuilder(256);
-                    ManualApis.GetWindowText(hWnd, tb, tb.Capacity);
+                    User32.GetWindowText(hWnd, tb, tb.Capacity);
                     if (tb.ToString().Contains("Start", StringComparison.OrdinalIgnoreCase))
                     {
                         visible = true;
@@ -1605,8 +1589,8 @@ internal static class Win32Apis
         try
         {
             // ESC dismisses Start without side effects; safe even if not visible.
-            ManualApis.keybd_event(ManualApis.VK_ESCAPE, 0, 0, UIntPtr.Zero);
-            ManualApis.keybd_event(ManualApis.VK_ESCAPE, 0, ManualApis.KEYEVENTF_KEYUP, UIntPtr.Zero);
+            User32.keybd_event(VK_ESCAPE, 0, 0, UIntPtr.Zero);
+            User32.keybd_event(VK_ESCAPE, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
         }
         catch { }
     }

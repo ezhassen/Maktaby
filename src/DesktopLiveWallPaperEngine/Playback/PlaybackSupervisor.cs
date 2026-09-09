@@ -1,9 +1,9 @@
 using DesktopLiveWallPaperEngine.Desktop;
-using DesktopLiveWallPaperEngine.Interop;
+using WindowsNative;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Text;
-using static DesktopLiveWallPaperEngine.Interop.Win32Constants;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine.Playback;
 
@@ -48,11 +48,11 @@ public sealed class PlaybackSupervisor : IDisposable
     private uint _hookThreadId;
     private readonly ManualResetEventSlim _hookReady = new(false);
     private readonly List<IntPtr> _hooks = [];
-    private readonly User32.WinEventProc _winEventProc;
+    private readonly WinEventProc _winEventProc;
 
     /// <summary>Rooted for the process lifetime: unhooking cannot recall an in-flight
     /// out-of-context callback, and a collected delegate there fail-fasts the process.</summary>
-    private static readonly ConcurrentDictionary<User32.WinEventProc, byte> HookRoots = new();
+    private static readonly ConcurrentDictionary<WinEventProc, byte> HookRoots = new();
 
     /// <summary>Last known rect per top-level window, for coalescing LOCATIONCHANGE storms.
     /// Rebuilt from every full capture; any window's geometry can now flip some monitor's
@@ -355,7 +355,7 @@ public sealed class PlaybackSupervisor : IDisposable
     private static List<TopWindowInfo> CaptureTopWindows()
     {
         var list = new List<TopWindowInfo>(64);
-        User32.EnumWindowsProc callback = (hwnd, _) =>
+        EnumWindowsProc callback = (hwnd, _) =>
         {
             try
             {
@@ -384,7 +384,7 @@ public sealed class PlaybackSupervisor : IDisposable
 
     private static bool IsCloaked(IntPtr hwnd)
     {
-        try { return DwmApi.DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int cloaked, (uint)sizeof(int)) == 0 && cloaked != 0; }
+        try { return DwmApi.DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0; }
         catch { return false; }
     }
 

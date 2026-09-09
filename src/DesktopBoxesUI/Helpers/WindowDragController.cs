@@ -3,6 +3,8 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -362,13 +364,13 @@ internal sealed class WindowDragController
             IntPtr topDesktop = surface;
             if (surface != IntPtr.Zero)
             {
-                IntPtr cur = ManualApis.GetWindow(surface, ManualApis.GW_HWNDNEXT);
+                IntPtr cur = User32.GetWindow(surface, GW_HWNDNEXT);
                 IntPtr lastDesktop = surface;
                 while (cur != IntPtr.Zero)
                 {
                     if (desktopManager.IsDesktopWindow(cur)) lastDesktop = cur;
                     else break;
-                    cur = ManualApis.GetWindow(cur, ManualApis.GW_HWNDNEXT);
+                    cur = User32.GetWindow(cur, GW_HWNDNEXT);
                 }
                 topDesktop = lastDesktop;
             }

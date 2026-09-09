@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Interop;
+using WindowsNative;
 
 namespace DesktopBoxesUI.Win32.Services;
 
@@ -35,13 +36,13 @@ public sealed class FileOperationService : IFileOperationService
             return true;
         }
 
-        var op = new ManualApis.SHFILEOPSTRUCT
+        var op = new SHFILEOPSTRUCT
         {
             hwnd = OwnerHandle(),
-            wFunc = Win32Apis.FO_MOVE,
+            wFunc = Win32Constants.FO_MOVE,
             pFrom = path + "\0",
             pTo = newPath + "\0",
-            fFlags = (ushort)(Win32Apis.FOF_ALLOWUNDO | Win32Apis.FOF_NOCONFIRMATION | Win32Apis.FOF_NOERRORUI),
+            fFlags = (ushort)(Win32Constants.FOF_ALLOWUNDO | Win32Constants.FOF_NOCONFIRMATION | Win32Constants.FOF_NOERRORUI),
         };
 
         int hr = Win32Apis.FileOperation(ref op);
@@ -58,13 +59,13 @@ public sealed class FileOperationService : IFileOperationService
         // Permanent delete: no FOF_ALLOWUNDO and FOF_WANTNUKEWARNING forces the native
         // "Permanently delete?" confirmation. Recycle delete: silent + undoable.
         ushort flags = permanent
-            ? Win32Apis.FOF_WANTNUKEWARNING
-            : (ushort)(Win32Apis.FOF_ALLOWUNDO | Win32Apis.FOF_NOCONFIRMATION | Win32Apis.FOF_SILENT | Win32Apis.FOF_NOERRORUI);
+            ? Win32Constants.FOF_WANTNUKEWARNING
+            : (ushort)(Win32Constants.FOF_ALLOWUNDO | Win32Constants.FOF_NOCONFIRMATION | Win32Constants.FOF_SILENT | Win32Constants.FOF_NOERRORUI);
 
-        var op = new ManualApis.SHFILEOPSTRUCT
+        var op = new SHFILEOPSTRUCT
         {
             hwnd = OwnerHandle(),
-            wFunc = Win32Apis.FO_DELETE,
+            wFunc = Win32Constants.FO_DELETE,
             pFrom = path + "\0",
             fFlags = flags,
         };
@@ -80,13 +81,13 @@ public sealed class FileOperationService : IFileOperationService
             return false;
         }
 
-        var op = new ManualApis.SHFILEOPSTRUCT
+        var op = new SHFILEOPSTRUCT
         {
             hwnd = OwnerHandle(),
-            wFunc = Win32Apis.FO_COPY,
+            wFunc = Win32Constants.FO_COPY,
             pFrom = source + "\0",
             pTo = destination + "\0",
-            fFlags = (ushort)(Win32Apis.FOF_NOCONFIRMATION | Win32Apis.FOF_NOERRORUI | Win32Apis.FOF_ALLOWUNDO),
+            fFlags = (ushort)(Win32Constants.FOF_NOCONFIRMATION | Win32Constants.FOF_NOERRORUI | Win32Constants.FOF_ALLOWUNDO),
         };
 
         int hr = Win32Apis.FileOperation(ref op);
@@ -104,14 +105,14 @@ public sealed class FileOperationService : IFileOperationService
         {
             if (cancellationToken.IsCancellationRequested) return false;
             ushort flags = permanent
-                ? Win32Apis.FOF_WANTNUKEWARNING
-                : (ushort)(Win32Apis.FOF_ALLOWUNDO | Win32Apis.FOF_NOCONFIRMATION | Win32Apis.FOF_SILENT | Win32Apis.FOF_NOERRORUI);
+                ? Win32Constants.FOF_WANTNUKEWARNING
+                : (ushort)(Win32Constants.FOF_ALLOWUNDO | Win32Constants.FOF_NOCONFIRMATION | Win32Constants.FOF_SILENT | Win32Constants.FOF_NOERRORUI);
 
             string multiFrom = BuildMultiString(valid);
-            var op = new ManualApis.SHFILEOPSTRUCT
+            var op = new SHFILEOPSTRUCT
             {
                 hwnd = OwnerHandle(),
-                wFunc = Win32Apis.FO_DELETE,
+                wFunc = Win32Constants.FO_DELETE,
                 pFrom = multiFrom,
                 pTo = null,
                 fFlags = flags,
@@ -150,13 +151,13 @@ public sealed class FileOperationService : IFileOperationService
         return RunOnStaThread(() =>
         {
             if (cancellationToken.IsCancellationRequested) return false;
-            var op = new ManualApis.SHFILEOPSTRUCT
+            var op = new SHFILEOPSTRUCT
             {
                 hwnd = OwnerHandle(),
-                wFunc = Win32Apis.FO_COPY,
+                wFunc = Win32Constants.FO_COPY,
                 pFrom = multiFrom,
                 pTo = multiTo,
-                fFlags = (ushort)(Win32Apis.FOF_NOCONFIRMATION | Win32Apis.FOF_NOERRORUI | Win32Apis.FOF_ALLOWUNDO),
+                fFlags = (ushort)(Win32Constants.FOF_NOCONFIRMATION | Win32Constants.FOF_NOERRORUI | Win32Constants.FOF_ALLOWUNDO),
             };
             int hr = Win32Apis.FileOperation(ref op);
             return hr == 0 && op.fAnyOperationsAborted == 0;

@@ -15,4 +15,8 @@
 		<PackageReference Include="Vortice.Direct3D11" />
 		<PackageReference Include="Vortice.DirectComposition" />
 	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\WindowsNative\WindowsNative.csproj" />
+	</ItemGroup>
 </Project>

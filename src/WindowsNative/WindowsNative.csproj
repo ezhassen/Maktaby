@@ -2,12 +2,17 @@
 
 	<PropertyGroup>
 		<TargetFramework>$(SharedTargetFrameworWindows)</TargetFramework>
+		<TargetPlatformMinVersion>$(SharedTargetPlatformMinVersion)</TargetPlatformMinVersion>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
+		<LangVersion>latest</LangVersion>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+		<IsTrimmable>false</IsTrimmable>
+		<EnableAot>false</EnableAot>
 	</PropertyGroup>
 
-	<ItemGroup>
-		<PackageReference Include="Serilog" />
+	<!-- Intentionally dependency-free: raw DllImport P/Invoke only, no CsWin32, no logging.
+	     Consumers (DesktopBoxesUI, DesktopLiveWallPaperEngine, WPFShared) reference this project. -->
 
-	</ItemGroup>
 </Project>

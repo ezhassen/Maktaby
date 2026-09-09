@@ -1,6 +1,8 @@
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.Win32.NativeMethods;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Input;
@@ -73,10 +75,10 @@ public partial class CssWidgetChromeOverlay : Window
             // explicitly for the wpftmp AnyCPU build where style changes can be reapplied.
             try
             {
-                int ex = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE);
-                ManualApis.SetWindowLong(hwnd, ManualApis.GWL_EXSTYLE, ex | ManualApis.WS_EX_NOACTIVATE);
-                ManualApis.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                    ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOZORDER | ManualApis.SWP_FRAMECHANGED | ManualApis.SWP_NOACTIVATE);
+                int ex = User32.GetWindowLong(hwnd, GWL_EXSTYLE);
+                User32.SetWindowLong(hwnd, GWL_EXSTYLE, ex | (int)WS_EX_NOACTIVATE);
+                User32.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
             }
             catch { }
             _hwndSource = HwndSource.FromHwnd(hwnd);

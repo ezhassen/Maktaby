@@ -8,7 +8,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using HICON = Windows.Win32.UI.WindowsAndMessaging.HICON;
+using WindowsNative;
 
 namespace DesktopBoxesUI.WPFServices;
 

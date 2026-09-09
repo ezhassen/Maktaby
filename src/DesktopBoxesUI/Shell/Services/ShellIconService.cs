@@ -1,5 +1,5 @@
 using DesktopBoxesUI.Core.Interfaces;
-using DesktopBoxesUI.Shell.Interop;
+using WindowsNative;
 using DesktopBoxesUI.Win32.NativeMethods;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
@@ -42,7 +42,7 @@ public sealed class ShellIconService : IShellIconService
         // Fallback to PIDL resolution for virtual shell items (This PC, Recycle Bin, ...).
         try
         {
-            if (ShellNative.SHCreateItemFromParsingName(path, System.IntPtr.Zero, ShellNative.IID_IShellItem, out IShellItem item) != 0 ||
+            if (Shell32.SHCreateItemFromParsingName(path, System.IntPtr.Zero, Shell32.IID_IShellItem, out IShellItem item) != 0 ||
                 item is null)
             {
                 return System.IntPtr.Zero;
@@ -53,7 +53,7 @@ public sealed class ShellIconService : IShellIconService
                 System.IntPtr pUnk = Marshal.GetIUnknownForObject(item);
                 try
                 {
-                    if (ShellNative.SHGetIDListFromObject(pUnk, out System.IntPtr pidl) != 0 || pidl == System.IntPtr.Zero)
+                    if (Shell32.SHGetIDListFromObject(pUnk, out System.IntPtr pidl) != 0 || pidl == System.IntPtr.Zero)
                     {
                         return System.IntPtr.Zero;
                     }
@@ -66,7 +66,7 @@ public sealed class ShellIconService : IShellIconService
                     }
                     finally
                     {
-                        ShellNative.ILFree(pidl);
+                        Shell32.ILFree(pidl);
                     }
                 }
                 finally

@@ -1,5 +1,5 @@
 using DesktopLiveWallPaperEngine.Common;
-using DesktopLiveWallPaperEngine.Interop;
+using WindowsNative;
 using Vortice.Direct2D1;
 using Vortice.Direct3D;
 using Vortice.Direct3D11;

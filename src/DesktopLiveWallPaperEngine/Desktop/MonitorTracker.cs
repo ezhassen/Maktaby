@@ -1,5 +1,5 @@
 using System.Runtime.InteropServices;
-using DesktopLiveWallPaperEngine.Interop;
+using WindowsNative;
 
 namespace DesktopLiveWallPaperEngine.Desktop;
 
@@ -37,7 +37,7 @@ public static class MonitorTracker
     private static List<MonitorInfo> EnumerateCore()
     {
         var monitors = new List<MonitorInfo>();
-        User32.MonitorEnumProc callback = (IntPtr hMonitor, IntPtr _, ref RECT _, IntPtr _) =>
+        MonitorEnumProc callback = (IntPtr hMonitor, IntPtr _, ref RECT _, IntPtr _) =>
         {
             var info = new MONITORINFOEX { Size = (uint)Marshal.SizeOf<MONITORINFOEX>() };
             if (User32.GetMonitorInfoW(hMonitor, ref info))

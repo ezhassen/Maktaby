@@ -3,11 +3,8 @@ using System.Runtime.Versioning;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Win32.NativeMethods;
-using HWND = Windows.Win32.Foundation.HWND;
-using RECT = Windows.Win32.Foundation.RECT;
-using HMONITOR = Windows.Win32.Graphics.Gdi.HMONITOR;
-using MONITORINFO = Windows.Win32.Graphics.Gdi.MONITORINFO;
-using MONITOR_FROM_FLAGS = Windows.Win32.Graphics.Gdi.MONITOR_FROM_FLAGS;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Win32.Services;
 
@@ -20,7 +17,7 @@ namespace DesktopBoxesUI.Win32.Services;
 public sealed class MonitorService : IMonitorService
 {
     public RectD GetPrimaryWorkArea()
-        => GetWorkArea(Win32Apis.MonitorFromWindow((HWND)(IntPtr)0, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY));
+        => GetWorkArea(Win32Apis.MonitorFromWindow(IntPtr.Zero, MONITOR_DEFAULTTOPRIMARY));
 
     public IReadOnlyList<RectD> GetMonitorWorkAreas()
         => GetAllMonitors().Select(m => m.WorkArea).ToList();
@@ -30,13 +27,13 @@ public sealed class MonitorService : IMonitorService
         var list = new List<MonitorInfo>();
         try
         {
-            Win32Apis.EnumDisplayMonitors((IntPtr hMonitor, IntPtr hdc, ref Windows.Win32.Foundation.RECT rect, IntPtr data) =>
+            Win32Apis.EnumDisplayMonitors((IntPtr hMonitor, IntPtr hdc, ref RECT rect, IntPtr data) =>
             {
                 try
                 {
-                    var info = new ManualApis.MONITORINFOEX
+                    var info = new MONITORINFOEX
                     {
-                        cbSize = (uint)Marshal.SizeOf<ManualApis.MONITORINFOEX>()
+                        Size = (uint)Marshal.SizeOf<MONITORINFOEX>()
                     };
                     if (!Win32Apis.GetMonitorInfoEx(hMonitor, ref info))
                     {
@@ -46,12 +43,12 @@ public sealed class MonitorService : IMonitorService
                     Win32Apis.TryGetDpiForMonitor(hMonitor, out uint dpiX, out uint dpiY);
                     list.Add(new MonitorInfo
                     {
-                        DeviceName = info.szDevice ?? string.Empty,
-                        Bounds = RectD.FromXYWH(info.rcMonitor.left, info.rcMonitor.top,
-                            info.rcMonitor.right - info.rcMonitor.left, info.rcMonitor.bottom - info.rcMonitor.top),
-                        WorkArea = RectD.FromXYWH(info.rcWork.left, info.rcWork.top,
-                            info.rcWork.right - info.rcWork.left, info.rcWork.bottom - info.rcWork.top),
-                        IsPrimary = (info.dwFlags & ManualApis.MONITORINFOF_PRIMARY) != 0,
+                        DeviceName = info.Device ?? string.Empty,
+                        Bounds = RectD.FromXYWH(info.Monitor.Left, info.Monitor.Top,
+                            info.Monitor.Right - info.Monitor.Left, info.Monitor.Bottom - info.Monitor.Top),
+                        WorkArea = RectD.FromXYWH(info.Work.Left, info.Work.Top,
+                            info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top),
+                        IsPrimary = (info.Flags & MONITORINFOF_PRIMARY) != 0,
                         DpiX = dpiX,
                         DpiY = dpiY,
                     });
@@ -77,27 +74,21 @@ public sealed class MonitorService : IMonitorService
 
     public RectD GetWorkAreaContaining(PointD point)
     {
-        RECT rect = new()
-        {
-            left = (int)point.X,
-            top = (int)point.Y,
-            right = (int)point.X,
-            bottom = (int)point.Y,
-        };
+        RECT rect = new((int)point.X, (int)point.Y, (int)point.X, (int)point.Y);
 
-        HMONITOR hmon = Win32Apis.MonitorFromRect(rect, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
+        IntPtr hmon = Win32Apis.MonitorFromRect(rect, MONITOR_DEFAULTTOPRIMARY);
         return GetWorkArea(hmon);
     }
 
-    private static RectD GetWorkArea(HMONITOR hmon)
+    private static RectD GetWorkArea(IntPtr hmon)
     {
         MONITORINFO info = new();
-        info.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
+        info.Size = (uint)Marshal.SizeOf<MONITORINFO>();
 
         if (Win32Apis.GetMonitorInfo(hmon, ref info))
         {
-            RECT r = info.rcWork;
-            return RectD.FromXYWH(r.left, r.top, r.right - r.left, r.bottom - r.top);
+            RECT r = info.Work;
+            return RectD.FromXYWH(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
         }
 
         return RectD.FromXYWH(0, 0, 1920, 1080);

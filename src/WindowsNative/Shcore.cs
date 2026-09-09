@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace DesktopLiveWallPaperEngine.Interop;
+namespace WindowsNative;
 
 public enum MonitorDpiType
 {
@@ -18,6 +18,9 @@ public static class Shcore
 
     [DllImport("shcore.dll")]
     private static extern int GetDpiForMonitor(IntPtr hMonitor, MonitorDpiType dpiType, out uint dpiX, out uint dpiY);
+
+    [DllImport("shcore.dll", EntryPoint = "GetDpiForMonitor")]
+    public static extern int GetDpiForMonitorTyped(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
     /// <summary>Effective DPI for a monitor, or 96 if the call fails. Degrading to 96 makes an
     /// unavailable API render exactly as v0.1.0 did rather than throw on the enumerate path.</summary>

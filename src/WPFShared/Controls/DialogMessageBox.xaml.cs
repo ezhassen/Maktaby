@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using WindowsNative;
 using Wpf.Ui.Controls;
 using WPFShared.Interfaces;
 using WPFShared.Win32APIs;
@@ -163,11 +164,11 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
                 const int SWP_NOSIZE = 0x0001;
                 const int SWP_NOZORDER = 0x0004;
                 const int SWP_FRAMECHANGED = 0x0020;
-                int style = ManualApis.GetWindowLong(hwnd, ManualApis.GWL_STYLE);
+                int style = User32.GetWindowLong(hwnd, Win32Constants.GWL_STYLE);
                 style &= ~WS_THICKFRAME;
                 style &= ~WS_MAXIMIZEBOX;
-                ManualApis.SetWindowLong(hwnd, ManualApis.GWL_STYLE, style);
-                ManualApis.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+                User32.SetWindowLong(hwnd, Win32Constants.GWL_STYLE, style);
+                User32.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
                 var chrome = System.Windows.Shell.WindowChrome.GetWindowChrome(this);
                 if (chrome != null)
                 {
@@ -228,7 +229,7 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
 
         if (msg == WmNcHitTest)
         {
-            var hit = ManualApis.DefWindowProc(hwnd, (uint)msg, wParam, lParam).ToInt32();
+            var hit = User32.DefWindowProc(hwnd, (uint)msg, wParam, lParam).ToInt32();
             if (hit >= 10 && hit <= 17)
             {
                 handled = true;
@@ -566,7 +567,7 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
                         // Fallback: GetDpiForWindow conversion
                         try
                         {
-                            uint dpi = Win32Apis.GetDpiForWindow((Windows.Win32.Foundation.HWND)hwnd);
+                            uint dpi = Win32Apis.GetDpiForWindow(hwnd);
                             if (dpi != 0)
                             {
                                 double scale = dpi / 96.0;

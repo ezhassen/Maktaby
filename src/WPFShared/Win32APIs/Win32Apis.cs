@@ -3,9 +3,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
-using Windows.Win32;
-using Windows.Win32.Foundation;
-using Windows.Win32.Graphics.Gdi;
+using WindowsNative;
 
 namespace WPFShared.Win32APIs;
 
@@ -19,21 +17,21 @@ internal static class Win32Apis
     /// </summary>
     public static (int left, int top, int right, int bottom)? GetMonitorWorkArea(IntPtr hwnd)
     {
-        var hmon = PInvoke.MonitorFromWindow((HWND)hwnd, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTONEAREST);
-        if (hmon == HWND.Null)
+        var hmon = User32.MonitorFromWindow(hwnd, Win32Constants.MONITOR_DEFAULTTONEAREST);
+        if (hmon == IntPtr.Zero)
         {
             return null;
         }
 
         MONITORINFO mi = default;
-        mi.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
-        if (!PInvoke.GetMonitorInfo(hmon, ref mi))
+        mi.Size = (uint)Marshal.SizeOf<MONITORINFO>();
+        if (!User32.GetMonitorInfo(hmon, ref mi))
         {
             return null;
         }
 
-        return (mi.rcWork.left, mi.rcWork.top, mi.rcWork.right, mi.rcWork.bottom);
+        return (mi.Work.Left, mi.Work.Top, mi.Work.Right, mi.Work.Bottom);
     }
-    public static uint GetDpiForWindow(HWND hWnd) => PInvoke.GetDpiForWindow(hWnd);
+    public static uint GetDpiForWindow(IntPtr hWnd) => User32.GetDpiForWindow(hWnd);
 
 }

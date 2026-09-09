@@ -5,6 +5,7 @@ using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Views.HelpersViews;
 using DesktopBoxesUI.Win32.NativeMethods;
+using WindowsNative;
 using DesktopBoxesUI.WPFServices;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
@@ -392,7 +393,7 @@ public partial class BoxControl : UserControl
 
         // Use the real cursor position (physical screen pixels) rather than Mouse.GetPosition, which
         // returns (0,0) during a drag because the mouse is captured by the drag-drop modal loop.
-        if (!Win32Apis.GetCursorPos(out ManualApis.POINT p))
+        if (!Win32Apis.GetCursorPos(out POINT p))
         {
             return;
         }

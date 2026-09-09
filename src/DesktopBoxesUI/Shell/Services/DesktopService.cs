@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Core.Services;
-using DesktopBoxesUI.Shell.Interop;
+using WindowsNative;
 
 namespace DesktopBoxesUI.Shell.Services;
 
@@ -20,7 +20,7 @@ public sealed class DesktopService : IDesktopService
     public async IAsyncEnumerable<BoxItem> GetDesktopItemsAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        if (ShellNative.SHGetDesktopFolder(out IShellFolder desktop) != 0 || desktop is null)
+        if (Shell32.SHGetDesktopFolder(out IShellFolder desktop) != 0 || desktop is null)
         {
             yield break;
         }
@@ -50,7 +50,7 @@ public sealed class DesktopService : IDesktopService
 
                     try
                     {
-                        if (ShellNative.SHCreateItemFromIDList(pidl, ShellNative.IID_IShellItem, out IShellItem item) == 0 &&
+                        if (Shell32.SHCreateItemFromIDList(pidl, Shell32.IID_IShellItem, out IShellItem item) == 0 &&
                             item is not null)
                         {
                             try
@@ -86,7 +86,7 @@ public sealed class DesktopService : IDesktopService
                     }
                     finally
                     {
-                        ShellNative.ILFree(pidl);
+                        Shell32.ILFree(pidl);
                     }
                 }
             }

@@ -4,6 +4,8 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.IO;
@@ -221,9 +223,9 @@ public partial class CssWidgetWindow : WidgetWindow
             // which match GetWindowRect and GetCursorPos.
             Win32Apis.GetCursorPos(out var pt);
             var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero && Win32Apis.GetWindowRect((Windows.Win32.Foundation.HWND)hwnd, out var rect))
+            if (hwnd != IntPtr.Zero && Win32Apis.GetWindowRect(hwnd, out var rect))
             {
-                if (pt.X >= rect.left && pt.X <= rect.right && pt.Y >= rect.top && pt.Y <= rect.bottom)
+                if (pt.X >= rect.Left && pt.X <= rect.Right && pt.Y >= rect.Top && pt.Y <= rect.Bottom)
                 {
                     //Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseLeave ignored — cursor still inside window");
                     return;
@@ -262,7 +264,7 @@ public partial class CssWidgetWindow : WidgetWindow
             {
                 const int WM_NCLBUTTONDOWN = 0x00A1;
                 const int HTCAPTION = 2;
-                ManualApis.SendMessage(hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+                User32.SendMessage(hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
             }
         }
         catch { }
@@ -357,10 +359,10 @@ public partial class CssWidgetWindow : WidgetWindow
         if (ohwnd == IntPtr.Zero) return;
         IntPtr ownerH = new WindowInteropHelper(this).Handle;
         if (ownerH == IntPtr.Zero) return;
-        ManualApis.SetWindowLongPtr(ohwnd, ManualApis.GWL_HWNDPARENT, ownerH);
+        User32.SetWindowLongPtr(ohwnd, GWL_HWNDPARENT, ownerH);
 
-        //ManualApis.SetWindowPos(ohwnd, ownerH, 0, 0, 0, 0,
-        //    ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+        //User32.SetWindowPos(ohwnd, ownerH, 0, 0, 0, 0,
+        //    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         //_chromeOverlay.Activate();
         //}
         //catch { }

@@ -2,6 +2,8 @@ using System;
 using System.Runtime.Versioning;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Win32.NativeMethods;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Win32.Services;
 
@@ -170,7 +172,7 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
         var listView = ExplorerDesktopService.FindDesktopListView();
         if (listView != IntPtr.Zero)
         {
-            int count = (int)ManualApis.SendMessage(listView, ManualApis.LVM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero);
+            int count = (int)User32.SendMessage(listView, LVM_GETITEMCOUNT, IntPtr.Zero, IntPtr.Zero);
             if (count > 0 && TryGetItemIconHeight(listView, 0, out var iconPhys) && iconPhys > 0)
             {
                 // The rect is in the list-view's PHYSICAL pixels; consumers (WPF) work in DIPs.
@@ -184,7 +186,7 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
         {
             // Fallback: SM_CXICON is the unscaled large-icon metric; scale to the system DPI.
             double scale = Win32Apis.GetDpiForSystem() / 96.0;
-            return Math.Max(16, (int)Math.Round(ManualApis.GetSystemMetrics(ManualApis.SM_CXICON) * scale));
+            return Math.Max(16, (int)Math.Round(User32.GetSystemMetrics(SM_CXICON) * scale));
         }
         catch
         {
@@ -207,8 +209,8 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
             return false;
         }
 
-        IntPtr hProc = ManualApis.OpenProcess(
-            ManualApis.PROCESS_VM_OPERATION | ManualApis.PROCESS_VM_READ | ManualApis.PROCESS_VM_WRITE,
+        IntPtr hProc = Kernel32.OpenProcess(
+            PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE,
             false,
             procId);
         if (hProc == IntPtr.Zero)
@@ -224,7 +226,7 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
             const uint PAGE_READWRITE = 0x04;
             const uint rectSize = 16; // RECT: 4 ints
 
-            IntPtr remote = ManualApis.VirtualAllocEx(hProc, IntPtr.Zero, rectSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+            IntPtr remote = Kernel32.VirtualAllocEx(hProc, IntPtr.Zero, rectSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
             if (remote == IntPtr.Zero)
             {
                 return false;
@@ -235,23 +237,23 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
                 // left = LVIR_ICON; rest zeroed by VirtualAllocEx.
                 byte[] input =
                 {
-                    (byte)ManualApis.LVIR_ICON, 0, 0, 0,
+                    (byte)LVIR_ICON, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                 };
-                if (!ManualApis.WriteProcessMemory(hProc, remote, input, (uint)input.Length, out _))
+                if (!Kernel32.WriteProcessMemory(hProc, remote, input, (uint)input.Length, out _))
                 {
                     return false;
                 }
 
-                if (ManualApis.SendMessage(listView, ManualApis.LVM_GETITEMRECT, (IntPtr)index, remote) == IntPtr.Zero)
+                if (User32.SendMessage(listView, LVM_GETITEMRECT, (IntPtr)index, remote) == IntPtr.Zero)
                 {
                     return false;
                 }
 
                 var outBytes = new byte[rectSize];
-                if (!ManualApis.ReadProcessMemory(hProc, remote, outBytes, rectSize, out _) || outBytes.Length < 16)
+                if (!Kernel32.ReadProcessMemory(hProc, remote, outBytes, rectSize, out _) || outBytes.Length < 16)
                 {
                     return false;
                 }
@@ -268,12 +270,12 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
             }
             finally
             {
-                ManualApis.VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
+                Kernel32.VirtualFreeEx(hProc, remote, 0, MEM_RELEASE);
             }
         }
         finally
         {
-            ManualApis.CloseHandle(hProc);
+            Kernel32.CloseHandle(hProc);
         }
     }
 }

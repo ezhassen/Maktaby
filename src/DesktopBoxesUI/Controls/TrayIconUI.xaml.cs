@@ -1,6 +1,7 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
+using WindowsNative;
 using System;
 using System.Linq;
 using System.Runtime.InteropServices;

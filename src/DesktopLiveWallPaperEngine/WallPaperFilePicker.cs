@@ -1,4 +1,4 @@
-using DesktopLiveWallPaperEngine.Interop;
+using WindowsNative;
 using DesktopLiveWallPaperEngine.Playback;
 using System.Runtime.InteropServices;
 
@@ -34,7 +34,7 @@ public static class WallpaperFilePicker
         // The legacy dialog switches the calling thread to system-DPI awareness and does not
         // reliably restore it; any monitor enumeration after a pick would then come back scaled
         // (secondary 1920x1200 reported as 2400x1500 on a 125%-primary box). Save and restore.
-        var awareness = Interop.User32.GetThreadDpiAwarenessContext();
+        var awareness = User32.GetThreadDpiAwarenessContext();
         try
         {
             // zero the buffer so the dialog sees an empty initial filename
@@ -56,7 +56,7 @@ public static class WallpaperFilePicker
         finally
         {
             if (awareness != IntPtr.Zero)
-                Interop.User32.SetThreadDpiAwarenessContext(awareness);
+                User32.SetThreadDpiAwarenessContext(awareness);
             Marshal.FreeHGlobal(buffer);
         }
     }

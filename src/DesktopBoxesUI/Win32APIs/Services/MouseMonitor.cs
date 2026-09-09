@@ -5,6 +5,8 @@ using System.Windows;
 using System.Windows.Threading;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Win32.NativeMethods;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Win32.Services;
 
@@ -20,14 +22,14 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
     [StructLayout(LayoutKind.Sequential)]
     private struct MsllHookStruct
     {
-        public ManualApis.POINT pt;
+        public POINT pt;
         public uint mouseData;
         public uint flags;
         public uint time;
         public nint dwExtraInfo;
     }
 
-    private readonly ManualApis.HookProc _proc;
+    private readonly HookProc _proc;
     private Thread? _thread;
     private Dispatcher? _dispatcher;
     private IntPtr _hook;
@@ -49,9 +51,9 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
     public MouseMonitor()
     {
         _proc = HookCallback;
-        _doubleClickTime = ManualApis.GetDoubleClickTime();
-        _doubleClickX = ManualApis.GetSystemMetrics(ManualApis.SM_CXDOUBLECLK);
-        _doubleClickY = ManualApis.GetSystemMetrics(ManualApis.SM_CYDOUBLECLK);
+        _doubleClickTime = User32.GetDoubleClickTime();
+        _doubleClickX = User32.GetSystemMetrics(SM_CXDOUBLECLK);
+        _doubleClickY = User32.GetSystemMetrics(SM_CYDOUBLECLK);
     }
 
     public void Start()
@@ -112,10 +114,10 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
         {
             int msg = wParam.ToInt32();
             if (msg is
-                ManualApis.WM_LBUTTONDOWN or
-                ManualApis.WM_RBUTTONDOWN or
-                ManualApis.WM_MBUTTONDOWN or
-                ManualApis.WM_XBUTTONDOWN)
+                WM_LBUTTONDOWN or
+                WM_RBUTTONDOWN or
+                WM_MBUTTONDOWN or
+                WM_XBUTTONDOWN)
             {
                 var info = Marshal.PtrToStructure<MsllHookStruct>(lParam);
                 var hwnd = Win32Apis.WindowFromPoint(info.pt);
@@ -126,7 +128,7 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
                     Application.Current.Dispatcher.BeginInvoke(new Action(() => handler(this, hwnd)));
                 }
 
-                if (msg == ManualApis.WM_LBUTTONDOWN && Application.Current != null)
+                if (msg == WM_LBUTTONDOWN && Application.Current != null)
                 {
                     TryDetectDesktopDoubleClick(info.pt, hwnd);
                     // TODO: Revisit whether a global WH_MOUSE_LL hook observing every click is acceptable
@@ -145,7 +147,7 @@ internal sealed class MouseMonitor : IMouseMonitor, IDisposable
     /// downs whose previous click landed on the same desktop list-view within the OS double-click
     /// time/distance count; an <c>LVM_HITTEST</c> then confirms the point is not on an icon.
     /// </summary>
-    private void TryDetectDesktopDoubleClick(ManualApis.POINT pt, IntPtr hwnd)
+    private void TryDetectDesktopDoubleClick(POINT pt, IntPtr hwnd)
     {
         bool isDouble = false;
         if (_lastClickHwnd == hwnd && _lastClickTime != 0)

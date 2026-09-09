@@ -26,17 +26,11 @@
     -->
 		<CETCompat>false</CETCompat>
 	</PropertyGroup>
-	<ItemGroup>
-	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Configuration" />
 		<PackageReference Include="Microsoft.Extensions.Configuration.Json" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" />
-		<PackageReference Include="Microsoft.Windows.CsWin32">
-			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-			<PrivateAssets>all</PrivateAssets>
-		</PackageReference>
 		<PackageReference Include="Serilog" />
 		<PackageReference Include="Serilog.Exceptions" />
 		<PackageReference Include="Serilog.Sinks.Console" Condition="'$(Configuration)' == 'Debug'" />
@@ -46,12 +40,6 @@
 
 		<PackageReference Include="CommunityToolkit.Mvvm" />
 		<PackageReference Include="Microsoft.Web.WebView2" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<!-- CsWin32 auto-discovers NativeMethods.txt only at the project root, so register our
-         isolated copy explicitly. All raw Win32 declarations live in this one file. -->
-		<AdditionalFiles Include="Win32APIs\NativeMethods\NativeMethods.txt" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -71,8 +59,9 @@
 		<Folder Include="Animations\" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<ProjectReference Include="..\DesktopLiveWallPaperEngine\DesktopLiveWallpaperEngine.csproj" />
-		<ProjectReference Include="..\WPFShared\WPFShared.csproj" />
-	</ItemGroup>
+   <ItemGroup>
+	  <ProjectReference Include="..\DesktopLiveWallPaperEngine\DesktopLiveWallPaperEngine.csproj" />
+	  <ProjectReference Include="..\WindowsNative\WindowsNative.csproj" />
+	  <ProjectReference Include="..\WPFShared\WPFShared.csproj" />
+   </ItemGroup>
 </Project>

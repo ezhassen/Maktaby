@@ -5,6 +5,7 @@ using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.HelpersViews;
 using DesktopBoxesUI.Win32.NativeMethods;
+using WindowsNative;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Versioning;
 using System.Windows;
@@ -285,8 +286,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         if (!Win32Apis.GetCursorPos(out var pt)) return false;
         var hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd == IntPtr.Zero) return false;
-        if (!Win32Apis.GetWindowRect((Windows.Win32.Foundation.HWND)hwnd, out var rect)) return false;
-        return pt.X >= rect.left && pt.X <= rect.right && pt.Y >= rect.top && pt.Y <= rect.bottom;
+        if (!Win32Apis.GetWindowRect(hwnd, out var rect)) return false;
+        return pt.X >= rect.Left && pt.X <= rect.Right && pt.Y >= rect.Top && pt.Y <= rect.Bottom;
     }
 
     /// <summary>Per-box icon size override from the menu: Auto/Default (null = follow the user
@@ -1186,7 +1187,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     private void PositionTabGhost(MouseEventArgs e)
     {
         if (_tabGhost == null || _dragButton == null) return;
-        if (!Win32Apis.GetCursorPos(out ManualApis.POINT pt)) return;
+        if (!Win32Apis.GetCursorPos(out POINT pt)) return;
         var ghostSrc = PresentationSource.FromVisual(_tabGhost);
         if (ghostSrc == null) return;
 
@@ -1633,7 +1634,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             // WorkArea math — on any scaled display the container landed far from the cursor.
             Point p;
             var dpi = VisualTreeHelper.GetDpi(this);
-            if (Win32Apis.GetCursorPos(out ManualApis.POINT cp))
+            if (Win32Apis.GetCursorPos(out POINT cp))
             {
                 p = new Point(cp.X / dpi.DpiScaleX, cp.Y / dpi.DpiScaleY);
             }

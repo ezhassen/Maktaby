@@ -4,6 +4,8 @@ using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Controls;
@@ -68,8 +70,8 @@ public sealed partial class DesktopSurface : Window
     private bool _marqueeCancelled; // set when aborted (Esc/other-button/capture loss); UP then swallows silently
     private IntPtr _pendingDownWParam;  // stored original LEFT down for plain-click replay
     private IntPtr _pendingDownLParam;
-    private ManualApis.POINT _marqueeStart;
-    private ManualApis.POINT _marqueeEnd;
+    private POINT _marqueeStart;
+    private POINT _marqueeEnd;
     private Border? _marqueeBorder;
     private const int MarqueeMinDeltaPx = 10; // physical pixels before a drag counts as a marquee
     private const int WM_CAPTURECHANGED = 0x0215;
@@ -115,8 +117,8 @@ public sealed partial class DesktopSurface : Window
         // synthesizes WM_LBUTTONDBLCLK for us (which historically forced manual double-click timing
         // in the hook). Each HwndWrapper class is unique to this window, so adding the style here
         // enables system double-click detection — correct timing/distance for free.
-        int classStyle = ManualApis.GetClassLong(helper.Handle, ManualApis.GCL_STYLE);
-        ManualApis.SetClassLong(helper.Handle, ManualApis.GCL_STYLE, classStyle | ManualApis.CS_DBLCLKS);
+        int classStyle = User32.GetClassLong(helper.Handle, GCL_STYLE);
+        User32.SetClassLong(helper.Handle, GCL_STYLE, classStyle | CS_DBLCLKS);
 
         Win32Apis.DesktopSurfaceHandle = helper.Handle;
         Win32Apis.GlueToDesktopSurface(helper.Handle);
@@ -139,9 +141,9 @@ public sealed partial class DesktopSurface : Window
         if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
         {
             Logging.Log.Debug($"glued: surface={Describe(helper.Handle)} anchor={Describe(_anchor)} "
-                + $"prev={Describe(Win32Apis.GetWindow(helper.Handle, ManualApis.GW_HWNDPREV))} "
-                + $"next={Describe(Win32Apis.GetWindow(helper.Handle, ManualApis.GW_HWNDNEXT))} "
-                + $"topmost={(ManualApis.GetWindowLong(helper.Handle, ManualApis.GWL_EXSTYLE) & ManualApis.WS_EX_TOPMOST) != 0}");
+                + $"prev={Describe(Win32Apis.GetWindow(helper.Handle, GW_HWNDPREV))} "
+                + $"next={Describe(Win32Apis.GetWindow(helper.Handle, GW_HWNDNEXT))} "
+                + $"topmost={(User32.GetWindowLong(helper.Handle, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0}");
         }
     }
 
@@ -286,7 +288,7 @@ public sealed partial class DesktopSurface : Window
                 _anchor = Win32Apis.GetDesktopAnchorHandle();
             }
 
-            bool topmost = (ManualApis.GetWindowLong(hwnd, ManualApis.GWL_EXSTYLE) & ManualApis.WS_EX_TOPMOST) != 0;
+            bool topmost = (User32.GetWindowLong(hwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0;
             if (topmost != _wasTopmost)
             {
                 _wasTopmost = topmost;
@@ -353,7 +355,7 @@ public sealed partial class DesktopSurface : Window
                     return IntPtr.Zero;
                 }
 
-                if (Win32Apis.GetCursorPos(out ManualApis.POINT movePt))
+                if (Win32Apis.GetCursorPos(out POINT movePt))
                 {
                     _marqueeEnd = movePt;
 
@@ -397,7 +399,7 @@ public sealed partial class DesktopSurface : Window
             {
                 var hitList = GetListView();
                 if (hitList != IntPtr.Zero
-                    && Win32Apis.GetCursorPos(out ManualApis.POINT ldownPt)
+                    && Win32Apis.GetCursorPos(out POINT ldownPt)
                     && Win32Apis.IsDesktopEmptyPoint(hitList, ldownPt))
                 {
                     _marqueeActive = true;
@@ -410,7 +412,7 @@ public sealed partial class DesktopSurface : Window
                     _marqueeEnd = ldownPt;
 
                     // Explicit capture so the drag keeps streaming across boxes/apps/monitors.
-                    ManualApis.SetCapture(hwnd);
+                    User32.SetCapture(hwnd);
 
                     handled = true;
                     return IntPtr.Zero;
@@ -439,7 +441,7 @@ public sealed partial class DesktopSurface : Window
                 _marqueeIsLeftButton = false;
                 _marqueePendingClick = false;
                 _marqueeCancelled = false;
-                if (Win32Apis.GetCursorPos(out ManualApis.POINT downPt))
+                if (Win32Apis.GetCursorPos(out POINT downPt))
                 {
                     _marqueeStart = downPt;
                     _marqueeEnd = downPt;
@@ -448,7 +450,7 @@ public sealed partial class DesktopSurface : Window
                 // Explicit capture: without it, moves stop arriving the moment the cursor crosses onto
                 // a Box/application window (marquee freezes) and an off-surface release is lost.
                 // With it, every mouse event streams here until ReleaseCapture.
-                ManualApis.SetCapture(hwnd);
+                User32.SetCapture(hwnd);
 
                 handled = true;
                 return IntPtr.Zero;
@@ -460,9 +462,9 @@ public sealed partial class DesktopSurface : Window
                 // WM_CAPTURECHANGED, and that handler must not treat our own release as a theft
                 // (it would hide the band the menu is supposed to keep visible).
                 _marqueeActive = false;
-                ManualApis.ReleaseCapture();
+                User32.ReleaseCapture();
 
-                if (Win32Apis.GetCursorPos(out ManualApis.POINT upPt))
+                if (Win32Apis.GetCursorPos(out POINT upPt))
                 {
                     _marqueeEnd = upPt;
                 }
@@ -490,7 +492,7 @@ public sealed partial class DesktopSurface : Window
                     // TrackPopupMenu-class popups normally require their thread to be foreground.
 
                     var defView = GetDefView();
-                    bool havePt = Win32Apis.GetCursorPos(out ManualApis.POINT pt);
+                    bool havePt = Win32Apis.GetCursorPos(out POINT pt);
 
                     if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
                     {
@@ -499,7 +501,7 @@ public sealed partial class DesktopSurface : Window
 
                     if (defView != IntPtr.Zero && havePt)
                     {
-                        ManualApis.PostMessage(defView, WM_CONTEXTMENU, listView, (IntPtr)(pt.X | (pt.Y << 16)));
+                        User32.PostMessage(defView, WM_CONTEXTMENU, listView, (IntPtr)(pt.X | (pt.Y << 16)));
                     }
 
                     handled = true;
@@ -514,9 +516,9 @@ public sealed partial class DesktopSurface : Window
             if (_marqueeActive && _marqueeIsLeftButton && m == WM_LBUTTONUP)
             {
                 _marqueeActive = false;
-                ManualApis.ReleaseCapture();
+                User32.ReleaseCapture();
 
-                if (Win32Apis.GetCursorPos(out ManualApis.POINT lupPt))
+                if (Win32Apis.GetCursorPos(out POINT lupPt))
                 {
                     _marqueeEnd = lupPt;
                 }
@@ -537,8 +539,8 @@ public sealed partial class DesktopSurface : Window
                     return IntPtr.Zero;
                 }
 
-                ManualApis.PostMessage(listView, WM_LBUTTONDOWN, _pendingDownWParam, _pendingDownLParam);
-                ManualApis.PostMessage(listView, WM_LBUTTONUP, wParam, lParam);
+                User32.PostMessage(listView, WM_LBUTTONDOWN, _pendingDownWParam, _pendingDownLParam);
+                User32.PostMessage(listView, WM_LBUTTONUP, wParam, lParam);
                 handled = true;
                 return IntPtr.Zero;
             }
@@ -549,7 +551,7 @@ public sealed partial class DesktopSurface : Window
             // native open behaviour intact.
             if (m == WM_LBUTTONDBLCLK)
             {
-                if (Win32Apis.GetCursorPos(out ManualApis.POINT pt)
+                if (Win32Apis.GetCursorPos(out POINT pt)
                     && Win32Apis.IsDesktopEmptyPoint(listView, pt))
                 {
 
@@ -574,7 +576,7 @@ public sealed partial class DesktopSurface : Window
                 App.Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>().NotifyPossibleChange();
             }
 
-            ManualApis.PostMessage(listView, m, wParam, lParam);
+            User32.PostMessage(listView, m, wParam, lParam);
             handled = true;
             return IntPtr.Zero;
         }
@@ -623,7 +625,7 @@ public sealed partial class DesktopSurface : Window
     private void GetMarqueeRectDip(out double scale, out double x, out double y, out double w, out double h)
     {
         var hwnd = new WindowInteropHelper(this).Handle;
-        scale = hwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow((Windows.Win32.Foundation.HWND)hwnd) / 96.0 : 1.0;
+        scale = hwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow(hwnd) / 96.0 : 1.0;
         x = Math.Min(_marqueeStart.X, _marqueeEnd.X) / scale;
         y = Math.Min(_marqueeStart.Y, _marqueeEnd.Y) / scale;
         w = Math.Abs(_marqueeEnd.X - _marqueeStart.X) / scale;
@@ -762,8 +764,8 @@ public sealed partial class DesktopSurface : Window
     private Point GetScreenPoint()
     {
         var hwnd = new WindowInteropHelper(this).Handle;
-        double scale = hwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow((Windows.Win32.Foundation.HWND)hwnd) / 96.0 : 1.0;
-        if (Win32Apis.GetCursorPos(out ManualApis.POINT pt))
+        double scale = hwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow(hwnd) / 96.0 : 1.0;
+        if (Win32Apis.GetCursorPos(out POINT pt))
         {
             return new Point(pt.X / scale, pt.Y / scale);
         }

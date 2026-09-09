@@ -3,11 +3,8 @@ using System.Runtime.Versioning;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Win32.NativeMethods;
-using HWND = Windows.Win32.Foundation.HWND;
-using RECT = Windows.Win32.Foundation.RECT;
-using HMONITOR = Windows.Win32.Graphics.Gdi.HMONITOR;
-using MONITORINFO = Windows.Win32.Graphics.Gdi.MONITORINFO;
-using MONITOR_FROM_FLAGS = Windows.Win32.Graphics.Gdi.MONITOR_FROM_FLAGS;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Win32.Services;
 
@@ -27,14 +24,14 @@ public sealed class DesktopWindowService : IDesktopWindowService
 
     public RectD GetDesktopBounds()
     {
-        HMONITOR hmon = Win32Apis.MonitorFromWindow((HWND)(IntPtr)0, MONITOR_FROM_FLAGS.MONITOR_DEFAULTTOPRIMARY);
+        IntPtr hmon = Win32Apis.MonitorFromWindow(IntPtr.Zero, MONITOR_DEFAULTTOPRIMARY);
         MONITORINFO info = new();
-        info.cbSize = (uint)Marshal.SizeOf<MONITORINFO>();
+        info.Size = (uint)Marshal.SizeOf<MONITORINFO>();
 
         if (Win32Apis.GetMonitorInfo(hmon, ref info))
         {
-            RECT r = info.rcMonitor;
-            return RectD.FromXYWH(r.left, r.top, r.right - r.left, r.bottom - r.top);
+            RECT r = info.Monitor;
+            return RectD.FromXYWH(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
         }
 
         return RectD.FromXYWH(0, 0, 1920, 1080);

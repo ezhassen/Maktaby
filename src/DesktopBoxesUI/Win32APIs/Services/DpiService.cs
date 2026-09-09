@@ -2,7 +2,6 @@ using System.Runtime.Versioning;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Win32.NativeMethods;
-using HWND = Windows.Win32.Foundation.HWND;
 
 namespace DesktopBoxesUI.Win32.Services;
 
@@ -17,7 +16,7 @@ public sealed class DpiService : IDpiService
         => Win32Apis.GetDpiForSystem();
 
     public double GetDpiForWindow(nint hwnd)
-        => Win32Apis.GetDpiForWindow((HWND)hwnd);
+        => Win32Apis.GetDpiForWindow(hwnd);
 
     public event EventHandler<DpiChangedEventArgs>? DpiChanged;
 

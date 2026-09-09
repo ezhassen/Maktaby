@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using WindowsNative;
 
 namespace DesktopLiveWallPaperEngine.Interop;
 
@@ -62,31 +63,6 @@ public sealed class PowerNotifications : IDisposable
     public const byte DisplayOn = 1;
     public const byte DisplayDimmed = 2;
 
-    [DllImport("user32.dll", SetLastError = true)]
-    private static extern IntPtr RegisterPowerSettingNotification(IntPtr recipient, ref Guid powerSettingGuid, int flags);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnregisterPowerSettingNotification(IntPtr handle);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MEMORY_BASIC_INFORMATION
-    {
-        public IntPtr BaseAddress;
-        public IntPtr AllocationBase;
-        public uint AllocationProtect;
-        public IntPtr RegionSize;
-        public uint State;
-        public uint Protect;
-        public uint Type;
-    }
-
-    [DllImport("kernel32.dll")]
-    private static extern nuint VirtualQuery(IntPtr address, out MEMORY_BASIC_INFORMATION buffer, nuint length);
-
-    private const uint MEM_COMMIT = 0x1000;
-    private const uint PAGE_GUARD = 0x100;
-
     /// <summary>The protections that actually grant read access. An allowlist rather than a list
     /// of things to reject: PAGE_EXECUTE grants execute and *not* read, so a denylist naming only
     /// PAGE_NOACCESS lets an execute-only region through and the marshal faults anyway.</summary>
@@ -106,7 +82,7 @@ public sealed class PowerNotifications : IDisposable
         foreach (var guid in RegisteredSettings)
         {
             var copy = guid;
-            var handle = RegisterPowerSettingNotification(hwnd, ref copy, DEVICE_NOTIFY_WINDOW_HANDLE);
+            var handle = User32.RegisterPowerSettingNotification(hwnd, ref copy, DEVICE_NOTIFY_WINDOW_HANDLE);
             if (handle != IntPtr.Zero) _handles.Add(handle);
             else Serilog.Log.Warning($"RegisterPowerSettingNotification failed for {guid} (win32 {Marshal.GetLastWin32Error()})");
         }
@@ -127,9 +103,9 @@ public sealed class PowerNotifications : IDisposable
         if (address == IntPtr.Zero || bytes <= 0) return false;
 
         var size = (nuint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>();
-        if (VirtualQuery(address, out var info, size) == 0) return false;
-        if (info.State != MEM_COMMIT) return false;
-        if ((info.Protect & PAGE_GUARD) != 0) return false;
+        if (Kernel32.VirtualQuery(address, out var info, size) == 0) return false;
+        if (info.State != Win32Constants.MEM_COMMIT) return false;
+        if ((info.Protect & Win32Constants.PAGE_GUARD) != 0) return false;
         // The low byte carries the base protection; PAGE_GUARD, PAGE_NOCACHE and
         // PAGE_WRITECOMBINE are modifiers layered on top of it.
         if ((info.Protect & 0xFF & ReadableProtections) == 0) return false;
@@ -164,7 +140,7 @@ public sealed class PowerNotifications : IDisposable
         if (_disposed) return;
         _disposed = true;
         // Leaks a kernel object per handle if skipped, and these outlive the window otherwise.
-        foreach (var handle in _handles) UnregisterPowerSettingNotification(handle);
+        foreach (var handle in _handles) User32.UnregisterPowerSettingNotification(handle);
         _handles.Clear();
     }
 }

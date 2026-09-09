@@ -8,7 +8,8 @@ using System.Windows.Shapes;
 using System.Windows.Threading;
 using DesktopBoxesUI.Shell.Interop;
 using DesktopBoxesUI.Win32.NativeMethods;
-using Windows.Win32.Foundation;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views;
 
@@ -126,9 +127,9 @@ public sealed partial class DesktopTreeDebugOverlay : Window
         // The window actually on top under the cursor: the real hit target for a desktop click.
         IntPtr top = IntPtr.Zero;
         string ancestryText = "ANCESTRY: (no cursor point)";
-        if (Win32Apis.GetCursorPos(out ManualApis.POINT pt))
+        if (Win32Apis.GetCursorPos(out POINT pt))
         {
-            top = ManualApis.WindowFromPoint(pt);
+            top = User32.WindowFromPoint(pt);
             DrawWindow(top, Brushes.Red, "TOPMOST @ CURSOR");
             ancestryText = BuildAncestry(top);
         }
@@ -164,14 +165,14 @@ public sealed partial class DesktopTreeDebugOverlay : Window
 
         var sb = new StringBuilder();
         sb.AppendLine($"SURFACE 0x{(long)surface:X}");
-        sb.AppendLine($"  parent : 0x{(long)ManualApis.GetParent(surface):X} ({GetClassName(ManualApis.GetParent(surface))})");
-        int style = ManualApis.GetWindowLong(surface, ManualApis.GWL_STYLE);
-        int exStyle = ManualApis.GetWindowLong(surface, ManualApis.GWL_EXSTYLE);
-        sb.AppendLine($"  style  : 0x{style:X}  {((style & ManualApis.WS_CHILD) != 0 ? "WS_CHILD " : "")}{((style & ManualApis.WS_POPUP) != 0 ? "WS_POPUP " : "")}{((style & ManualApis.WS_VISIBLE) != 0 ? "WS_VISIBLE " : "")}{((style & ManualApis.WS_DISABLED) != 0 ? "WS_DISABLED " : "")}");
-        sb.AppendLine($"  exstyle: 0x{exStyle:X}  {((exStyle & ManualApis.WS_EX_LAYERED) != 0 ? "WS_EX_LAYERED " : "")}{((exStyle & ManualApis.WS_EX_TRANSPARENT) != 0 ? "WS_EX_TRANSPARENT " : "")}");
-        if (Win32Apis.GetWindowRect((HWND)surface, out RECT r))
+        sb.AppendLine($"  parent : 0x{(long)User32.GetParent(surface):X} ({GetClassName(User32.GetParent(surface))})");
+        int style = User32.GetWindowLong(surface, GWL_STYLE);
+        int exStyle = User32.GetWindowLong(surface, GWL_EXSTYLE);
+        sb.AppendLine($"  style  : 0x{style:X}  {((style & WS_CHILD) != 0 ? "WS_CHILD " : "")}{((style & WS_POPUP) != 0 ? "WS_POPUP " : "")}{((style & WS_VISIBLE) != 0 ? "WS_VISIBLE " : "")}{((style & WS_DISABLED) != 0 ? "WS_DISABLED " : "")}");
+        sb.AppendLine($"  exstyle: 0x{exStyle:X}  {((exStyle & WS_EX_LAYERED) != 0 ? "WS_EX_LAYERED " : "")}{((exStyle & WS_EX_TRANSPARENT) != 0 ? "WS_EX_TRANSPARENT " : "")}");
+        if (Win32Apis.GetWindowRect(surface, out RECT r))
         {
-            sb.AppendLine($"  rect   : L{r.left} T{r.top} R{r.right} B{r.bottom}  ({r.right - r.left}x{r.bottom - r.top})");
+            sb.AppendLine($"  rect   : L{r.Left} T{r.Top} R{r.Right} B{r.Bottom}  ({r.Right - r.Left}x{r.Bottom - r.Top})");
         }
         sb.AppendLine($"  is TOPMOST @ CURSOR: {((surface == topAtCursor) ? "YES" : "no")}");
 
@@ -180,7 +181,7 @@ public sealed partial class DesktopTreeDebugOverlay : Window
 
     private void DrawTree(string className, Brush brush)
     {
-        IntPtr root = ManualApis.FindWindowEx(IntPtr.Zero, IntPtr.Zero, className, null);
+        IntPtr root = User32.FindWindowEx(IntPtr.Zero, IntPtr.Zero, className, null);
         if (root == IntPtr.Zero)
         {
             return;
@@ -192,7 +193,7 @@ public sealed partial class DesktopTreeDebugOverlay : Window
     private void DrawNode(IntPtr hwnd, Brush brush)
     {
         DrawWindow(hwnd, brush, GetClassName(hwnd));
-            ManualApis.EnumChildWindows(hwnd, (child, _) =>
+            User32.EnumChildWindows(hwnd, (child, _) =>
         {
             DrawNode(child, brush);
             return true;
@@ -206,17 +207,17 @@ public sealed partial class DesktopTreeDebugOverlay : Window
             return;
         }
 
-        if (!Win32Apis.GetWindowRect((HWND)hwnd, out RECT r))
+        if (!Win32Apis.GetWindowRect(hwnd, out RECT r))
         {
             return;
         }
 
         // GetWindowRect is in DEVICE pixels. PointFromScreen also expects device pixels and converts
-        // them to this window's local DIP space (including the overlay's own origin) — so pass the
+        // them to this window's local DIP space (including the overlay's own origin) ? so pass the
         // raw rect corner. Only the width/height need the manual DPI division.
-        var local = PointFromScreen(new Point(r.left, r.top));
-        double w = (r.right - r.left) / _dpi.DpiScaleX;
-        double h = (r.bottom - r.top) / _dpi.DpiScaleY;
+        var local = PointFromScreen(new Point(r.Left, r.Top));
+        double w = (r.Right - r.Left) / _dpi.DpiScaleX;
+        double h = (r.Bottom - r.Top) / _dpi.DpiScaleY;
         if (w <= 0 || h <= 0)
         {
             return;
@@ -259,7 +260,7 @@ public sealed partial class DesktopTreeDebugOverlay : Window
             }
 
             sb.Append("  <  ");
-            cur = ManualApis.GetParent(cur);
+            cur = User32.GetParent(cur);
         }
 
         return sb.ToString();
@@ -268,7 +269,7 @@ public sealed partial class DesktopTreeDebugOverlay : Window
     private string BuildZOrder(IntPtr surface)
     {
         var order = new System.Collections.Generic.List<string>();
-        ManualApis.EnumWindows((hwnd, _) =>
+        User32.EnumWindows((hwnd, _) =>
         {
             string cls = GetClassName(hwnd);
             string marker = hwnd == surface ? "  <-- OUR SURFACE" : string.Empty;
@@ -285,6 +286,6 @@ public sealed partial class DesktopTreeDebugOverlay : Window
     private static string GetClassName(IntPtr hwnd)
     {
         var sb = new StringBuilder(256);
-        return ManualApis.GetClassName(hwnd, sb, sb.Capacity) != 0 ? sb.ToString() : "?";
+        return User32.GetClassName(hwnd, sb, sb.Capacity) != 0 ? sb.ToString() : "?";
     }
 }

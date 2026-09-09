@@ -1,7 +1,7 @@
-using DesktopLiveWallPaperEngine.Interop;
+using WindowsNative;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
-using static DesktopLiveWallPaperEngine.Interop.Win32Constants;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine.Desktop;
 
@@ -26,7 +26,7 @@ public sealed class DesktopLayerHost : IDisposable
 
     private readonly List<IntPtr> _attached = [];
     private readonly object _attachSync = new();
-    private User32.WinEventProc? _winEventProc; // rooted while hook lives
+    private WinEventProc? _winEventProc; // rooted while hook lives
     private IntPtr _winEventHook;
 
     /// <summary>Every installed hook procedure, rooted for the process lifetime.
@@ -35,7 +35,7 @@ public sealed class DesktopLayerHost : IDisposable
     /// for an unbounded time. If the delegate were collected in between, the late
     /// landing fail-fasts the process ("callback on a collected delegate"). One entry
     /// per Enable is ~100 bytes; never removed, by design.</summary>
-    private static readonly ConcurrentDictionary<User32.WinEventProc, byte> HookRoots = new();
+    private static readonly ConcurrentDictionary<WinEventProc, byte> HookRoots = new();
 
     public DesktopLayerInfo Layer { get; private set; } = new(DesktopTopology.ClassicWorkerW, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
 
@@ -64,7 +64,7 @@ public sealed class DesktopLayerHost : IDisposable
         // top-level WorkerW sibling after it (covers both the Win10 WorkerW-hosted DefView
         // and the Win11 Progman-hosted DefView variants).
         IntPtr host = IntPtr.Zero, worker = IntPtr.Zero, shellDefView = IntPtr.Zero;
-        User32.EnumWindowsProc enumProc = (hwnd, _) =>
+        EnumWindowsProc enumProc = (hwnd, _) =>
         {
             var dv = User32.FindWindowExW(hwnd, IntPtr.Zero, "SHELLDLL_DefView", null);
             if (dv != IntPtr.Zero)

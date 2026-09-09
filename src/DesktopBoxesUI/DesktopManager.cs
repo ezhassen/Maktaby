@@ -6,6 +6,8 @@ using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.WPFServices;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using System.Collections.Specialized;
@@ -796,7 +798,7 @@ public sealed class DesktopManager
         //IntPtr? foregroundWindowHwnd = null;
         //if (!showActivated && focusWorkaround)
         //{
-        //    foregroundWindowHwnd = ManualApis.GetForegroundWindow();
+        //    foregroundWindowHwnd = User32.GetForegroundWindow();
         //}
         window.Show();
 
@@ -814,22 +816,22 @@ public sealed class DesktopManager
     /*public void NudgeWindowActivation(Window window, IntPtr prevForegroundWindow)
     {
         var widgetHwnd = new WindowInteropHelper(window).Handle;
-        //var previousHwnd = ManualApis.GetForegroundWindow();
+        //var previousHwnd = User32.GetForegroundWindow();
 
         //Debug.WriteLine($"Previous: 0x{previousHwnd.ToInt64():X}");
 
-        ManualApis.SetForegroundWindow(widgetHwnd);
+        User32.SetForegroundWindow(widgetHwnd);
         //window.Activate();
 
         //Debug.WriteLine(
-        //    $"Widget active: {ManualApis.GetForegroundWindow() == widgetHwnd}");
+        //    $"Widget active: {User32.GetForegroundWindow() == widgetHwnd}");
 
         if (prevForegroundWindow != IntPtr.Zero &&
             prevForegroundWindow != widgetHwnd)
         {
             //Win32.NativeMethods.Win32Apis.GlueToDesktop(widgetHwnd, Win32Apis.DesktopSurfaceHandle);
-            ManualApis.SetActiveWindow(prevForegroundWindow);
-            ManualApis.SetForegroundWindow(prevForegroundWindow);
+            User32.SetActiveWindow(prevForegroundWindow);
+            User32.SetForegroundWindow(prevForegroundWindow);
         }
     }*/
 
@@ -1481,7 +1483,7 @@ public sealed class DesktopManager
 
         try
         {
-            ManualApis.ReleaseCapture();
+            User32.ReleaseCapture();
         }
         catch
         {
@@ -1613,8 +1615,8 @@ public sealed class DesktopManager
             {
                 // Pure z-order change: no move/size (KeepBelowApps passes those through
                 // untouched), no activation, no visibility change.
-                ManualApis.SetWindowPos(hwnd, after, 0, 0, 0, 0,
-                    ManualApis.SWP_NOMOVE | ManualApis.SWP_NOSIZE | ManualApis.SWP_NOACTIVATE);
+                User32.SetWindowPos(hwnd, after, 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
                 after = hwnd;
             }
             catch
@@ -1661,8 +1663,8 @@ public sealed class DesktopManager
             _iconWatchProc = OnIconVisibilityEvent;
             _iconWatchListView = listView;
             _iconWatchHook = Win32Apis.SetWinEventHook(
-                ManualApis.EVENT_OBJECT_DESTROY, ManualApis.EVENT_OBJECT_HIDE,
-                IntPtr.Zero, _iconWatchProc, explorerPid, 0, ManualApis.WINEVENT_OUTOFCONTEXT);
+                EVENT_OBJECT_DESTROY, EVENT_OBJECT_HIDE,
+                IntPtr.Zero, _iconWatchProc, explorerPid, 0, WINEVENT_OUTOFCONTEXT);
             if (_iconWatchHook == IntPtr.Zero)
             {
                 _iconWatchProc = null;
@@ -1700,7 +1702,7 @@ public sealed class DesktopManager
     {
         try
         {
-            if (idObject != ManualApis.OBJID_WINDOW)
+            if (idObject != OBJID_WINDOW)
             {
                 return;
             }
@@ -1710,7 +1712,7 @@ public sealed class DesktopManager
                 return;
             }
 
-            if (eventType == ManualApis.EVENT_OBJECT_DESTROY)
+            if (eventType == EVENT_OBJECT_DESTROY)
             {
                 // List-view itself is going away (Explorer crash/restart): stop watching;
                 // RecoverAfterShellRestart re-arms against the new shell.
@@ -1718,7 +1720,7 @@ public sealed class DesktopManager
                 return;
             }
 
-            if (eventType is not (ManualApis.EVENT_OBJECT_SHOW or ManualApis.EVENT_OBJECT_HIDE))
+            if (eventType is not (EVENT_OBJECT_SHOW or EVENT_OBJECT_HIDE))
             {
                 return;
             }

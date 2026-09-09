@@ -1,12 +1,13 @@
 using DesktopLiveWallPaperEngine.Common;
 using DesktopLiveWallPaperEngine.Config;
 using DesktopLiveWallPaperEngine.Desktop;
+using WindowsNative;
 using DesktopLiveWallPaperEngine.Interop;
 using DesktopLiveWallPaperEngine.Playback;
 using DesktopLiveWallPaperEngine.Rendering;
 using System.Collections.Concurrent;
 using System.Text;
-using static DesktopLiveWallPaperEngine.Interop.Win32Constants;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine;
 

@@ -1,97 +1,16 @@
-using System;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace DesktopBoxesUI.Shell.Interop;
+namespace WindowsNative;
 
-/// <summary>
-/// Isolated Shell COM interop used to enumerate the real Desktop namespace (including virtual items
-/// such as "This PC" and "Recycle Bin") and to resolve item icons by PIDL. Per the architecture
-/// rules, Shell COM native interop lives in <c>Shell/Interop</c> only.
-/// </summary>
-internal static class ShellNative
-{
-    public static readonly Guid IID_IShellItem = new("43826D1E-E718-42EE-BC55-A1E261C37BFE");
-    public static readonly Guid CLSID_ShellLink = new("00021401-0000-0000-C000-000000000046");
-
-    [DllImport("shell32.dll")]
-    public static extern int SHGetDesktopFolder(out IShellFolder ppshf);
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    public static extern int SHCreateItemFromIDList(IntPtr pidl, [MarshalAs(UnmanagedType.LPStruct)] Guid riid, out IShellItem ppv);
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    public static extern int SHCreateItemFromParsingName(
-        string pszPath,
-        IntPtr pbc,
-        [MarshalAs(UnmanagedType.LPStruct)] Guid riid,
-        out IShellItem ppv);
-
-    [DllImport("shell32.dll")]
-    public static extern int SHGetIDListFromObject(IntPtr punk, out IntPtr ppidl);
-
-    [DllImport("shell32.dll")]
-    public static extern void ILFree(IntPtr pidl);
-
-    public static readonly Guid IID_IContextMenu = new("000214e4-0000-0000-c000-000000000046");
-
-    // --- Shell change notifications (desktop watcher) ---
-
-    [StructLayout(LayoutKind.Sequential)]
-    internal struct SHChangeNotifyEntry
-    {
-        public IntPtr pidl;
-        public int fRecursive;
-    }
-
-    [Flags]
-    internal enum SHCNRF : int
-    {
-        InterruptLevel = 0x0001,
-        ShellLevel = 0x0002,
-        RecursiveInterrupt = 0x1000,
-        NewDelivery = 0x8000,
-    }
-
-    [Flags]
-    internal enum SHCNE : int
-    {
-        RENAMEITEM = 0x0001,
-        CREATE = 0x0002,
-        DELETE = 0x0004,
-        RENAMEFOLDER = 0x0008,
-        UPDATEITEM = 0x00002000,
-    }
-
-    [DllImport("shell32.dll")]
-    public static extern uint SHChangeNotifyRegister(
-        IntPtr hwnd,
-        SHCNRF fSources,
-        SHCNE fEvents,
-        uint wMsg,
-        int cEntries,
-        ref SHChangeNotifyEntry pshcne);
-
-    [DllImport("shell32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool SHChangeNotifyDeregister(uint ulID);
-
-    [DllImport("shell32.dll")]
-    public static extern IntPtr SHChangeNotification_Lock(
-        IntPtr hChange,
-        uint dwProcessId,
-        out IntPtr pppidl,
-        out int lEvent);
-
-    [DllImport("shell32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    public static extern bool SHChangeNotification_Unlock(IntPtr hLock);
-}
+/// <summary>Shared Shell COM interop (Desktop namespace, PIDLs, shell items/links, context menus).
+/// Hand-rolled ComImport definitions only — the single canonical home for every Shell COM type
+/// used by DesktopBoxesUI, DesktopLiveWallPaperEngine and WPFShared.</summary>
 
 [ComImport]
 [Guid("000214e4-0000-0000-c000-000000000046")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IContextMenu
+public interface IContextMenu
 {
     [PreserveSig] int QueryContextMenu(IntPtr hMenu, uint indexMenu, uint idCmdFirst, uint idCmdLast, uint uFlags);
     [PreserveSig] int InvokeCommand(ref CMINVOKECOMMANDINFO pici);
@@ -101,7 +20,7 @@ internal interface IContextMenu
 [ComImport]
 [Guid("000214f4-0000-0000-c000-000000000046")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IContextMenu2
+public interface IContextMenu2
 {
     [PreserveSig] int QueryContextMenu(IntPtr hMenu, uint indexMenu, uint idCmdFirst, uint idCmdLast, uint uFlags);
     [PreserveSig] int InvokeCommand(ref CMINVOKECOMMANDINFO pici);
@@ -112,7 +31,7 @@ internal interface IContextMenu2
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-internal struct CMINVOKECOMMANDINFO
+public struct CMINVOKECOMMANDINFO
 {
     public int cbSize;
     public int fMask;
@@ -128,7 +47,7 @@ internal struct CMINVOKECOMMANDINFO
 [ComImport]
 [Guid("000214E6-0000-0000-C000-000000000046")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IShellFolder
+public interface IShellFolder
 {
     void ParseDisplayName(IntPtr hwnd, IntPtr pbc, [MarshalAs(UnmanagedType.LPWStr)] string pszDisplayName, out uint pchEaten, out IntPtr ppidl, ref uint pdwAttributes);
     [PreserveSig] int EnumObjects(IntPtr hwndOwner, SHCONTF grfFlags, out IEnumIDList ppenumIDList);
@@ -145,7 +64,7 @@ internal interface IShellFolder
 [ComImport]
 [Guid("000214F2-0000-0000-C000-000000000046")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IEnumIDList
+public interface IEnumIDList
 {
     [PreserveSig] int Next(uint celt, [Out, MarshalAs(UnmanagedType.LPArray)] IntPtr[] rgelt, out uint pceltFetched);
     [PreserveSig] int Skip(uint celt);
@@ -156,7 +75,7 @@ internal interface IEnumIDList
 [ComImport]
 [Guid("43826D1E-E718-42EE-BC55-A1E261C37BFE")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IShellItem
+public interface IShellItem
 {
     [PreserveSig] int BindToHandler(IntPtr pbc, ref Guid bhid, ref Guid riid, out IntPtr ppv);
     [PreserveSig] int GetParent(out IShellItem ppsi);
@@ -166,14 +85,14 @@ internal interface IShellItem
 }
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-internal struct STRRET
+public struct STRRET
 {
     public uint uType;
     public IntPtr pOleStr;
 }
 
 [Flags]
-internal enum SHCONTF : uint
+public enum SHCONTF : uint
 {
     FOLDERS = 0x20,
     NONFOLDERS = 0x40,
@@ -181,7 +100,7 @@ internal enum SHCONTF : uint
     INIT_ON_FIRST_NEXT = 0x100,
 }
 
-internal enum SHGDNF : uint
+public enum SHGDNF : uint
 {
     NORMAL = 0x0,
     INFOLDER = 0x1,
@@ -191,7 +110,7 @@ internal enum SHGDNF : uint
 }
 
 [Flags]
-internal enum SFGAO : uint
+public enum SFGAO : uint
 {
     FOLDER = 0x20000000,
     FILESYSTEM = 0x40000000,
@@ -201,7 +120,7 @@ internal enum SFGAO : uint
 [ComImport]
 [Guid("000214F9-0000-0000-C000-000000000046")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IShellLink
+public interface IShellLink
 {
     [PreserveSig] int GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pszFile, int cch, IntPtr pfd, uint fFlags);
     [PreserveSig] int GetIDList(out IntPtr ppidl);
@@ -211,7 +130,7 @@ internal interface IShellLink
 [ComImport]
 [Guid("0000010B-0000-0000-C000-000000000046")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IPersistFile
+public interface IPersistFile
 {
     [PreserveSig] int GetClassID(out Guid pClassID);
     [PreserveSig] int IsDirty();
@@ -221,17 +140,30 @@ internal interface IPersistFile
     [PreserveSig] int GetCurFile(out IntPtr ppszFileName);
 }
 
-[StructLayout(LayoutKind.Sequential)]
-internal struct SIZE
-{
-    public int cx;
-    public int cy;
-}
-
 [ComImport]
 [Guid("BCC6EEA8-5C45-44F0-8DF0-8B3B728B1728")]
 [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-internal interface IShellItemImageFactory
+public interface IShellItemImageFactory
 {
     [PreserveSig] int GetImage(SIZE size, uint flags, out IntPtr phBitmap);
 }
+
+[ComImport, Guid("C2CF3110-460B-4d97-BF42-7ED4146F695C")]
+public class DesktopWallpaperClass { }
+
+[ComImport, Guid("B92B56A9-8B55-4E14-9A89-0199BBB6F93B"),
+ InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IDesktopWallpaper
+{
+    void SetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string? monitorId, [MarshalAs(UnmanagedType.LPWStr)] string wallpaper);
+    [return: MarshalAs(UnmanagedType.LPWStr)] string GetWallpaper([MarshalAs(UnmanagedType.LPWStr)] string? monitorId);
+    [return: MarshalAs(UnmanagedType.LPWStr)] string GetMonitorDevicePathAt(uint monitorIndex);
+    uint GetMonitorDevicePathCount();
+    RECT GetMonitorRECT([MarshalAs(UnmanagedType.LPWStr)] string monitorId);
+    void SetBackgroundColor(uint color);
+    uint GetBackgroundColor();
+    void SetPosition(DesktopWallpaperPosition position);
+    DesktopWallpaperPosition GetPosition();
+}
+
+public enum DesktopWallpaperPosition { Center = 0, Tile = 1, Stretch = 2, Fit = 3, Fill = 4, Span = 5 }

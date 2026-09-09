@@ -1,7 +1,7 @@
 using DesktopLiveWallPaperEngine.Desktop;
-using DesktopLiveWallPaperEngine.Interop;
+using WindowsNative;
 using System.Text;
-using static DesktopLiveWallPaperEngine.Interop.Win32Constants;
+using static WindowsNative.Win32Constants;
 using Timer = System.Threading.Timer;
 
 namespace DesktopLiveWallPaperEngine.Playback;
@@ -134,11 +134,8 @@ public sealed class PlaybackMonitor : IDisposable
     {
         // MonitorFromWindow needs a window; identify the monitor by a representative point instead.
         var point = new POINT { X = bounds.Left + 1, Y = bounds.Top + 1 };
-        return MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
+        return User32.MonitorFromPoint(point, MONITOR_DEFAULTTONEAREST);
     }
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
 
     private static bool IsBatterySaverOn() =>
         Kernel32.GetSystemPowerStatus(out var status) && status.SystemStatusFlag == 1;

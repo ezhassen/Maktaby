@@ -5,7 +5,8 @@ using System.Text;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Core.Services;
-using DesktopBoxesUI.Shell.Interop;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 using DesktopBoxesUI.Win32.NativeMethods;
 
 namespace DesktopBoxesUI.Shell.Services;
@@ -20,10 +21,10 @@ namespace DesktopBoxesUI.Shell.Services;
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
 {
-    private const uint WmNotify = ManualApis.WM_USER + 1;
+    private const uint WmNotify = WM_USER + 1;
 
     private readonly object _gate = new();
-    private ManualApis.WndProc? _wndProc;
+    private WndProc? _wndProc;
     private string? _className;
     private ushort _atom;
     private IntPtr _hwnd;
@@ -45,30 +46,30 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
 
     private void EnsureWindow()
     {
-        _wndProc = WndProc;
+        _wndProc = new WndProc(WndProc);
         _className = "DesktopBoxesShellWatch_" + Guid.NewGuid().ToString("N");
 
-        var wc = new ManualApis.WNDCLASSEX
+        var wc = new WNDCLASSEX
         {
-            cbSize = Marshal.SizeOf<ManualApis.WNDCLASSEX>(),
-            lpfnWndProc = _wndProc,
-            hInstance = ManualApis.GetModuleHandle(null),
-            lpszClassName = _className,
+            Size = (uint)Marshal.SizeOf<WNDCLASSEX>(),
+            WndProc = _wndProc,
+            Instance = Kernel32.GetModuleHandle(null),
+            ClassName = _className,
         };
 
-        _atom = ManualApis.RegisterClassEx(ref wc);
+        _atom = User32.RegisterClassEx(ref wc);
         if (_atom == 0)
         {
             return;
         }
 
-        _hwnd = ManualApis.CreateWindowEx(
+        _hwnd = User32.CreateWindowEx(
             0,
             _className,
             "DesktopBoxesShellWatch",
             0,
             0, 0, 0, 0,
-            ManualApis.HWND_MESSAGE,
+            HWND_MESSAGE,
             IntPtr.Zero,
             IntPtr.Zero,
             IntPtr.Zero);
@@ -78,33 +79,33 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
             return;
         }
 
-        if (ManualApis.SHGetSpecialFolderLocation(IntPtr.Zero, 0 /* CSIDL_DESKTOP */, out IntPtr deskPidl) != 0)
+        if (Shell32.SHGetSpecialFolderLocation(IntPtr.Zero, 0 /* CSIDL_DESKTOP */, out IntPtr deskPidl) != 0)
         {
             return;
         }
 
-        var entry = new ShellNative.SHChangeNotifyEntry
+        var entry = new SHChangeNotifyEntry
         {
             pidl = deskPidl,
             fRecursive = 0,
         };
 
-        _regId = ShellNative.SHChangeNotifyRegister(
+        _regId = Shell32.SHChangeNotifyRegister(
             _hwnd,
-            ShellNative.SHCNRF.InterruptLevel | ShellNative.SHCNRF.ShellLevel | ShellNative.SHCNRF.NewDelivery,
-            ShellNative.SHCNE.CREATE | ShellNative.SHCNE.DELETE | ShellNative.SHCNE.RENAMEITEM | ShellNative.SHCNE.RENAMEFOLDER,
+            SHCNRF.InterruptLevel | SHCNRF.ShellLevel | SHCNRF.NewDelivery,
+            SHCNE.CREATE | SHCNE.DELETE | SHCNE.RENAMEITEM | SHCNE.RENAMEFOLDER,
             WmNotify,
             1,
             ref entry);
 
-        ManualApis.ILFree(deskPidl);
+        Shell32.ILFree(deskPidl);
     }
 
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
         if (msg == WmNotify)
         {
-            IntPtr lockHandle = ShellNative.SHChangeNotification_Lock(wParam, (uint)lParam, out IntPtr pppidl, out int lEvent);
+            IntPtr lockHandle = Shell32.SHChangeNotification_Lock(wParam, (uint)lParam, out IntPtr pppidl, out int lEvent);
             if (lockHandle != IntPtr.Zero)
             {
                 try
@@ -113,14 +114,14 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
                 }
                 finally
                 {
-                    ShellNative.SHChangeNotification_Unlock(lockHandle);
+                    Shell32.SHChangeNotification_Unlock(lockHandle);
                 }
             }
 
             return IntPtr.Zero;
         }
 
-        return ManualApis.DefWindowProc(hWnd, msg, wParam, lParam);
+        return User32.DefWindowProc(hWnd, msg, wParam, lParam);
     }
 
     private void HandleEvent(int lEvent, IntPtr pppidl)
@@ -129,17 +130,17 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
 
         switch (lEvent)
         {
-            case (int)ShellNative.SHCNE.CREATE:
-            case (int)ShellNative.SHCNE.UPDATEITEM:
+            case (int)SHCNE.CREATE:
+            case (int)SHCNE.UPDATEITEM:
                 RaiseCreated(Resolve(pidl1));
                 break;
 
-            case (int)ShellNative.SHCNE.DELETE:
+            case (int)SHCNE.DELETE:
                 RaiseDeleted(Resolve(pidl1));
                 break;
 
-            case (int)ShellNative.SHCNE.RENAMEITEM:
-            case (int)ShellNative.SHCNE.RENAMEFOLDER:
+            case (int)SHCNE.RENAMEITEM:
+            case (int)SHCNE.RENAMEFOLDER:
                 var pidl2 = Marshal.ReadIntPtr(pppidl, IntPtr.Size);
                 RaiseDeleted(Resolve(pidl1));
                 RaiseCreated(Resolve(pidl2));
@@ -172,7 +173,7 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
 
         // Preferred: resolve the (still-present) item through the Shell to a BoxItem identical in
         // shape to DesktopService's items (Path = parsing name, DisplayName = friendly name).
-        if (ShellNative.SHCreateItemFromIDList(pidl, ShellNative.IID_IShellItem, out IShellItem item) == 0 && item != null)
+        if (Shell32.SHCreateItemFromIDList(pidl, Shell32.IID_IShellItem, out IShellItem item) == 0 && item != null)
         {
             try
             {
@@ -208,7 +209,7 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
         // Fallback for a deleted item that can no longer be resolved: recover a real filesystem path
         // if possible so an existing box entry can still be matched and removed.
         var sb = new StringBuilder(260);
-        if (ManualApis.SHGetPathFromIDListW(pidl, sb) != 0 && sb.Length > 0)
+        if (Shell32.SHGetPathFromIDListW(pidl, sb) != 0 && sb.Length > 0)
         {
             return BoxItemFactory.FromPath(sb.ToString());
         }
@@ -220,13 +221,13 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     {
         if (_regId != 0)
         {
-            ShellNative.SHChangeNotifyDeregister(_regId);
+            Shell32.SHChangeNotifyDeregister(_regId);
             _regId = 0;
         }
 
         if (_hwnd != IntPtr.Zero)
         {
-            ManualApis.DestroyWindow(_hwnd);
+            User32.DestroyWindow(_hwnd);
             _hwnd = IntPtr.Zero;
         }
 

@@ -8,15 +8,17 @@ Follow it to keep the architecture clean and the build green.
 - **Never** use scripts to edit project files, use only the Edit Tool
 - **Never** put WPF, Win32 P/Invoke, or Shell COM code in the `Core` project folders.
   Core may only define models, interfaces, and pure-.NET service implementations.
-- **Never** scatter `DllImport` / P/Invoke declarations outside `Win32APIs/NativeMethods`.
-  Add new native APIs to `Win32APIs/NativeMethods/NativeMethods.txt`; CsWin32 generates them
-  into `Win32APIs/NativeMethods/Win32Apis`. Call them only from `Win32APIs/Services`.
+- **Never** scatter `DllImport` / P/Invoke declarations outside the shared `WindowsNative`
+  project. Add new native APIs there (hand-rolled `[DllImport]`, never `LibraryImport` for structs
+  the source generator can't marshal, and never CsWin32 — the repo does not use it). Call them
+  from `Win32APIs/Services` (UI) or directly where the engine already does, converting to Core
+  geometry types (`RectD`, `PointD`, `SizeD`) at the boundary.
 - **Never** create a Window or native handle per `BoxItem`. A Box is one control/window
   holding many items.
 - Use **IDispatcher** **Helpers/WpfDispatcher** when needed. IDispatcher registered in App.Services
 - Use the term **Box** everywhere (code, comments, UI). Do **not** use "Fence".
 - Keep the NuGet surface small. Don't add packages without a reason. Currently allowed:
-  `Microsoft.Extensions.DependencyInjection`, `Microsoft.Windows.CsWin32`,
+  `Microsoft.Extensions.DependencyInjection`,
   `CommunityToolkit.Mvvm`, `Wpf.Ui` (v4.3.0) and `Wpf.Ui.Tray` (v4.3.0) — the user explicitly asked for
   them to provide the modern window chrome, view-model helpers and tray styling. Reference WPF-UI resource
   dictionaries via `ui:ThemesDictionary` / `ui:ControlsDictionary` (`App.xaml` already does); legacy pack URIs
@@ -29,8 +31,10 @@ Follow it to keep the architecture clean and the build green.
 - **Core/Interfaces** — define contracts, including platform abstractions. Use Core geometry
   types (`RectD`, `PointD`, `SizeD`) instead of WPF/Win32 coordinate types.
 - **Core/Services** — only platform-independent implementations (no IO to OS specifics).
-- **Shell/** — Windows Shell behavior. Put Shell COM native interop in `Shell/Interop`.
-- **Win32APIs/** — raw Win32. `NativeMethods` for declarations, `Services` for the callers.
+- **Shell/** — Windows Shell behavior. Shell COM native interop itself lives in `WindowsNative`
+  (`Shell32`/`ShellCom`); `Shell/` keeps only the calling services.
+- **Win32APIs/** — raw Win32 callers. `NativeMethods/Win32Apis.cs` is the UI's thin wrapper over
+  `WindowsNative`; `Services` holds the callers. All declarations live in `WindowsNative`.
 - **Views / Controls / Converters / Resources / WPFServices/ AttachedProperties / Animation / App.xaml** — WPF only (ViewModels use `CommunityToolkit.Mvvm` source generators: `[ObservableProperty]`, `[RelayCommand]`).
   - **Views/DebugViews/** Wpf debugging overlays
   - **Views/AppWindows/** wpf main windows like settings and about etc
@@ -51,35 +55,23 @@ Follow it to keep the architecture clean and the build green.
 
 ## Adding a new native API (example)
 
- 1. Add the API name to `Win32APIs/NativeMethods/NativeMethods.txt` (CsWin32 only auto-discovers this
-    file at the project root, so it is also registered as an `AdditionalFiles` item in the csproj).
- 2. Leave the rest to CsWin32: it generates the real P/Invoke into its own `Windows.Win32.PInvoke`
-    class. The thin, named wrapper `Win32APIs/NativeMethods/Win32Apis.cs` re-exposes exactly the APIs
-    we use, so every native call in the codebase goes through `Win32Apis` and never `PInvoke` directly.
+ 1. Declare it by hand in the shared `WindowsNative` project (`User32`/`Kernel32`/`Shell32`/… by
+    owning DLL; structs in `NativeTypes.cs`, constants in `Win32Constants.cs`, callbacks in
+    `NativeDelegates.cs`). Use `[DllImport]` (NOT `LibraryImport` — the source generator can't
+    marshal structs like `SHFILEINFOW`), plain `IntPtr` handles, and `WindowsNative` geometry
+    types (`RECT`, `POINT`, `SIZE`). `WindowsNative` stays dependency-free (no packages, no logging).
+ 2. The thin, named wrapper `Win32APIs/NativeMethods/Win32Apis.cs` re-exposes exactly the APIs
+    the UI uses, so every native call in the codebase goes through `Win32Apis` and never P/Invoke
+    directly. The engine calls `WindowsNative` directly.
  3. Use `Win32Apis` from a class in `Win32APIs/Services`, converting to/from Core geometry types
-    (`RectD`, `PointD`, `SizeD`). Do NOT take `Win32Apis` members' addresses or use `void*` handles
-    (e.g. prefer the implicit `HWND`→`IntPtr` conversion over `.Value`).
+    (`RectD`, `PointD`, `SizeD`). Do NOT take native addresses or use `void*` handles.
  4. Win32APIs service classes that call these APIs are marked
     `[SupportedOSPlatform("windows10.0.14393")]` so platform-API analyzers (CA1416) stay quiet;
     keep that attribute in sync when you add newer-API usage. The project suppresses CA1416 globally
     (it is a Windows-only app), but the attribute is still good documentation.
  5. Expose behavior through a Core interface; inject the implementation in `App.xaml.cs`.
-
-### When CsWin32 won't emit an API (WPF AnyCPU wpftmp trap)
-
- The WPF build compiles our code twice: once in the real project and once in a generated
- `DesktopBoxesUI_*` "temporary target assembly" (`wpftmp`) project that is ALWAYS `AnyCPU`.
- CsWin32 refuses to generate **architecture-specific** APIs under AnyCPU (e.g. `SHGetFileInfo`,
- `SetWinEventHook` → `PInvoke005`/silently skipped), so those symbols are missing when the `wpftmp`
- compiles `Win32Apis.cs`. Symptoms: build errors only about the new types, not the older APIs.
- Do NOT "fix" this by setting `<Platform>/<PlatformTarget>` to x64 — that makes CsWin32 emit nothing
- at all for this project. Instead:
-
-- Keep CsWin32 for every normal API (leave it in `NativeMethods.txt`).
-- For the architecture-specific few, declare them manually in
-     `Win32APIs/NativeMethods/ManualApis.cs` via `[DllImport]` (NOT `LibraryImport` — the source
-     generator can't marshal structs like `SHFILEINFOW`). Re-expose them through `Win32Apis` so all
-     native calls still flow through the one wrapper. This keeps raw P/Invoke inside `Win32APIs/NativeMethods`.
+ 6. Reference `WindowsNative` from the consuming `.csproj` (`DesktopBoxesUI`,
+    `DesktopLiveWallPaperEngine` and `WPFShared` already do).
 
 ## Verifying changes
 
@@ -153,8 +145,8 @@ that draws, at the cursor, the hit-test result, z-order, and the surface's style
      different `BoxContainerWindow` than the source.
   2. The drag crosshair / drag-image is offset on **multi-DPI** setups because `GetScreenDragPoint()`
      (around `BoxContainerWindow.xaml.cs:824`) uses `PointToScreen` instead of `GetCursorPos` combined with
-     per-monitor DPI. `GetDpiForMonitor` + `MonitorFromPoint` are already declared in `NativeMethods.txt`
-     but are not yet wrapped in `Win32Apis`.
+     per-monitor DPI. `Shcore.GetDpiForMonitorTyped` + `User32.MonitorFromPoint` already live in
+     `WindowsNative` but are not yet wrapped in `Win32Apis`.
 - **`WindowExceptionHandler` unhandled-exception flow:** The `DispatcherUnhandledException` / `AppDomain` /
   `TaskScheduler` handlers are wired in `App.xaml.cs:OnStartup` (`#if !DEBUG` gate). The dialog is a
   `Wpf.Ui.Controls.FluentWindow` (`Views/WindowExceptionHandler.xaml`) bound to

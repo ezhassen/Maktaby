@@ -1,4 +1,4 @@
-using DesktopLiveWallPaperEngine.Interop;
+using WindowsNative;
 
 namespace DesktopLiveWallPaperEngine.Playback;
 

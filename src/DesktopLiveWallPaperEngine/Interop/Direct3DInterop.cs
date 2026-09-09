@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Windows.Graphics.DirectX.Direct3D11;
+using WindowsNative;
 
 namespace DesktopLiveWallPaperEngine.Interop;
 
@@ -7,12 +8,9 @@ namespace DesktopLiveWallPaperEngine.Interop;
 /// IDirect3DSurface that MediaPlayer.CopyFrameToVideoSurface expects.</summary>
 public static class Direct3DInterop
 {
-    [DllImport("d3d11.dll", EntryPoint = "CreateDirect3D11SurfaceFromDXGISurface", ExactSpelling = true)]
-    private static extern int CreateDirect3D11SurfaceFromDXGISurface(IntPtr dxgiSurface, out IntPtr inspectable);
-
     public static IDirect3DSurface CreateSurfaceFromDxgi(IntPtr dxgiSurfacePtr)
     {
-        int hr = CreateDirect3D11SurfaceFromDXGISurface(dxgiSurfacePtr, out IntPtr inspectable);
+        int hr = D3D11Native.CreateDirect3D11SurfaceFromDXGISurface(dxgiSurfacePtr, out IntPtr inspectable);
         Marshal.ThrowExceptionForHR(hr);
         try
         {
