@@ -5,6 +5,7 @@ using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views;
 using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
+using DesktopBoxesUI.Win32APIs.Services;
 using DesktopBoxesUI.WPFServices;
 using WindowsNative;
 using static WindowsNative.Win32Constants;
@@ -46,6 +47,9 @@ public sealed class DesktopManager
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
     private DesktopSurface? _surface;
+    /// <summary>Owns the above-icons widget layer (probe/attach/watch) on the custom-surface
+    /// feature path. The surface window is the layer window; boxes/widgets are owned by it.</summary>
+    private DesktopWidgetLayerHost? _widgetLayerHost;
     private bool _allBoxesHidden;
 
     // WinEvent watch for desktop-icon show/hide toggles (e.g. via Explorer's own menu):
@@ -1405,6 +1409,7 @@ public sealed class DesktopManager
         if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == false)
         {
             _surface ??= new DesktopSurface(_mainVm, SaveAsyncFireAndForget);
+            RequireWidgetLayerHost().TryEnsureLayer();
             SyncSurfaceWithIconVisibility();
         }
         else
@@ -1427,7 +1432,37 @@ public sealed class DesktopManager
                 _surface.CloseWindowEx();
                 _surface = null;
             }
+            if (_widgetLayerHost is not null)
+            {
+                _widgetLayerHost.LayerLost -= OnWidgetLayerLost;
+                _widgetLayerHost.Dispose();
+                _widgetLayerHost = null;
+            }
         }
+    }
+
+    /// <summary>Lazy, single host for the custom-surface path. Subscribes layer-loss exactly once;
+    /// the hook unsubscribes on teardown so a stale host never fires into a newer session.</summary>
+    private DesktopWidgetLayerHost RequireWidgetLayerHost()
+    {
+        _widgetLayerHost ??= new DesktopWidgetLayerHost();
+        _widgetLayerHost.LayerLost -= OnWidgetLayerLost;
+        _widgetLayerHost.LayerLost += OnWidgetLayerLost;
+        return _widgetLayerHost;
+    }
+
+    private void OnWidgetLayerLost()
+    {
+        // Installed on the UI thread, so this already runs there — but stay safe if that ever changes.
+        try
+        {
+            Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { RecoverAfterShellRestart(); }
+                catch (Exception ex) { Serilog.Log.Error("Widget layer recovery failed", ex); }
+            }));
+        }
+        catch { }
     }
 
     /// <summary>
@@ -1530,7 +1565,7 @@ public sealed class DesktopManager
         var hwnd = new WindowInteropHelper(_surface).Handle;
         if (hwnd != IntPtr.Zero && Win32Apis.IsWindow(hwnd))
         {
-            Win32Apis.GlueToDesktopSurface(hwnd);
+            RequireWidgetLayerHost().AttachAboveIcons(hwnd);
             _surface.Relayout();
         }
 
@@ -1773,7 +1808,7 @@ public sealed class DesktopManager
             _surface.InvalidateShellHandles();
             if (sHwnd != IntPtr.Zero && Win32Apis.IsWindow(sHwnd))
             {
-                Win32Apis.GlueToDesktopSurface(sHwnd);
+                RequireWidgetLayerHost().AttachAboveIcons(sHwnd);
                 _surface.Relayout();
             }
 

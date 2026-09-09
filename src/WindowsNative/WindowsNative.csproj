@@ -12,7 +12,10 @@
 		<EnableAot>false</EnableAot>
 	</PropertyGroup>
 
-	<!-- Intentionally dependency-free: raw DllImport P/Invoke only, no CsWin32, no logging.
-	     Consumers (DesktopBoxesUI, DesktopLiveWallPaperEngine, WPFShared) reference this project. -->
+	<!-- Shared hand-rolled Win32 interop (no CsWin32). Logging via Serilog only; no other
+	     dependencies, so every consumer gets the same native surface without package sprawl. -->
+	<ItemGroup>
+		<PackageReference Include="Serilog" />
+	</ItemGroup>
 
 </Project>

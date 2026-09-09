@@ -61,9 +61,10 @@ Follow it to keep the architecture clean and the build green.
 
  1. Declare it by hand in the shared `WindowsNative` project (`User32`/`Kernel32`/`Shell32`/… by
     owning DLL; structs in `NativeTypes.cs`, constants in `Win32Constants.cs`, callbacks in
-    `NativeDelegates.cs`). Use `[DllImport]` (NOT `LibraryImport` — the source generator can't
-    marshal structs like `SHFILEINFOW`), plain `IntPtr` handles, and `WindowsNative` geometry
-    types (`RECT`, `POINT`, `SIZE`). `WindowsNative` stays dependency-free (no packages, no logging).
+    `NativeDelegates.cs`, desktop-layer core in `Desktop/DesktopLayerHostBase.cs`). Use `[DllImport]`
+    (NOT `LibraryImport` — the source generator can't marshal structs like `SHFILEINFOW`), plain
+    `IntPtr` handles, and `WindowsNative` geometry types (`RECT`, `POINT`, `SIZE`). `WindowsNative`
+    takes no dependencies except Serilog (layer lifecycle logging only).
  2. The thin, named wrapper `Win32APIs/NativeMethods/Win32Apis.cs` re-exposes exactly the APIs
     the UI uses, so every native call in the codebase goes through `Win32Apis` and never P/Invoke
     directly. The engine calls `WindowsNative` directly.
@@ -111,8 +112,11 @@ supported path; the custom `DesktopSurface` is experimental and has unresolved i
   apps/games.** Prefer this path.
 - **Custom surface (`false`)** — `DesktopManager.EnsureSurface()` shows `Views/DesktopSurface.xaml`, a
   top-level layered WPF window glued to the desktop root that forwards mouse input to the Explorer
-  list-view and detects the double-click itself (`WM_NCHITTEST` + two `WM_LBUTTONDOWN`s). See Known issues
-  before touching this path.
+  list-view and detects the double-click itself (`WM_NCHITTEST` + two `WM_LBUTTONDOWN`s). Its
+  above-icons layer lifecycle (probe via the engine's probe, attach, WinEvent layer watch,
+  re-glue on loss) is owned by `Win32APIs/Services/DesktopWidgetLayerHost.cs`, hosted in
+  `DesktopManager` — the counterpart to the engine's `DesktopWallpaperLayerHost` (which sits
+  BELOW the icons). See Known issues before touching this path.
 
 `ToggleHideAllBoxes` (in `DesktopManager`) toggles `HideAllBoxes`/`ShowAllBoxes`; hides wrap each window
 in `Win32Apis.AllowHide` so `MinimizePreventionHook` doesn't re-show it, and the surface/tray stay visible

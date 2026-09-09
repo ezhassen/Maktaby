@@ -1,12 +1,13 @@
 using DesktopLiveWallPaperEngine.Common;
 using DesktopLiveWallPaperEngine.Config;
 using DesktopLiveWallPaperEngine.Desktop;
-using WindowsNative;
 using DesktopLiveWallPaperEngine.Interop;
 using DesktopLiveWallPaperEngine.Playback;
 using DesktopLiveWallPaperEngine.Rendering;
 using System.Collections.Concurrent;
 using System.Text;
+using WindowsNative;
+using WindowsNative.Desktop;
 using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine;
@@ -20,7 +21,7 @@ public sealed class Engine : IDisposable
 
     private readonly EngineConfig _config;
     private readonly string _appDataDir;
-    private DesktopLayerHost? _host;
+    private DesktopWallpaperLayerHost? _host;
     private readonly ConcurrentDictionary<string, WallpaperWindow> _windows = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentQueue<Action> _mainThreadActions = new();
     private DeviceLossGuard? _deviceLoss;

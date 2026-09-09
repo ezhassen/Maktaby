@@ -1,85 +1,17 @@
 using WindowsNative;
-using System.Collections.Concurrent;
+using WindowsNative.Desktop;
 using System.Runtime.InteropServices;
 using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine.Desktop;
 
-public enum DesktopTopology
-{
-    /// <summary>Win10 / Win11 ≤23H2 and early 24H2: wallpaper WorkerW is a top-level
-    /// sibling; we SetParent into that WorkerW.</summary>
-    ClassicWorkerW,
-    /// <summary>2025+ "raised desktop" (HDR-capable shell): SHELLDLL_DefView is a layered
-    /// child of Progman; we become a layered WS_CHILD of Progman just below DefView.</summary>
-    RaisedDesktop,
-}
-
-public sealed record DesktopLayerInfo(DesktopTopology Topology, IntPtr Progman, IntPtr WorkerW, IntPtr DefView);
-
 /// <summary>Owns the fragile part: spawning/finding the wallpaper layer, attaching our
 /// windows behind the desktop icons on both known shell topologies, re-attaching when
 /// explorer restarts or the layer is destroyed, and restoring the desktop on exit.</summary>
-public sealed class DesktopLayerHost : IDisposable
+public sealed class DesktopWallpaperLayerHost : DesktopLayerHostBase
 {
-    private const uint WM_SPAWN_WORKER = 0x052C;
-
     private readonly List<IntPtr> _attached = [];
     private readonly object _attachSync = new();
-    private WinEventProc? _winEventProc; // rooted while hook lives
-    private IntPtr _winEventHook;
-
-    /// <summary>Every installed hook procedure, rooted for the process lifetime.
-    /// UnhookWinEvent stops new callbacks but cannot recall one already dispatched —
-    /// and a full GC (pipeline reclaim runs them) can suspend its thread mid-flight
-    /// for an unbounded time. If the delegate were collected in between, the late
-    /// landing fail-fasts the process ("callback on a collected delegate"). One entry
-    /// per Enable is ~100 bytes; never removed, by design.</summary>
-    private static readonly ConcurrentDictionary<WinEventProc, byte> HookRoots = new();
-
-    public DesktopLayerInfo Layer { get; private set; } = new(DesktopTopology.ClassicWorkerW, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
-
-    /// <summary>Raised (on the WinEvent/message thread) when the wallpaper layer died and
-    /// was re-created; the engine must re-attach all wallpaper windows.</summary>
-    public event Action? LayerLost;
-
-    public static DesktopLayerInfo Probe()
-    {
-        var progman = User32.FindWindowW("Progman", null);
-        if (progman == IntPtr.Zero)
-            throw new InvalidOperationException("Progman not found — is explorer.exe running?");
-
-        // Ask Progman to spawn the wallpaper WorkerW. No-op if it already exists.
-        User32.SendMessageTimeoutW(progman, WM_SPAWN_WORKER, new IntPtr(0xD), new IntPtr(0x1), SMTO_NORMAL, 1000, out _);
-
-        bool raised = ((long)User32.GetWindowLongPtrW(progman, GWL_EXSTYLE) & WS_EX_NOREDIRECTIONBITMAP) != 0;
-        if (raised)
-        {
-            var defView = User32.FindWindowExW(progman, IntPtr.Zero, "SHELLDLL_DefView", null);
-            var workerW = User32.FindWindowExW(progman, IntPtr.Zero, "WorkerW", null);
-            return new DesktopLayerInfo(DesktopTopology.RaisedDesktop, progman, workerW, defView);
-        }
-
-        // Classic: find the top-level window hosting SHELLDLL_DefView, then take the next
-        // top-level WorkerW sibling after it (covers both the Win10 WorkerW-hosted DefView
-        // and the Win11 Progman-hosted DefView variants).
-        IntPtr host = IntPtr.Zero, worker = IntPtr.Zero, shellDefView = IntPtr.Zero;
-        EnumWindowsProc enumProc = (hwnd, _) =>
-        {
-            var dv = User32.FindWindowExW(hwnd, IntPtr.Zero, "SHELLDLL_DefView", null);
-            if (dv != IntPtr.Zero)
-            {
-                host = hwnd;
-                shellDefView = dv;
-                worker = User32.FindWindowExW(IntPtr.Zero, hwnd, "WorkerW", null);
-                return false;
-            }
-            return true;
-        };
-        User32.EnumWindows(enumProc, IntPtr.Zero);
-        GC.KeepAlive(enumProc);
-        return new DesktopLayerInfo(DesktopTopology.ClassicWorkerW, progman, worker, shellDefView);
-    }
 
     /// <summary>Probes with retries — on 24H2+ the WorkerW is created lazily and may not
     /// exist for a while after logon.</summary>
@@ -94,7 +26,11 @@ public sealed class DesktopLayerHost : IDisposable
             if (ok)
             {
                 Serilog.Log.Information($"Desktop layer ready: {Layer.Topology} progman=0x{Layer.Progman:X} workerW=0x{Layer.WorkerW:X} defView=0x{Layer.DefView:X}");
-                InstallLayerWatch();
+                if (Layer.WorkerW != IntPtr.Zero)
+                {
+                    User32.GetWindowThreadProcessId(Layer.WorkerW, out uint pid);
+                    InstallLayerWatch(pid);
+                }
                 return;
             }
             if (attempt >= 20)
@@ -204,35 +140,11 @@ public sealed class DesktopLayerHost : IDisposable
             User32.SetWindowPos(Layer.WorkerW, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
-    private void InstallLayerWatch()
+    /// <summary>Clears the attached-window ledger, then runs the shared loss path.</summary>
+    public override void NotifyLayerLost()
     {
-        if (_winEventHook != IntPtr.Zero || Layer.WorkerW == IntPtr.Zero) return;
-        User32.GetWindowThreadProcessId(Layer.WorkerW, out uint pid);
-        _winEventProc = OnWinEvent;
-        _winEventHook = User32.SetWinEventHook(EVENT_OBJECT_DESTROY, EVENT_OBJECT_DESTROY,
-            IntPtr.Zero, _winEventProc, pid, 0, WINEVENT_OUTOFCONTEXT);
-        if (_winEventHook != IntPtr.Zero) HookRoots.TryAdd(_winEventProc, 0);
-    }
-
-    private void OnWinEvent(IntPtr hook, uint eventId, IntPtr hwnd, int idObject, int idChild, uint thread, uint time)
-    {
-        if (idObject != OBJID_WINDOW) return;
-        if (hwnd != Layer.WorkerW && hwnd != Layer.Progman) return;
-        Serilog.Log.Warning($"Wallpaper layer window 0x{hwnd:X} destroyed — scheduling re-attach");
-        NotifyLayerLost();
-    }
-
-    /// <summary>Explorer restarted (TaskbarCreated) or layer destroyed: re-probe and tell
-    /// the engine to re-attach everything.</summary>
-    public void NotifyLayerLost()
-    {
-        if (_winEventHook != IntPtr.Zero)
-        {
-            User32.UnhookWinEvent(_winEventHook);
-            _winEventHook = IntPtr.Zero;
-        }
         lock (_attachSync) _attached.Clear();
-        LayerLost?.Invoke();
+        base.NotifyLayerLost();
     }
 
     public void ValidateLayer()
@@ -241,22 +153,6 @@ public sealed class DesktopLayerHost : IDisposable
         {
             Serilog.Log.Warning("WorkerW handle went stale (session unlock?) — re-probing");
             NotifyLayerLost();
-        }
-    }
-
-    /// <summary>Final cleanup: repaint the desktop so the original static wallpaper shows.
-    /// Only called on exit — on 24H2 raised desktops this refresh destroys the live WorkerW.</summary>
-    public static void RestoreDesktop()
-    {
-        User32.SystemParametersInfoW(SPI_SETDESKWALLPAPER, 0, IntPtr.Zero, SPIF_UPDATEINIFILE);
-    }
-
-    public void Dispose()
-    {
-        if (_winEventHook != IntPtr.Zero)
-        {
-            User32.UnhookWinEvent(_winEventHook);
-            _winEventHook = IntPtr.Zero;
         }
     }
 }
