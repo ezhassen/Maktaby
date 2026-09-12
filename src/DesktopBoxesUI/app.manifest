@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<assembly manifestVersion="1.0" xmlns="urn:schemas-microsoft-com:asm.v1">
+  <assemblyIdentity version="1.0.0.0" name="DesktopBoxesUI" processorArchitecture="*" type="win32" />
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <!-- Per-monitor V2: crisp rendering on mixed-DPI desktops, live WM_DPICHANGED handling,
+       and correctly scaled popups (tray context menu) after display scale changes.
+       Do NOT remove: without this the process falls back to OS-version-dependent
+       virtualization and popups/geometry misbehave on scale changes.
+       NOTE: no compatibility section — the OS rejects this manifest when one is present
+       (side-by-side activation failure); the SDK default ships without it either. -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor, System, Unaware</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>

@@ -29,6 +29,15 @@ namespace DesktopBoxesUI.ViewModels
         private string _status = "";
         public string Status { get => _status; set => SetField(ref _status, value); }
 
+        private string _modelBounds = "";
+        public string ModelBounds { get => _modelBounds; set => SetField(ref _modelBounds, value); }
+
+        private string _appliedBounds = "";
+        public string AppliedBounds { get => _appliedBounds; set => SetField(ref _appliedBounds, value); }
+
+        private bool _boundsMismatch;
+        public bool BoundsMismatch { get => _boundsMismatch; set => SetField(ref _boundsMismatch, value); }
+
         public System.Windows.Window? WindowRef { get; set; }
     }
 
@@ -95,6 +104,9 @@ namespace DesktopBoxesUI.ViewModels
         private bool _isIdleMode;
         public bool IsIdleMode { get => _isIdleMode; set => SetField(ref _isIdleMode, value); }
 
+        private string _layoutAnchorStatus = "";
+        public string LayoutAnchorStatus { get => _layoutAnchorStatus; set => SetField(ref _layoutAnchorStatus, value); }
+
         public PerformanceMonitorViewModel()
         {
             _prevTotalProcessorTime = _process.TotalProcessorTime;
@@ -103,6 +115,97 @@ namespace DesktopBoxesUI.ViewModels
             _timer.Tick += (_, _) => Refresh();
             _timer.Start();
             Refresh();
+        }
+
+        private static string FormatBounds(double x, double y, double width, double height)
+            => $"({x:0},{y:0} {width:0}x{height:0})";
+
+        private const double BoundsMismatchToleranceDip = 1.0;
+
+        private static bool BoundsDiffer(double x1, double y1, double w1, double h1,
+            double x2, double y2, double w2, double h2)
+            => Math.Abs(x1 - x2) > BoundsMismatchToleranceDip
+                || Math.Abs(y1 - y2) > BoundsMismatchToleranceDip
+                || Math.Abs(w1 - w2) > BoundsMismatchToleranceDip
+                || Math.Abs(h1 - h2) > BoundsMismatchToleranceDip;
+
+        /// <summary>
+        /// Live window rect in DIPs, read from the native window rect (device pixels) converted
+        /// with the window's own DPI scale. This is the ground truth: WPF's cached
+        /// Left/Top/Width/Height can disagree with where the window actually is (stale DPI
+        /// context, native moves), which is exactly what the mismatch flag must catch.
+        /// Falls back to the WPF properties when no handle exists yet.
+        /// </summary>
+        private static (double X, double Y, double Width, double Height) GetLiveBounds(System.Windows.Window win)
+        {
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+                if (hwnd != IntPtr.Zero
+                    && Win32.NativeMethods.Win32Apis.GetWindowRect(hwnd, out var r))
+                {
+                    var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(win);
+                    double sx = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+                    double sy = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+                    return (r.Left / sx, r.Top / sy, (r.Right - r.Left) / sx, (r.Bottom - r.Top) / sy);
+                }
+            }
+            catch { }
+            return (win.Left, win.Top, win.Width, win.Height);
+        }
+
+        private static double MonitorScale()
+        {
+            try
+            {
+                uint dpi = DesktopManager.GetPrimaryDpi();
+                if (dpi > 0) return dpi / 96.0;
+            }
+            catch { }
+            return 1.0;
+        }
+
+        private static bool TryGetNativeRect(System.Windows.Window win, out double l, out double t, out double w, out double h)
+        {
+            l = t = w = h = 0;
+            try
+            {
+                var hwnd = new System.Windows.Interop.WindowInteropHelper(win).Handle;
+                if (hwnd != IntPtr.Zero
+                    && Win32.NativeMethods.Win32Apis.GetWindowRect(hwnd, out var r))
+                {
+                    l = r.Left; t = r.Top; w = r.Right - r.Left; h = r.Bottom - r.Top;
+                    return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>
+        /// Applied-bounds text (physical truth expressed in live monitor DIPs) plus the mismatch
+        /// flag. Flags when EITHER the window-space rect or the monitor-space rect diverges from
+        /// expected — the two disagree exactly when the window's DPI context is stale.
+        /// </summary>
+        private static (string Text, bool Mismatch) DescribeLive(
+            System.Windows.Window win, double monScale,
+            (double X, double Y, double Width, double Height) liveWin,
+            Core.Models.RectD expected)
+        {
+            if (monScale <= 0) monScale = 1.0;
+            if (TryGetNativeRect(win, out double nl, out double nt, out double nw, out double nh))
+            {
+                double ax = nl / monScale, ay = nt / monScale, aw = nw / monScale, ah = nh / monScale;
+                bool mismatch =
+                    BoundsDiffer(expected.X, expected.Y, expected.Width, expected.Height,
+                        liveWin.X, liveWin.Y, liveWin.Width, liveWin.Height)
+                    || BoundsDiffer(expected.X, expected.Y, expected.Width, expected.Height,
+                        ax, ay, aw, ah);
+                return (FormatBounds(ax, ay, aw, ah), mismatch);
+            }
+            bool fallbackMismatch = BoundsDiffer(expected.X, expected.Y, expected.Width, expected.Height,
+                liveWin.X, liveWin.Y, liveWin.Width, liveWin.Height);
+            return (FormatBounds(liveWin.X, liveWin.Y, liveWin.Width, liveWin.Height), fallbackMismatch);
         }
 
         public void Refresh()
@@ -158,24 +261,40 @@ namespace DesktopBoxesUI.ViewModels
                 WebView2ProcessCount = wvCount;
                 WebView2MemoryMB = wvMem / 1024 / 1024;
 
-                // Per-window items
+                // Per-window items. Monitor-space rects (native pixels ÷ live monitor DPI)
+                // are the physical truth; window-space rects catch WPF-side drift. A stuck
+                // window DPI shows up as a mismatch between the two.
+                double monScale = MonitorScale();
                 var toRemove = Items.ToList();
                 foreach (var win in System.Windows.Application.Current.Windows.OfType<System.Windows.Window>())
                 {
-                    string name, type;
+                    string name, type, modelBounds, appliedBounds;
                     bool isVisible = win.IsVisible;
                     bool isSuspended = false;
+                    bool boundsMismatch = false;
                     if (win is Views.Containers.BoxContainerWindow bcw)
                     {
                         name = bcw.DataContext is ContainerViewModel cvm ? cvm.Title ?? "BoxContainer" : "BoxContainer";
                         type = "Box";
                         // Box has no WebView, suspended when hidden
                         isSuspended = !isVisible || win.WindowState == System.Windows.WindowState.Minimized;
+                        var model = bcw.DataContext is ContainerViewModel cvm2 ? cvm2.Bounds : default;
+                        modelBounds = FormatBounds(model.X, model.Y, model.Width, model.Height);
+                        // Live window rect: for a rolled box this is the title strip, while the
+                        // model keeps the full home bounds — the difference is expected.
+                        var live = GetLiveBounds(bcw);
+                        var expected = bcw.GetExpectedDisplayRect();
+                        (appliedBounds, boundsMismatch) = DescribeLive(bcw, monScale, live, expected);
                     }
                     else if (win is Views.Containers.CssWidgetWindow cww)
                     {
                         name = cww.Title ?? "Widget";
                         type = "Widget";
+                        var model = cww.ContainerViewModel.Bounds;
+                        modelBounds = FormatBounds(model.X, model.Y, model.Width, model.Height);
+                        var live = GetLiveBounds(cww);
+                        var expected = cww.GetExpectedDisplayRect();
+                        (appliedBounds, boundsMismatch) = DescribeLive(cww, monScale, live, expected);
                         // Check if widget's WebView is suspended (via control)
                         try
                         {
@@ -209,6 +328,9 @@ namespace DesktopBoxesUI.ViewModels
                     existing.IsVisible = isVisible;
                     existing.IsSuspended = isSuspended;
                     existing.Status = !isVisible ? "Hidden" : isSuspended ? "Suspended" : "Active";
+                    existing.ModelBounds = modelBounds;
+                    existing.AppliedBounds = appliedBounds;
+                    existing.BoundsMismatch = boundsMismatch;
                     // Approximate per-window memory via process is not per-window, use total divided
                 }
                 foreach (var r in toRemove) Items.Remove(r);
@@ -218,6 +340,7 @@ namespace DesktopBoxesUI.ViewModels
                 bool allHidden = dm?.AllBoxesHidden == true;
                 bool anyVisibleWidget = Items.Any(i => i.Type == "Widget" && i.IsVisible && !i.IsSuspended);
                 IsIdleMode = allHidden || !anyVisibleWidget;
+                try { LayoutAnchorStatus = dm?.GetLayoutAnchorStatus() ?? "DesktopManager unavailable"; } catch { }
 
                 RefreshLiveWallpaper();
             }

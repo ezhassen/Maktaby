@@ -11,10 +11,6 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<Folder Include="Helpers\" />
-	</ItemGroup>
-
-	<ItemGroup>
 		<PackageReference Include="Serilog" />
 		<PackageReference Include="CommunityToolkit.Mvvm" />
 		<PackageReference Include="WPF-UI" />

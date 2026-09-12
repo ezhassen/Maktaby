@@ -191,6 +191,23 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     /// unrolled states). Used after a display/DPI/resolution change rescales the layout.</summary>
     public override void ApplyGeometry() => ApplyRoll();
 
+    /// <summary>The on-screen rectangle <see cref="ApplyRoll"/> displays for the current roll state:
+    /// the full home bounds when unrolled, the edge strip when rolled.</summary>
+    public override RectD GetExpectedDisplayRect() => GetDisplayedRect();
+
+    /// <summary>Computes the displayed rectangle without touching the window (shared by
+    /// <see cref="ApplyRoll"/> and layout verification).</summary>
+    private RectD GetDisplayedRect()
+    {
+        var home = RectD.FromXYWH(_vm.Left, _vm.Top, _vm.Width, _vm.Height);
+        if (!_vm.IsRolled)
+        {
+            return home;
+        }
+
+        return ClampToWorkArea(GetRolledRect(home, _effectiveDir));
+    }
+
     private void OnLoaded(object? sender, RoutedEventArgs e)
     {
         ApplyType();
@@ -815,7 +832,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
         ResizeMode = ResizeMode.NoResize;
 
-        var rect = ClampToWorkArea(GetRolledRect(new RectD(_vm.Left, _vm.Top, _vm.Width, _vm.Height), _effectiveDir));
+        var rect = GetDisplayedRect();
 
         BodyContent.Visibility = Visibility.Collapsed;
         TabStrip.Visibility = Visibility.Collapsed;
@@ -917,14 +934,16 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void ClampBoundsToWorkArea()
     {
-        var wa = SystemParameters.WorkArea;
+        // Live primary area, not the cached SystemParameters.WorkArea: the cache can still hold
+        // pre-change values while a scale switch settles.
+        var wa = DesktopManager.GetPrimaryWorkAreaDip();
         _vm.Left = Math.Max(wa.X, Math.Min(_vm.Left, wa.Right - _vm.Width));
         _vm.Top = Math.Max(wa.Y, Math.Min(_vm.Top, wa.Bottom - _vm.Height));
     }
 
     private static RectD ClampToWorkArea(RectD rect)
     {
-        var wa = SystemParameters.WorkArea;
+        var wa = DesktopManager.GetPrimaryWorkAreaDip();
         double x = Math.Max(wa.X, Math.Min(rect.X, wa.Right - rect.Width));
         double y = Math.Max(wa.Y, Math.Min(rect.Y, wa.Bottom - rect.Height));
         return RectD.FromXYWH(x, y, rect.Width, rect.Height);

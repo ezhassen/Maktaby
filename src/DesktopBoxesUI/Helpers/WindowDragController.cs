@@ -156,6 +156,10 @@ internal sealed class WindowDragController
 
     public static Window? DraggingSourceWindow;
 
+    /// <summary>True while a custom title-bar move drag owns window geometry. Unlike
+    /// <see cref="DraggingSourceWindow"/>, this is never used for item/tab drags.</summary>
+    public static bool IsTitleDragging;
+
     /// <summary>Bumped whenever a native shell context menu opens/closes in any window.
     /// Item-drag arming records the epoch at MouseDown and MouseMove requires a match, so a
     /// press eaten by the menu's modal loop can never start a drag from a stale origin.</summary>
@@ -526,6 +530,7 @@ internal sealed class WindowDragController
                 }
 
                 _dragging = true;
+                IsTitleDragging = true;
                 DraggingSourceWindow = _window;
                 _dragOffset = current;
                 _window.CaptureMouse();
@@ -567,6 +572,7 @@ internal sealed class WindowDragController
         }
 
         _dragging = false;
+        IsTitleDragging = false;
         var src = DraggingSourceWindow;
         if (DraggingSourceWindow == _window) DraggingSourceWindow = null;
         _window.ReleaseMouseCapture();

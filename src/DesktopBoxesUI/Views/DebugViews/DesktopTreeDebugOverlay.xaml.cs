@@ -43,10 +43,9 @@ public sealed partial class DesktopTreeDebugOverlay : Window
         InitializeComponent();
 
         // Cover the primary work area (no negative origin on multi-monitor setups) in DIPs.
-        Left = SystemParameters.WorkArea.Left;
-        Top = SystemParameters.WorkArea.Top;
-        Width = SystemParameters.WorkArea.Width;
-        Height = SystemParameters.WorkArea.Height;
+        // Sized from the live area (not a one-time SystemParameters snapshot) and re-synced
+        // on every refresh tick so the overlay itself tracks display/scale changes.
+        SyncToWorkArea();
 
         // NOTE: intentionally NOT click-through. Transparent areas still pass input through natively
         // (AllowsTransparency), while the info column is interactive so its text can be selected and
@@ -105,8 +104,26 @@ public sealed partial class DesktopTreeDebugOverlay : Window
     public void Start() => _timer.Start();
     public void Stop() => _timer.Stop();
 
+    /// <summary>Keeps the overlay covering the live primary work area across display/scale
+    /// changes. Only assigns when actually moved/resized to avoid needless layout churn.</summary>
+    private void SyncToWorkArea()
+    {
+        var wa = DesktopManager.GetPrimaryWorkAreaDip();
+        if (wa.Width <= 0 || wa.Height <= 0)
+        {
+            return;
+        }
+
+        const double tolerance = 0.5;
+        if (Math.Abs(Left - wa.X) > tolerance) Left = wa.X;
+        if (Math.Abs(Top - wa.Y) > tolerance) Top = wa.Y;
+        if (Math.Abs(Width - wa.Width) > tolerance) Width = wa.Width;
+        if (Math.Abs(Height - wa.Height) > tolerance) Height = wa.Height;
+    }
+
     private void Refresh()
     {
+        SyncToWorkArea();
         Host.Children.Clear();
         Host.Children.Add(_infoPanel);
         _dpi = VisualTreeHelper.GetDpi(this);
@@ -132,6 +149,7 @@ public sealed partial class DesktopTreeDebugOverlay : Window
             top = User32.WindowFromPoint(pt);
             DrawWindow(top, Brushes.Red, "TOPMOST @ CURSOR");
             ancestryText = BuildAncestry(top);
+            ancestryText += "\n" + BuildTopmostRect(top);
         }
 
         SetInfo(_ancestryBox, ref _lastAncestry, ancestryText);
@@ -247,10 +265,28 @@ public sealed partial class DesktopTreeDebugOverlay : Window
         Host.Children.Add(tb);
     }
 
+    /// <summary>
+    /// Numeric bounds of the highlighted (topmost-at-cursor) window. Uses the live native rect
+    /// (device pixels) converted to DIPs — the ground truth when WPF's cached
+    /// Left/Top/Width/Height disagree with where the window actually is.
+    /// </summary>
+    private string BuildTopmostRect(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero || !Win32Apis.GetWindowRect(hwnd, out RECT r))
+        {
+            return "TOPMOST RECT: (unavailable)";
+        }
+
+        var dipPos = PointFromScreen(new Point(r.Left, r.Top));
+        double w = (r.Right - r.Left) / _dpi.DpiScaleX;
+        double h = (r.Bottom - r.Top) / _dpi.DpiScaleY;
+        return $"TOPMOST RECT (dip): ({dipPos.X:0},{dipPos.Y:0} {w:0}x{h:0})  [px: L{r.Left} T{r.Top} R{r.Right} B{r.Bottom}]";
+    }
+
     private string BuildAncestry(IntPtr hwnd)
     {
         var sb = new StringBuilder("ANCESTRY: ");
-        IntPtr cur = hwnd;
+IntPtr cur = hwnd;
         for (int i = 0; i < 8 && cur != IntPtr.Zero; i++)
         {
             sb.Append(GetClassName(cur));
