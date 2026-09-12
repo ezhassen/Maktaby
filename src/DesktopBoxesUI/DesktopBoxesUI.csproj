@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
 		<OutputType>WinExe</OutputType>
-		<TargetFramework>$(SharedTargetFrameworWindows)</TargetFramework>
+		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
 		<TargetPlatformMinVersion>$(SharedTargetPlatformMinVersion)</TargetPlatformMinVersion>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
@@ -15,6 +15,9 @@
 		<AssemblyTitle>Desktop Boxes - desktop organizer</AssemblyTitle>
 		<Product>Desktop Boxes</Product>
 		<ApplicationIcon>Assets\app.ico</ApplicationIcon>
+		<!-- Declares PerMonitorV2 DPI awareness (see app.manifest). Do not remove: without it
+		     popups and geometry misbehave after display scale changes. -->
+		<ApplicationManifest>app.manifest</ApplicationManifest>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 		<EnableDefaultPageItems>true</EnableDefaultPageItems>
 		<GenerateDocumentationFile>false</GenerateDocumentationFile>

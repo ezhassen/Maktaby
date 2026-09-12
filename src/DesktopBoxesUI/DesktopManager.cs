@@ -7,8 +7,6 @@ using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32APIs.Services;
 using DesktopBoxesUI.WPFServices;
-using WindowsNative;
-using static WindowsNative.Win32Constants;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using System.Collections.Specialized;
@@ -17,6 +15,8 @@ using System.IO.Compression;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Interop;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI;
 
@@ -66,6 +66,36 @@ public sealed class DesktopManager
     /// display settings change we rescale every container proportionally against this baseline.</summary>
     private RectD _appliedResolution;
 
+    private int _layoutUpdateDepth;
+
+    private string _lastPassSummary = "no rescale pass yet";
+
+    /// <summary>True while <see cref="RescaleToCurrent"/> is applying authoritative container bounds.
+    /// Framework-driven geometry echoes must not overwrite the model during this scope.</summary>
+    internal bool IsLayoutUpdateActive => _layoutUpdateDepth > 0;
+
+    internal IDisposable BeginLayoutUpdate() => new LayoutUpdateScope(this);
+
+    private sealed class LayoutUpdateScope : IDisposable
+    {
+        private DesktopManager? _owner;
+
+        public LayoutUpdateScope(DesktopManager owner)
+        {
+            _owner = owner;
+            Interlocked.Increment(ref owner._layoutUpdateDepth);
+        }
+
+        public void Dispose()
+        {
+            var owner = Interlocked.Exchange(ref _owner, null);
+            if (owner is not null)
+            {
+                Interlocked.Decrement(ref owner._layoutUpdateDepth);
+            }
+        }
+    }
+
     #endregion
 
     #region Init
@@ -98,6 +128,7 @@ public sealed class DesktopManager
             await BuildDefaultContainerAsync();
             RegisterAllBoxes();
             _rules.EnsureDefaultRule(DefaultBoxId());
+            //RescaleIfNeeded(GetCurrentDesktopSnapshot());
         }
         else
         {
@@ -256,13 +287,120 @@ public sealed class DesktopManager
     /// <summary>
     /// The primary work area in WPF logical (DIP) coordinates. Container <c>Bounds</c> are always stored
     /// in this same space (the WPF window geometry), so this is the correct basis for the persisted
-    /// <see cref="DesktopSnapshot.DesktopResolution"/> and for rescaling — never the raw physical pixels
-    /// from <see cref="IMonitorService.GetPrimaryWorkArea"/>.
+    /// <see cref="DesktopSnapshot.DesktopResolution"/> and for rescaling.
+    /// Computed from live physical pixels + live monitor DPI on every call: unlike
+    /// <see cref="SystemParameters.WorkArea"/> (a WPF cache that only refreshes when the UI thread
+    /// pumps the broadcast) this cannot report pre-change values after a scale switch.
     /// </summary>
-    private static RectD GetPrimaryWorkAreaDip()
+    internal static RectD GetPrimaryWorkAreaDip()
     {
+        var previous = PinMonitorAwareness();
+        try
+        {
+            return GetPrimaryWorkAreaDipCore();
+        }
+        finally
+        {
+            RestoreAwareness(previous);
+        }
+    }
+
+    /// <summary>Live primary-monitor DPI, pinned like the area query. Falls back to 96.</summary>
+    internal static uint GetPrimaryDpi()
+    {
+        var previous = PinMonitorAwareness();
+        try
+        {
+            var hmon = Win32Apis.MonitorFromWindow(IntPtr.Zero, MONITOR_DEFAULTTOPRIMARY);
+            if (hmon != IntPtr.Zero
+                && Win32Apis.TryGetDpiForMonitor(hmon, out uint dpi, out _)
+                && dpi > 0)
+            {
+                return dpi;
+            }
+        }
+        catch { }
+        finally
+        {
+            RestoreAwareness(previous);
+        }
+        return 96;
+    }
+
+    private static IntPtr PinMonitorAwareness()
+    {
+        // GetMonitorInfoW virtualizes rects for non-per-monitor threads, and this process has a
+        // known path that flips the UI thread to system-aware (the legacy file dialog does not
+        // reliably restore it). A virtualized read here would silently corrupt the rescale
+        // baseline and every clamp/snapshot derived from it.
+        var previous = User32.GetThreadDpiAwarenessContext();
+        if (User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == IntPtr.Zero)
+            User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
+        return previous;
+    }
+
+    private static void RestoreAwareness(IntPtr previous)
+    {
+        if (previous != IntPtr.Zero)
+        {
+            try { User32.SetThreadDpiAwarenessContext(previous); } catch { }
+        }
+    }
+
+    private static RectD GetPrimaryWorkAreaDipCore()
+    {
+        try
+        {
+            var hmon = Win32Apis.MonitorFromWindow(IntPtr.Zero, MONITOR_DEFAULTTOPRIMARY);
+            if (hmon != IntPtr.Zero)
+            {
+                MONITORINFO mi = default;
+                mi.Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf<MONITORINFO>();
+                if (Win32Apis.GetMonitorInfo(hmon, ref mi) &&
+                    Win32Apis.TryGetDpiForMonitor(hmon, out uint dpi, out _))
+                {
+                    double s = 96.0 / (dpi > 0 ? dpi : 96);
+                    var w = mi.Work;
+                    return RectD.FromXYWH(w.Left * s, w.Top * s, (w.Right - w.Left) * s, (w.Bottom - w.Top) * s);
+                }
+            }
+        }
+        catch { }
         var wa = SystemParameters.WorkArea;
         return RectD.FromXYWH(wa.X, wa.Y, wa.Width, wa.Height);
+    }
+
+    private static bool SameArea(in RectD a, in RectD b) =>
+        a.Width == b.Width && a.Height == b.Height && a.X == b.X && a.Y == b.Y;
+
+    /// <summary>
+    /// One-line layout-anchor state for diagnostics UI (Performance Monitor): the baseline the
+    /// current layout was computed against, the live primary area + DPI right now, and what the
+    /// last rescale decision was. If baseline and live disagree with no recent pass, scheduling
+    /// (not math) is the suspect.
+    /// </summary>
+    public string GetLayoutAnchorStatus()
+    {
+        var live = GetPrimaryWorkAreaDip();
+        uint dpi = GetPrimaryDpi();
+        return $"baseline=({_appliedResolution.X:0},{_appliedResolution.Y:0} {_appliedResolution.Width:0}x{_appliedResolution.Height:0})"
+            + $" live=({live.X:0},{live.Y:0} {live.Width:0}x{live.Height:0}) @{dpi}dpi | {_lastPassSummary}";
+    }
+
+    /// <summary>Scales one bounds rect from an old primary area to a new one (position relative
+    /// to the area origin, then size), clamped into the new area.</summary>
+    private static (double Left, double Top, double Width, double Height) ScaleBounds(
+        double x, double y, double w, double h,
+        in RectD oldArea, in RectD newArea, in RectD clampArea,
+        double minW, double minH)
+    {
+        double sx = oldArea.Width > 0 ? newArea.Width / oldArea.Width : 1.0;
+        double sy = oldArea.Height > 0 ? newArea.Height / oldArea.Height : 1.0;
+        double width = ClampRescaledExtent(w * sx, clampArea.Width, minW);
+        double height = ClampRescaledExtent(h * sy, clampArea.Height, minH);
+        double left = ClampRescaledOrigin(newArea.X + (x - oldArea.X) * sx, clampArea.X, clampArea.Right, width);
+        double top = ClampRescaledOrigin(newArea.Y + (y - oldArea.Y) * sy, clampArea.Y, clampArea.Bottom, height);
+        return (left, top, width, height);
     }
 
     /// <summary>
@@ -276,6 +414,7 @@ public sealed class DesktopManager
 
     private void ScheduleRescale()
     {
+        if (IsDisabled) return;
         var app = Application.Current;
         if (app is null)
         {
@@ -310,13 +449,23 @@ public sealed class DesktopManager
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) => ScheduleRescale();
 
-    private void OnWindowDpiChanged(object? sender, System.Windows.DpiChangedEventArgs e) => ScheduleRescale();
+    private void OnWindowDpiChanged(object? sender, System.Windows.DpiChangedEventArgs e)
+    {
+        /*Serilog.Log.Debug(
+            "Window DPI changed: {OldDpi} -> {NewDpi} on {Window}",
+            e.OldDpi, e.NewDpi, sender?.GetType().Name ?? "<unknown>");
+        ScheduleRescale();*/
+    }
 
     private void RescaleToCurrent()
     {
-        // Never rescale mid-gesture: a native move/size loop owns the geometry until it exits.
-        if (Helpers.WindowDragController.IsNativeSizing)
+        if (IsDisabled) return;
+        // Never rescale mid-gesture: a native move/size loop or an active title drag owns the
+        // geometry until it exits.
+        if (Helpers.WindowDragController.IsNativeSizing ||
+            Helpers.WindowDragController.IsTitleDragging)
         {
+            Serilog.Log.Debug("Rescale deferred: a move/resize gesture is active.");
             ScheduleRescale();
             return;
         }
@@ -333,44 +482,394 @@ public sealed class DesktopManager
             return;
         }
 
-        if (current.Width == _appliedResolution.Width && current.Height == _appliedResolution.Height)
+        if (SameArea(current, _appliedResolution))
         {
             // Same size — re-baseline anyway so rounding drift can never accumulate.
+            Serilog.Log.Debug("Rescale skipped: area unchanged ({Area}).", current);
             _appliedResolution = current;
+            _lastPassSummary = $"no-op, area unchanged @ {DateTime.Now:HH:mm:ss}";
+            // The surface has no DpiChanged subscription of its own: a pass that skips
+            // container scaling must still re-anchor/re-size it, otherwise it keeps the
+            // pre-change rect (visible in the debug overlay as a stale surface).
+            try { _surface?.Relayout(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Surface relayout failed."); }
             return;
         }
 
+        // Stability re-check: the desktop may still be settling (bursts deliver transient
+        // intermediate areas). If values moved under us, drop this pass WITHOUT touching the
+        // baseline and let the next scheduled pass apply clean numbers — otherwise partial
+        // factors compound with clamping into a wrong layout.
+        var settled = GetPrimaryWorkAreaDip();
+        if (!SameArea(settled, current))
+        {
+            Serilog.Log.Debug("Rescale deferred: area still settling ({First} vs {Second}).", current, settled);
+            ScheduleRescale();
+            return;
+        }
+        current = settled;
+
         double sx = current.Width / _appliedResolution.Width;
         double sy = current.Height / _appliedResolution.Height;
+        Serilog.Log.Information(
+            "Rescale layout: {Old} -> {New} (sx={Sx:0.###}, sy={Sy:0.###}, {Count} containers)",
+            _appliedResolution, current, sx, sy, _mainVm.Containers.Count);
+        _lastPassSummary = $"scaled {_appliedResolution.Width:0}x{_appliedResolution.Height:0}"
+            + $" -> {current.Width:0}x{current.Height:0} (sx={sx:0.###}, sy={sy:0.###}) @ {DateTime.Now:HH:mm:ss}";
 
-        foreach (var vm in _mainVm.Containers)
+        using (BeginLayoutUpdate())
         {
-            // Minimums must match each window type (BoxContainerWindow 160x120,
-            // CssWidgetWindow 120x80) — otherwise a shrink would inflate small widgets.
-            double minW = vm.Type == DesktopItemContainerType.CssWidget ? 120 : MinContainerWidth;
-            double minH = vm.Type == DesktopItemContainerType.CssWidget ? 80 : MinContainerHeight;
-            vm.Width = ClampRescaledExtent(vm.Width * sx, current.Width, minW);
-            vm.Height = ClampRescaledExtent(vm.Height * sy, current.Height, minH);
-            vm.Left = ClampRescaledOrigin(vm.Left * sx, current.X, current.Right, vm.Width);
-            vm.Top = ClampRescaledOrigin(vm.Top * sy, current.Y, current.Bottom, vm.Height);
-        }
-
-        _appliedResolution = current;
-
-        foreach (var window in _windows.Values)
-        {
-            if (window is WidgetWindow widgetWindow)
+            foreach (var vm in _mainVm.Containers)
             {
-                widgetWindow.ApplyGeometry();
+                // Minimums must match each window type (BoxContainerWindow 160x120,
+                // CssWidgetWindow 120x80) — otherwise a shrink would inflate small widgets.
+                double minW = vm.Type == DesktopItemContainerType.CssWidget ? 120 : MinContainerWidth;
+                double minH = vm.Type == DesktopItemContainerType.CssWidget ? 80 : MinContainerHeight;
+                var (left, top, width, height) = ScaleBounds(
+                    vm.Left, vm.Top, vm.Width, vm.Height,
+                    _appliedResolution, current, current, minW, minH);
+                Serilog.Log.Debug(
+                    "Rescale container: ({OldL:0},{OldT:0} {OldW:0}x{OldH:0}) -> ({L:0},{T:0} {W:0}x{H:0})",
+                    vm.Left, vm.Top, vm.Width, vm.Height, left, top, width, height);
+                vm.Width = width;
+                vm.Height = height;
+                vm.Left = left;
+                vm.Top = top;
+            }
+
+            _appliedResolution = current;
+
+            foreach (var window in _windows.Values)
+            {
+                if (window is WidgetWindow widgetWindow)
+                {
+                    // One failing window must never abort the pass: the baseline is already
+                    // updated, so anything skipped here would be left stale with no retry
+                    // (a later pass sees SameArea and no-ops). Isolate, log, continue — the
+                    // verify pass scheduled below heals whatever is still out of sync.
+                    try
+                    {
+                        widgetWindow.ApplyGeometry();
+                    }
+                    catch (Exception ex)
+                    {
+                        Serilog.Log.Error(ex, "Rescale: ApplyGeometry failed for a container window; continuing pass.");
+                    }
+                }
             }
         }
 
-        _surface?.Relayout();
-        SyncSurfaceWithIconVisibility();
-        EnsureDesktopZOrder();
-        StartIconVisibilityWatch();
+        RefreshDesktopLayer();
 
         _ = SaveAsync();
+        try { LayoutRefreshed?.Invoke(); } catch { }
+        _verifyAttempts = 0;
+        _verifySweepsLeft = 2;
+        ScheduleVerifyLayout(TimeSpan.FromSeconds(2));
+    }
+
+    /// <summary>
+    /// Re-anchors/re-sizes the desktop surface and re-asserts the desktop z-band and icon
+    /// watch. Isolated per step so one failing piece never blocks the others (or the save
+    /// and verification scheduled after a rescale pass).
+    /// </summary>
+    private void RefreshDesktopLayer()
+    {
+        try { _surface?.Relayout(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Surface relayout failed."); }
+        try { SyncSurfaceWithIconVisibility(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Surface visibility sync failed."); }
+        try { EnsureDesktopZOrder(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Desktop z-order sync failed."); }
+        try { StartIconVisibilityWatch(); } catch (Exception ex) { Serilog.Log.Warning(ex, "Icon visibility watch restart failed."); }
+    }
+
+    /// <summary>Raised after a display/DPI rescale pass that changed the layout completes.
+    /// Lets app-level UI (tray popup) re-anchor itself.</summary>
+    public event Action? LayoutRefreshed;
+
+    private const double VerifyToleranceDip = 1.0;
+    private System.Windows.Threading.DispatcherTimer? _verifyTimer;
+    private int _verifyAttempts;
+    private int _verifySweepsLeft;
+
+    private void ScheduleVerifyLayout(TimeSpan delay)
+    {
+        if (IsDisabled) return;
+        var app = Application.Current;
+        if (app is null)
+        {
+            return;
+        }
+
+        if (!app.Dispatcher.CheckAccess())
+        {
+            app.Dispatcher.InvokeAsync(() => ScheduleVerifyLayout(delay));
+            return;
+        }
+
+        _verifyTimer ??= new System.Windows.Threading.DispatcherTimer();
+        _verifyTimer.Tick -= VerifyTimerTick;
+        _verifyTimer.Tick += VerifyTimerTick;
+        _verifyTimer.Interval = delay;
+        _verifyTimer.Stop();
+        _verifyTimer.Start();
+    }
+
+    private void VerifyTimerTick(object? sender, EventArgs e)
+    {
+        if (_verifyTimer != null)
+        {
+            _verifyTimer.Stop();
+            _verifyTimer.Tick -= VerifyTimerTick;
+        }
+        VerifyLayout();
+    }
+
+    /// <summary>
+    /// Settles a rescale pass: WPF, hooks and overlay sync can leave a live window out of sync
+    /// with its (already correct) model after a DPI transition. This compares every live window
+    /// against the model-derived expected rect and re-applies mismatches once. Re-applying writes
+    /// model values, never scaled values, so it cannot compound — it only enforces convergence.
+    /// </summary>
+    private void VerifyLayout()
+    {
+        if (IsDisabled) return;
+        var app = Application.Current;
+        if (app is null)
+        {
+            return;
+        }
+
+        if (!app.Dispatcher.CheckAccess())
+        {
+            app.Dispatcher.InvokeAsync(VerifyLayout);
+            return;
+        }
+
+        if (Helpers.WindowDragController.IsNativeSizing ||
+            Helpers.WindowDragController.IsTitleDragging ||
+            IsLayoutUpdateActive)
+        {
+            if (_verifyAttempts < 3)
+            {
+                _verifyAttempts++;
+                ScheduleVerifyLayout(TimeSpan.FromSeconds(1));
+            }
+            else
+            {
+                Serilog.Log.Warning("Layout verification skipped: a move/resize gesture is still active.");
+            }
+            return;
+        }
+
+        var current = GetPrimaryWorkAreaDip();
+        if (current.Width <= 0 || current.Height <= 0)
+        {
+            return;
+        }
+
+        // A newer display change may be settling (or its rescale pass debouncing): never enforce
+        // against a stale baseline — that could clamp a pre-change layout into the new area and
+        // corrupt the next pass. Defer until the area matches the applied baseline.
+        if (!SameArea(current, _appliedResolution))
+        {
+            if (_verifyAttempts < 5)
+            {
+                _verifyAttempts++;
+                ScheduleVerifyLayout(TimeSpan.FromSeconds(1));
+            }
+            else
+            {
+                Serilog.Log.Warning("Layout verification skipped: display area is still settling.");
+            }
+            return;
+        }
+
+        bool repaired = false;
+        using (BeginLayoutUpdate())
+        {
+            foreach (var vm in _mainVm.Containers)
+            {
+                double minW = vm.Type == DesktopItemContainerType.CssWidget ? 120 : MinContainerWidth;
+                double minH = vm.Type == DesktopItemContainerType.CssWidget ? 80 : MinContainerHeight;
+                var clamped = ClampBoundsToArea(vm.Bounds, current, minW, minH);
+                if (Math.Abs(clamped.X - vm.Bounds.X) > VerifyToleranceDip ||
+                    Math.Abs(clamped.Y - vm.Bounds.Y) > VerifyToleranceDip ||
+                    Math.Abs(clamped.Width - vm.Bounds.Width) > VerifyToleranceDip ||
+                    Math.Abs(clamped.Height - vm.Bounds.Height) > VerifyToleranceDip)
+                {
+                    Serilog.Log.Warning(
+                        "Layout verify: container {Id} model {Bounds} is outside {Area}; clamping.",
+                        vm.Id, vm.Bounds, current);
+                    vm.Left = clamped.X;
+                    vm.Top = clamped.Y;
+                    vm.Width = clamped.Width;
+                    vm.Height = clamped.Height;
+                    repaired = true;
+                }
+
+                if (_windows.TryGetValue(vm.Id, out var window) && window is WidgetWindow widgetWindow)
+                {
+                    var expected = widgetWindow.GetExpectedDisplayRect();
+                    var live = GetLiveWindowRect(window);
+                    bool dipMismatch =
+                        Math.Abs(expected.X - live.X) > VerifyToleranceDip ||
+                        Math.Abs(expected.Y - live.Y) > VerifyToleranceDip ||
+                        Math.Abs(expected.Width - live.Width) > VerifyToleranceDip ||
+                        Math.Abs(expected.Height - live.Height) > VerifyToleranceDip;
+                    // Physical-space comparison with the MONITOR scale: a window stuck at a stale
+                    // DPI looks consistent in its own DIP space while rendering off-bounds.
+                    double monScale = GetPrimaryDpi() / 96.0;
+                    if (monScale <= 0) monScale = 1.0;
+                    var expectedPhys = RectD.FromXYWH(
+                        expected.X * monScale, expected.Y * monScale,
+                        expected.Width * monScale, expected.Height * monScale);
+                    var livePhys = GetLiveWindowRectPhysical(window);
+                    const double physicalTolerancePx = 2.0;
+                    bool physMismatch =
+                        Math.Abs(expectedPhys.X - livePhys.X) > physicalTolerancePx ||
+                        Math.Abs(expectedPhys.Y - livePhys.Y) > physicalTolerancePx ||
+                        Math.Abs(expectedPhys.Width - livePhys.Width) > physicalTolerancePx ||
+                        Math.Abs(expectedPhys.Height - livePhys.Height) > physicalTolerancePx;
+                    if (dipMismatch || physMismatch)
+                    {
+                        Serilog.Log.Warning(
+                            "Layout verify: container {Id} ({Window}) live {Live} != expected {Expected}; {Details} reapplying.",
+                            vm.Id, widgetWindow.GetType().Name, live, expected, DescribeLiveState(widgetWindow));
+                        try
+                        {
+                            widgetWindow.ApplyGeometry();
+                        }
+                        catch (Exception ex)
+                        {
+                            Serilog.Log.Error(ex, "Layout verify: reapply failed for container {Id}.", vm.Id);
+                        }
+                        if (physMismatch)
+                        {
+                            // Native placement is immune to a stale window DPI context: physical
+                            // pixels are physical pixels. Property sets alone cannot fix a stuck
+                            // window (they get reinterpreted in the stale space).
+                            try
+                            {
+                                var hwnd = new WindowInteropHelper(window).Handle;
+                                if (hwnd != IntPtr.Zero) _positioning.SetBounds(hwnd, expectedPhys);
+                            }
+                            catch (Exception ex)
+                            {
+                                Serilog.Log.Error(ex, "Layout verify: native repair failed for container {Id}.", vm.Id);
+                            }
+                        }
+                        repaired = true;
+                    }
+                }
+            }
+        }
+
+        if (repaired)
+        {
+            _ = SaveAsync();
+            try { LayoutRefreshed?.Invoke(); } catch { }
+        }
+
+        // Late DPI remaps can re-smear a window after an early sweep heals it: keep sweeping
+        // a bounded number of times so a repeat offender is caught, not just the first drift.
+        if (_verifySweepsLeft > 0)
+        {
+            _verifySweepsLeft--;
+            ScheduleVerifyLayout(TimeSpan.FromSeconds(3));
+        }
+    }
+
+    /// <summary>
+    /// Extra state for mismatch diagnostics: chrome-overlay geometry for widgets and the live
+    /// per-window DPI scale, so a repeat smear can be attributed instead of guessed at.
+    /// </summary>
+    private static string DescribeLiveState(WidgetWindow window)
+    {
+        try
+        {
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(window);
+            string dpiText = $"dpi={dpi.DpiScaleX:0.###}x{dpi.DpiScaleY:0.###}";
+            string nativeText;
+            try
+            {
+                var hwnd = new WindowInteropHelper(window).Handle;
+                nativeText = hwnd != IntPtr.Zero && Win32Apis.GetWindowRect(hwnd, out RECT nr)
+                    ? $" native=({nr.Left},{nr.Top} {nr.Right - nr.Left}x{nr.Bottom - nr.Top}px)"
+                    : " native=<none>";
+            }
+            catch
+            {
+                nativeText = " native=<unknown>";
+            }
+            if (window is Views.Containers.CssWidgetWindow widget)
+            {
+                var overlay = widget.ChromeOverlay;
+                if (overlay is null)
+                {
+                    return dpiText + nativeText + " overlay=<none>";
+                }
+
+                return dpiText + nativeText + $" overlay=({overlay.Left:0},{overlay.Top:0} {overlay.Width:0}x{overlay.Height:0})"
+                    + (overlay.IsVisible ? " visible" : " hidden");
+            }
+            return dpiText + nativeText;
+        }
+        catch
+        {
+            return "dpi=<unknown>";
+        }
+    }
+
+    /// <summary>
+    /// Live window rect in DIPs, read from the native window rect (device pixels) converted with
+    /// the window's own DPI scale — the same ground truth the debug overlay and Performance
+    /// Monitor show. WPF's cached Left/Top/Width/Height can disagree with it after a DPI
+    /// transition, and verification must compare against reality, not the cache.
+    /// </summary>
+    private static RectD GetLiveWindowRect(Window window)
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(window).Handle;
+            if (hwnd != IntPtr.Zero && Win32Apis.GetWindowRect(hwnd, out RECT r))
+            {
+                var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(window);
+                double sx = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+                double sy = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+                return RectD.FromXYWH(r.Left / sx, r.Top / sy, (r.Right - r.Left) / sx, (r.Bottom - r.Top) / sy);
+            }
+        }
+        catch { }
+        return RectD.FromXYWH(window.Left, window.Top, window.Width, window.Height);
+    }
+
+    /// <summary>
+    /// Live native (physical-pixel) window rect. Falls back to props × monitor scale.
+    /// Compared in physical space so a window stuck at a stale DPI (whose DIP props look
+    /// self-consistent while it renders oversized/off-bounds) is still detected.
+    /// </summary>
+    private static RectD GetLiveWindowRectPhysical(Window window)
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(window).Handle;
+            if (hwnd != IntPtr.Zero && Win32Apis.GetWindowRect(hwnd, out RECT r))
+            {
+                return RectD.FromXYWH(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
+            }
+        }
+        catch { }
+        double s = GetPrimaryDpi() / 96.0;
+        if (s <= 0) s = 1.0;
+        return RectD.FromXYWH(window.Left * s, window.Top * s, window.Width * s, window.Height * s);
+    }
+
+    /// <summary>Clamps bounds into an area without rescaling (used by post-pass verification).</summary>
+    private static RectD ClampBoundsToArea(RectD bounds, RectD area, double minW, double minH)
+    {
+        double width = ClampRescaledExtent(bounds.Width, area.Width, minW);
+        double height = ClampRescaledExtent(bounds.Height, area.Height, minH);
+        double left = ClampRescaledOrigin(bounds.X, area.X, area.Right, width);
+        double top = ClampRescaledOrigin(bounds.Y, area.Y, area.Bottom, height);
+        return RectD.FromXYWH(left, top, width, height);
     }
 
     #endregion
@@ -621,7 +1120,7 @@ public sealed class DesktopManager
             SelectedIndex = 0,
         };
 
-        _containers.CreateContainer(DesktopItemContainerType.BoxContainer, 60, 60, 300, 460, childContainer: boxContainer);
+        _containers.CreateContainer(DesktopItemContainerType.BoxContainer, 60, 60, 340, 460, childContainer: boxContainer);
 
         // FolderPortal for Downloads at top-right
         string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
@@ -796,7 +1295,7 @@ public sealed class DesktopManager
         _windows[vm.Id] = window;
         // Per-window DPI changes never raise DisplaySettingsChanged — observe them directly so
         // DPI-only switches (same resolution, different scale) also funnel into the rescale path.
-        window.DpiChanged += OnWindowDpiChanged;
+        //window.DpiChanged += OnWindowDpiChanged;//not needed
         // RegisterBoxWindow is done inside each window's OnLoaded for CssWidget; keep for BoxContainer compat
         try { Win32Apis.RegisterBoxWindow(new WindowInteropHelper(window).Handle); } catch { }
         //IntPtr? foregroundWindowHwnd = null;
@@ -941,9 +1440,17 @@ public sealed class DesktopManager
     {
         if (_windows.TryGetValue(id, out var window))
         {
-            try { window.DpiChanged -= OnWindowDpiChanged; } catch { }
+            //try { window.DpiChanged -= OnWindowDpiChanged; } catch { }
             var handle = new WindowInteropHelper(window).Handle;
             Win32Apis.UnregisterBoxWindow(handle);
+            // WebView2 must be torn down BEFORE Window.Close: closing with a live WebView2
+            // inside throws InvalidOperationException ("Notification Window is null") from
+            // HwndHost teardown mid-close (kills ToggleDisable/Reset teardown).
+            try
+            {
+                if (window is CssWidgetWindow widgetWindow) widgetWindow.PrepareForClose();
+            }
+            catch { }
             //Win32Apis.AllowHide(handle);
             //window.Close();
             window.CloseWindowEx(handle);
@@ -991,11 +1498,14 @@ public sealed class DesktopManager
         _coordinator.Stop();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
 
-        foreach (var window in _windows)
+        // Snapshot: RemoveWindow mutates the dictionary, and a single failing window must never
+        // abort teardown (disable/reset) or crash the app — each close is independently guarded.
+        foreach (var id in _windows.Keys.ToList())
         {
             //Win32Apis.AllowHide(new WindowInteropHelper(window).Handle);
             //window.Close();
-            RemoveWindow(window.Key);
+            try { RemoveWindow(id); }
+            catch (Exception ex) { Serilog.Log.Error(ex, "CloseAll: failed to close window {Id}", id); }
         }
 
         _windows.Clear();
@@ -1850,7 +2360,16 @@ public static class DesktopManagerExtensions
     public static void CloseWindowEx(this Window window, nint? handle = null)
     {
         if (handle is null) handle = new WindowInteropHelper(window).Handle;
-        window.Close();
+        try
+        {
+            window.Close();
+        }
+        catch (Exception ex)
+        {
+            // Teardown-time close failures (e.g. HwndHost "Notification Window is null" when hosted
+            // content was already torn down) are benign: the window is going away and the OS reclaims
+            // the rest. Never let one take down disable/reset/exit.
+            Serilog.Log.Debug(ex, "CloseWindowEx: close failed for 0x{Handle:X}, continuing teardown", handle.Value.ToInt64());
+        }
     }
-
 }

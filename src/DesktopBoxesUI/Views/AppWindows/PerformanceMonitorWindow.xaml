@@ -148,6 +148,10 @@
                     Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
                     CornerRadius="8,8,0,0">
                     <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <TextBlock
                             VerticalAlignment="Center"
                             FontWeight="SemiBold"
@@ -164,6 +168,15 @@
                                 Click="ResumeAll_Click"
                                 Content="Resume All" />
                         </StackPanel>
+                        <TextBlock
+                            Grid.Row="1"
+                            Margin="0,4,0,0"
+                            FontFamily="Consolas"
+                            FontSize="10"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="{Binding LayoutAnchorStatus}"
+                            TextWrapping="Wrap"
+                            ToolTip="Rescale baseline vs live primary area: if they disagree with no recent pass, scheduling (not math) is the suspect." />
                     </Grid>
                 </Border>
                 <DataGrid
@@ -208,6 +221,36 @@
                             Width="80"
                             Binding="{Binding Status}"
                             Header="Status" />
+                        <DataGridTextColumn
+                            Width="150"
+                            Binding="{Binding ModelBounds}"
+                            Header="Model Bounds">
+                            <DataGridTextColumn.CellStyle>
+                                <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding BoundsMismatch}" Value="True">
+                                            <Setter Property="Foreground" Value="Red" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                        </DataGridTextColumn>
+                        <DataGridTextColumn
+                            Width="150"
+                            Binding="{Binding AppliedBounds}"
+                            Header="Applied Bounds">
+                            <DataGridTextColumn.CellStyle>
+                                <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding BoundsMismatch}" Value="True">
+                                            <Setter Property="Foreground" Value="Red" />
+                                            <Setter Property="FontWeight" Value="Bold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                        </DataGridTextColumn>
                     </DataGrid.Columns>
                 </DataGrid>
             </Grid>

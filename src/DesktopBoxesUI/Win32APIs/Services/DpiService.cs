@@ -2,6 +2,7 @@ using System.Runtime.Versioning;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Win32.NativeMethods;
+using WindowsNative;
 
 namespace DesktopBoxesUI.Win32.Services;
 
@@ -16,7 +17,20 @@ public sealed class DpiService : IDpiService
         => Win32Apis.GetDpiForSystem();
 
     public double GetDpiForWindow(nint hwnd)
-        => Win32Apis.GetDpiForWindow(hwnd);
+    {
+        // Prefer the monitor's live DPI over the window's associated DPI: GetDpiForWindow follows
+        // the window's last processed DPI change and goes stale across a scale switch (e.g. still
+        // reporting 120 after the display moved to 96), while the monitor itself always reports
+        // current values. Falls back to the window value when the monitor cannot be resolved.
+        try
+        {
+            var hmon = Win32Apis.MonitorFromWindow(hwnd, Win32Constants.MONITOR_DEFAULTTONEAREST);
+            if (hmon != IntPtr.Zero && Win32Apis.TryGetDpiForMonitor(hmon, out uint dpiX, out _))
+                return dpiX;
+        }
+        catch { }
+        return Win32Apis.GetDpiForWindow(hwnd);
+    }
 
     public event EventHandler<DpiChangedEventArgs>? DpiChanged;
 

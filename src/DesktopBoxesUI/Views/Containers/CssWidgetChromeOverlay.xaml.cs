@@ -1,12 +1,12 @@
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.Win32.NativeMethods;
-using WindowsNative;
-using static WindowsNative.Win32Constants;
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views.Containers;
 
@@ -158,36 +158,60 @@ public partial class CssWidgetChromeOverlay : Window
     private void OverlayPosChanged(object? sender, EventArgs e)
     {
         if (_isSyncing) return;
-        // Live sync owner during native drag — don't block on _isDragging or owner lags behind overlay.
-        SyncOwnerToThis();
+        if (IsDragging || IsResizing)
+        {
+            // User is actively moving/resizing the overlay: keep the owner following live.
+            // Model commits happen only on explicit gesture completions, never here.
+            SyncOwnerToThis(commitModel: false);
+            return;
+        }
+        // Outside gestures the overlay is a pure MIRROR of the owner: it must never push
+        // geometry back. An overlay move out here can only be framework/DPI noise, and pushing
+        // it into the owner would corrupt the owner and then echo back forever. Re-sync FROM
+        // the owner instead so any drift snaps back instead of amplifying.
+        SyncFromOwner();
     }
+
 
     public void SyncFromOwner()
     {
         if (_isDragging || _isSyncing) return;
         _isSyncing = true;
+
+        MinWidth = _ownerWidget.MinWidth;
+        MinHeight = _ownerWidget.MinHeight;
+
+        // Copy DIPs directly and let WPF map them to physical pixels with the overlay's current
+        // DPI context. Converting through a separately queried monitor DPI here can use a stale
+        // scale mid-transition and shift the chrome (for example left on 100% -> 125%).
         Left = _ownerWidget.Left;
         Top = _ownerWidget.Top;
         Width = _ownerWidget.Width;
         Height = _ownerWidget.Height;
-        MinWidth = _ownerWidget.MinWidth;
-        MinHeight = _ownerWidget.MinHeight;
+
         ResizeMode = _ownerWidget.ResizeMode;
         UpdateLockButtonAppearance();
         _isSyncing = false;
     }
 
-    public void SyncOwnerToThis()
+    public void SyncOwnerToThis(bool commitModel = true)
     {
         if (_isSyncing) return;
         _isSyncing = true;
+
         _ownerWidget.Left = Left;
         _ownerWidget.Top = Top;
         _ownerWidget.Width = Width;
         _ownerWidget.Height = Height;
-        _ownerWidget.ContainerViewModel.Model.Bounds = RectD.FromXYWH(Left, Top, Width, Height);
+
+        if (commitModel && !_desktopManager.IsLayoutUpdateActive)
+        {
+            _ownerWidget.ContainerViewModel.Model.Bounds = RectD.FromXYWH(Left, Top, Width, Height);
+        }
         _isSyncing = false;
     }
+
+
 
     void UpdateLockButtonAppearance()
     {

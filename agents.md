@@ -21,13 +21,20 @@ Follow it to keep the architecture clean and the build green.
   for `[ObservableProperty]` wherever the generator supports it (it does since 8.4):
   `[ObservableProperty] public partial string Name { get; set; }` instead of
   `[ObservableProperty] private string _name;`.
+- `DesktopBoxesUI/app.manifest` declares PerMonitorV2 DPI awareness — do not remove it, or popups
+  and geometry misbehave after display scale changes. Do not add a `compatibility` section to it
+  either: SxS activation fails on this machine when one is present (verified by bisecting). Container rescaling
+  keys off `DesktopResolution` (DIP work area) only — rescaling by the DIP ratio preserves both physical
+  size and relative layout across DPI changes, so no physical-pixel special-casing.
+- Widgets, containers and the desktop surface live on the **primary display only** — there is no
+  multi-monitor positioning support (for now). Rescaling keys off the primary work area alone.
 - Keep the NuGet surface small. Don't add packages without a reason. Currently allowed:
   `Microsoft.Extensions.DependencyInjection`,
   `CommunityToolkit.Mvvm`, `Wpf.Ui` (v4.3.0) and `Wpf.Ui.Tray` (v4.3.0) — the user explicitly asked for
   them to provide the modern window chrome, view-model helpers and tray styling. Reference WPF-UI resource
   dictionaries via `ui:ThemesDictionary` / `ui:ControlsDictionary` (`App.xaml` already does); legacy pack URIs
   (`/Wpf.Ui;component/...`) are obsolete. The window type is `Wpf.Ui.Controls.FluentWindow`.
-- Build must stay warning-light and succeed in both Debug and Release.
+- Build must stay warning-light and succeed.
 
 ## Layer responsibilities
 

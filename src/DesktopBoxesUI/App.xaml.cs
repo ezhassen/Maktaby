@@ -86,6 +86,11 @@ public partial class App : Application
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        // Display scale/resolution changes can leave the tray popup with stale DPI/placement
+        // state (small, unclickable menu). Re-create the icon once the layout settles.
+        // DesktopManager.LayoutRefreshed fires for both resolution and DPI-only passes.
+        Services.GetRequiredService<DesktopManager>().LayoutRefreshed += ScheduleTrayRefresh;
+
         // Windows shutdown / user logoff: disarm the minimize-prevention hooks BEFORE the session
         // starts collapsing our owned window chains, so teardown is not fought.
         SessionEnding += (_, _) => Win32Apis.SystemTeardown = true;
@@ -349,6 +354,14 @@ public partial class App : Application
             _trayHost!.Content = null;
         }
 
+        // The old icon must be disposed: merely dropping it leaves its shell registration alive
+        // and each refresh adds a visible duplicate. (Wpf.Ui NotifyIcon implements IDisposable.)
+        if (_tray is not null)
+        {
+            try { (_tray as IDisposable)?.Dispose(); } catch { }
+            _tray = null;
+        }
+
         var tray = new TrayIconUI();
         tray.NewBoxRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewBox();
         tray.NewBoxFolderPortalRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewFolderPortal();
@@ -456,6 +469,50 @@ public partial class App : Application
 
         _trayHost!.Content = tray;
         _tray = tray;
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _trayRefreshDebounce;
+
+    /// <summary>Re-creates the tray icon after a display/DPI layout pass (debounced through bursts).
+    /// A scale change can strand the popup with stale DPI/placement state; a fresh icon re-anchors it.</summary>
+    private void ScheduleTrayRefresh()
+    {
+        try
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    _trayRefreshDebounce ??= new System.Windows.Threading.DispatcherTimer
+                    {
+                        Interval = TimeSpan.FromSeconds(1.5)
+                    };
+                    _trayRefreshDebounce.Tick -= TrayRefreshDebounceTick;
+                    _trayRefreshDebounce.Tick += TrayRefreshDebounceTick;
+                    _trayRefreshDebounce.Stop();
+                    _trayRefreshDebounce.Start();
+                }
+                catch { }
+            }));
+        }
+        catch { }
+    }
+
+    private void TrayRefreshDebounceTick(object? sender, EventArgs e)
+    {
+        try
+        {
+            if (_trayRefreshDebounce is not null)
+            {
+                _trayRefreshDebounce.Stop();
+                _trayRefreshDebounce.Tick -= TrayRefreshDebounceTick;
+            }
+            if (Services is not null && _trayHost is not null)
+            {
+                ReplaceTrayIcon(Services);
+            }
+        }
+        catch { }
     }
 
     private void ShowWidgetsList(bool selectMode)

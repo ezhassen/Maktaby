@@ -10,6 +10,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using Wpf.Ui.Appearance;
+using WPFShared.Helpers;
 
 namespace DesktopBoxesUI.Controls.ContainersControls;
 
@@ -21,6 +22,8 @@ public partial class CssWidgetControl : UserControl
     private string? _pendingHtml;
     private Task? _initTask;
     private static Task<CoreWebView2Environment>? s_envTask;
+    private Window? _ownerWindow;
+    private bool _isWindowClosing;
 
     public event EventHandler? WidgetMouseEnter;
     public event EventHandler? WidgetMouseLeave;
@@ -55,10 +58,23 @@ public partial class CssWidgetControl : UserControl
             NavigateToHtml(_pendingHtml);
             _pendingHtml = null;
         }
+        _ownerWindow = Window.GetWindow(this);
+        _ownerWindow.Closing += OnWindowClosing;
+
+    }
+
+    private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        _isWindowClosing = !e.Cancel;
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
+        if (_ownerWindow != null)
+        {
+            _ownerWindow.Closing -= OnWindowClosing;
+            _ownerWindow = null;
+        }
         UnsubscribeTheme();
         try { IsVisibleChanged -= OnIsVisibleChanged; } catch { }
         // Keep WebView alive for performance; disposal is handled by parent window's OnClosed
@@ -67,6 +83,7 @@ public partial class CssWidgetControl : UserControl
 
     private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        if (_isWindowClosing) return;
         if (!IsVisible) Suspend();
         else Resume();
     }
@@ -155,7 +172,9 @@ public partial class CssWidgetControl : UserControl
 
     public async void Suspend()
     {
-        if (IsSuspended) return;
+        if (IsSuspended || _isWindowClosing || !IsLoaded) return;
+        // Don't perform teardown if we're being detached
+        if (this.IsBeingDetached()) return;
         if (WebView?.CoreWebView2 == null)
         {
             IsSuspended = true;
@@ -179,6 +198,10 @@ public partial class CssWidgetControl : UserControl
     public void Resume()
     {
         if (!IsSuspended) return;
+
+        if (_isWindowClosing || !IsLoaded) return;
+        // Don't perform teardown if we're being detached
+        if (this.IsBeingDetached()) return;
         try
         {
             WebView?.CoreWebView2?.Resume();

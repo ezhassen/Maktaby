@@ -4,14 +4,14 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
-using WindowsNative;
-using static WindowsNative.Win32Constants;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views.Containers;
 
@@ -50,8 +50,9 @@ public partial class CssWidgetWindow : WidgetWindow
 
         //UpdateChrome();
         Loaded += OnLoaded;
-        SizeChanged += OnSizeChanged;
-        LocationChanged += OnLocationChanged;
+        // Container bounds are authoritative layout state. SizeChanged/LocationChanged also fire for
+        // framework-driven DPI remapping, so they must not overwrite the model here. Explicit user
+        // drag/resize paths and DesktopManager commit bounds instead.
         IsVisibleChanged += OnIsVisibleChanged;
         StateChanged += OnStateChanged;
         this.LockMenuItem.IsChecked = vm.IsLocked;
@@ -279,20 +280,9 @@ public partial class CssWidgetWindow : WidgetWindow
         Height = bounds.Height;
     }
 
-    private void OnSizeChanged(object sender, SizeChangedEventArgs e)
-    {
-        if (!IsLoaded) return;
-        _container.Bounds = RectD.FromXYWH(Left, Top, ActualWidth, ActualHeight);
-        try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { }
-    }
-
-    private void OnLocationChanged(object? sender, EventArgs e)
-    {
-        if (!IsLoaded) return;
-        _container.Bounds = RectD.FromXYWH(Left, Top, ActualWidth, ActualHeight);
-    }
-
     public void SetHover(bool hover) { _isHover = hover; UpdateChrome(); }
+    /// <summary>Live chrome overlay, if one has been created (used by layout diagnostics).</summary>
+    internal CssWidgetChromeOverlay? ChromeOverlay => _chromeOverlay;
     bool HeaderIsShown() => _chromeOverlay?.IsVisible == true;
     bool CanShowHeader()
     {
@@ -329,6 +319,12 @@ public partial class CssWidgetWindow : WidgetWindow
                 EnsureOverlayAboveHost();
             }
             else if (!shouldShow && _chromeOverlay.IsVisible) _chromeOverlay.Hide();
+            else if (!shouldShow)
+            {
+                // Keep a hidden overlay tracking the owner (a DPI transition remaps hidden
+                // windows too). Invisible move, no model write — SyncFromOwner only aligns it.
+                _chromeOverlay.SyncFromOwner();
+            }
         }
     }
 
@@ -467,6 +463,8 @@ public partial class CssWidgetWindow : WidgetWindow
     {
         // Overlay must be closed before owner handle is destroyed — otherwise overlay's
         // HwndHook (KeepBelowApps/SyncOwnerToThis) and OwnerClosed re-entrancy run on half-torn-down owner.
+        base.OnClosing(e);
+        if (e.Cancel) return;
         var overlay = _chromeOverlay;
         _chromeOverlay = null;
         if (overlay != null)
@@ -475,13 +473,18 @@ public partial class CssWidgetWindow : WidgetWindow
             try { overlay.Owner = null; } catch { }
             try { overlay.Close(); } catch { }
         }
-        base.OnClosing(e);
     }
 
-    protected override void OnClosed(EventArgs e)
+    /// <summary>Detaches and disposes the WebView2 control. Must run BEFORE <see cref="Window.Close"/>:
+    /// closing with a live WebView2 inside throws InvalidOperationException ("Notification Window
+    /// is null") from HwndHost teardown mid-close. Idempotent — also called from <see cref="OnClosed"/>
+    /// as a fallback for direct closes.</summary>
+    public void PrepareForClose() => ShutdownWebView();
+
+    /// <summary>Prevent CoreWebView2Controller.IsVisible race on shutdown:
+    /// detach events, collapse and dispose WebView before the Window visual tree is torn down.</summary>
+    private void ShutdownWebView()
     {
-        // Prevent CoreWebView2Controller.IsVisible race on shutdown:
-        // detach events, collapse and dispose WebView before the Window visual tree is torn down
         if (_widgetControl != null)
         {
             try { _widgetControl.WidgetMouseEnter -= OnWidgetMouseEnter; } catch { }
@@ -492,6 +495,13 @@ public partial class CssWidgetWindow : WidgetWindow
             try { WidgetHost.Content = null; } catch { }
             _widgetControl = null;
         }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // WebView teardown already ran in PrepareForClose (called before Close by the manager);
+        // this is the fallback for direct closes so it never runs twice.
+        ShutdownWebView();
         // Overlay already closed in OnClosing — defensive null check only
         _chromeOverlay = null;
         if (_hwndSource != null)
