@@ -655,6 +655,7 @@ public sealed class BoxViewModel : ViewModelBase
         }
     }
 
+    [Obsolete("Use DeleteFolderItemsAsync instead", error: true)]
     public async Task<bool> DeleteFolderItemAsync(FolderItemViewModel vm, bool permanent)
     {
         var wasWatching = _isWatching;
@@ -663,6 +664,28 @@ public sealed class BoxViewModel : ViewModelBase
         {
             var ops = App.Services.GetRequiredService<IFileOperationService>();
             bool ok = ops.Delete(vm.Path, permanent);
+            if (ok) await RefreshFolderAsync();
+            return ok;
+        }
+        finally
+        {
+            if (wasWatching) StartWatching();
+        }
+    }
+
+    /// <summary>Deletes several items in ONE native operation (single shell dialog): cancelling it
+    /// aborts the whole batch. The old per-item fan-out showed one modal per file, where cancelling
+    /// one dialog could not stop the rest — users read that as "cancel still deletes".</summary>
+    public async Task<bool> DeleteFolderItemsAsync(IEnumerable<FolderItemViewModel> vms, bool permanent)
+    {
+        var paths = vms?.Where(v => v is not null && !string.IsNullOrEmpty(v.Path)).Select(v => v.Path).ToList();
+        if (paths is null || paths.Count == 0) return false;
+        var wasWatching = _isWatching;
+        if (wasWatching) StopWatching();
+        try
+        {
+            var ops = App.Services.GetRequiredService<IFileOperationService>();
+            bool ok = await ops.DeleteAsync(paths, permanent);
             if (ok) await RefreshFolderAsync();
             return ok;
         }

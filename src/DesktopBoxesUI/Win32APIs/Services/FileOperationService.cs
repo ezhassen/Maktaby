@@ -49,6 +49,7 @@ public sealed class FileOperationService : IFileOperationService
         return hr == 0 && op.fAnyOperationsAborted == 0;
     }
 
+    [Obsolete("Use DeleteAsync instead", error: true)]
     public bool Delete(string path, bool permanent)
     {
         if (string.IsNullOrEmpty(path))
@@ -74,6 +75,7 @@ public sealed class FileOperationService : IFileOperationService
         return hr == 0 && op.fAnyOperationsAborted == 0;
     }
 
+    [Obsolete("Use CopyAsync instead", error: true)]
     public bool Copy(string source, string destination)
     {
         if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(destination))

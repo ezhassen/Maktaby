@@ -14,10 +14,12 @@ public interface IFileOperationService
     /// <summary>Deletes the item at <paramref name="path"/>. When <paramref name="permanent"/> is false the
     /// item is moved to the Recycle Bin silently; when true the native Explorer confirmation is shown and the
     /// item is deleted permanently. Returns false if cancelled or failed.</summary>
+    [Obsolete("Use DeleteAsync instead", error: true)]
     bool Delete(string path, bool permanent);
 
     /// <summary>Copies the item at <paramref name="source"/> to <paramref name="destination"/> (file or
     /// directory), matching Explorer behaviour. Returns false if cancelled or failed.</summary>
+    [Obsolete("Use CopyAsync instead", error: true)]
     bool Copy(string source, string destination);
 
     /// <summary>Deletes multiple items at <paramref name="paths"/>. Uses a single shell operation so the

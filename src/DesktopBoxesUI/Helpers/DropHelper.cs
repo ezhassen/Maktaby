@@ -58,6 +58,7 @@ internal static class DropHelper
     /// a specific slot instead of appending. Returns the moved <see cref="BoxItem"/> models when the drop
     /// was an internal item move (so the caller can re-select them), otherwise <c>null</c>.
     /// </summary>
+    [Obsolete("Use AddToBoxAsync instead", error: true)]
     public static List<BoxItem>? AddToBox(BoxViewModel target, MainViewModel? host, DragEventArgs e, int insertIndex = -1)
     {
         if (e.Data.GetDataPresent(DndFormats.BoxItems))
@@ -260,6 +261,7 @@ internal static class DropHelper
     /// is a real desktop file, like Fences). If the source is already on the Desktop, the path is used
     /// as-is. Virtual/shell items (returned as PIDLs) are handled separately.
     /// </summary>
+    [Obsolete("Use ResolveDroppedFileAsync instead", error: true)]
     private static string ResolveDroppedFile(string source, IFileOperationService fileOps)
     {
         try
@@ -318,6 +320,7 @@ internal static class DropHelper
     /// real file it is copied; when it is a virtual shell item (no filesystem path) a <c>.lnk</c> that stores the
     /// PIDL is materialised on the desktop (matching Explorer). Returns the desktop path, or <c>null</c> if nothing
     /// could be materialised.</summary>
+    [Obsolete("Use ResolveDroppedPidlAsync instead", error: true)]
     private static string? ResolveDroppedPidl(string pidlBase64, IFileOperationService fileOps)
     {
         var path = Win32Apis.GetPathFromPidl(pidlBase64);

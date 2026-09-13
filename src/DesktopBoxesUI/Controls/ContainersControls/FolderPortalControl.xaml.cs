@@ -867,9 +867,18 @@ public partial class FolderPortalControl : UserControl
 
     private void ItemBorder_KeyDown(object sender, KeyEventArgs e)
     {
-        if (sender is not FrameworkElement { DataContext: FolderItemViewModel vm }) return;
+        if (e.Handled || sender is not FrameworkElement { DataContext: FolderItemViewModel vm }) return;
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
         bool alt = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+
+        // Auto-repeat is only meaningful for navigation; holding an action key (rename, delete,
+        // open, navigate-up) must not re-fire it — especially the destructive ones.
+        bool isNavigation = key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End;
+        if (e.IsRepeat && !isNavigation)
+        {
+            e.Handled = true;
+            return;
+        }
 
         if (key == Key.F2)
         {
@@ -878,9 +887,9 @@ public partial class FolderPortalControl : UserControl
         }
         else if (key == Key.Delete)
         {
+            e.Handled = true;
             bool permanent = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
             DeleteSelected(vm, permanent);
-            e.Handled = true;
         }
         else if (key == Key.Enter)
         {
@@ -1036,16 +1045,11 @@ public partial class FolderPortalControl : UserControl
     private void DeleteSelected(FolderItemViewModel clicked, bool permanent)
     {
         if (Box == null) return;
+        // One batched operation (one shell dialog): cancelling aborts everything. The previous
+        // per-item fan-out showed a modal per file, so cancelling one dialog never stopped the rest.
         var selected = Box.FolderItems.Where(i => i.IsSelected).ToList();
-        if (selected.Count > 0)
-        {
-            foreach (var it in selected.ToList())
-                _ = Box.DeleteFolderItemAsync(it, permanent);
-        }
-        else
-        {
-            _ = Box.DeleteFolderItemAsync(clicked, permanent);
-        }
+        var targets = selected.Count > 0 ? selected : [clicked];
+        _ = Box.DeleteFolderItemsAsync(targets, permanent);
     }
 
     private void StartRename(FolderItemViewModel vm, FrameworkElement? element)
