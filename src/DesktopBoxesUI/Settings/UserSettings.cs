@@ -107,6 +107,18 @@ public class UserSettings
     [Category("Appearance_CSSWidgets"), DefaultValue(null)]
     public string? DefaultCSSWidgetsTheme { get; set; }
 
+    /// <summary>Suspend widget WebViews when a fullscreen app covers their monitor.</summary>
+    [Category("Widgets"), DefaultValue(true)]
+    public bool PauseWidgetsOnFullscreen { get; set; } = true;
+
+    /// <summary>Suspend widget WebViews while battery saver is on.</summary>
+    [Category("Widgets"), DefaultValue(true)]
+    public bool PauseWidgetsOnBatterySaver { get; set; } = true;
+
+    /// <summary>Suspend widget WebViews in remote sessions.</summary>
+    [Category("Widgets"), DefaultValue(true)]
+    public bool PauseWidgetsOnRemoteSession { get; set; } = true;
+
     #endregion
 
     #region LiveWallpaper

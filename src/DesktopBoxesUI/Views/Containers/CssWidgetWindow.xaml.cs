@@ -21,7 +21,9 @@ public partial class CssWidgetWindow : WidgetWindow
     private readonly DesktopItemContainer _container;
     private readonly ICssWidgetService _widgetService;
     private CssWidgetControl? _widgetControl;
-    //private WindowDragController? _drag;
+    /// <summary>The hosted widget control (null before load / after shutdown teardown).
+    /// Used by <see cref="DesktopManager"/> for fullscreen auto-suspend.</summary>
+    internal CssWidgetControl? WidgetControl => _widgetControl;    //private WindowDragController? _drag;
     private bool _isHover;
     private bool _isActive;
     private HwndSource? _hwndSource;

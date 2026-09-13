@@ -1,32 +1,43 @@
-using WindowsNative;
-
-namespace DesktopLiveWallPaperEngine.Playback;
+namespace WindowsNative.Playback;
 
 public sealed record ForegroundInfo(string ClassName, RECT WindowRect, bool IsZoomed, IntPtr MonitorHandle);
 
 /// <summary>A visible top-level candidate window for coverage checks — foreground or not.
-/// Minimized, cloaked, shell and own-process windows never make it into the capture.</summary>
+/// Minimized, cloaked, shell and excluded windows never make it into the capture.</summary>
 public sealed record TopWindowInfo(IntPtr Hwnd, string ClassName, RECT WindowRect, bool IsZoomed, IntPtr MonitorHandle);
 
 /// <summary><paramref name="DisplayOff"/> comes from GUID_CONSOLE_DISPLAY_STATE as a pushed
-/// notification, not from a poll — see PowerNotifications.</summary>
+/// notification, not from a poll.</summary>
 public sealed record SystemFlags(bool SessionLocked, bool RemoteSession, bool BatterySaver, bool D3DFullscreen,
     bool DisplayOff = false);
 
 public enum PauseReason { None, Fullscreen, SessionLocked, RemoteSession, BatterySaver, DisplayOff, ByUser }
 
+/// <summary>Which pause triggers are armed. Each consumer maps its own settings object to
+/// this (the live-wallpaper engine maps its persisted PauseConfig; the desktop app maps
+/// its user settings) so the decision never depends on either.</summary>
+public sealed class PausePolicy
+{
+    public bool OnFullscreen { get; set; } = true;
+    public bool OnBatterySaver { get; set; } = true;
+    public bool OnRemoteSession { get; set; } = true;
+}
+
 /// <summary>Pure pause policy — no Win32 calls, fully unit-testable.</summary>
 public static class PauseDecision
 {
-    private static readonly HashSet<string> ShellOrOwnClasses = new(StringComparer.Ordinal)
+    /// <summary>Shell windows, always ignored by every consumer. Consumer-owned classes
+    /// (the live-wallpaper surface, Box windows, …) arrive per-call via
+    /// <paramref name="extraExcludedClasses"/> instead — each host passes only its own.</summary>
+    private static readonly HashSet<string> ShellClasses = new(StringComparer.Ordinal)
     {
         "Progman", "WorkerW", "Shell_TrayWnd", "SHELLDLL_DefView", "SysListView32",
-        Rendering.WallpaperWindow.ClassName,
     };
 
     public const double CoverageThreshold = 0.95;
 
-    public static bool IsShellOrOwnWindow(string className) => ShellOrOwnClasses.Contains(className);
+    public static bool IsShellOrOwnWindow(string className, IReadOnlySet<string>? extraExcludedClasses = null) =>
+        ShellClasses.Contains(className) || (extraExcludedClasses?.Contains(className) == true);
 
     /// <summary>True when the foreground window effectively hides the desktop of the given
     /// monitor: maximized on it, or covering ≥95% of its work area.</summary>
@@ -44,14 +55,15 @@ public static class PauseDecision
         in RECT monitorWorkArea,
         IntPtr monitorHandle,
         SystemFlags flags,
-        Config.PauseConfig config)
+        PausePolicy policy,
+        IReadOnlySet<string>? extraExcludedClasses = null)
     {
         // Legacy single-window entry: the foreground window is simply the only candidate.
         // (Kept for the polling monitor; the supervisor evaluates the full window list.)
         List<TopWindowInfo> windows = [];
-        if (foreground is not null && !IsShellOrOwnWindow(foreground.ClassName))
+        if (foreground is not null && !IsShellOrOwnWindow(foreground.ClassName, extraExcludedClasses))
             windows.Add(new TopWindowInfo(IntPtr.Zero, foreground.ClassName, foreground.WindowRect, foreground.IsZoomed, foreground.MonitorHandle));
-        return EvaluateForMonitor(windows, monitorBounds, monitorWorkArea, monitorHandle, flags, config);
+        return EvaluateForMonitor(windows, monitorBounds, monitorWorkArea, monitorHandle, flags, policy, extraExcludedClasses);
     }
 
     /// <summary>A monitor pauses when ANY qualifying top-level window covers it — a fullscreen app
@@ -64,15 +76,16 @@ public static class PauseDecision
         in RECT monitorWorkArea,
         IntPtr monitorHandle,
         SystemFlags flags,
-        Config.PauseConfig config)
+        PausePolicy policy,
+        IReadOnlySet<string>? extraExcludedClasses = null)
     {
         // Outranks everything, and is not configurable: there is no reading of "pause on
         // fullscreen: off" under which the user wants frames decoded into a dark panel.
         if (flags.DisplayOff) return PauseReason.DisplayOff;
         if (flags.SessionLocked) return PauseReason.SessionLocked;
-        if (config.OnRemoteSession && flags.RemoteSession) return PauseReason.RemoteSession;
-        if (config.OnBatterySaver && flags.BatterySaver) return PauseReason.BatterySaver;
-        if (!config.OnFullscreen) return PauseReason.None;
+        if (policy.OnRemoteSession && flags.RemoteSession) return PauseReason.RemoteSession;
+        if (policy.OnBatterySaver && flags.BatterySaver) return PauseReason.BatterySaver;
+        if (!policy.OnFullscreen) return PauseReason.None;
         if (flags.D3DFullscreen) return PauseReason.Fullscreen;
         foreach (var w in windows)
         {

@@ -2,12 +2,12 @@ using DesktopLiveWallPaperEngine.Common;
 using DesktopLiveWallPaperEngine.Config;
 using DesktopLiveWallPaperEngine.Desktop;
 using DesktopLiveWallPaperEngine.Interop;
-using DesktopLiveWallPaperEngine.Playback;
 using DesktopLiveWallPaperEngine.Rendering;
 using System.Collections.Concurrent;
 using System.Text;
 using WindowsNative;
 using WindowsNative.Desktop;
+using WindowsNative.Playback;
 using static WindowsNative.Win32Constants;
 
 namespace DesktopLiveWallPaperEngine;
@@ -102,7 +102,20 @@ public sealed class Engine : IDisposable
 
         //_tray = new TrayIcon(_messageWindow.Hwnd);
 
-        _playback = new PlaybackSupervisor(() => _config.Pause);
+        _playback = new PlaybackSupervisor(
+            // The supervisor reads a shared PausePolicy; map the persisted config each time.
+            () => new PausePolicy
+            {
+                OnFullscreen = _config.Pause.OnFullscreen,
+                OnBatterySaver = _config.Pause.OnBatterySaver,
+                OnRemoteSession = _config.Pause.OnRemoteSession,
+            },
+            () => MonitorTracker.Enumerate()
+                .Select(m => new PauseMonitor(m.Device, m.Bounds, m.WorkArea))
+                .ToList(),
+            // Our own surface window must never pause a monitor — engine-only exclusion
+            // (the desktop app passes its own classes instead).
+            new HashSet<string>([WallpaperWindow.ClassName], StringComparer.OrdinalIgnoreCase));
         _playback.PauseStateChanged += (device, reason) =>
         {
             var epoch = Volatile.Read(ref _pauseEpoch);

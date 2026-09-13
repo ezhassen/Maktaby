@@ -1,14 +1,18 @@
-using DesktopLiveWallPaperEngine.Desktop;
-using WindowsNative;
 using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Text;
 using static WindowsNative.Win32Constants;
 
-namespace DesktopLiveWallPaperEngine.Playback;
+namespace WindowsNative.Playback;
 
-/// <summary>Event-driven pause supervisor: pauses wallpapers hidden under fullscreen apps (and
-/// resumes them) with no polling loop and no timers.
+/// <summary>One monitor as the supervisor sees it. Each host maps its own monitor
+/// enumeration to this (the live-wallpaper engine maps its MonitorTracker entries;
+/// the desktop app maps its IMonitorService) so the supervisor never depends on either.</summary>
+public sealed record PauseMonitor(string Device, RECT Bounds, RECT WorkArea);
+
+/// <summary>Event-driven pause supervisor: pauses per-monitor content (live wallpapers,
+/// suspendable widgets) hidden under fullscreen apps (and resumes them) with no polling
+/// loop and no timers.
 ///
 /// Every input the policy (<see cref="PauseDecision"/>) reads arrives as an event:
 /// <list type="bullet">
@@ -18,9 +22,9 @@ namespace DesktopLiveWallPaperEngine.Playback;
 /// <item>geometry drifts of any top-level window via <c>EVENT_OBJECT_LOCATIONCHANGE</c>,
 /// coalesced per-window on actual rect changes, so the hook storm of a window drag costs one
 /// cheap compare per event;</item>
-/// <item>session lock/unlock, display on/off and battery-saver transitions via the engine's
-/// existing pushed notifications (<c>WM_WTSSESSION_CHANGE</c>, power-setting messages),
-/// which land in <see cref="SessionLocked"/> / <see cref="DisplayOff"/> / <see cref="Invalidate"/>;</item>
+/// <item>session lock/unlock, display on/off and battery-saver transitions via pushed
+/// notifications (<c>WM_WTSSESSION_CHANGE</c>, power-setting messages), which land in
+/// <see cref="SessionLocked"/> / <see cref="DisplayOff"/> / <see cref="Invalidate"/>;</item>
 /// <item>remote-session and exclusive-D3D-fullscreen state, which have no event of their own,
 /// are read at evaluation time — i.e. only when something else already fired.</item>
 /// </list>
@@ -33,10 +37,12 @@ namespace DesktopLiveWallPaperEngine.Playback;
 /// flag flip with the window list otherwise identical is held as transition noise.
 /// Evaluation is skipped entirely while <see cref="Suspend"/>ed (user-paused), and
 /// <see cref="Resume"/> re-evaluates immediately, preserving the old no-spurious-resume contract.
-/// Transitions fire on the hook/notification thread; the engine marshals them as before.</summary>
+/// Transitions fire on the hook/notification thread; the host marshals them as before.</summary>
 public sealed class PlaybackSupervisor : IDisposable
 {
-    private readonly Func<Config.PauseConfig> _config;
+    private readonly Func<PausePolicy> _policy;
+    private readonly Func<IReadOnlyList<PauseMonitor>> _monitors;
+    private readonly IReadOnlySet<string>? _extraExcluded;
     private readonly Dictionary<string, PauseReason> _state = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _gate = new();
     private volatile bool _suspended;
@@ -91,9 +97,20 @@ public sealed class PlaybackSupervisor : IDisposable
         set { _displayOff = value; Reevaluate(); }
     }
 
-    public PlaybackSupervisor(Func<Config.PauseConfig> config)
+    /// <param name="policy">Live policy snapshot, read fresh on every evaluation.</param>
+    /// <param name="monitors">Live monitor snapshot (device, bounds, work area).</param>
+    /// <param name="extraExcludedWindowClasses">Host-owned window classes that must never
+    /// pause a monitor — e.g. the live-wallpaper surface for the wallpaper engine, Box
+    /// windows for the desktop app — on top of the shell classes
+    /// <see cref="PauseDecision"/> always ignores. Pass only the host's own classes.</param>
+    public PlaybackSupervisor(
+        Func<PausePolicy> policy,
+        Func<IReadOnlyList<PauseMonitor>> monitors,
+        IReadOnlySet<string>? extraExcludedWindowClasses = null)
     {
-        _config = config;
+        _policy = policy;
+        _monitors = monitors;
+        _extraExcluded = extraExcludedWindowClasses;
         _winEventProc = OnWinEvent;
         HookRoots.TryAdd(_winEventProc, 0);
         _hookThread = new Thread(HookThreadMain) { IsBackground = true, Name = "PlaybackEvents" };
@@ -234,7 +251,7 @@ public sealed class PlaybackSupervisor : IDisposable
 
         // This runs on the hook thread, the engine thread, or a Win32 notification thread —
         // any of which may carry a different DPI context. The foreground rect captured here
-        // must be in the same physical pixels as MonitorTracker's bounds.
+        // must be in the same physical pixels as the monitor bounds.
         var awareness = User32.GetThreadDpiAwarenessContext();
         if (User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == IntPtr.Zero)
             User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
@@ -249,10 +266,10 @@ public sealed class PlaybackSupervisor : IDisposable
                 IsBatterySaverOn(),
                 IsD3DFullscreen(),
                 _displayOff);
-            var config = _config();
+            var policy = _policy();
 
             var monitors = new List<(string Device, RECT Bounds, RECT WorkArea, IntPtr Handle)>();
-            foreach (var monitor in MonitorTracker.Enumerate())
+            foreach (var monitor in _monitors())
                 monitors.Add((monitor.Device, monitor.Bounds, monitor.WorkArea, MonitorHandle(monitor.Bounds)));
 
             // Foreground identity is log-only now: coverage considers every captured window.
@@ -286,7 +303,7 @@ public sealed class PlaybackSupervisor : IDisposable
             current = [];
             foreach (var (device, bounds, workArea, handle) in monitors)
             {
-                var reason = PauseDecision.EvaluateForMonitor(windows, bounds, workArea, handle, flags, config);
+                var reason = PauseDecision.EvaluateForMonitor(windows, bounds, workArea, handle, flags, policy, _extraExcluded);
                 string by = "-";
                 if (reason == PauseReason.Fullscreen)
                 {
@@ -317,7 +334,7 @@ public sealed class PlaybackSupervisor : IDisposable
         lock (_gate)
         {
             // A Suspend landing mid-evaluation must still win: applying transitions now would
-            // resume playback behind the user's manual pause.
+            // resume content behind the user's manual pause.
             if (_disposed || _suspended) return;
             foreach (var (device, reason, by) in current)
             {
@@ -352,7 +369,7 @@ public sealed class PlaybackSupervisor : IDisposable
     /// <summary>Every visible, non-minimized, non-cloaked top-level window outside our own
     /// process and the shell. Runs synchronously on the caller's thread (awareness pinned by
     /// Reevaluate, for life by the hook thread).</summary>
-    private static List<TopWindowInfo> CaptureTopWindows()
+    private List<TopWindowInfo> CaptureTopWindows()
     {
         var list = new List<TopWindowInfo>(64);
         EnumWindowsProc callback = (hwnd, _) =>
@@ -360,15 +377,15 @@ public sealed class PlaybackSupervisor : IDisposable
             try
             {
                 if (!User32.IsWindowVisible(hwnd) || User32.IsIconic(hwnd)) return true;
-                // Never pause for our own windows (boxes, settings, dialogs): interacting with
-                // the app itself must not count as covering the wallpaper.
+                // Never pause for our own windows: interacting with
+                // the app itself must not count as covering the content.
                 User32.GetWindowThreadProcessId(hwnd, out uint pid);
                 if (pid == OwnPid) return true;
                 if (!User32.GetWindowRect(hwnd, out var rect) || rect.Right <= rect.Left || rect.Bottom <= rect.Top) return true;
                 var sb = new StringBuilder(64);
                 if (User32.GetClassNameW(hwnd, sb, sb.Capacity) == 0) return true;
                 string cls = sb.ToString();
-                if (PauseDecision.IsShellOrOwnWindow(cls)) return true;
+                if (PauseDecision.IsShellOrOwnWindow(cls, _extraExcluded)) return true;
                 // Suspended Store apps keep stale fullscreen rects while invisible.
                 if (IsCloaked(hwnd)) return true;
                 list.Add(new TopWindowInfo(hwnd, cls, rect, User32.IsZoomed(hwnd), User32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)));

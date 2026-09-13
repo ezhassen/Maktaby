@@ -16,6 +16,7 @@ using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Interop;
 using WindowsNative;
+using WindowsNative.Playback;
 using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI;
@@ -44,8 +45,14 @@ public sealed class DesktopManager
     private readonly IFileRuleCoordinator _coordinator;
     private readonly IMouseMonitor _mouseMonitor;
     private readonly ISettingsService _settingsService;
+    private readonly IMonitorService _monitors;
+    private readonly IDispatcher _dispatcher;
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
+    /// <summary>Fullscreen/system auto-pause for widget WebViews (shared engine with live
+    /// wallpapers). Created in <see cref="InitializeAsync"/>, torn down in
+    /// <see cref="CloseAll"/>; transitions marshal to the UI thread.</summary>
+    private PlaybackSupervisor? _widgetPause;
     private DesktopSurface? _surface;
     /// <summary>Owns the above-icons widget layer (probe/attach/watch) on the custom-surface
     /// feature path. The surface window is the layer window; boxes/widgets are owned by it.</summary>
@@ -113,6 +120,8 @@ public sealed class DesktopManager
         _coordinator = provider.GetRequiredService<IFileRuleCoordinator>();
         _mouseMonitor = provider.GetRequiredService<IMouseMonitor>();
         _settingsService = provider.GetRequiredService<ISettingsService>();
+        _monitors = provider.GetRequiredService<IMonitorService>();
+        _dispatcher = provider.GetRequiredService<IDispatcher>();
     }
 
     public async Task InitializeAsync()
@@ -184,6 +193,9 @@ public sealed class DesktopManager
         //
         _coordinator.Start();
         if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == true) _mouseMonitor.Start();
+        StartWidgetAutoPause();
+        SystemEvents.SessionSwitch -= OnSessionSwitch;
+        SystemEvents.SessionSwitch += OnSessionSwitch;
     }
 
     /// <summary>
@@ -559,6 +571,10 @@ public sealed class DesktopManager
         }
 
         RefreshDesktopLayer();
+
+        // Windows may now sit on different monitors: re-evaluate pause state so moved
+        // widgets pick up the covering state of their new monitor.
+        _widgetPause?.Invalidate();
 
         _ = SaveAsync();
         try { LayoutRefreshed?.Invoke(); } catch { }
@@ -1304,6 +1320,8 @@ public sealed class DesktopManager
         //    foregroundWindowHwnd = User32.GetForegroundWindow();
         //}
         window.Show();
+        // A window created while its monitor is already covered must start suspended.
+        ApplySupervisorStateToWindow(window);
 
         /*if (!showActivated && focusWorkaround && foregroundWindowHwnd is not null)
         {
@@ -1460,6 +1478,150 @@ public sealed class DesktopManager
     #endregion
 
 
+    #region Widget auto-pause
+
+    /// <summary>Starts per-monitor fullscreen/system auto-suspend for widget WebViews on the
+    /// shared <see cref="PlaybackSupervisor"/> engine (same as live wallpapers). No class
+    /// exclusions: every own window is in-process (already excluded by PID) and shell
+    /// windows are excluded by default.</summary>
+    private void StartWidgetAutoPause()
+    {
+        try { _widgetPause?.Dispose(); } catch { }
+        _widgetPause = new PlaybackSupervisor(
+            () => new PausePolicy
+            {
+                OnFullscreen = _settingsService.UserSettings.PauseWidgetsOnFullscreen,
+                OnBatterySaver = _settingsService.UserSettings.PauseWidgetsOnBatterySaver,
+                OnRemoteSession = _settingsService.UserSettings.PauseWidgetsOnRemoteSession,
+            },
+            GetPauseMonitors,
+            extraExcludedWindowClasses: null);
+        _widgetPause.PauseStateChanged += OnWidgetPauseChanged;
+    }
+
+    private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
+    {
+        var supervisor = _widgetPause;
+        if (supervisor is null) return;
+        if (e.Reason == SessionSwitchReason.SessionLock) supervisor.SessionLocked = true;
+        else if (e.Reason == SessionSwitchReason.SessionUnlock) supervisor.SessionLocked = false;
+    }
+
+    /// <summary>Fires on the supervisor's hook thread; marshal to the UI thread.</summary>
+    private void OnWidgetPauseChanged(string device, PauseReason reason)
+    {
+        if (IsDisabled) return;
+        _ = _dispatcher.InvokeAsync(() =>
+        {
+            try
+            {
+                if (IsDisabled) return;
+                ApplyWidgetPause(device, reason);
+            }
+            catch (Exception ex) { Serilog.Log.Error(ex, "Widget auto-pause apply failed"); }
+        });
+    }
+
+    /// <summary>Suspends (or resumes) every widget window currently on the given monitor.
+    /// Runs on the UI thread. Resume is gated on visibility so a hidden/minimized widget
+    /// keeps its own visibility-driven suspension.</summary>
+    private void ApplyWidgetPause(string device, PauseReason reason)
+    {
+        List<Window> snapshot;
+        try { snapshot = _windows.Values.ToList(); }
+        catch { return; }
+        List<PauseMonitor>? monitors = null;
+        foreach (var window in snapshot)
+        {
+            if (window is not Views.Containers.CssWidgetWindow widgetWindow) continue;
+            var control = widgetWindow.WidgetControl;
+            if (control is null) continue;
+            try
+            {
+                monitors ??= GetPauseMonitors();
+                if (!TryGetMonitorDevice(window, monitors, out var actual)) continue;
+                if (!string.Equals(actual, device, StringComparison.OrdinalIgnoreCase)) continue;
+                if (reason == PauseReason.None)
+                {
+                    if (window.IsVisible && window.WindowState != WindowState.Minimized)
+                        control.Resume();
+                }
+                else
+                {
+                    control.Suspend();
+                }
+            }
+            catch (Exception ex) { Serilog.Log.Error(ex, "Widget auto-pause failed for a window"); }
+        }
+    }
+
+    /// <summary>Applies the current pause state to a freshly shown window (it may have been
+    /// created while its monitor was already covered — no transition will fire for it).</summary>
+    private void ApplySupervisorStateToWindow(Window window)
+    {
+        var supervisor = _widgetPause;
+        if (supervisor is null || window is not Views.Containers.CssWidgetWindow widgetWindow) return;
+        var control = widgetWindow.WidgetControl;
+        if (control is null) return;
+        try
+        {
+            if (!TryGetMonitorDevice(window, GetPauseMonitors(), out var device)) return;
+            if (supervisor.GetPauseReason(device) == PauseReason.None)
+            {
+                if (window.IsVisible && window.WindowState != WindowState.Minimized)
+                    control.Resume();
+            }
+            else
+            {
+                control.Suspend();
+            }
+        }
+        catch (Exception ex) { Serilog.Log.Error(ex, "Widget initial pause state failed"); }
+    }
+
+    private List<PauseMonitor> GetPauseMonitors()
+    {
+        try
+        {
+            return _monitors.GetAllMonitors()
+                .Select(m => new PauseMonitor(m.DeviceName, ToNativeRect(m.Bounds), ToNativeRect(m.WorkArea)))
+                .ToList();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private static WindowsNative.RECT ToNativeRect(Core.Models.RectD r) =>
+        new((int)r.X, (int)r.Y, (int)(r.X + r.Width), (int)(r.Y + r.Height));
+
+    /// <summary>Which pause-monitor device a window is currently on, by its physical center.</summary>
+    private static bool TryGetMonitorDevice(Window window, IReadOnlyList<PauseMonitor> monitors, out string device)
+    {
+        device = "";
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(window).Handle;
+            if (hwnd == IntPtr.Zero) return false;
+            if (!User32.GetWindowRect(hwnd, out var rect)) return false;
+            double cx = (rect.Left + rect.Right) / 2.0;
+            double cy = (rect.Top + rect.Bottom) / 2.0;
+            foreach (var m in monitors)
+            {
+                if (cx >= m.Bounds.Left && cx < m.Bounds.Right && cy >= m.Bounds.Top && cy < m.Bounds.Bottom)
+                {
+                    device = m.Device;
+                    return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    #endregion
+
     #region Boxes
 
     public async Task ResetAsync()
@@ -1494,6 +1656,9 @@ public sealed class DesktopManager
 
     public void CloseAll()
     {
+        try { _widgetPause?.Dispose(); } catch { }
+        _widgetPause = null;
+        try { SystemEvents.SessionSwitch -= OnSessionSwitch; } catch { }
         StopIconVisibilityWatch();
         _coordinator.Stop();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
@@ -1609,6 +1774,7 @@ public sealed class DesktopManager
             {
                 if (!existing.IsVisible) existing.Show();
                 if (showActivated) existing.Activate();
+                ApplySupervisorStateToWindow(existing);
             }
             catch { }
             return;

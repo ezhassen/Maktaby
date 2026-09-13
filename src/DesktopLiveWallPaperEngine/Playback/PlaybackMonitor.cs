@@ -1,5 +1,7 @@
 using DesktopLiveWallPaperEngine.Desktop;
+using DesktopLiveWallPaperEngine.Rendering;
 using WindowsNative;
+using WindowsNative.Playback;
 using System.Text;
 using static WindowsNative.Win32Constants;
 using Timer = System.Threading.Timer;
@@ -95,7 +97,14 @@ public sealed class PlaybackMonitor : IDisposable
             foreach (var monitor in MonitorTracker.Enumerate())
             {
                 var handle = MonitorHandle(monitor.Bounds);
-                var reason = PauseDecision.Evaluate(foreground, monitor.Bounds, monitor.WorkArea, handle, flags, config);
+                var reason = PauseDecision.Evaluate(foreground, monitor.Bounds, monitor.WorkArea, handle, flags,
+                    new PausePolicy
+                    {
+                        OnFullscreen = config.OnFullscreen,
+                        OnBatterySaver = config.OnBatterySaver,
+                        OnRemoteSession = config.OnRemoteSession,
+                    },
+                    new HashSet<string>([WallpaperWindow.ClassName], StringComparer.OrdinalIgnoreCase));
                 bool changed;
                 lock (_state)
                 {
