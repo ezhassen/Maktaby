@@ -9,14 +9,16 @@ public static class WallpaperFilePicker
     private static string BuildFilter()
     {
         // Single source of truth: exactly what the engine can render.
-        // Images -> ImageRenderer, videos -> VideoRenderer (MediaPlayer).
+        // Images -> ImageRenderer, videos -> VideoRenderer (MediaPlayer), web -> WebviewRender.
         string images = string.Join(";", Engine.ImageExtensions.Select(e => "*" + e));
         string videos = string.Join(";", CodecSupport.VideoExtensions.Select(e => "*" + e));
-        string all = images + ";" + videos;
+        string web = string.Join(";", Engine.WebExtensions.Select(e => "*" + e));
+        string all = images + ";" + videos + ";" + web;
         return
-            "Images & videos\0" + all + "\0" +
+            "Wallpapers\0" + all + "\0" +
             "Images\0" + images + "\0" +
             "Videos\0" + videos + "\0" +
+            "Web\0" + web + "\0" +
             "All files\0*.*\0\0";
     }
 
@@ -47,7 +49,7 @@ public static class WallpaperFilePicker
                 Filter = BuildFilter(),
                 File = buffer,
                 MaxFile = bufferChars,
-                Title = "Choose a wallpaper (image or video)",
+                Title = "Choose a wallpaper (image, video or web page)",
                 Flags = ComDlg32.OFN_EXPLORER | ComDlg32.OFN_ENABLESIZING |
                         ComDlg32.OFN_FILEMUSTEXIST | ComDlg32.OFN_PATHMUSTEXIST | ComDlg32.OFN_NOCHANGEDIR,
             };

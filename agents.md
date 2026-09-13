@@ -34,6 +34,7 @@ Follow it to keep the architecture clean and the build green.
   them to provide the modern window chrome, view-model helpers and tray styling. Reference WPF-UI resource
   dictionaries via `ui:ThemesDictionary` / `ui:ControlsDictionary` (`App.xaml` already does); legacy pack URIs
   (`/Wpf.Ui;component/...`) are obsolete. The window type is `Wpf.Ui.Controls.FluentWindow`.
+- For WebView2 init use provided userData folder directly as the engine will create the "EBWebView" shared env folder in it
 - Build must stay warning-light and succeed.
 
 ## Layer responsibilities

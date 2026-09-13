@@ -145,6 +145,20 @@ public sealed class CompositionHost : IDisposable
         lock (_tree) return _overlays.TryGetValue(key, out var surface) ? surface : null;
     }
 
+    /// <summary>Drops the content surface without replacement. A switch to a renderer that
+    /// owns no surface (web) must call this first — otherwise the previous renderer's last
+    /// frame stays in the tree, opaque and on top, forever hiding the new content.</summary>
+    public void ClearContent()
+    {
+        lock (_tree)
+        {
+            if (Content is null) return;
+            try { Content.Dispose(); } catch { /* tearing down */ }
+            Content = null;
+            try { _dcompDevice.Commit(); } catch { /* tearing down */ }
+        }
+    }
+
     /// <summary>A transparent surface composed above the content (clock and friends). Keyed, so
     /// each widget owns its own visual and creating one does not destroy another's.</summary>
     public CompositionSurface CreateOverlay(string key, int width, int height, int offsetX, int offsetY)

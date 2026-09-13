@@ -5,10 +5,15 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<!-- Microsoft.Web.WebView2 unconditionally references its Wpf/WinForms assemblies even
+		     in non-WPF projects; the Wpf ref unifies WindowsBase 5.0 against the framework 4.0
+		     (MSB3277). Only Core is ever loaded at runtime, so the conflict is benign. -->
+		<NoWarn>$(NoWarn);MSB3277</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Serilog" />
+		<PackageReference Include="Microsoft.Web.WebView2" />
 		<PackageReference Include="Microsoft.Windows.Compatibility" />
 		<PackageReference Include="System.Drawing.Common" />
 		<PackageReference Include="Vortice.Direct2D1" />

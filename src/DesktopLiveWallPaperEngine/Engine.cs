@@ -19,6 +19,14 @@ public sealed class Engine : IDisposable
     public static readonly IReadOnlySet<string> ImageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff" };
 
+    /// <summary>Entry-point extensions for HTML wallpapers (WebviewRender). A folder whose
+    /// index.html is used also counts — see <see cref="IsWebPath"/>.</summary>
+    public static readonly IReadOnlySet<string> WebExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { ".html", ".htm", ".css", ".js" };
+
+    public static bool IsWebPath(string path) =>
+        Directory.Exists(path) || WebExtensions.Contains(Path.GetExtension(path));
+
     private readonly EngineConfig _config;
     private readonly string _appDataDir;
     private DesktopWallpaperLayerHost? _host;
@@ -239,7 +247,7 @@ public sealed class Engine : IDisposable
         {
             var path = _config.WallpaperFor(monitor.Device);
             if (path is null) continue;
-            if (!File.Exists(path))
+            if (!File.Exists(path) && !Directory.Exists(path))
             {
                 Serilog.Log.Warning($"Configured wallpaper missing: {path}");
                 continue;
@@ -276,6 +284,14 @@ public sealed class Engine : IDisposable
         }
         var host = window.EnsureHost();
 
+        // A switch to a renderer that owns no surface (web) must drop the previous
+        // renderer's last frame from the tree first — otherwise it stays opaque and on
+        // top, and the wallpaper looks stuck on the old image/video with no errors.
+        // (Video/image renderers create their own replacement surface in the constructor,
+        // so their handoff stays smooth without this.)
+        if (IsWebPath(path))
+            host.ClearContent();
+
         // When the first frame is captured, set it as the OS static wallpaper so a
         // virtual-desktop switch (or Task View) paints a matching frame instead of the
         // previous wallpaper — no flash before our live layer returns.
@@ -299,6 +315,11 @@ public sealed class Engine : IDisposable
         if (ImageExtensions.Contains(Path.GetExtension(path)))
         {
             renderer = new ImageRenderer(host, monitor.Bounds.Width, monitor.Bounds.Height, _config.Fit, staticPath, onStatic);
+        }
+        else if (IsWebPath(path))
+        {
+            renderer = new WebViewRenderer(host, window.Hwnd, monitor.Bounds.Width, monitor.Bounds.Height,
+                _appDataDir, _config.MuteVideo, staticPath, onStatic);
         }
         else
         {
@@ -611,7 +632,7 @@ public sealed class Engine : IDisposable
             foreach (var monitor in MonitorTracker.Enumerate())
             {
                 var path = _config.WallpaperFor(monitor.Device);
-                if (path is null || !File.Exists(path)) continue;
+                if (path is null || (!File.Exists(path) && !Directory.Exists(path))) continue;
                 try
                 {
                     ApplyToMonitor(monitor, path);
@@ -632,6 +653,10 @@ public sealed class Engine : IDisposable
             {
                 video.IsMuted = _config.MuteVideo;
                 video.Volume = _config.Volume;
+            }
+            else if (window.Renderer is WebViewRenderer web)
+            {
+                web.IsMuted = _config.MuteVideo;
             }
     }
 
@@ -660,6 +685,7 @@ public sealed class Engine : IDisposable
                     catch { file = ""; }
                     string kind = renderer is VideoRenderer ? "Video"
                         : renderer is ImageRenderer ? "Image"
+                        : renderer is WebViewRenderer ? "Web"
                         : renderer is null ? "-" : renderer.GetType().Name;
                     bool loaded = false, paused = false, playing = false;
                     try
