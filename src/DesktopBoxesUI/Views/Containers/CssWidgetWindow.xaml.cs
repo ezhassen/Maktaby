@@ -29,7 +29,7 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private bool _isHover;
     private bool _isActive;
     private HwndSource? _hwndSource;
-    private CssWidgetChromeOverlay? _chromeOverlay;
+    private WidgetChromeOverlay? _chromeOverlay;
     private readonly DesktopManager _desktopManager;
     private bool ShowChromeOnHover = false;
     //private bool MoveWindowByWidgetMouseDown = false;
@@ -286,7 +286,7 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
     public void SetHover(bool hover) { _isHover = hover; UpdateChrome(); }
     /// <summary>Live chrome overlay, if one has been created (used by layout diagnostics).</summary>
-    internal CssWidgetChromeOverlay? ChromeOverlay => _chromeOverlay;
+    internal WidgetChromeOverlay? ChromeOverlay => _chromeOverlay;
     bool HeaderIsShown() => _chromeOverlay?.IsVisible == true;
     bool CanShowHeader()
     {
@@ -335,7 +335,7 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private void EnsureChromeOverlay()
     {
         if (_chromeOverlay != null) return;
-        _chromeOverlay = new CssWidgetChromeOverlay(this);
+        _chromeOverlay = new WidgetChromeOverlay(this);
         _chromeOverlay.UpdateTitle(Title);
         _chromeOverlay.ResizeMode = ResizeMode;
         _chromeOverlay.Deactivated += _chromeOverlay_Deactivated;

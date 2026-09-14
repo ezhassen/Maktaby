@@ -19,7 +19,7 @@ namespace DesktopBoxesUI.Views.Containers;
 
 /// <summary>Host window for a native plugin widget (<see cref="DesktopItemContainerType.NativeWidget"/>).
 /// Mirrors <see cref="CssWidgetWindow"/>: borderless tool window glued to the desktop layer with an
-/// external <see cref="CssWidgetChromeOverlay"/> (shared via <see cref="IWidgetChromeOwner"/>),
+/// external <see cref="WidgetChromeOverlay"/> (shared via <see cref="IWidgetChromeOwner"/>),
 /// manifest-driven resize behavior, visibility-driven plugin suspend/resume, and hybrid
 /// interaction detection (WPF routed events on the plugin visual merged with the plugin's
 /// opt-in <see cref="INativeWidget"/> events).</summary>
@@ -34,7 +34,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private INativeWidget? _plugin;
     private NativeWidgetInfo? _info;
     private int _loadGeneration;
-    private CssWidgetChromeOverlay? _chromeOverlay;
+    private WidgetChromeOverlay? _chromeOverlay;
     private HwndSource? _hwndSource;
     private bool _isHover;
     private bool _isActive;
@@ -44,7 +44,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     /// <summary>Live plugin instance, if one is attached (used by auto-pause/diagnostics).</summary>
     internal INativeWidget? Widget => _plugin;
     /// <summary>Live chrome overlay, if one has been created (used by layout diagnostics).</summary>
-    internal CssWidgetChromeOverlay? ChromeOverlay => _chromeOverlay;
+    internal WidgetChromeOverlay? ChromeOverlay => _chromeOverlay;
 
     public NativeWidgetWindow(ContainerViewModel vm)
     {
@@ -435,7 +435,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private void EnsureChromeOverlay()
     {
         if (_chromeOverlay != null) return;
-        _chromeOverlay = new CssWidgetChromeOverlay(this);
+        _chromeOverlay = new WidgetChromeOverlay(this);
         _chromeOverlay.UpdateTitle(Title);
         _chromeOverlay.ResizeMode = ResizeMode;
         _chromeOverlay.Deactivated += _chromeOverlay_Deactivated;

@@ -61,7 +61,7 @@ Follow it to keep the architecture clean and the build green.
 - **Core/Services/NativeWidgetService** — native widget discovery/compile/load (Roslyn +
   collectible ALC, hashed cache). `UserWidgets/<slug>` folders are shared with CSS widgets;
   `WidgetFolder.PeekKind` (WidgetSdk) decides ownership without loading code — keep it so.
-- **Views/Containers/NativeWidgetWindow** — native plugin host; shares `CssWidgetChromeOverlay`
+- **Views/Containers/NativeWidgetWindow** — native plugin host; shares `WidgetChromeOverlay`
   via `IWidgetChromeOwner` (implement the interface for new chrome owners, don't fork the overlay).
 - **samples/NativeClockWidget/** — source-mode sample plugin (not built, compiled at runtime).
 - **docs/** — user-facing guides (`native-widgets.md` = plugin authoring reference).

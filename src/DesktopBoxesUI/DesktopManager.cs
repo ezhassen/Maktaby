@@ -1264,7 +1264,7 @@ public sealed class DesktopManager
     public bool IsDesktopWindow(Window wind, bool checkSurfaceToo = true)
     {
         if (checkSurfaceToo && wind is DesktopSurface) return true;
-        return wind is BoxContainerWindow || wind is CssWidgetWindow || wind is NativeWidgetWindow;//|| wind is CssWidgetChromeOverlay;
+        return wind is BoxContainerWindow || wind is CssWidgetWindow || wind is NativeWidgetWindow;//|| wind is WidgetChromeOverlay;
     }
 
     public bool IsDesktopWindow(IntPtr hWnd, bool checkSurfaceToo = true)

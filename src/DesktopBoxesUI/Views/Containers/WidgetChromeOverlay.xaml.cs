@@ -10,7 +10,7 @@ using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views.Containers;
 
-public partial class CssWidgetChromeOverlay : Window
+public partial class WidgetChromeOverlay : Window
 {
     #region Fields
 
@@ -33,7 +33,7 @@ public partial class CssWidgetChromeOverlay : Window
 
     #region Init, Load, close
 
-    public CssWidgetChromeOverlay(IWidgetChromeOwner owner)
+    public WidgetChromeOverlay(IWidgetChromeOwner owner)
     {
         InitializeComponent();
         _ownerWidget = owner;
