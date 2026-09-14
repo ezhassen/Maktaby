@@ -121,8 +121,16 @@ public class UserSettings
 
     #endregion
 
-    #region LiveWallpaper
+    #region Hints
 
+    /// <summary>Suppresses the "container hidden, bring it back via Settings → Containers"
+    /// hint shown after hiding a container from its context menu.</summary>
+    [Category("General"), DefaultValue(false)]
+    public bool HideContainerHintDismissed { get; set; } = false;
+
+    #endregion
+
+    #region LiveWallpaper
     /// <summary>Full path of the live wallpaper video (.mp4). Null/empty = no wallpaper.</summary>
     [Category("LiveWallpaper"), DefaultValue(null)]
     public string? LiveWallpaperPath { get; set; }

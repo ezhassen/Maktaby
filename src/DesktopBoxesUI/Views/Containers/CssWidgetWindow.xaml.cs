@@ -448,8 +448,9 @@ public partial class CssWidgetWindow : WidgetWindow
         try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { }
     }
 
-    private void Hide_Click(object sender, RoutedEventArgs e)
+    private async void Hide_Click(object sender, RoutedEventArgs e)
     {
+        await ContainerHideHint.MaybeShowAsync(this);
         _desktopManager.HideContainer(_container.Id);
         _desktopManager.SaveAsyncFireAndForget();
     }

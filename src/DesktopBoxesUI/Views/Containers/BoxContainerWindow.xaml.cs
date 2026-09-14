@@ -1069,8 +1069,9 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         Close();
     }
 
-    private void MenuHide_Click(object sender, RoutedEventArgs e)
+    private async void MenuHide_Click(object sender, RoutedEventArgs e)
     {
+        await ContainerHideHint.MaybeShowAsync(this);
         App.Services.GetRequiredService<DesktopManager>().HideContainer(_vm.Id);
         _save();
     }
