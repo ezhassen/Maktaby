@@ -67,14 +67,17 @@ public sealed class ContainerViewModel : ViewModelBase
 
     public string? CssWidgetName => _container.CssWidgetName;
     public CssWidgetSource? CssWidgetSource => _container.CssWidgetSource;
+    public string? NativeWidgetName => _container.NativeWidgetName;
 
     public DesktopItemContainer Model => _container;
 
-    /// <summary>Display title: the active box name for a BoxContainer, or the widget name for Custom/CssWidget.</summary>
+    /// <summary>Display title: the active box name for a BoxContainer, or the widget name for Custom/CssWidget/NativeWidget.</summary>
     public string Title =>
         Type == DesktopItemContainerType.CssWidget
             ? (CssWidgetName ?? "Widget")
-            : Type == DesktopItemContainerType.Custom
+            : Type == DesktopItemContainerType.NativeWidget
+                ? (NativeWidgetName ?? "Widget")
+                : Type == DesktopItemContainerType.Custom
                 ? (CustomTypeName ?? "Custom Widget")
                 : (ActiveBox?.Name ?? "");
 

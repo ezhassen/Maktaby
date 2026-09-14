@@ -1,3 +1,4 @@
+using DesktopBoxes.WidgetSdk;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Settings;
@@ -62,6 +63,8 @@ public sealed class CssWidgetService : ICssWidgetService
         {
             var slug = Path.GetFileName(dir);
             if (string.IsNullOrWhiteSpace(slug)) continue;
+            // Native folders belong to NativeWidgetService (kind detected without loading).
+            if (WidgetFolder.PeekKind(dir) == WidgetFolderKind.Native) continue;
             var info = TryGetWidget(slug, source);
             if (info is not null) result.Add(info);
         }

@@ -32,6 +32,13 @@ public interface IContainerService
         string slug,
         CssWidgetSource source);
 
+    DesktopItemContainer CreateNativeWidgetContainer(
+        double left,
+        double top,
+        double width,
+        double height,
+        string slug);
+
     void AddContainer(DesktopItemContainer container);
 
     void RemoveContainer(System.Guid id);

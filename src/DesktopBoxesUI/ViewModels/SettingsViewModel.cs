@@ -39,6 +39,7 @@ public sealed class ContainerVisibilityRow : ViewModelBase, IDisposable
     {
         DesktopItemContainerType.BoxContainer => "Box",
         DesktopItemContainerType.CssWidget => "Widget",
+        DesktopItemContainerType.NativeWidget => "Native",
         _ => _container.Type.ToString(),
     };
 

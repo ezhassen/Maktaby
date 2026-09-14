@@ -18,6 +18,7 @@
     <Platform Solution="*|x64" Project="x64" />
   </Project>
   <Project Path="src/DesktopLiveWallPaperEngine/DesktopLiveWallPaperEngine.csproj" Id="34ac74dd-ecef-4511-990e-09b07d714091" />
+  <Project Path="src/DesktopBoxes.WidgetSdk/DesktopBoxes.WidgetSdk.csproj" Id="7f3a2c1d-9b4e-4f5a-8c6d-1e2f3a4b5c6d" />
   <Project Path="src/WindowsNative/WindowsNative.csproj" Id="a76d5e12-6c95-49bd-a18e-55c916af14a6" />
   <Project Path="src/WPFShared/WPFShared.csproj" Id="8b255fd0-c0c5-4e2c-96d2-7815d83abad8" />
 </Solution>

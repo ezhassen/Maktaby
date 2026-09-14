@@ -1,3 +1,4 @@
+using DesktopBoxes.WidgetSdk;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Core.Services;
@@ -1181,32 +1182,38 @@ public sealed class DesktopManager
             dlTop = Math.Max(wa.Y, Math.Min(dlTop, wa.Bottom - dlH));
             _containers.CreateContainer(DesktopItemContainerType.BoxContainer, dlLeft, dlTop, dlW, dlH, childContainer: dlContainer);
 
-            // Analog clock widget directly under the Downloads box
-            const string clockSlug = "AnalogClock";
+            // Native analog clock widget directly under the Downloads box
+            const string clockSlug = "NativeClock";
             double clockW = 220;
             double clockH = 220;
             try
             {
-                var svc = App.Services?.GetService<ICssWidgetService>();
-                var info = svc?.TryGetWidget(clockSlug, CssWidgetSource.App);
-                if (info?.Manifest.Width is int mw && mw > 0) clockW = mw;
-                if (info?.Manifest.Height is int mh && mh > 0) clockH = mh;
+                var svc = App.Services?.GetService<INativeWidgetService>();
+                var info = svc?.TryGetWidget(clockSlug, NativeWidgetSource.App);
+                if (info is not null)
+                {
+                    if (info.Manifest.Width > 0) clockW = info.Manifest.Width;
+                    if (info.Manifest.Height > 0) clockH = info.Manifest.Height;
+                }
                 else
                 {
                     // Fallback: read manifest directly if service not yet available
                     var appBase = AppContext.BaseDirectory;
-                    var clockManifestPath = Path.Combine(appBase, "CSSWidgets", clockSlug, "widget.json");
+                    var clockManifestPath = Path.Combine(appBase, "NativeWidgets", clockSlug, "nwidget.json");
                     if (!File.Exists(clockManifestPath))
                     {
-                        var devPath = Path.GetFullPath(Path.Combine(appBase, "..", "..", "..", "..", "src", "DesktopBoxesUI", "CSSWidgets", clockSlug, "widget.json"));
+                        var devPath = Path.GetFullPath(Path.Combine(appBase, "..", "..", "..", "..", "src", "DesktopBoxesUI", "NativeWidgets", clockSlug, "nwidget.json"));
                         if (File.Exists(devPath)) clockManifestPath = devPath;
                     }
                     if (File.Exists(clockManifestPath))
                     {
                         var json = File.ReadAllText(clockManifestPath);
-                        var manifest = System.Text.Json.JsonSerializer.Deserialize<CssWidgetManifest>(json);
-                        if (manifest?.Width is int fmw && fmw > 0) clockW = fmw;
-                        if (manifest?.Height is int fmh && fmh > 0) clockH = fmh;
+                        var manifest = DesktopBoxes.WidgetSdk.NativeWidgetManifest.TryParse(json, clockSlug, out _);
+                        if (manifest is not null)
+                        {
+                            if (manifest.Width > 0) clockW = manifest.Width;
+                            if (manifest.Height > 0) clockH = manifest.Height;
+                        }
                     }
                 }
             }
@@ -1220,7 +1227,7 @@ public sealed class DesktopManager
             // Only place if there is vertical space below Downloads (avoid overlapping bottom edge)
             if (clockTop + clockH <= wa.Bottom + 1)
             {
-                _containers.CreateCssWidgetContainer(clockLeft, clockTop, clockW, clockH, clockSlug, CssWidgetSource.App);
+                _containers.CreateNativeWidgetContainer(clockLeft, clockTop, clockW, clockH, clockSlug);
             }
         }
     }
@@ -1257,7 +1264,7 @@ public sealed class DesktopManager
     public bool IsDesktopWindow(Window wind, bool checkSurfaceToo = true)
     {
         if (checkSurfaceToo && wind is DesktopSurface) return true;
-        return wind is BoxContainerWindow || wind is CssWidgetWindow;//|| wind is CssWidgetChromeOverlay;
+        return wind is BoxContainerWindow || wind is CssWidgetWindow || wind is NativeWidgetWindow;//|| wind is CssWidgetChromeOverlay;
     }
 
     public bool IsDesktopWindow(IntPtr hWnd, bool checkSurfaceToo = true)
@@ -1296,6 +1303,13 @@ public sealed class DesktopManager
         if (vm.Type == DesktopItemContainerType.CssWidget)
         {
             window = new CssWidgetWindow(vm)
+            {
+                ShowActivated = showActivated
+            };
+        }
+        else if (vm.Type == DesktopItemContainerType.NativeWidget)
+        {
+            window = new NativeWidgetWindow(vm)
             {
                 ShowActivated = showActivated
             };
@@ -1467,6 +1481,7 @@ public sealed class DesktopManager
             try
             {
                 if (window is CssWidgetWindow widgetWindow) widgetWindow.PrepareForClose();
+                else if (window is NativeWidgetWindow nativeWindow) nativeWindow.PrepareForClose();
             }
             catch { }
             //Win32Apis.AllowHide(handle);
@@ -1533,22 +1548,37 @@ public sealed class DesktopManager
         List<PauseMonitor>? monitors = null;
         foreach (var window in snapshot)
         {
-            if (window is not Views.Containers.CssWidgetWindow widgetWindow) continue;
-            var control = widgetWindow.WidgetControl;
-            if (control is null) continue;
             try
             {
                 monitors ??= GetPauseMonitors();
                 if (!TryGetMonitorDevice(window, monitors, out var actual)) continue;
                 if (!string.Equals(actual, device, StringComparison.OrdinalIgnoreCase)) continue;
-                if (reason == PauseReason.None)
+                bool resume = reason == PauseReason.None;
+                if (window is Views.Containers.CssWidgetWindow cssWindow)
                 {
-                    if (window.IsVisible && window.WindowState != WindowState.Minimized)
-                        control.Resume();
+                    var control = cssWindow.WidgetControl;
+                    if (control is null) continue;
+                    if (resume)
+                    {
+                        if (window.IsVisible && window.WindowState != WindowState.Minimized)
+                            control.Resume();
+                    }
+                    else control.Suspend();
                 }
-                else
+                else if (window is Views.Containers.NativeWidgetWindow nativeWindow)
                 {
-                    control.Suspend();
+                    var plugin = nativeWindow.Widget;
+                    if (plugin is null) continue;
+                    try
+                    {
+                        if (resume)
+                        {
+                            if (window.IsVisible && window.WindowState != WindowState.Minimized)
+                                plugin.Resume();
+                        }
+                        else plugin.Suspend();
+                    }
+                    catch { }
                 }
             }
             catch (Exception ex) { Serilog.Log.Error(ex, "Widget auto-pause failed for a window"); }
@@ -1560,20 +1590,36 @@ public sealed class DesktopManager
     private void ApplySupervisorStateToWindow(Window window)
     {
         var supervisor = _widgetPause;
-        if (supervisor is null || window is not Views.Containers.CssWidgetWindow widgetWindow) return;
-        var control = widgetWindow.WidgetControl;
-        if (control is null) return;
+        if (supervisor is null) return;
         try
         {
             if (!TryGetMonitorDevice(window, GetPauseMonitors(), out var device)) return;
-            if (supervisor.GetPauseReason(device) == PauseReason.None)
+            bool resume = supervisor.GetPauseReason(device) == PauseReason.None;
+            if (window is Views.Containers.CssWidgetWindow cssWindow)
             {
-                if (window.IsVisible && window.WindowState != WindowState.Minimized)
-                    control.Resume();
+                var control = cssWindow.WidgetControl;
+                if (control is null) return;
+                if (resume)
+                {
+                    if (window.IsVisible && window.WindowState != WindowState.Minimized)
+                        control.Resume();
+                }
+                else control.Suspend();
             }
-            else
+            else if (window is Views.Containers.NativeWidgetWindow nativeWindow)
             {
-                control.Suspend();
+                var plugin = nativeWindow.Widget;
+                if (plugin is null) return;
+                try
+                {
+                    if (resume)
+                    {
+                        if (window.IsVisible && window.WindowState != WindowState.Minimized)
+                            plugin.Resume();
+                    }
+                    else plugin.Suspend();
+                }
+                catch { }
             }
         }
         catch (Exception ex) { Serilog.Log.Error(ex, "Widget initial pause state failed"); }
@@ -1733,6 +1779,18 @@ public sealed class DesktopManager
         double w = info?.Manifest.Width ?? 300;
         double h = info?.Manifest.Height ?? 220;
         _mainVm.CreateCssWidgetAt(slug, source, 60 + offset, 60 + offset, w, h);
+        _ = SaveAsync();
+    }
+
+    public void NewNativeWidget(string slug)
+    {
+        var offset = _mainVm.Containers.Count * 24;
+        // Use manifest default size if available
+        var svc = App.Services.GetRequiredService<INativeWidgetService>();
+        var info = svc.TryGetWidget(slug);
+        double w = info?.Manifest.Width ?? 300;
+        double h = info?.Manifest.Height ?? 220;
+        _mainVm.CreateNativeWidgetAt(slug, 60 + offset, 60 + offset, w, h);
         _ = SaveAsync();
     }
 

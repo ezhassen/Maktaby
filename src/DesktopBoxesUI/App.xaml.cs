@@ -222,6 +222,7 @@ public partial class App : Application
         services.AddTransient<SettingsViewModel>();
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<ICssWidgetService, CssWidgetService>();
+        services.AddSingleton<INativeWidgetService, NativeWidgetService>();
 
         // Win32 watchers
         services.AddSingleton<IMouseMonitor, MouseMonitor>();
@@ -525,9 +526,12 @@ public partial class App : Application
                 return;
             }
             var win = new Views.WidgetsListWindow(selectMode);
-            if (win.ShowDialog() == true && win.SelectedInfo is not null)
+            if (win.ShowDialog() == true)
             {
-                Services.GetRequiredService<DesktopManager>().NewCssWidget(win.SelectedInfo.Slug, win.SelectedInfo.Source);
+                if (win.SelectedNativeInfo is not null)
+                    Services.GetRequiredService<DesktopManager>().NewNativeWidget(win.SelectedNativeInfo.Slug);
+                else if (win.SelectedInfo is not null)
+                    Services.GetRequiredService<DesktopManager>().NewCssWidget(win.SelectedInfo.Slug, win.SelectedInfo.Source);
             }
         });
     }

@@ -729,19 +729,30 @@ public sealed partial class DesktopSurface : Window
 
         // Open gallery in select mode; on selection create widget at marquee position
         var win = new WidgetsListWindow(selectMode: true);
-        if (win.ShowDialog() == true && win.SelectedInfo is not null)
+        if (win.ShowDialog() == true)
         {
-            // Use marquee size as override if user dragged larger than default
-            var info = win.SelectedInfo;
-            double useW = w;
-            double useH = h;
-            // If manifest has default size and marquee is close to min, prefer manifest
-            if (info.Manifest.Width.HasValue && Math.Abs(w - minWidth) < 1) useW = info.Manifest.Width.Value;
-            if (info.Manifest.Height.HasValue && Math.Abs(h - minHeight) < 1) useH = info.Manifest.Height.Value;
-            var dm = App.Services.GetRequiredService<DesktopManager>();
             // Create via MainViewModel to keep bounds correct
             var main = App.Services.GetRequiredService<ViewModels.MainViewModel>();
-            main.CreateCssWidgetAt(info.Slug, info.Source, x, y, useW, useH);
+            if (win.SelectedNativeInfo is not null)
+            {
+                var ninfo = win.SelectedNativeInfo;
+                double useW = w;
+                double useH = h;
+                if (Math.Abs(w - minWidth) < 1) useW = ninfo.Manifest.Width;
+                if (Math.Abs(h - minHeight) < 1) useH = ninfo.Manifest.Height;
+                main.CreateNativeWidgetAt(ninfo.Slug, x, y, useW, useH);
+                _save();
+                return;
+            }
+            if (win.SelectedInfo is null) { HideMarquee(); return; }
+            // Use marquee size as override if user dragged larger than default
+            var info = win.SelectedInfo;
+            double useW2 = w;
+            double useH2 = h;
+            // If manifest has default size and marquee is close to min, prefer manifest
+            if (info.Manifest.Width.HasValue && Math.Abs(w - minWidth) < 1) useW2 = info.Manifest.Width.Value;
+            if (info.Manifest.Height.HasValue && Math.Abs(h - minHeight) < 1) useH2 = info.Manifest.Height.Value;
+            main.CreateCssWidgetAt(info.Slug, info.Source, x, y, useW2, useH2);
             _save();
         }
         else

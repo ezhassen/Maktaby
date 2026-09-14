@@ -1,3 +1,4 @@
+using DesktopBoxes.WidgetSdk;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,20 +11,33 @@ using WPFShared.Interfaces;
 
 namespace DesktopBoxesUI.Views;
 
+/// <summary>Widget taxonomy shown in the gallery. CSS widgets render web content;
+/// native widgets run plugin code.</summary>
+public enum WidgetGalleryKind
+{
+    Css,
+    Native,
+}
+
 public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvider
 {
     private readonly ICssWidgetService _svc;
+    private readonly INativeWidgetService _native;
     private readonly IDialogService _dialogs;
     public bool IsSelectMode { get; }
+    public WidgetGalleryKind? SelectKind { get; }
     public CssWidgetInfo? SelectedInfo { get; private set; }
+    public NativeWidgetInfo? SelectedNativeInfo { get; private set; }
 
     // The global dialog service renders WPF-UI content dialogs on this host.
     public ContentDialogHost DialogHost => RootContentDialogHost;
-    public WidgetsListWindow(bool selectMode = false)
+    public WidgetsListWindow(bool selectMode = false, WidgetGalleryKind? selectKind = null)
     {
         InitializeComponent();
         IsSelectMode = selectMode;
+        SelectKind = selectKind;
         _svc = App.Services.GetRequiredService<ICssWidgetService>();
+        _native = App.Services.GetRequiredService<INativeWidgetService>();
         _dialogs = App.Services.GetRequiredService<IDialogService>();
         DataContext = this;
         Loaded += (_, _) => Refresh();
@@ -32,28 +46,62 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     private async void Refresh()
     {
         _svc.EnsureUserWidgetsRoot();
-        var all = _svc.GetAvailableWidgets().OrderBy(w => w.Source).ThenBy(w => w.Slug).ToList();
-        var view = all.Select(w => new WidgetGalleryItem
+        var items = new List<WidgetGalleryItem>();
+        if (SelectKind is null || SelectKind == WidgetGalleryKind.Css)
         {
-            Slug = w.Slug,
-            Source = w.Source,
-            FolderPath = w.FolderPath,
-            Manifest = w.Manifest,
-            ThumbnailPath = w.ThumbnailPath,
-            IsGenerating = false,
-            SourceInfo = w
-        }).ToList();
-        WidgetsItems.ItemsSource = view;
-        CountText.Text = $"{all.Count} widgets";
+            var all = _svc.GetAvailableWidgets().OrderBy(w => w.Source).ThenBy(w => w.Slug).ToList();
+            items.AddRange(all.Select(w => new WidgetGalleryItem
+            {
+                Kind = WidgetGalleryKind.Css,
+                Slug = w.Slug,
+                Source = w.Source,
+                SourceLabel = w.Source.ToString(),
+                IsBuiltIn = w.Source == CssWidgetSource.App,
+                FolderPath = w.FolderPath,
+                Manifest = w.Manifest,
+                DisplayName = string.IsNullOrWhiteSpace(w.Manifest.Name) ? w.Slug : w.Manifest.Name,
+                DisplayAuthor = w.Manifest.Author ?? "",
+                ThumbnailPath = w.ThumbnailPath,
+                IsGenerating = false,
+                CanPlace = true,
+                SourceInfo = w,
+            }));
+        }
+        if (SelectKind is null || SelectKind == WidgetGalleryKind.Native)
+        {
+            var natives = _native.GetAvailableWidgets().OrderBy(w => w.Source).ThenBy(w => w.Slug).ToList();
+            items.AddRange(natives.Select(w => new WidgetGalleryItem
+            {
+                Kind = WidgetGalleryKind.Native,
+                Slug = w.Slug,
+                Source = CssWidgetSource.User,
+                NativeSource = w.Source,
+                SourceLabel = w.Source.ToString(),
+                IsBuiltIn = w.Source == NativeWidgetSource.App,
+                FolderPath = w.FolderPath,
+                DisplayName = string.IsNullOrWhiteSpace(w.Manifest.Name) ? w.Slug : w.Manifest.Name,
+                DisplayAuthor = w.Manifest.Author ?? "",
+                ThumbnailPath = w.ThumbnailPath,
+                IsGenerating = false,
+                CanPlace = w.LoadError is null,
+                HasError = w.LoadError is not null,
+                LoadError = w.LoadError ?? "",
+                NativeInfo = w,
+            }));
+        }
+        WidgetsItems.ItemsSource = items;
+        CountText.Text = $"{items.Count} widgets";
 
-        // Generate thumbnails for widgets missing them, showing "Generating..." indicator
-        foreach (var item in view.Where(v => v.ThumbnailPath == null).ToList())
+        // Generate thumbnails for CSS widgets missing them, showing "Generating..." indicator.
+        // Native widgets use their thumbnail.png as-is (no offscreen render).
+        foreach (var item in items.Where(v => v.Kind == WidgetGalleryKind.Css && v.ThumbnailPath == null && v.SourceInfo is not null).ToList())
         {
             await RefreshThumbnail(item);
         }
     }
     async Task RefreshThumbnail(WidgetGalleryItem vm, bool force = false)
     {
+        if (vm.SourceInfo is null) return;
         vm.IsGenerating = true;
         try
         {
@@ -81,7 +129,11 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
         // Small delay to avoid flooding WebView2 with concurrent captures
         await System.Threading.Tasks.Task.Delay(100);
     }
-    private void Refresh_Click(object sender, RoutedEventArgs e) => Refresh();
+    private void Refresh_Click(object sender, RoutedEventArgs e)
+    {
+        try { _native.Refresh(); } catch { } // unload cached plugin assemblies: edited sources recompile on next load
+        Refresh();
+    }
 
     private void New_Click(object sender, RoutedEventArgs e)
     {
@@ -93,6 +145,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     {
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
+            if (vm.Kind != WidgetGalleryKind.Css) return;
             await RefreshThumbnail(vm, force: true);
         }
     }
@@ -100,6 +153,16 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     {
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
+            if (vm.Kind == WidgetGalleryKind.Native)
+            {
+                // Native widgets are code: open the folder instead of the HTML editor.
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(vm.FolderPath) { UseShellExecute = true }); }
+                catch (System.Exception ex)
+                {
+                    await _dialogs.ShowMessageAsync(ex.Message, "Widgets");
+                }
+                return;
+            }
             if (vm.Source == CssWidgetSource.App)
             {
                 await _dialogs.ShowMessageAsync("App widgets are read-only. Duplicate to edit.", "Widgets");
@@ -114,6 +177,19 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     {
         if (sender is FrameworkElement fe2 && fe2.Tag is WidgetGalleryItem vm2)
         {
+            if (vm2.Kind == WidgetGalleryKind.Native)
+            {
+                if (vm2.IsBuiltIn)
+                {
+                    await _dialogs.ShowMessageAsync("Cannot delete built-in widgets.", "Widgets");
+                    return;
+                }
+                var confirmedNative = await _dialogs.ShowConfirmDeleteAsync($"Delete native widget '{vm2.Slug}'? This cannot be undone.");
+                if (!confirmedNative) return;
+                try { _native.DeleteWidget(vm2.Slug); } catch (System.Exception ex) { await _dialogs.ShowMessageAsync(ex.Message, "Widgets"); return; }
+                Refresh();
+                return;
+            }
             if (vm2.Source == CssWidgetSource.App)
             {
                 await _dialogs.ShowMessageAsync("Cannot delete built-in widgets.", "Widgets");
@@ -131,6 +207,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     {
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
+            if (vm.Kind != WidgetGalleryKind.Css) return;
             try
             {
                 var info = _svc.TryGetWidget(vm.Slug, vm.Source);
@@ -150,10 +227,25 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
         }
     }
 
-    private void Place_Click(object sender, RoutedEventArgs e)
+    private async void Place_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement fe3 && fe3.Tag is WidgetGalleryItem vm3)
         {
+            if (vm3.Kind == WidgetGalleryKind.Native)
+            {
+                var native = _native.TryGetWidget(vm3.Slug, vm3.NativeSource);
+                if (native is null) return;
+                if (native.LoadError is not null)
+                {
+                    await _dialogs.ShowMessageAsync(native.LoadError, "Widgets");
+                    return;
+                }
+                if (!await ConfirmNativeTrustAsync(native)) return;
+                SelectedNativeInfo = native;
+                DialogResult = true;
+                Close();
+                return;
+            }
             var info = _svc.TryGetWidget(vm3.Slug, vm3.Source);
             if (info is not null)
             {
@@ -166,15 +258,50 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
 
     private void Close_Click(object sender, RoutedEventArgs e) => Close();
 
+    /// <summary>Trust-on-first-use consent: plugins are full-trust code, so placing a user
+    /// widget asks once per content hash. Built-ins skip the prompt (shipped with the app).
+    /// Declining aborts placement; editing the plugin re-arms the prompt.</summary>
+    private async Task<bool> ConfirmNativeTrustAsync(NativeWidgetInfo native)
+    {
+        try
+        {
+            if (_native.IsTrusted(native)) return true;
+        }
+        catch { return false; }
+        var confirmed = await _dialogs.ShowConfirmAsync(
+            $"Native widget '{native.Slug}' runs plugin code with your full privileges.\n\n" +
+            $"Only proceed if you trust where it came from.\nFolder: {native.FolderPath}",
+            new DialogOptions
+            {
+                Title = "Trust this widget?",
+                PrimaryButtonText = "Trust & Place",
+                CloseButtonText = "Cancel",
+            });
+        if (!confirmed) return false;
+        try { _native.Trust(native); }
+        catch { return false; }
+        return true;
+    }
+
 }
 
 public sealed class WidgetGalleryItem : INotifyPropertyChanged
 {
+    public WidgetGalleryKind Kind { get; set; } = WidgetGalleryKind.Css;
     public string Slug { get; set; } = "";
     public CssWidgetSource Source { get; set; }
+    public NativeWidgetSource NativeSource { get; set; } = NativeWidgetSource.User;
+    public string SourceLabel { get; set; } = "";
+    public bool IsBuiltIn { get; set; }
     public string FolderPath { get; set; } = "";
     public CssWidgetManifest Manifest { get; set; } = new();
-    public CssWidgetInfo SourceInfo { get; set; } = null!;
+    public string DisplayName { get; set; } = "";
+    public string DisplayAuthor { get; set; } = "";
+    public CssWidgetInfo? SourceInfo { get; set; }
+    public NativeWidgetInfo? NativeInfo { get; set; }
+    public bool CanPlace { get; set; } = true;
+    public bool HasError { get; set; }
+    public string LoadError { get; set; } = "";
 
     private string? _thumbnailPath;
     public string? ThumbnailPath

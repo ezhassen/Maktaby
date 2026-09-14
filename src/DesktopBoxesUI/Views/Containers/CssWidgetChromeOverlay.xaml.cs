@@ -14,7 +14,7 @@ public partial class CssWidgetChromeOverlay : Window
 {
     #region Fields
 
-    private readonly CssWidgetWindow _ownerWidget;
+    private readonly IWidgetChromeOwner _ownerWidget;
     private HwndSource? _hwndSource;
     private WindowDragController? _drag;
     private readonly DesktopManager _desktopManager;
@@ -33,23 +33,23 @@ public partial class CssWidgetChromeOverlay : Window
 
     #region Init, Load, close
 
-    public CssWidgetChromeOverlay(CssWidgetWindow owner)
+    public CssWidgetChromeOverlay(IWidgetChromeOwner owner)
     {
         InitializeComponent();
         _ownerWidget = owner;
-        Owner = owner;
+        Owner = owner.Window;
         ShowInTaskbar = false;
         Topmost = false;
         _desktopManager = App.Services.GetRequiredService<DesktopManager>();
         // Match owner size/pos/min initially — overlay must mirror owner's resize constraints
-        Left = owner.Left;
-        Top = owner.Top;
-        Width = owner.Width;
-        Height = owner.Height;
-        MinWidth = owner.MinWidth;
-        MinHeight = owner.MinHeight;
-        ResizeMode = owner.ResizeMode;
-        DataContext = owner.DataContext;
+        Left = owner.Window.Left;
+        Top = owner.Window.Top;
+        Width = owner.Window.Width;
+        Height = owner.Window.Height;
+        MinWidth = owner.Window.MinWidth;
+        MinHeight = owner.Window.MinHeight;
+        ResizeMode = owner.Window.ResizeMode;
+        DataContext = owner.Window.DataContext;
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         Closed += OnClosed;
@@ -114,9 +114,9 @@ public partial class CssWidgetChromeOverlay : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         SyncFromOwner();
-        _ownerWidget.LocationChanged += OwnerPosChanged;
-        _ownerWidget.SizeChanged += OwnerPosChanged;
-        _ownerWidget.Closed += OwnerClosed;
+        _ownerWidget.Window.LocationChanged += OwnerPosChanged;
+        _ownerWidget.Window.SizeChanged += OwnerPosChanged;
+        _ownerWidget.Window.Closed += OwnerClosed;
         LocationChanged += OverlayPosChanged;
         SizeChanged += OverlayPosChanged;
         HeaderBorder.MouseEnter += (_, _) => _ownerWidget.SetHover(true);
@@ -124,9 +124,9 @@ public partial class CssWidgetChromeOverlay : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
-        _ownerWidget.LocationChanged -= OwnerPosChanged;
-        _ownerWidget.SizeChanged -= OwnerPosChanged;
-        _ownerWidget.Closed -= OwnerClosed;
+        _ownerWidget.Window.LocationChanged -= OwnerPosChanged;
+        _ownerWidget.Window.SizeChanged -= OwnerPosChanged;
+        _ownerWidget.Window.Closed -= OwnerClosed;
         LocationChanged -= OverlayPosChanged;
         SizeChanged -= OverlayPosChanged;
         try { PreviewMouseLeftButtonDown -= Header_PreviewMouseDown; } catch { }
@@ -178,18 +178,18 @@ public partial class CssWidgetChromeOverlay : Window
         if (_isDragging || _isSyncing) return;
         _isSyncing = true;
 
-        MinWidth = _ownerWidget.MinWidth;
-        MinHeight = _ownerWidget.MinHeight;
+        MinWidth = _ownerWidget.Window.MinWidth;
+        MinHeight = _ownerWidget.Window.MinHeight;
 
         // Copy DIPs directly and let WPF map them to physical pixels with the overlay's current
         // DPI context. Converting through a separately queried monitor DPI here can use a stale
         // scale mid-transition and shift the chrome (for example left on 100% -> 125%).
-        Left = _ownerWidget.Left;
-        Top = _ownerWidget.Top;
-        Width = _ownerWidget.Width;
-        Height = _ownerWidget.Height;
+        Left = _ownerWidget.Window.Left;
+        Top = _ownerWidget.Window.Top;
+        Width = _ownerWidget.Window.Width;
+        Height = _ownerWidget.Window.Height;
 
-        ResizeMode = _ownerWidget.ResizeMode;
+        ResizeMode = _ownerWidget.Window.ResizeMode;
         UpdateLockButtonAppearance();
         _isSyncing = false;
     }
@@ -199,10 +199,10 @@ public partial class CssWidgetChromeOverlay : Window
         if (_isSyncing) return;
         _isSyncing = true;
 
-        _ownerWidget.Left = Left;
-        _ownerWidget.Top = Top;
-        _ownerWidget.Width = Width;
-        _ownerWidget.Height = Height;
+        _ownerWidget.Window.Left = Left;
+        _ownerWidget.Window.Top = Top;
+        _ownerWidget.Window.Width = Width;
+        _ownerWidget.Window.Height = Height;
 
         if (commitModel && !_desktopManager.IsLayoutUpdateActive)
         {
@@ -247,7 +247,7 @@ public partial class CssWidgetChromeOverlay : Window
         if (msg == WM_MOUSEACTIVATE)
         {
             handled = true;
-            try { _ownerWidget.Activate(); } catch { }
+            try { _ownerWidget.Window.Activate(); } catch { }
             return (IntPtr)MA_NOACTIVATE;
         }
         if (msg == WM_NCLBUTTONDOWN) { _isDragging = true; return IntPtr.Zero; }
@@ -280,14 +280,14 @@ public partial class CssWidgetChromeOverlay : Window
                 int edge = (int)Math.Max(4, 8 * scale);
                 double headerH = 28 * scale;
                 try { headerH = HeaderBorder.ActualHeight * scale; if (headerH < 1) headerH = 28 * scale; } catch { }
-                bool canResize = _ownerWidget.ResizeMode != ResizeMode.NoResize
-                                 && _ownerWidget.ResizeMode != ResizeMode.CanMinimize
+                bool canResize = _ownerWidget.Window.ResizeMode != ResizeMode.NoResize
+                                 && _ownerWidget.Window.ResizeMode != ResizeMode.CanMinimize
                                  && !_ownerWidget.ContainerViewModel.IsLocked;
                 // Mirror owner's Min* to overlay so WindowDragController.WmSizing clamps correctly
                 if (canResize)
                 {
                     // Keep overlay's Min* in sync for native WmSizing clamp (already synced in SyncToOwner, but ensure live)
-                    try { MinWidth = _ownerWidget.MinWidth; MinHeight = _ownerWidget.MinHeight; } catch { }
+                    try { MinWidth = _ownerWidget.Window.MinWidth; MinHeight = _ownerWidget.Window.MinHeight; } catch { }
                 }
                 bool left = false, right = false, top = false, bottom = false;
                 if (canResize)
@@ -328,7 +328,7 @@ public partial class CssWidgetChromeOverlay : Window
             if (!IsDragging && !IsResizing)
             {
                 //    WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager);
-                WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager, parentWindowH: _ownerWidget.GetCriticalHandle());
+                WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager, parentWindowH: _ownerWidget.Window.GetCriticalHandle());
             }
             // KeepBelowApps intentionally NOT called for overlay — it's owned by CssWidgetWindow (Owner set in ctor)
             // Owned windows are always above their owner; owner is kept below via CssWidgetWindow.KeepBelowApps.
@@ -340,7 +340,7 @@ public partial class CssWidgetChromeOverlay : Window
 
     private void Header_MouseDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        try { _ownerWidget.Activate(); } catch { }
+        try { _ownerWidget.Window.Activate(); } catch { }
         if (_ownerWidget.ContainerViewModel.IsLocked) return;
         _isDragging = true;
         _drag?.BeginTitleDrag(e);

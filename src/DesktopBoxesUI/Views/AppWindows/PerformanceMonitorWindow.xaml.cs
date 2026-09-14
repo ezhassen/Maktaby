@@ -85,6 +85,10 @@ namespace DesktopBoxesUI.Views
                         var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                         if (field?.GetValue(cww) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.Suspend();
                     }
+                    else if (item.WindowRef is Views.Containers.NativeWidgetWindow nww)
+                    {
+                        try { nww.Widget?.Suspend(); } catch { }
+                    }
                 }
                 catch { }
             }
@@ -104,6 +108,10 @@ namespace DesktopBoxesUI.Views
                         var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                         if (field?.GetValue(cww) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.Resume();
                     }
+                    else if (item.WindowRef is Views.Containers.NativeWidgetWindow nww)
+                    {
+                        try { nww.Widget?.Resume(); } catch { }
+                    }
                 }
                 catch { }
             }
@@ -121,6 +129,10 @@ namespace DesktopBoxesUI.Views
                 }
                 catch { }
             }
+            foreach (var win in Application.Current.Windows.OfType<Views.Containers.NativeWidgetWindow>())
+            {
+                try { win.Widget?.Suspend(); } catch { }
+            }
             _vm.Refresh();
         }
 
@@ -134,6 +146,10 @@ namespace DesktopBoxesUI.Views
                     if (field?.GetValue(win) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.Resume();
                 }
                 catch { }
+            }
+            foreach (var win in Application.Current.Windows.OfType<Views.Containers.NativeWidgetWindow>())
+            {
+                try { win.Widget?.Resume(); } catch { }
             }
             _vm.Refresh();
         }

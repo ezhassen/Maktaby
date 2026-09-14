@@ -132,6 +132,20 @@ public sealed class MainViewModel : ViewModelBase
         return vm;
     }
 
+    public ContainerViewModel CreateNativeWidget(string slug, double left = 60, double top = 60, double width = 300, double height = 220)
+    {
+        var offset = Containers.Count * 24;
+        return CreateNativeWidgetAt(slug, left + offset, top + offset, width, height);
+    }
+
+    public ContainerViewModel CreateNativeWidgetAt(string slug, double left, double top, double width = 300, double height = 220)
+    {
+        var container = _containers.CreateNativeWidgetContainer(left, top, width, height, slug);
+        var vm = MakeVm(container);
+        Containers.Add(vm);
+        return vm;
+    }
+
     private ContainerViewModel MakeVm(DesktopItemContainer container) =>
         new(container, _icons, _boxService);
 

@@ -306,6 +306,22 @@ namespace DesktopBoxesUI.ViewModels
                         }
                         catch { }
                     }
+                    else if (win is Views.Containers.NativeWidgetWindow nww)
+                    {
+                        name = nww.Title ?? "Widget";
+                        type = "Native";
+                        var model = nww.ContainerViewModel.Bounds;
+                        modelBounds = FormatBounds(model.X, model.Y, model.Width, model.Height);
+                        var live = GetLiveBounds(nww);
+                        var expected = nww.GetExpectedDisplayRect();
+                        (appliedBounds, boundsMismatch) = DescribeLive(nww, monScale, live, expected);
+                        try
+                        {
+                            var plugin = nww.Widget;
+                            if (plugin is not null) isSuspended = plugin.IsSuspended;
+                        }
+                        catch { }
+                    }
                     else
                     {
                         continue;
@@ -338,7 +354,7 @@ namespace DesktopBoxesUI.ViewModels
                 // Idle detection: if all widget windows hidden/minimized or AllBoxesHidden, we are idle
                 var dm = App.Services?.GetService<DesktopManager>();
                 bool allHidden = dm?.AllBoxesHidden == true;
-                bool anyVisibleWidget = Items.Any(i => i.Type == "Widget" && i.IsVisible && !i.IsSuspended);
+                bool anyVisibleWidget = Items.Any(i => (i.Type == "Widget" || i.Type == "Native") && i.IsVisible && !i.IsSuspended);
                 IsIdleMode = allHidden || !anyVisibleWidget;
                 try { LayoutAnchorStatus = dm?.GetLayoutAnchorStatus() ?? "DesktopManager unavailable"; } catch { }
 

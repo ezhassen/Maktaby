@@ -55,6 +55,16 @@ Follow it to keep the architecture clean and the build green.
 - **Helpers/** static or sealed (shared) helper classes can have WPF types
 - **WPFServices/** Services that access WPF types directly (like ImageSource)
 - **CSSWidgets/** for built in app widgets
+- **DesktopBoxes.WidgetSdk/** (`src/`) — plugin contracts only (`INativeWidget`, base control,
+  manifest, folder-kind helper). BCL + WPF framework, no packages. Plugin authors reference
+  the built DLL; never move host logic here.
+- **Core/Services/NativeWidgetService** — native widget discovery/compile/load (Roslyn +
+  collectible ALC, hashed cache). `UserWidgets/<slug>` folders are shared with CSS widgets;
+  `WidgetFolder.PeekKind` (WidgetSdk) decides ownership without loading code — keep it so.
+- **Views/Containers/NativeWidgetWindow** — native plugin host; shares `CssWidgetChromeOverlay`
+  via `IWidgetChromeOwner` (implement the interface for new chrome owners, don't fork the overlay).
+- **samples/NativeClockWidget/** — source-mode sample plugin (not built, compiled at runtime).
+- **docs/** — user-facing guides (`native-widgets.md` = plugin authoring reference).
 - **AttachedProperties/** wpf Attached Properties
 - **Animations/** wpf Animations
 

@@ -41,9 +41,11 @@
 		<PackageReference Include="WPF-UI" />
 		<PackageReference Include="WPF-UI.Tray" />
 
-		<PackageReference Include="CommunityToolkit.Mvvm" />
-		<PackageReference Include="Microsoft.Web.WebView2" />
-	</ItemGroup>
+ 		<PackageReference Include="CommunityToolkit.Mvvm" />
+ 		<PackageReference Include="Microsoft.Web.WebView2" />
+		<!-- Runtime compile of native-widget sources; see NativeWidgetService. -->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+ 	</ItemGroup>
 
 	<ItemGroup>
 		<!-- Embedded WPF resources so windows/tray can load them via pack URI (ApplicationIcon only
@@ -54,17 +56,19 @@
 		<Resource Include="Assets\github_light.png" />
 	</ItemGroup>
 
-	<ItemGroup>
-		<Content Include="CSSWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
-	</ItemGroup>
+ 	<ItemGroup>
+ 		<Content Include="CSSWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+ 		<Content Include="NativeWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+ 	</ItemGroup>
 
 	<ItemGroup>
 		<Folder Include="Animations\" />
 	</ItemGroup>
 
    <ItemGroup>
-	  <ProjectReference Include="..\DesktopLiveWallPaperEngine\DesktopLiveWallPaperEngine.csproj" />
-	  <ProjectReference Include="..\WindowsNative\WindowsNative.csproj" />
-	  <ProjectReference Include="..\WPFShared\WPFShared.csproj" />
+ 	  <ProjectReference Include="..\DesktopLiveWallPaperEngine\DesktopLiveWallPaperEngine.csproj" />
+ 	  <ProjectReference Include="..\DesktopBoxes.WidgetSdk\DesktopBoxes.WidgetSdk.csproj" />
+ 	  <ProjectReference Include="..\WindowsNative\WindowsNative.csproj" />
+ 	  <ProjectReference Include="..\WPFShared\WPFShared.csproj" />
    </ItemGroup>
 </Project>

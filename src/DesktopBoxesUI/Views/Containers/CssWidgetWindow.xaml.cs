@@ -15,9 +15,11 @@ using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views.Containers;
 
-public partial class CssWidgetWindow : WidgetWindow
+public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
 {
     public override ContainerViewModel ContainerViewModel { get; }
+    Window IWidgetChromeOwner.Window => this;
+    System.Windows.Controls.MenuItem? IWidgetChromeOwner.LockMenuItem => LockMenuItem;
     private readonly DesktopItemContainer _container;
     private readonly ICssWidgetService _widgetService;
     private CssWidgetControl? _widgetControl;

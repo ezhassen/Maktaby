@@ -102,6 +102,29 @@ public sealed class ContainerService : IContainerService
         return container;
     }
 
+    public DesktopItemContainer CreateNativeWidgetContainer(
+        double left,
+        double top,
+        double width,
+        double height,
+        string slug)
+    {
+        var bounds = RectD.FromXYWH(left, top, width, height);
+        var container = new DesktopItemContainer
+        {
+            Type = DesktopItemContainerType.NativeWidget,
+            Bounds = bounds,
+            IsLocked = false,
+            IsVisible = true,
+            NativeWidgetName = slug
+        };
+        lock (_gate)
+        {
+            _containers.Add(container);
+        }
+        return container;
+    }
+
     public void AddContainer(DesktopItemContainer container)
     {
         lock (_gate)

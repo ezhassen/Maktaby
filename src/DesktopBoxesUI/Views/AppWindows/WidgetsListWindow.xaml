@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="clr-namespace:DesktopBoxesUI.ViewModels"
     xmlns:models2="clr-namespace:DesktopBoxesUI.Core.Models;assembly=WPFShared"
+    xmlns:views="clr-namespace:DesktopBoxesUI.Views"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Widgets"
     Width="860"
@@ -92,6 +93,7 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <Border
                                         Grid.Row="0"
@@ -152,34 +154,63 @@
                                                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                                                     Text="Generating thumbnail..." />
                                             </StackPanel>
-                                            <Border
+                                            <StackPanel
                                                 Margin="6"
-                                                Padding="4,2"
                                                 HorizontalAlignment="Left"
                                                 VerticalAlignment="Top"
-                                                Background="{DynamicResource SystemFillColorAttentionBackgroundBrush}"
-                                                CornerRadius="4">
-                                                <TextBlock
-                                                    FontSize="10"
-                                                    FontWeight="SemiBold"
-                                                    Text="{Binding Source}" />
-                                            </Border>
+                                                Orientation="Horizontal">
+                                                <Border
+                                                    Padding="4,2"
+                                                    Background="{DynamicResource SystemFillColorAttentionBackgroundBrush}"
+                                                    CornerRadius="4">
+                                                    <TextBlock
+                                                        FontSize="10"
+                                                        FontWeight="SemiBold"
+                                                        Text="{Binding Kind}" />
+                                                </Border>
+                                                <Border
+                                                    Margin="4,0,0,0"
+                                                    Padding="4,2"
+                                                    Background="{DynamicResource ControlFillColorSecondaryBrush}"
+                                                    CornerRadius="4">
+                                                    <TextBlock FontSize="10" Text="{Binding SourceLabel}" />
+                                                </Border>
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                     <TextBlock
                                         Grid.Row="1"
                                         Margin="0,8,0,2"
                                         FontWeight="SemiBold"
-                                        Text="{Binding Manifest.Name}"
+                                        Text="{Binding DisplayName}"
                                         TextTrimming="CharacterEllipsis" />
                                     <TextBlock
                                         Grid.Row="2"
                                         FontSize="11"
                                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                        Text="{Binding Manifest.Author, FallbackValue='', TargetNullValue=''}"
+                                        Text="{Binding DisplayAuthor, FallbackValue='', TargetNullValue=''}"
                                         TextTrimming="CharacterEllipsis" />
-                                    <StackPanel
+                                    <TextBlock
                                         Grid.Row="3"
+                                        Margin="0,4,0,0"
+                                        FontSize="11"
+                                        Foreground="OrangeRed"
+                                        Text="{Binding LoadError}"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasError}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <StackPanel
+                                        Grid.Row="4"
                                         Margin="0,8,0,0"
                                         Orientation="Horizontal">
                                         <ui:Button
@@ -193,6 +224,9 @@
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsGenerating}" Value="True">
+                                                            <Setter Property="IsEnabled" Value="False" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding CanPlace}" Value="False">
                                                             <Setter Property="IsEnabled" Value="False" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
@@ -217,6 +251,27 @@
                                                         <DataTrigger Binding="{Binding Source}" Value="{x:Static models2:CssWidgetSource.App}">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static views:WidgetGalleryKind.Native}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </ui:Button.Style>
+                                        </ui:Button>
+                                        <ui:Button
+                                            Margin="6,0,0,0"
+                                            Padding="8,3"
+                                            Appearance="Secondary"
+                                            Click="Edit_Click"
+                                            Icon="{ui:SymbolIcon Symbol=Folder20}"
+                                            Tag="{Binding}"
+                                            ToolTip="Open widget folder">
+                                            <ui:Button.Style>
+                                                <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static views:WidgetGalleryKind.Css}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </ui:Button.Style>
@@ -234,6 +289,9 @@
                                                     <Style.Triggers>
                                                         <DataTrigger Binding="{Binding IsGenerating}" Value="True">
                                                             <Setter Property="IsEnabled" Value="False" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static views:WidgetGalleryKind.Native}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
@@ -253,6 +311,9 @@
                                                         <DataTrigger Binding="{Binding IsGenerating}" Value="True">
                                                             <Setter Property="IsEnabled" Value="False" />
                                                         </DataTrigger>
+                                                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static views:WidgetGalleryKind.Native}">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </ui:Button.Style>
@@ -270,7 +331,7 @@
                                                         <DataTrigger Binding="{Binding IsGenerating}" Value="True">
                                                             <Setter Property="IsEnabled" Value="False" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Source}" Value="{x:Static models2:CssWidgetSource.App}">
+                                                        <DataTrigger Binding="{Binding IsBuiltIn}" Value="True">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
                                                     </Style.Triggers>

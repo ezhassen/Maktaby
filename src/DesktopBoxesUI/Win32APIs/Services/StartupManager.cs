@@ -11,7 +11,13 @@ namespace DesktopBoxesUI.Win32APIs.Services;
 public static class StartupManager
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+#if DEBUG
+    private const string AppName = "DesktopBoxes_Debug";
+#else
     private const string AppName = "DesktopBoxes";
+#endif
+
+    //TODO: Checks should also check app exe path
 
     /// <summary>True when the Run-key entry for this app exists.</summary>
     public static bool IsEnabled
@@ -21,7 +27,11 @@ public static class StartupManager
             try
             {
                 using var key = Registry.CurrentUser.OpenSubKey(RunKey);
-                return key?.GetValue(AppName) is not null;
+                var savedVal = key?.GetValue(AppName);
+                if (savedVal is not string savedExePath) return false;
+                var exe = Process.GetCurrentProcess().MainModule?.FileName;
+                if (string.IsNullOrEmpty(exe)) return false;
+                return savedExePath == exe;
             }
             catch (Exception ex)
             {
