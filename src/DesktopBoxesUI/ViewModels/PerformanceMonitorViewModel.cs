@@ -230,12 +230,12 @@ namespace DesktopBoxesUI.ViewModels
                 var wvIds = new HashSet<int>();
                 try
                 {
-                    foreach (var win in System.Windows.Application.Current.Windows.OfType<Views.Containers.CssWidgetWindow>())
+                    foreach (var win in System.Windows.Application.Current.Windows.OfType<Views.Containers.WebWidgetWindow>())
                     {
                         try
                         {
-                            var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                            if (field?.GetValue(win) is Controls.ContainersControls.CssWidgetControl ctrl)
+                            var field = typeof(Views.Containers.WebWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                            if (field?.GetValue(win) is Controls.ContainersControls.WebWidgetControl ctrl)
                             {
                                 var pid = ctrl.BrowserProcessId;
                                 if (pid.HasValue) wvIds.Add(pid.Value);
@@ -286,10 +286,10 @@ namespace DesktopBoxesUI.ViewModels
                         var expected = bcw.GetExpectedDisplayRect();
                         (appliedBounds, boundsMismatch) = DescribeLive(bcw, monScale, live, expected);
                     }
-                    else if (win is Views.Containers.CssWidgetWindow cww)
+                    else if (win is Views.Containers.WebWidgetWindow cww)
                     {
                         name = cww.Title ?? "Widget";
-                        type = "Widget";
+                        type = "Web";
                         var model = cww.ContainerViewModel.Bounds;
                         modelBounds = FormatBounds(model.X, model.Y, model.Width, model.Height);
                         var live = GetLiveBounds(cww);
@@ -298,8 +298,8 @@ namespace DesktopBoxesUI.ViewModels
                         // Check if widget's WebView is suspended (via control)
                         try
                         {
-                            var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                            if (field?.GetValue(cww) is Controls.ContainersControls.CssWidgetControl ctrl)
+                            var field = typeof(Views.Containers.WebWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                            if (field?.GetValue(cww) is Controls.ContainersControls.WebWidgetControl ctrl)
                             {
                                 isSuspended = ctrl.IsSuspended;
                             }
@@ -354,7 +354,7 @@ namespace DesktopBoxesUI.ViewModels
                 // Idle detection: if all widget windows hidden/minimized or AllBoxesHidden, we are idle
                 var dm = App.Services?.GetService<DesktopManager>();
                 bool allHidden = dm?.AllBoxesHidden == true;
-                bool anyVisibleWidget = Items.Any(i => (i.Type == "Widget" || i.Type == "Native") && i.IsVisible && !i.IsSuspended);
+                bool anyVisibleWidget = Items.Any(i => (i.Type == "Web" || i.Type == "Native") && i.IsVisible && !i.IsSuspended);
                 IsIdleMode = allHidden || !anyVisibleWidget;
                 try { LayoutAnchorStatus = dm?.GetLayoutAnchorStatus() ?? "DesktopManager unavailable"; } catch { }
 

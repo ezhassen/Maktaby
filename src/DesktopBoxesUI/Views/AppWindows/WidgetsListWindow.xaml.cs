@@ -15,18 +15,18 @@ namespace DesktopBoxesUI.Views;
 /// native widgets run plugin code.</summary>
 public enum WidgetGalleryKind
 {
-    Css,
+    Web,
     Native,
 }
 
 public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvider
 {
-    private readonly ICssWidgetService _svc;
+    private readonly IWebWidgetService _svc;
     private readonly INativeWidgetService _native;
     private readonly IDialogService _dialogs;
     public bool IsSelectMode { get; }
     public WidgetGalleryKind? SelectKind { get; }
-    public CssWidgetInfo? SelectedInfo { get; private set; }
+    public WebWidgetInfo? SelectedInfo { get; private set; }
     public NativeWidgetInfo? SelectedNativeInfo { get; private set; }
 
     // The global dialog service renders WPF-UI content dialogs on this host.
@@ -36,7 +36,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
         InitializeComponent();
         IsSelectMode = selectMode;
         SelectKind = selectKind;
-        _svc = App.Services.GetRequiredService<ICssWidgetService>();
+        _svc = App.Services.GetRequiredService<IWebWidgetService>();
         _native = App.Services.GetRequiredService<INativeWidgetService>();
         _dialogs = App.Services.GetRequiredService<IDialogService>();
         DataContext = this;
@@ -47,16 +47,16 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     {
         _svc.EnsureUserWidgetsRoot();
         var items = new List<WidgetGalleryItem>();
-        if (SelectKind is null || SelectKind == WidgetGalleryKind.Css)
+        if (SelectKind is null || SelectKind == WidgetGalleryKind.Web)
         {
             var all = _svc.GetAvailableWidgets().OrderBy(w => w.Source).ThenBy(w => w.Slug).ToList();
             items.AddRange(all.Select(w => new WidgetGalleryItem
             {
-                Kind = WidgetGalleryKind.Css,
+                Kind = WidgetGalleryKind.Web,
                 Slug = w.Slug,
                 Source = w.Source,
                 SourceLabel = w.Source.ToString(),
-                IsBuiltIn = w.Source == CssWidgetSource.App,
+                IsBuiltIn = w.Source == WebWidgetSource.App,
                 FolderPath = w.FolderPath,
                 Manifest = w.Manifest,
                 DisplayName = string.IsNullOrWhiteSpace(w.Manifest.Name) ? w.Slug : w.Manifest.Name,
@@ -74,7 +74,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
             {
                 Kind = WidgetGalleryKind.Native,
                 Slug = w.Slug,
-                Source = CssWidgetSource.User,
+                Source = WebWidgetSource.User,
                 NativeSource = w.Source,
                 SourceLabel = w.Source.ToString(),
                 IsBuiltIn = w.Source == NativeWidgetSource.App,
@@ -94,7 +94,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
 
         // Generate thumbnails for CSS widgets missing them, showing "Generating..." indicator.
         // Native widgets use their thumbnail.png as-is (no offscreen render).
-        foreach (var item in items.Where(v => v.Kind == WidgetGalleryKind.Css && v.ThumbnailPath == null && v.SourceInfo is not null).ToList())
+        foreach (var item in items.Where(v => v.Kind == WidgetGalleryKind.Web && v.ThumbnailPath == null && v.SourceInfo is not null).ToList())
         {
             await RefreshThumbnail(item);
         }
@@ -145,7 +145,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     {
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
-            if (vm.Kind != WidgetGalleryKind.Css) return;
+            if (vm.Kind != WidgetGalleryKind.Web) return;
             await RefreshThumbnail(vm, force: true);
         }
     }
@@ -163,7 +163,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
                 }
                 return;
             }
-            if (vm.Source == CssWidgetSource.App)
+            if (vm.Source == WebWidgetSource.App)
             {
                 await _dialogs.ShowMessageAsync("App widgets are read-only. Duplicate to edit.", "Widgets");
                 return;
@@ -190,7 +190,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
                 Refresh();
                 return;
             }
-            if (vm2.Source == CssWidgetSource.App)
+            if (vm2.Source == WebWidgetSource.App)
             {
                 await _dialogs.ShowMessageAsync("Cannot delete built-in widgets.", "Widgets");
                 return;
@@ -207,7 +207,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     {
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
-            if (vm.Kind != WidgetGalleryKind.Css) return;
+            if (vm.Kind != WidgetGalleryKind.Web) return;
             try
             {
                 var info = _svc.TryGetWidget(vm.Slug, vm.Source);
@@ -287,17 +287,17 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
 
 public sealed class WidgetGalleryItem : INotifyPropertyChanged
 {
-    public WidgetGalleryKind Kind { get; set; } = WidgetGalleryKind.Css;
+    public WidgetGalleryKind Kind { get; set; } = WidgetGalleryKind.Web;
     public string Slug { get; set; } = "";
-    public CssWidgetSource Source { get; set; }
+    public WebWidgetSource Source { get; set; }
     public NativeWidgetSource NativeSource { get; set; } = NativeWidgetSource.User;
     public string SourceLabel { get; set; } = "";
     public bool IsBuiltIn { get; set; }
     public string FolderPath { get; set; } = "";
-    public CssWidgetManifest Manifest { get; set; } = new();
+    public WebWidgetManifest Manifest { get; set; } = new();
     public string DisplayName { get; set; } = "";
     public string DisplayAuthor { get; set; } = "";
-    public CssWidgetInfo? SourceInfo { get; set; }
+    public WebWidgetInfo? SourceInfo { get; set; }
     public NativeWidgetInfo? NativeInfo { get; set; }
     public bool CanPlace { get; set; } = true;
     public bool HasError { get; set; }

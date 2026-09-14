@@ -54,7 +54,7 @@ Follow it to keep the architecture clean and the build green.
   - **Views/HelpersViews/** for overlays, ghost windows etc that is not part of main user direct interactive windows
 - **Helpers/** static or sealed (shared) helper classes can have WPF types
 - **WPFServices/** Services that access WPF types directly (like ImageSource)
-- **CSSWidgets/** for built in app widgets
+- **WebWidgets/** for built in app widgets
 - **DesktopBoxes.WidgetSdk/** (`src/`) — plugin contracts only (`INativeWidget`, base control,
   manifest, folder-kind helper). BCL + WPF framework, no packages. Plugin authors reference
   the built DLL; never move host logic here.

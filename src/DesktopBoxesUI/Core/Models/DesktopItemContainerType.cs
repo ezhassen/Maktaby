@@ -10,6 +10,6 @@ public enum DesktopItemContainerType
 {
     Custom = 0,
     BoxContainer = 1,
-    CssWidget = 2,
+    WebWidget = 2,
     NativeWidget = 3,
 }

@@ -14,11 +14,11 @@ using WPFShared.Helpers;
 
 namespace DesktopBoxesUI.Controls.ContainersControls;
 
-public partial class CssWidgetControl : UserControl
+public partial class WebWidgetControl : UserControl
 {
-    private readonly ICssWidgetService _widgetService;
+    private readonly IWebWidgetService _widgetService;
     private bool _isInitialized;
-    private CssWidgetManifest? _currentManifest;
+    private WebWidgetManifest? _currentManifest;
     private string? _pendingHtml;
     private Task? _initTask;
     private static Task<CoreWebView2Environment>? s_envTask;
@@ -30,12 +30,12 @@ public partial class CssWidgetControl : UserControl
     public event EventHandler? WidgetClicked;
     public event EventHandler? WidgetMouseDown;
 
-    public CssWidgetControl()
+    public WebWidgetControl()
     {
         InitializeComponent();
         // Resolve service without DI for design-time safety
-        _widgetService = DesktopBoxesUI.App.Services?.GetService(typeof(ICssWidgetService)) as ICssWidgetService
-                         ?? new Core.Services.CssWidgetService();
+        _widgetService = DesktopBoxesUI.App.Services?.GetService(typeof(IWebWidgetService)) as IWebWidgetService
+                         ?? new Core.Services.WebWidgetService();
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -109,10 +109,10 @@ public partial class CssWidgetControl : UserControl
         if (_currentManifest == null) return false;
         if (_currentManifest.CanSwitchTheme == true) return true;
         if (_currentManifest.CanSwitchTheme == false) return false;
-        // null (indeterminate) -> follow global DefaultCSSWidgetsTheme
+        // null (indeterminate) -> follow global DefaultWebWidgetsTheme
         try
         {
-            var global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultCSSWidgetsTheme;
+            var global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultWebWidgetsTheme;
             // global null/App => follow app theme (still switchable)
             // Dark/Light => switch to that global theme
             return true;
@@ -125,14 +125,14 @@ public partial class CssWidgetControl : UserControl
         return GetEffectiveThemeStatic(_currentManifest);
     }
 
-    private static string? GetEffectiveThemeStatic(CssWidgetManifest? manifest)
+    private static string? GetEffectiveThemeStatic(WebWidgetManifest? manifest)
     {
         //if false no theming
         if (manifest?.CanSwitchTheme == false) return null;
         try
         {
-            //try get DefaultCSSWidgetsTheme setting 
-            var global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultCSSWidgetsTheme?.Trim().ToLowerInvariant();
+            //try get DefaultWebWidgetsTheme setting 
+            var global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultWebWidgetsTheme?.Trim().ToLowerInvariant();
             if (global == "dark") return "dark";
             if (global == "light") return "light";
         }
@@ -382,7 +382,7 @@ public partial class CssWidgetControl : UserControl
         }
     }
 
-    public async void LoadWidget(string slug, CssWidgetSource source)
+    public async void LoadWidget(string slug, WebWidgetSource source)
     {
         var info = _widgetService.TryGetWidget(slug, source);
         if (info is null)
@@ -401,9 +401,9 @@ public partial class CssWidgetControl : UserControl
         await EnsureAndNavigate(doc);
     }
 
-    public async void LoadDirect(string html, string css, string js, CssWidgetManifest? manifest = null)
+    public async void LoadDirect(string html, string css, string js, WebWidgetManifest? manifest = null)
     {
-        _currentManifest = manifest ?? new CssWidgetManifest { Resizable = true, AllowNetwork = false };
+        _currentManifest = manifest ?? new WebWidgetManifest { Resizable = true, AllowNetwork = false };
         ApplyNetworkFilter(_currentManifest);
         // Build doc similarly to service but from strings
         string doc;
@@ -447,7 +447,7 @@ public partial class CssWidgetControl : UserControl
         return html;
     }
 
-    private void ApplyNetworkFilter(CssWidgetManifest manifest)
+    private void ApplyNetworkFilter(WebWidgetManifest manifest)
     {
         if (!_isInitialized || WebView.CoreWebView2 is null) return;
         try

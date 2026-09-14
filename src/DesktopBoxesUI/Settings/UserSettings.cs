@@ -99,13 +99,13 @@ public class UserSettings
     public int? DefaultBoxIconSize { get; set; }
 
 
-    #region CSSWidgets
+    #region WebWidgets
 
     /// <summary>
     /// Default box Selected Theme, dark, light, (null= get app SelectedTheme)
     /// </summary>
-    [Category("Appearance_CSSWidgets"), DefaultValue(null)]
-    public string? DefaultCSSWidgetsTheme { get; set; }
+    [Category("Appearance_WebWidgets"), DefaultValue(null)]
+    public string? DefaultWebWidgetsTheme { get; set; }
 
     /// <summary>Suspend widget WebViews when a fullscreen app covers their monitor.</summary>
     [Category("Widgets"), DefaultValue(true)]

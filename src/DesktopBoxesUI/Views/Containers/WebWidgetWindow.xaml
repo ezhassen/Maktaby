@@ -1,5 +1,5 @@
 <containers:WidgetWindow
-    x:Class="DesktopBoxesUI.Views.Containers.CssWidgetWindow"
+    x:Class="DesktopBoxesUI.Views.Containers.WebWidgetWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ap="clr-namespace:DesktopBoxesUI.AttachedProperties"

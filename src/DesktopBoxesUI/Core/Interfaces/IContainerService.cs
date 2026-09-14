@@ -24,13 +24,13 @@ public interface IContainerService
         string? customTypeName = null,
         string? customData = null);
 
-    DesktopItemContainer CreateCssWidgetContainer(
+    DesktopItemContainer CreateWebWidgetContainer(
         double left,
         double top,
         double width,
         double height,
         string slug,
-        CssWidgetSource source);
+        WebWidgetSource source);
 
     DesktopItemContainer CreateNativeWidgetContainer(
         double left,

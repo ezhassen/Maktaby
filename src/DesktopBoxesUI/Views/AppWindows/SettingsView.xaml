@@ -67,7 +67,7 @@
                     <ListBoxItem Content="Preview" Tag="SectionPreview" />
                     <ListBoxItem Content="Appearance" Tag="SectionAppearance" />
                     <ListBoxItem Content="Boxes" Tag="SectionBoxes" />
-                    <ListBoxItem Content="CSS Widgets" Tag="SectionCSSWidgets" />
+                    <ListBoxItem Content="CSS Widgets" Tag="SectionWebWidgets" />
                     <ListBoxItem Content="Containers" Tag="SectionContainers" />
                     <ListBoxItem Content="General" Tag="SectionGeneral" />
                     <ListBoxItem Content="Snapshot" Tag="SectionSnapshot" />
@@ -405,7 +405,7 @@
                     </GroupBox>
 
                     <GroupBox
-                        x:Name="SectionCSSWidgets"
+                        x:Name="SectionWebWidgets"
                         Margin="0,0,0,12"
                         Header="CSS Widgets">
                         <StackPanel Margin="8">
@@ -419,11 +419,11 @@
                                 <StackPanel Orientation="Horizontal">
                                     <ComboBox
                                         Width="200"
-                                        ItemsSource="{Binding CssWidgetThemeOptions}"
-                                        SelectedItem="{Binding DefaultCSSWidgetsThemeOption, UpdateSourceTrigger=PropertyChanged}" />
+                                        ItemsSource="{Binding WebWidgetThemeOptions}"
+                                        SelectedItem="{Binding DefaultWebWidgetsThemeOption, UpdateSourceTrigger=PropertyChanged}" />
                                     <ui:Button
                                         Command="{Binding ResetToDefaultCommand}"
-                                        CommandParameter="DefaultCSSWidgetsThemeOption"
+                                        CommandParameter="DefaultWebWidgetsThemeOption"
                                         Style="{StaticResource ResetButton}">
                                         <ui:SymbolIcon Symbol="ArrowCounterclockwise24" />
                                     </ui:Button>

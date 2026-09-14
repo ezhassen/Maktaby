@@ -534,9 +534,9 @@ public sealed class DesktopManager
             foreach (var vm in _mainVm.Containers)
             {
                 // Minimums must match each window type (BoxContainerWindow 160x120,
-                // CssWidgetWindow 120x80) — otherwise a shrink would inflate small widgets.
-                double minW = vm.Type == DesktopItemContainerType.CssWidget ? 120 : MinContainerWidth;
-                double minH = vm.Type == DesktopItemContainerType.CssWidget ? 80 : MinContainerHeight;
+                // WebWidgetWindow 120x80) — otherwise a shrink would inflate small widgets.
+                double minW = vm.Type == DesktopItemContainerType.WebWidget ? 120 : MinContainerWidth;
+                double minH = vm.Type == DesktopItemContainerType.WebWidget ? 80 : MinContainerHeight;
                 var (left, top, width, height) = ScaleBounds(
                     vm.Left, vm.Top, vm.Width, vm.Height,
                     _appliedResolution, current, current, minW, minH);
@@ -704,8 +704,8 @@ public sealed class DesktopManager
         {
             foreach (var vm in _mainVm.Containers)
             {
-                double minW = vm.Type == DesktopItemContainerType.CssWidget ? 120 : MinContainerWidth;
-                double minH = vm.Type == DesktopItemContainerType.CssWidget ? 80 : MinContainerHeight;
+                double minW = vm.Type == DesktopItemContainerType.WebWidget ? 120 : MinContainerWidth;
+                double minH = vm.Type == DesktopItemContainerType.WebWidget ? 80 : MinContainerHeight;
                 var clamped = ClampBoundsToArea(vm.Bounds, current, minW, minH);
                 if (Math.Abs(clamped.X - vm.Bounds.X) > VerifyToleranceDip ||
                     Math.Abs(clamped.Y - vm.Bounds.Y) > VerifyToleranceDip ||
@@ -816,7 +816,7 @@ public sealed class DesktopManager
             {
                 nativeText = " native=<unknown>";
             }
-            if (window is Views.Containers.CssWidgetWindow widget)
+            if (window is Views.Containers.WebWidgetWindow widget)
             {
                 var overlay = widget.ChromeOverlay;
                 if (overlay is null)
@@ -1264,13 +1264,13 @@ public sealed class DesktopManager
     public bool IsDesktopWindow(Window wind, bool checkSurfaceToo = true)
     {
         if (checkSurfaceToo && wind is DesktopSurface) return true;
-        return wind is BoxContainerWindow || wind is CssWidgetWindow || wind is NativeWidgetWindow;//|| wind is WidgetChromeOverlay;
+        return wind is BoxContainerWindow || wind is WebWidgetWindow || wind is NativeWidgetWindow;//|| wind is WidgetChromeOverlay;
     }
 
     public bool IsDesktopWindow(IntPtr hWnd, bool checkSurfaceToo = true)
     {
         if (checkSurfaceToo && hWnd == Win32Apis.DesktopSurfaceHandle) return true;
-        // Check if hwnd belongs to our app's BoxContainerWindow / CssWidgetWindow
+        // Check if hwnd belongs to our app's BoxContainerWindow / WebWidgetWindow
         try
         {
             foreach (var w in _windows.Values)
@@ -1300,9 +1300,9 @@ public sealed class DesktopManager
         //if is not set to be visible do not add it
         if (!vm.IsVisible) return;
         Window window;
-        if (vm.Type == DesktopItemContainerType.CssWidget)
+        if (vm.Type == DesktopItemContainerType.WebWidget)
         {
-            window = new CssWidgetWindow(vm)
+            window = new WebWidgetWindow(vm)
             {
                 ShowActivated = showActivated
             };
@@ -1326,7 +1326,7 @@ public sealed class DesktopManager
         // Per-window DPI changes never raise DisplaySettingsChanged — observe them directly so
         // DPI-only switches (same resolution, different scale) also funnel into the rescale path.
         //window.DpiChanged += OnWindowDpiChanged;//not needed
-        // RegisterBoxWindow is done inside each window's OnLoaded for CssWidget; keep for BoxContainer compat
+        // RegisterBoxWindow is done inside each window's OnLoaded for WebWidget; keep for BoxContainer compat
         try { Win32Apis.RegisterBoxWindow(new WindowInteropHelper(window).Handle); } catch { }
         //IntPtr? foregroundWindowHwnd = null;
         //if (!showActivated && focusWorkaround)
@@ -1480,7 +1480,7 @@ public sealed class DesktopManager
             // HwndHost teardown mid-close (kills ToggleDisable/Reset teardown).
             try
             {
-                if (window is CssWidgetWindow widgetWindow) widgetWindow.PrepareForClose();
+                if (window is WebWidgetWindow widgetWindow) widgetWindow.PrepareForClose();
                 else if (window is NativeWidgetWindow nativeWindow) nativeWindow.PrepareForClose();
             }
             catch { }
@@ -1554,7 +1554,7 @@ public sealed class DesktopManager
                 if (!TryGetMonitorDevice(window, monitors, out var actual)) continue;
                 if (!string.Equals(actual, device, StringComparison.OrdinalIgnoreCase)) continue;
                 bool resume = reason == PauseReason.None;
-                if (window is Views.Containers.CssWidgetWindow cssWindow)
+                if (window is Views.Containers.WebWidgetWindow cssWindow)
                 {
                     var control = cssWindow.WidgetControl;
                     if (control is null) continue;
@@ -1595,7 +1595,7 @@ public sealed class DesktopManager
         {
             if (!TryGetMonitorDevice(window, GetPauseMonitors(), out var device)) return;
             bool resume = supervisor.GetPauseReason(device) == PauseReason.None;
-            if (window is Views.Containers.CssWidgetWindow cssWindow)
+            if (window is Views.Containers.WebWidgetWindow cssWindow)
             {
                 var control = cssWindow.WidgetControl;
                 if (control is null) return;
@@ -1770,15 +1770,15 @@ public sealed class DesktopManager
         _ = SaveAsync();
     }
 
-    public void NewCssWidget(string slug, CssWidgetSource source)
+    public void NewWebWidget(string slug, WebWidgetSource source)
     {
         var offset = _mainVm.Containers.Count * 24;
         // Use manifest default size if available
-        var svc = App.Services.GetRequiredService<ICssWidgetService>();
+        var svc = App.Services.GetRequiredService<IWebWidgetService>();
         var info = svc.TryGetWidget(slug, source);
         double w = info?.Manifest.Width ?? 300;
         double h = info?.Manifest.Height ?? 220;
-        _mainVm.CreateCssWidgetAt(slug, source, 60 + offset, 60 + offset, w, h);
+        _mainVm.CreateWebWidgetAt(slug, source, 60 + offset, 60 + offset, w, h);
         _ = SaveAsync();
     }
 

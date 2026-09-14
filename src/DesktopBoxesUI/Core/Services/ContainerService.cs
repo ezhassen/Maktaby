@@ -55,13 +55,13 @@ public sealed class ContainerService : IContainerService
             ClampSelected(childContainer);
             container.ChildContainer = childContainer;
         }
-        else if (type == DesktopItemContainerType.CssWidget)
+        else if (type == DesktopItemContainerType.WebWidget)
         {
-            // For CssWidget the slug/source are preferred via CreateCssWidgetContainer.
+            // For WebWidget the slug/source are preferred via CreateWebWidgetContainer.
             // Fallback: treat customTypeName as slug and customData as source string.
-            container.CssWidgetName = customTypeName;
-            if (Enum.TryParse<CssWidgetSource>(customData, true, out var src))
-                container.CssWidgetSource = src;
+            container.WebWidgetName = customTypeName;
+            if (Enum.TryParse<WebWidgetSource>(customData, true, out var src))
+                container.WebWidgetSource = src;
         }
         else
         {
@@ -77,23 +77,23 @@ public sealed class ContainerService : IContainerService
         return container;
     }
 
-    public DesktopItemContainer CreateCssWidgetContainer(
+    public DesktopItemContainer CreateWebWidgetContainer(
         double left,
         double top,
         double width,
         double height,
         string slug,
-        CssWidgetSource source)
+        WebWidgetSource source)
     {
         var bounds = RectD.FromXYWH(left, top, width, height);
         var container = new DesktopItemContainer
         {
-            Type = DesktopItemContainerType.CssWidget,
+            Type = DesktopItemContainerType.WebWidget,
             Bounds = bounds,
             IsLocked = false,
             IsVisible = true,
-            CssWidgetName = slug,
-            CssWidgetSource = source
+            WebWidgetName = slug,
+            WebWidgetSource = source
         };
         lock (_gate)
         {

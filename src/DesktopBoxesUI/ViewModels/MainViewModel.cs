@@ -118,15 +118,15 @@ public sealed class MainViewModel : ViewModelBase
         return vm;
     }
 
-    public ContainerViewModel CreateCssWidget(string slug, CssWidgetSource source, double left = 60, double top = 60, double width = 300, double height = 220)
+    public ContainerViewModel CreateWebWidget(string slug, WebWidgetSource source, double left = 60, double top = 60, double width = 300, double height = 220)
     {
         var offset = Containers.Count * 24;
-        return CreateCssWidgetAt(slug, source, left + offset, top + offset, width, height);
+        return CreateWebWidgetAt(slug, source, left + offset, top + offset, width, height);
     }
 
-    public ContainerViewModel CreateCssWidgetAt(string slug, CssWidgetSource source, double left, double top, double width = 300, double height = 220)
+    public ContainerViewModel CreateWebWidgetAt(string slug, WebWidgetSource source, double left, double top, double width = 300, double height = 220)
     {
-        var container = _containers.CreateCssWidgetContainer(left, top, width, height, slug, source);
+        var container = _containers.CreateWebWidgetContainer(left, top, width, height, slug, source);
         var vm = MakeVm(container);
         Containers.Add(vm);
         return vm;

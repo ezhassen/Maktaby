@@ -752,7 +752,7 @@ public sealed partial class DesktopSurface : Window
             // If manifest has default size and marquee is close to min, prefer manifest
             if (info.Manifest.Width.HasValue && Math.Abs(w - minWidth) < 1) useW2 = info.Manifest.Width.Value;
             if (info.Manifest.Height.HasValue && Math.Abs(h - minHeight) < 1) useH2 = info.Manifest.Height.Value;
-            main.CreateCssWidgetAt(info.Slug, info.Source, x, y, useW2, useH2);
+            main.CreateWebWidgetAt(info.Slug, info.Source, x, y, useW2, useH2);
             _save();
         }
         else

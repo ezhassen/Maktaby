@@ -13,17 +13,17 @@ namespace DesktopBoxesUI.Views;
 
 public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
 {
-    private readonly ICssWidgetService _svc;
+    private readonly IWebWidgetService _svc;
     private readonly IDialogService _dialogs;
     private readonly string? _originalSlug;
     private readonly bool _isNew;
     private readonly DispatcherTimer _debounce;
-    private CssWidgetControl? _previewControl;
+    private WebWidgetControl? _previewControl;
 
     public WidgetDataWindow(string? slug, bool isNew)
     {
         InitializeComponent();
-        _svc = App.Services.GetRequiredService<ICssWidgetService>();
+        _svc = App.Services.GetRequiredService<IWebWidgetService>();
         _dialogs = App.Services.GetRequiredService<IDialogService>();
         _originalSlug = slug;
         _isNew = isNew;
@@ -39,12 +39,12 @@ public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
     public ContentDialogHost DialogHost => RootContentDialogHost;
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        _previewControl = new CssWidgetControl();
+        _previewControl = new WebWidgetControl();
         PreviewHost.Content = _previewControl;
 
         if (!_isNew && !string.IsNullOrWhiteSpace(_originalSlug))
         {
-            var info = _svc.TryGetWidget(_originalSlug!, CssWidgetSource.User);
+            var info = _svc.TryGetWidget(_originalSlug!, WebWidgetSource.User);
             if (info is null)
             {
                 await _dialogs.ShowMessageAsync($"Widget '{_originalSlug}' not found.", "Error");
@@ -100,11 +100,11 @@ public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
 
     private void PreviewRefresh_Click(object sender, RoutedEventArgs e) => RefreshPreview();
 
-    private CssWidgetManifest BuildManifestFromFields()
+    private WebWidgetManifest BuildManifestFromFields()
     {
         int.TryParse(WidthBox.Text, out int w);
         int.TryParse(HeightBox.Text, out int h);
-        return new CssWidgetManifest
+        return new WebWidgetManifest
         {
             Name = string.IsNullOrWhiteSpace(NameBox.Text) ? "widget" : NameBox.Text.Trim(),
             Author = AuthorBox.Text?.Trim(),
@@ -139,7 +139,7 @@ public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
             // Generate thumbnail for the newly created widget (fire-and-forget, show in gallery as "Generating...")
             try
             {
-                var info = _svc.TryGetWidget(newSlug, CssWidgetSource.User);
+                var info = _svc.TryGetWidget(newSlug, WebWidgetSource.User);
                 if (info != null) await _svc.GenerateThumbnailAsync(info);
             }
             catch { }
@@ -153,26 +153,26 @@ public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
             {
                 var thumbPath = System.IO.Path.Combine(_svc.UserWidgetsRoot, targetSlug, "thumbnail.png");
                 if (System.IO.File.Exists(thumbPath)) System.IO.File.Delete(thumbPath);
-                var updInfo = _svc.TryGetWidget(targetSlug, CssWidgetSource.User);
+                var updInfo = _svc.TryGetWidget(targetSlug, WebWidgetSource.User);
                 if (updInfo != null) await _svc.GenerateThumbnailAsync(updInfo);
             }
             catch { }
             // Broadcast reload to all placed widgets sharing this slug (update all on save)
-            foreach (var win in System.Windows.Application.Current.Windows.OfType<CssWidgetWindow>())
+            foreach (var win in System.Windows.Application.Current.Windows.OfType<WebWidgetWindow>())
             {
                 win.Dispatcher.Invoke(() =>
                 {
                     try
                     {
-                        var field = typeof(CssWidgetWindow).GetField("_container", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        var field = typeof(WebWidgetWindow).GetField("_container", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                         if (field?.GetValue(win) is DesktopBoxesUI.Core.Models.DesktopItemContainer c)
                         {
-                            if (string.Equals(c.CssWidgetName, targetSlug, StringComparison.OrdinalIgnoreCase)
-                                && c.CssWidgetSource == CssWidgetSource.User)
+                            if (string.Equals(c.WebWidgetName, targetSlug, StringComparison.OrdinalIgnoreCase)
+                                && c.WebWidgetSource == WebWidgetSource.User)
                             {
-                                var wcField = typeof(CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                                if (wcField?.GetValue(win) is CssWidgetControl ctrl)
-                                    ctrl.LoadWidget(targetSlug, CssWidgetSource.User);
+                                var wcField = typeof(WebWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                                if (wcField?.GetValue(win) is WebWidgetControl ctrl)
+                                    ctrl.LoadWidget(targetSlug, WebWidgetSource.User);
                             }
                         }
                     }

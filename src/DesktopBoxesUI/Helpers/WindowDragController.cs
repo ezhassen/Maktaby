@@ -346,7 +346,7 @@ internal sealed class WindowDragController
         bool noSize = (wp.Flags & SwpNoSize) != 0;
         // Only pure z-order activation (no move/size) should be kept in desktop layer.
         // Move/resize (WM_ENTERSIZEMOVE, WM_MOVING, WM_SIZING) clears NOMOVE/NOSIZE and must be allowed.
-        // Note: noActivate is intentionally NOT checked — CssWidget overlay is WS_EX_NOACTIVATE and
+        // Note: noActivate is intentionally NOT checked — WebWidget overlay is WS_EX_NOACTIVATE and
         // activates owner via MA_NOACTIVATE, so pure z-order with SWP_NOACTIVATE must still be kept below.
         if (noZOrder || !noMove || !noSize) return;
 

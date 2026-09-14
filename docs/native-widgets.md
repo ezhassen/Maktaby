@@ -1,11 +1,11 @@
 # Native widget plugins
 
 Native widgets are window widgets written in C# (WPF) instead of HTML/CSS/JS.
-They live side by side with CSS widgets in `%LocalAppData%\DesktopBoxes\UserWidgets\<slug>\`
+They live side by side with web widgets in `%LocalAppData%\DesktopBoxes\UserWidgets\<slug>\`
 — the **folder name is the widget identity**, there is no id field. A folder containing
-`nwidget.json` belongs to the native loader, anything else to the CSS loader; detection
+`nwidget.json` belongs to the native loader, anything else to the web loader; detection
 never loads code. Built-in widgets ship next to the app in `NativeWidgets/` and appear in
-the gallery with an `App` badge. The gallery lists all kinds with a `CSS` / `Native`
+the gallery with an `App` badge. The gallery lists all kinds with a `Web` / `Native`
 badge; placement, chrome (move/resize/title/lock/menu), fullscreen auto-suspend and theme
 switching work the same for all.
 
@@ -153,7 +153,7 @@ keyed on content identity:
 
 | symptom | cause / fix |
 |---|---|
-| Folder missing from gallery | Not under `UserWidgets/`, or name starts with `.`. No `nwidget.json` means the CSS loader owns it. |
+| Folder missing from gallery | Not under `UserWidgets/`, or name starts with `.`. No `nwidget.json` means the web loader owns it. |
 | `No INativeWidget implementation found` | Reference the matching `DesktopBoxes.WidgetSdk` version; implement the interface or derive `NativeWidgetControl`; no top-level statements. |
 | `Ambiguous … types` / `Ambiguous … DLLs` | Set `type` / `assembly` in `nwidget.json`. |
 | `Compile failed: …` | First errors shown in logs + placeholder. Fix sources, gallery Refresh. |

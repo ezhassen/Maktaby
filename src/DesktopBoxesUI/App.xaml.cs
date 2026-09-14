@@ -81,8 +81,8 @@ public partial class App : Application
         ApplyTheme(Services.GetRequiredService<ISettingsService>().UserSettings.SelectedTheme);
         ApplyBoxAppearance();
         ApplicationThemeManager.Changed += (_, _) => ApplyBoxAppearance();
-        // Ensure CssWidget storage roots exist (UserWidgets + EBWebView)
-        try { Services.GetRequiredService<ICssWidgetService>().EnsureUserWidgetsRoot(); } catch { }
+        // Ensure WebWidget storage roots exist (UserWidgets + EBWebView)
+        try { Services.GetRequiredService<IWebWidgetService>().EnsureUserWidgetsRoot(); } catch { }
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
@@ -221,7 +221,7 @@ public partial class App : Application
         services.AddSingleton<MainViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddSingleton<IDialogService, DialogService>();
-        services.AddSingleton<ICssWidgetService, CssWidgetService>();
+        services.AddSingleton<IWebWidgetService, WebWidgetService>();
         services.AddSingleton<INativeWidgetService, NativeWidgetService>();
 
         // Win32 watchers
@@ -531,7 +531,7 @@ public partial class App : Application
                 if (win.SelectedNativeInfo is not null)
                     Services.GetRequiredService<DesktopManager>().NewNativeWidget(win.SelectedNativeInfo.Slug);
                 else if (win.SelectedInfo is not null)
-                    Services.GetRequiredService<DesktopManager>().NewCssWidget(win.SelectedInfo.Slug, win.SelectedInfo.Source);
+                    Services.GetRequiredService<DesktopManager>().NewWebWidget(win.SelectedInfo.Slug, win.SelectedInfo.Source);
             }
         });
     }

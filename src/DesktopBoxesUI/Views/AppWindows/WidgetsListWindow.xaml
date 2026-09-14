@@ -248,7 +248,7 @@
                                                         <DataTrigger Binding="{Binding IsGenerating}" Value="True">
                                                             <Setter Property="IsEnabled" Value="False" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Source}" Value="{x:Static models2:CssWidgetSource.App}">
+                                                        <DataTrigger Binding="{Binding Source}" Value="{x:Static models2:WebWidgetSource.App}">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
                                                         <DataTrigger Binding="{Binding Kind}" Value="{x:Static views:WidgetGalleryKind.Native}">
@@ -269,7 +269,7 @@
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
                                                     <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static views:WidgetGalleryKind.Css}">
+                                                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static views:WidgetGalleryKind.Web}">
                                                             <Setter Property="Visibility" Value="Collapsed" />
                                                         </DataTrigger>
                                                     </Style.Triggers>

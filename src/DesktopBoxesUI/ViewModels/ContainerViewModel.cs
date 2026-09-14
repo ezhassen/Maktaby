@@ -65,16 +65,16 @@ public sealed class ContainerViewModel : ViewModelBase
 
     public string? CustomTypeName => _container.CustomTypeName;
 
-    public string? CssWidgetName => _container.CssWidgetName;
-    public CssWidgetSource? CssWidgetSource => _container.CssWidgetSource;
+    public string? WebWidgetName => _container.WebWidgetName;
+    public WebWidgetSource? WebWidgetSource => _container.WebWidgetSource;
     public string? NativeWidgetName => _container.NativeWidgetName;
 
     public DesktopItemContainer Model => _container;
 
-    /// <summary>Display title: the active box name for a BoxContainer, or the widget name for Custom/CssWidget/NativeWidget.</summary>
+    /// <summary>Display title: the active box name for a BoxContainer, or the widget name for Custom/WebWidget/NativeWidget.</summary>
     public string Title =>
-        Type == DesktopItemContainerType.CssWidget
-            ? (CssWidgetName ?? "Widget")
+        Type == DesktopItemContainerType.WebWidget
+            ? (WebWidgetName ?? "Widget")
             : Type == DesktopItemContainerType.NativeWidget
                 ? (NativeWidgetName ?? "Widget")
                 : Type == DesktopItemContainerType.Custom

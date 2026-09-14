@@ -80,10 +80,10 @@ namespace DesktopBoxesUI.Views
             {
                 try
                 {
-                    if (item.WindowRef is Views.Containers.CssWidgetWindow cww)
+                    if (item.WindowRef is Views.Containers.WebWidgetWindow cww)
                     {
-                        var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        if (field?.GetValue(cww) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.Suspend();
+                        var field = typeof(Views.Containers.WebWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (field?.GetValue(cww) is Controls.ContainersControls.WebWidgetControl ctrl) ctrl.Suspend();
                     }
                     else if (item.WindowRef is Views.Containers.NativeWidgetWindow nww)
                     {
@@ -103,10 +103,10 @@ namespace DesktopBoxesUI.Views
             {
                 try
                 {
-                    if (item.WindowRef is Views.Containers.CssWidgetWindow cww)
+                    if (item.WindowRef is Views.Containers.WebWidgetWindow cww)
                     {
-                        var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                        if (field?.GetValue(cww) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.Resume();
+                        var field = typeof(Views.Containers.WebWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                        if (field?.GetValue(cww) is Controls.ContainersControls.WebWidgetControl ctrl) ctrl.Resume();
                     }
                     else if (item.WindowRef is Views.Containers.NativeWidgetWindow nww)
                     {
@@ -120,12 +120,12 @@ namespace DesktopBoxesUI.Views
 
         private void SuspendIdle_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var win in Application.Current.Windows.OfType<Views.Containers.CssWidgetWindow>())
+            foreach (var win in Application.Current.Windows.OfType<Views.Containers.WebWidgetWindow>())
             {
                 try
                 {
-                    var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (field?.GetValue(win) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.Suspend();
+                    var field = typeof(Views.Containers.WebWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (field?.GetValue(win) is Controls.ContainersControls.WebWidgetControl ctrl) ctrl.Suspend();
                 }
                 catch { }
             }
@@ -138,12 +138,12 @@ namespace DesktopBoxesUI.Views
 
         private void ResumeAll_Click(object sender, RoutedEventArgs e)
         {
-            foreach (var win in Application.Current.Windows.OfType<Views.Containers.CssWidgetWindow>())
+            foreach (var win in Application.Current.Windows.OfType<Views.Containers.WebWidgetWindow>())
             {
                 try
                 {
-                    var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (field?.GetValue(win) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.Resume();
+                    var field = typeof(Views.Containers.WebWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (field?.GetValue(win) is Controls.ContainersControls.WebWidgetControl ctrl) ctrl.Resume();
                 }
                 catch { }
             }

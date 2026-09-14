@@ -15,17 +15,17 @@ using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views.Containers;
 
-public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
+public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
 {
     public override ContainerViewModel ContainerViewModel { get; }
     Window IWidgetChromeOwner.Window => this;
     System.Windows.Controls.MenuItem? IWidgetChromeOwner.LockMenuItem => LockMenuItem;
     private readonly DesktopItemContainer _container;
-    private readonly ICssWidgetService _widgetService;
-    private CssWidgetControl? _widgetControl;
+    private readonly IWebWidgetService _widgetService;
+    private WebWidgetControl? _widgetControl;
     /// <summary>The hosted widget control (null before load / after shutdown teardown).
     /// Used by <see cref="DesktopManager"/> for fullscreen auto-suspend.</summary>
-    internal CssWidgetControl? WidgetControl => _widgetControl;    //private WindowDragController? _drag;
+    internal WebWidgetControl? WidgetControl => _widgetControl;    //private WindowDragController? _drag;
     private bool _isHover;
     private bool _isActive;
     private HwndSource? _hwndSource;
@@ -34,13 +34,13 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private bool ShowChromeOnHover = false;
     //private bool MoveWindowByWidgetMouseDown = false;
 
-    public CssWidgetWindow(ContainerViewModel vm)
+    public WebWidgetWindow(ContainerViewModel vm)
     {
         InitializeComponent();
         //DataContext = vm;
         ContainerViewModel = vm;
         _container = vm.Model;
-        _widgetService = App.Services.GetRequiredService<ICssWidgetService>();
+        _widgetService = App.Services.GetRequiredService<IWebWidgetService>();
         _desktopManager = App.Services.GetRequiredService<DesktopManager>();
         var manifest = LoadWidget();
         ApplyManifest(manifest);
@@ -50,7 +50,7 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
         Width = _container.Bounds.Width > 0 ? _container.Bounds.Width : (manifest?.Width ?? 300);
         Height = _container.Bounds.Height > 0 ? _container.Bounds.Height : (manifest?.Height ?? 220);
 
-        Title = manifest?.Name ?? _container.CssWidgetName ?? "Widget";
+        Title = manifest?.Name ?? _container.WebWidgetName ?? "Widget";
 
         //UpdateChrome();
         Loaded += OnLoaded;
@@ -79,15 +79,15 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
         Deactivated += (_, _) => { _isActive = false; _isHover = false; UpdateChrome(); };
     }
 
-    private CssWidgetManifest? LoadWidget()
+    private WebWidgetManifest? LoadWidget()
     {
-        var slug = _container.CssWidgetName;
-        var source = _container.CssWidgetSource ?? CssWidgetSource.User;
+        var slug = _container.WebWidgetName;
+        var source = _container.WebWidgetSource ?? WebWidgetSource.User;
         if (string.IsNullOrWhiteSpace(slug)) return null;
         var info = _widgetService.TryGetWidget(slug, source);
         if (info is null)
         {
-            var alt = source == CssWidgetSource.App ? CssWidgetSource.User : CssWidgetSource.App;
+            var alt = source == WebWidgetSource.App ? WebWidgetSource.User : WebWidgetSource.App;
             info = _widgetService.TryGetWidget(slug, alt);
         }
         if (info is null)
@@ -109,7 +109,7 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
             _widgetControl.WidgetClicked -= OnWidgetClicked;
             //_widgetControl.WidgetMouseDown -= OnWidgetMouseDown;
         }
-        _widgetControl = new CssWidgetControl();
+        _widgetControl = new WebWidgetControl();
         _widgetControl.WidgetMouseEnter += OnWidgetMouseEnter;
         _widgetControl.WidgetMouseLeave += OnWidgetMouseLeave;
         _widgetControl.WidgetClicked += OnWidgetClicked;
@@ -119,7 +119,7 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
         return info.Manifest;
     }
 
-    private void ApplyManifest(CssWidgetManifest? manifest)
+    private void ApplyManifest(WebWidgetManifest? manifest)
     {
         bool resizable = manifest?.IsResizable ?? true;
         if (_container.IsLocked) resizable = false;
@@ -213,14 +213,14 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
     {
         if (!HeaderIsShown() && !_isHover)
         {
-            //Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseEnter to show");
+            //Debug.WriteLine("[WebWidgetWindow] OnWidgetMouseEnter to show");
             _isHover = true;
             UpdateChrome();
         }
     }
     private void OnWidgetMouseLeave(object? sender, EventArgs e)
     {
-        //Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseLeave");
+        //Debug.WriteLine("[WebWidgetWindow] OnWidgetMouseLeave");
         try
         {
             // If the native cursor is still inside this window's bounds, ignore the DOM 'leave' messages
@@ -232,7 +232,7 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
             {
                 if (pt.X >= rect.Left && pt.X <= rect.Right && pt.Y >= rect.Top && pt.Y <= rect.Bottom)
                 {
-                    //Debug.WriteLine("[CssWidgetWindow] OnWidgetMouseLeave ignored — cursor still inside window");
+                    //Debug.WriteLine("[WebWidgetWindow] OnWidgetMouseLeave ignored — cursor still inside window");
                     return;
                 }
             }
@@ -377,9 +377,9 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
     private void Edit_Click(object sender, RoutedEventArgs e)
     {
-        var slug = _container.CssWidgetName ?? "";
-        var source = _container.CssWidgetSource ?? CssWidgetSource.User;
-        if (source == CssWidgetSource.App)
+        var slug = _container.WebWidgetName ?? "";
+        var source = _container.WebWidgetSource ?? WebWidgetSource.User;
+        if (source == WebWidgetSource.App)
         {
             var info = _widgetService.TryGetWidget(slug, source);
             if (info is not null)
@@ -397,10 +397,10 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
         if (w.ShowDialog() == true)
         {
             _widgetControl?.LoadWidget(slug, source);
-            foreach (var win in System.Windows.Application.Current.Windows.OfType<CssWidgetWindow>())
+            foreach (var win in System.Windows.Application.Current.Windows.OfType<WebWidgetWindow>())
             {
-                if (win != this && string.Equals(win._container.CssWidgetName, slug, StringComparison.OrdinalIgnoreCase)
-                    && win._container.CssWidgetSource == source)
+                if (win != this && string.Equals(win._container.WebWidgetName, slug, StringComparison.OrdinalIgnoreCase)
+                    && win._container.WebWidgetSource == source)
                     win._widgetControl?.LoadWidget(slug, source);
             }
         }
@@ -411,8 +411,8 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
         var w = new WidgetsListWindow(selectMode: true);
         if (w.ShowDialog() == true && w.SelectedInfo is not null)
         {
-            _container.CssWidgetName = w.SelectedInfo.Slug;
-            _container.CssWidgetSource = w.SelectedInfo.Source;
+            _container.WebWidgetName = w.SelectedInfo.Slug;
+            _container.WebWidgetSource = w.SelectedInfo.Source;
             var info = w.SelectedInfo;
             Title = info.Manifest.Name ?? info.Slug;
             //TitleText.Text = Title;
@@ -433,9 +433,9 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private void Duplicate_Click(object sender, RoutedEventArgs e)
     {
         var main = App.Services.GetRequiredService<MainViewModel>();
-        main.CreateCssWidgetAt(
-            _container.CssWidgetName ?? "widget",
-            _container.CssWidgetSource ?? CssWidgetSource.User,
+        main.CreateWebWidgetAt(
+            _container.WebWidgetName ?? "widget",
+            _container.WebWidgetSource ?? WebWidgetSource.User,
             _container.Bounds.X + 20, _container.Bounds.Y + 20,
             _container.Bounds.Width, _container.Bounds.Height);
         try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { }
@@ -445,7 +445,7 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
     {
         _container.IsLocked = !_container.IsLocked;
         LockMenuItem.IsChecked = _container.IsLocked;
-        var m = _widgetService.TryGetWidget(_container.CssWidgetName ?? "", _container.CssWidgetSource ?? CssWidgetSource.User)?.Manifest;
+        var m = _widgetService.TryGetWidget(_container.WebWidgetName ?? "", _container.WebWidgetSource ?? WebWidgetSource.User)?.Manifest;
         ApplyManifest(m);
         try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { }
     }
@@ -534,6 +534,6 @@ public partial class CssWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
     private void WidgetMenu_Opened(object sender, RoutedEventArgs e)
     {
-        WidgetMenuEdit.Visibility = ContainerViewModel.CssWidgetSource == CssWidgetSource.App ? Visibility.Collapsed : Visibility.Visible;
+        WidgetMenuEdit.Visibility = ContainerViewModel.WebWidgetSource == WebWidgetSource.App ? Visibility.Collapsed : Visibility.Visible;
     }
 }

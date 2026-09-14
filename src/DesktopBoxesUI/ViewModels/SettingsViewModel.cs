@@ -38,7 +38,7 @@ public sealed class ContainerVisibilityRow : ViewModelBase, IDisposable
     public string TypeDisplay => _container.Type switch
     {
         DesktopItemContainerType.BoxContainer => "Box",
-        DesktopItemContainerType.CssWidget => "Widget",
+        DesktopItemContainerType.WebWidget => "Web",
         DesktopItemContainerType.NativeWidget => "Native",
         _ => _container.Type.ToString(),
     };
@@ -95,7 +95,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     public IReadOnlyList<string> BoxThemeOptions { get; } = new[] { "App", "Dark", "Light" };
 
     // CSS Widgets theme: "App" follows app theme, otherwise Dark/Light override for switchable widgets (null = App)
-    public IReadOnlyList<string> CssWidgetThemeOptions { get; } = new[] { "App", "Dark", "Light" };
+    public IReadOnlyList<string> WebWidgetThemeOptions { get; } = new[] { "App", "Dark", "Light" };
 
     /// <summary>True when the app is registered to launch on Windows startup.</summary>
     private bool _launchOnStartup;
@@ -133,11 +133,11 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         set => SetField(ref _defaultBoxThemeOption, value);
     }
 
-    private string _defaultCssWidgetsThemeOption = "App";
-    public string DefaultCSSWidgetsThemeOption
+    private string _defaultWebWidgetsThemeOption = "App";
+    public string DefaultWebWidgetsThemeOption
     {
-        get => _defaultCssWidgetsThemeOption;
-        set => SetField(ref _defaultCssWidgetsThemeOption, value);
+        get => _defaultWebWidgetsThemeOption;
+        set => SetField(ref _defaultWebWidgetsThemeOption, value);
     }
 
     private double _defaultBoxTransparencyValue;
@@ -228,7 +228,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
             "light" => "Light",
             _ => "App"
         };
-        _defaultCssWidgetsThemeOption = s.DefaultCSSWidgetsTheme?.Trim().ToLowerInvariant() switch
+        _defaultWebWidgetsThemeOption = s.DefaultWebWidgetsTheme?.Trim().ToLowerInvariant() switch
         {
             "dark" => "Dark",
             "light" => "Light",
@@ -310,9 +310,9 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        if (name == nameof(DefaultCSSWidgetsThemeOption))
+        if (name == nameof(DefaultWebWidgetsThemeOption))
         {
-            DefaultCSSWidgetsThemeOption = "App";
+            DefaultWebWidgetsThemeOption = "App";
             return;
         }
 
@@ -368,7 +368,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     {
         SelectedTheme = OptionToStored(_selectedThemeOption),
         DefaultBoxTheme = OptionToStored(_defaultBoxThemeOption),
-        DefaultCSSWidgetsTheme = OptionToStored(_defaultCssWidgetsThemeOption),
+        DefaultWebWidgetsTheme = OptionToStored(_defaultWebWidgetsThemeOption),
         DefaultBoxTransparencyValue = _defaultBoxTransparencyValue,
         DefaultBoxBackColor = _defaultBoxBackColor,
         DefaultBoxForeColor = _defaultBoxForeColor,
@@ -385,7 +385,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         var s = _settingsService.UserSettings;
         s.SelectedTheme = OptionToStored(_selectedThemeOption);
         s.DefaultBoxTheme = OptionToStored(_defaultBoxThemeOption);
-        s.DefaultCSSWidgetsTheme = OptionToStored(_defaultCssWidgetsThemeOption);
+        s.DefaultWebWidgetsTheme = OptionToStored(_defaultWebWidgetsThemeOption);
         s.DefaultBoxTransparencyValue = _defaultBoxTransparencyValue;
         s.DefaultBoxBackColor = _defaultBoxBackColor;
         s.DefaultBoxForeColor = _defaultBoxForeColor;
@@ -401,12 +401,12 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         // Refresh all CSS widgets that follow the global theme (CanSwitchTheme=null) or app theme
         try
         {
-            foreach (var win in System.Windows.Application.Current.Windows.OfType<Views.Containers.CssWidgetWindow>())
+            foreach (var win in System.Windows.Application.Current.Windows.OfType<Views.Containers.WebWidgetWindow>())
             {
                 try
                 {
-                    var field = typeof(Views.Containers.CssWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (field?.GetValue(win) is Controls.ContainersControls.CssWidgetControl ctrl) ctrl.RefreshTheme();
+                    var field = typeof(Views.Containers.WebWidgetWindow).GetField("_widgetControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    if (field?.GetValue(win) is Controls.ContainersControls.WebWidgetControl ctrl) ctrl.RefreshTheme();
                 }
                 catch { }
             }
@@ -415,7 +415,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
                 try
                 {
                     var field = typeof(Views.WidgetDataWindow).GetField("_previewControl", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    if (field?.GetValue(win) is Controls.ContainersControls.CssWidgetControl ctrl2) ctrl2.RefreshTheme();
+                    if (field?.GetValue(win) is Controls.ContainersControls.WebWidgetControl ctrl2) ctrl2.RefreshTheme();
                 }
                 catch { }
             }

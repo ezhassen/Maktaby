@@ -18,7 +18,7 @@ using static WindowsNative.Win32Constants;
 namespace DesktopBoxesUI.Views.Containers;
 
 /// <summary>Host window for a native plugin widget (<see cref="DesktopItemContainerType.NativeWidget"/>).
-/// Mirrors <see cref="CssWidgetWindow"/>: borderless tool window glued to the desktop layer with an
+/// Mirrors <see cref="WebWidgetWindow"/>: borderless tool window glued to the desktop layer with an
 /// external <see cref="WidgetChromeOverlay"/> (shared via <see cref="IWidgetChromeOwner"/>),
 /// manifest-driven resize behavior, visibility-driven plugin suspend/resume, and hybrid
 /// interaction detection (WPF routed events on the plugin visual merged with the plugin's
@@ -255,7 +255,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private string? ResolveTheme()
     {
         string? global = null;
-        try { global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultCSSWidgetsTheme?.Trim().ToLowerInvariant(); } catch { }
+        try { global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultWebWidgetsTheme?.Trim().ToLowerInvariant(); } catch { }
         if (global == "dark") return "dark";
         if (global == "light") return "light";
         try

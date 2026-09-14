@@ -8,7 +8,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Threading;
 using Wpf.Ui.Appearance;
 
-namespace CSSWidgetsCreator
+namespace WebWidgetsCreator
 {
     public partial class MainWindow
     {
@@ -107,11 +107,11 @@ namespace CSSWidgetsCreator
             CurrentFolderLabel.Text = "No folder loaded – New widget";
         }
 
-        private CssWidgetManifest BuildManifestFromFields()
+        private WebWidgetManifest BuildManifestFromFields()
         {
             int.TryParse(WidthBox.Text, out int w);
             int.TryParse(HeightBox.Text, out int h);
-            return new CssWidgetManifest
+            return new WebWidgetManifest
             {
                 Name = string.IsNullOrWhiteSpace(NameBox.Text) ? "widget" : NameBox.Text.Trim(),
                 Author = AuthorBox.Text?.Trim(),
@@ -263,22 +263,22 @@ namespace CSSWidgetsCreator
                 string css = File.Exists(cssPath) ? File.ReadAllText(cssPath, Encoding.UTF8) : "";
                 string js = File.Exists(jsPath) ? File.ReadAllText(jsPath, Encoding.UTF8) : "";
 
-                CssWidgetManifest manifest;
+                WebWidgetManifest manifest;
                 if (File.Exists(manifestPath))
                 {
                     try
                     {
                         var json = File.ReadAllText(manifestPath, Encoding.UTF8);
-                        manifest = JsonSerializer.Deserialize<CssWidgetManifest>(json, JsonOpts) ?? CssWidgetManifest.DefaultFor(Path.GetFileName(folder));
+                        manifest = JsonSerializer.Deserialize<WebWidgetManifest>(json, JsonOpts) ?? WebWidgetManifest.DefaultFor(Path.GetFileName(folder));
                     }
                     catch
                     {
-                        manifest = CssWidgetManifest.DefaultFor(Path.GetFileName(folder));
+                        manifest = WebWidgetManifest.DefaultFor(Path.GetFileName(folder));
                     }
                 }
                 else
                 {
-                    manifest = CssWidgetManifest.DefaultFor(Path.GetFileName(folder));
+                    manifest = WebWidgetManifest.DefaultFor(Path.GetFileName(folder));
                 }
                 manifest.Name ??= Path.GetFileName(folder);
 

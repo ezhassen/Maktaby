@@ -9,11 +9,11 @@ using Wpf.Ui.Appearance;
 
 namespace WPFShared.Controls;
 
-public partial class CssWidgetControl : UserControl
+public partial class WebWidgetControl : UserControl
 {
-    //private readonly ICssWidgetService _widgetService;
+    //private readonly IWebWidgetService _widgetService;
     private bool _isInitialized;
-    private CssWidgetManifest? _currentManifest;
+    private WebWidgetManifest? _currentManifest;
     private string? _pendingHtml;
     private Task? _initTask;
     private static Task<CoreWebView2Environment>? s_envTask;
@@ -23,7 +23,7 @@ public partial class CssWidgetControl : UserControl
     public event EventHandler? WidgetClicked;
     public event EventHandler? WidgetMouseDown;
 
-    public CssWidgetControl()
+    public WebWidgetControl()
     {
         InitializeComponent();
         Loaded += OnLoaded;
@@ -254,7 +254,7 @@ public partial class CssWidgetControl : UserControl
         }
     }
 
-    /* public async void LoadWidget(string slug, CssWidgetSource source)
+    /* public async void LoadWidget(string slug, WebWidgetSource source)
      {
          var info = _widgetService.TryGetWidget(slug, source);
          if (info is null)
@@ -268,9 +268,9 @@ public partial class CssWidgetControl : UserControl
          await EnsureAndNavigate(doc);
      }*/
 
-    public async void LoadDirect(string html, string css, string js, CssWidgetManifest? manifest = null)
+    public async void LoadDirect(string html, string css, string js, WebWidgetManifest? manifest = null)
     {
-        _currentManifest = manifest ?? new CssWidgetManifest { Resizable = true, AllowNetwork = false };
+        _currentManifest = manifest ?? new WebWidgetManifest { Resizable = true, AllowNetwork = false };
         ApplyNetworkFilter(_currentManifest);
         // Build doc similarly to service but from strings
         string doc;
@@ -309,7 +309,7 @@ public partial class CssWidgetControl : UserControl
         return html;
     }
 
-    private void ApplyNetworkFilter(CssWidgetManifest manifest)
+    private void ApplyNetworkFilter(WebWidgetManifest manifest)
     {
         if (!_isInitialized || WebView.CoreWebView2 is null) return;
         try

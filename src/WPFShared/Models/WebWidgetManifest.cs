@@ -2,8 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace DesktopBoxesUI.Core.Models;
 
-/// <summary>Optional widget.json describing a CssWidget.</summary>
-public sealed class CssWidgetManifest
+/// <summary>Optional widget.json describing a WebWidget.</summary>
+public sealed class WebWidgetManifest
 {
     public string? Name { get; set; }
     public string? Author { get; set; }
@@ -37,7 +37,7 @@ public sealed class CssWidgetManifest
     [JsonIgnore]
     public bool IsNetworkAllowed => AllowNetwork ?? false;
 
-    public static CssWidgetManifest DefaultFor(string slug) => new()
+    public static WebWidgetManifest DefaultFor(string slug) => new()
     {
         Name = slug,
         Width = 300,

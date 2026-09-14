@@ -330,8 +330,8 @@ public partial class WidgetChromeOverlay : Window
                 //    WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager);
                 WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager, parentWindowH: _ownerWidget.Window.GetCriticalHandle());
             }
-            // KeepBelowApps intentionally NOT called for overlay — it's owned by CssWidgetWindow (Owner set in ctor)
-            // Owned windows are always above their owner; owner is kept below via CssWidgetWindow.KeepBelowApps.
+            // KeepBelowApps intentionally NOT called for overlay — it's owned by WebWidgetWindow (Owner set in ctor)
+            // Owned windows are always above their owner; owner is kept below via WebWidgetWindow.KeepBelowApps.
             // Calling KeepBelowApps for owned WS_EX_NOACTIVATE overlay would set HwndInsertAfter to topDesktop (below owner)
             // and make chrome appear behind the widget, plus block TitleDrag.
         }

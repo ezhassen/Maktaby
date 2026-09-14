@@ -13,7 +13,7 @@
     <File Path="installer.iss" />
     <File Path="README.md" />
   </Folder>
-  <Project Path="src/CSSWidgetsCreator/CSSWidgetsCreator.csproj" Id="9ce93e5f-676c-4519-8b94-5757cf251ade" />
+  <Project Path="src/WebWidgetsCreator/WebWidgetsCreator.csproj" Id="9ce93e5f-676c-4519-8b94-5757cf251ade" />
   <Project Path="src/DesktopBoxesUI/DesktopBoxesUI.csproj">
     <Platform Solution="*|x64" Project="x64" />
   </Project>

@@ -11,7 +11,7 @@ using System.Windows;
 
 namespace DesktopBoxesUI.Core.Services;
 
-public sealed class CssWidgetService : ICssWidgetService
+public sealed class WebWidgetService : IWebWidgetService
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -25,13 +25,13 @@ public sealed class CssWidgetService : ICssWidgetService
         get
         {
             var baseDir = AppContext.BaseDirectory;
-            var candidate = Path.Combine(baseDir, "CSSWidgets");
+            var candidate = Path.Combine(baseDir, "WebWidgets");
             if (Directory.Exists(candidate)) return candidate;
             try
             {
-                var dev = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "src", "DesktopBoxesUI", "CSSWidgets"));
+                var dev = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "..", "src", "DesktopBoxesUI", "WebWidgets"));
                 if (Directory.Exists(dev)) return dev;
-                var dev2 = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "CSSWidgets"));
+                var dev2 = Path.GetFullPath(Path.Combine(baseDir, "..", "..", "..", "WebWidgets"));
                 if (Directory.Exists(dev2)) return dev2;
             }
             catch { }
@@ -44,20 +44,20 @@ public sealed class CssWidgetService : ICssWidgetService
         try { Directory.CreateDirectory(UserWidgetsRoot); } catch { }
     }
 
-    public IReadOnlyList<CssWidgetInfo> GetAvailableWidgets()
+    public IReadOnlyList<WebWidgetInfo> GetAvailableWidgets()
     {
-        var list = new List<CssWidgetInfo>();
+        var list = new List<WebWidgetInfo>();
         list.AddRange(GetAppWidgets());
         list.AddRange(GetUserWidgets());
         return list;
     }
 
-    public IReadOnlyList<CssWidgetInfo> GetAppWidgets() => EnumerateWidgets(AppWidgetsRoot, CssWidgetSource.App);
-    public IReadOnlyList<CssWidgetInfo> GetUserWidgets() => EnumerateWidgets(UserWidgetsRoot, CssWidgetSource.User);
+    public IReadOnlyList<WebWidgetInfo> GetAppWidgets() => EnumerateWidgets(AppWidgetsRoot, WebWidgetSource.App);
+    public IReadOnlyList<WebWidgetInfo> GetUserWidgets() => EnumerateWidgets(UserWidgetsRoot, WebWidgetSource.User);
 
-    private IReadOnlyList<CssWidgetInfo> EnumerateWidgets(string root, CssWidgetSource source)
+    private IReadOnlyList<WebWidgetInfo> EnumerateWidgets(string root, WebWidgetSource source)
     {
-        var result = new List<CssWidgetInfo>();
+        var result = new List<WebWidgetInfo>();
         if (!Directory.Exists(root)) return result;
         foreach (var dir in Directory.EnumerateDirectories(root))
         {
@@ -71,28 +71,28 @@ public sealed class CssWidgetService : ICssWidgetService
         return result;
     }
 
-    public CssWidgetInfo? TryGetWidget(string slug, CssWidgetSource source)
+    public WebWidgetInfo? TryGetWidget(string slug, WebWidgetSource source)
     {
         if (string.IsNullOrWhiteSpace(slug)) return null;
         slug = SanitizeSlug(slug);
-        var root = source == CssWidgetSource.App ? AppWidgetsRoot : UserWidgetsRoot;
+        var root = source == WebWidgetSource.App ? AppWidgetsRoot : UserWidgetsRoot;
         var folder = Path.Combine(root, slug);
         if (!Directory.Exists(folder)) return null;
 
         var manifestPath = Path.Combine(folder, "widget.json");
-        CssWidgetManifest manifest;
+        WebWidgetManifest manifest;
         if (File.Exists(manifestPath))
         {
             try
             {
                 var json = File.ReadAllText(manifestPath, Encoding.UTF8);
-                manifest = JsonSerializer.Deserialize<CssWidgetManifest>(json, JsonOpts) ?? CssWidgetManifest.DefaultFor(slug);
+                manifest = JsonSerializer.Deserialize<WebWidgetManifest>(json, JsonOpts) ?? WebWidgetManifest.DefaultFor(slug);
             }
-            catch { manifest = CssWidgetManifest.DefaultFor(slug); }
+            catch { manifest = WebWidgetManifest.DefaultFor(slug); }
         }
         else
         {
-            manifest = CssWidgetManifest.DefaultFor(slug);
+            manifest = WebWidgetManifest.DefaultFor(slug);
         }
         manifest.Name ??= slug;
 
@@ -103,26 +103,26 @@ public sealed class CssWidgetService : ICssWidgetService
         var thumbPath = Path.Combine(folder, thumbName);
         if (!File.Exists(thumbPath)) thumbPath = Path.Combine(folder, "thumbnail.png");
         string? thumb = File.Exists(thumbPath) ? thumbPath : null;
-        if (thumb == null && source == CssWidgetSource.App)
+        if (thumb == null && source == WebWidgetSource.App)
         {
             var cacheThumb = Path.Combine(SettingsService.AppDataDir, "WidgetThumbnails", slug + ".png");
             if (File.Exists(cacheThumb)) thumb = cacheThumb;
         }
-        return new CssWidgetInfo(slug, source, folder, manifest, htmlPath, cssPath, jsPath, thumb);
+        return new WebWidgetInfo(slug, source, folder, manifest, htmlPath, cssPath, jsPath, thumb);
     }
 
-    public CssWidgetInfo? TryGetWidgetForContainer(DesktopItemContainer container)
+    public WebWidgetInfo? TryGetWidgetForContainer(DesktopItemContainer container)
     {
-        if (container.Type != DesktopItemContainerType.CssWidget) return null;
-        var slug = container.CssWidgetName;
-        var source = container.CssWidgetSource ?? CssWidgetSource.User;
+        if (container.Type != DesktopItemContainerType.WebWidget) return null;
+        var slug = container.WebWidgetName;
+        var source = container.WebWidgetSource ?? WebWidgetSource.User;
         if (string.IsNullOrWhiteSpace(slug)) return null;
         return TryGetWidget(slug, source);
     }
 
     public bool UserWidgetExists(string slug) => Directory.Exists(Path.Combine(UserWidgetsRoot, SanitizeSlug(slug)));
 
-    public string CreateUserWidget(string desiredName, string html, string css, string js, CssWidgetManifest manifest, byte[]? thumbnailBytes = null)
+    public string CreateUserWidget(string desiredName, string html, string css, string js, WebWidgetManifest manifest, byte[]? thumbnailBytes = null)
     {
         EnsureUserWidgetsRoot();
         var slug = SanitizeSlug(desiredName);
@@ -139,7 +139,7 @@ public sealed class CssWidgetService : ICssWidgetService
         return slug;
     }
 
-    public void UpdateUserWidget(string slug, string html, string css, string js, CssWidgetManifest manifest, byte[]? thumbnailBytes = null)
+    public void UpdateUserWidget(string slug, string html, string css, string js, WebWidgetManifest manifest, byte[]? thumbnailBytes = null)
     {
         slug = SanitizeSlug(slug);
         var folder = Path.Combine(UserWidgetsRoot, slug);
@@ -154,7 +154,7 @@ public sealed class CssWidgetService : ICssWidgetService
         try { if (Directory.Exists(folder)) Directory.Delete(folder, true); } catch { }
     }
 
-    private void WriteWidgetFolder(string folder, string html, string css, string js, CssWidgetManifest manifest, byte[]? thumbnailBytes, string slug)
+    private void WriteWidgetFolder(string folder, string html, string css, string js, WebWidgetManifest manifest, byte[]? thumbnailBytes, string slug)
     {
         manifest.Name ??= slug;
         var json = JsonSerializer.Serialize(manifest, JsonOpts);
@@ -169,7 +169,7 @@ public sealed class CssWidgetService : ICssWidgetService
         }
     }
 
-    public string BuildDocument(CssWidgetInfo widget)
+    public string BuildDocument(WebWidgetInfo widget)
     {
         string html = File.Exists(widget.HtmlPath) ? File.ReadAllText(widget.HtmlPath, Encoding.UTF8) : "<div>No content</div>";
         string css = File.Exists(widget.CssPath) ? File.ReadAllText(widget.CssPath, Encoding.UTF8) : string.Empty;
@@ -211,13 +211,13 @@ public sealed class CssWidgetService : ICssWidgetService
         }
     }
 
-    public async Task<string?> GenerateThumbnailAsync(CssWidgetInfo widget, int width = 480, int height = 270, bool force = false)
+    public async Task<string?> GenerateThumbnailAsync(WebWidgetInfo widget, int width = 480, int height = 270, bool force = false)
     {
         if (!string.IsNullOrEmpty(widget.ThumbnailPath) && File.Exists(widget.ThumbnailPath) && !force)
             return widget.ThumbnailPath;
 
         string outputPath;
-        if (widget.Source == CssWidgetSource.App)
+        if (widget.Source == WebWidgetSource.App)
         {
             var cacheDir = Path.Combine(SettingsService.AppDataDir, "WidgetThumbnails");
             Directory.CreateDirectory(cacheDir);

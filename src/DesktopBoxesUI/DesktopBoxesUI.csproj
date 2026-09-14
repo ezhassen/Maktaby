@@ -57,7 +57,7 @@
 	</ItemGroup>
 
  	<ItemGroup>
- 		<Content Include="CSSWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+ 		<Content Include="WebWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
  		<Content Include="NativeWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
  	</ItemGroup>
 

@@ -342,7 +342,7 @@
             <TextBlock
                 FontSize="11"
                 Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                Text="Idle: when Hide All / minimized / no visible widget, WebView2 is suspended via TrySuspendAsync to cut CPU. Widgets use visibility-aware JS (document.hidden check) and CSS containment. See CSSWidgets style.css data-theme handling."
+                Text="Idle: when Hide All / minimized / no visible widget, WebView2 is suspended via TrySuspendAsync to cut CPU. Widgets use visibility-aware JS (document.hidden check) and CSS containment. See WebWidgets style.css data-theme handling."
                 TextWrapping="Wrap" />
         </Border>
     </Grid>
