@@ -78,4 +78,10 @@ public interface INativeWidgetService
     /// <summary>Content hash the trust decision keys on (source hash or DLL bytes).
     /// Null when indeterminable — treated as untrusted.</summary>
     string? GetContentHash(NativeWidgetInfo widget);
+
+    /// <summary>Renders the widget offscreen (never parented/visible) and saves a PNG
+    /// thumbnail (manifest thumbnail name, default <c>thumbnail.png</c>). Trusted widgets
+    /// only — rendering executes plugin code. Must run on the UI thread (STA). Existing
+    /// thumbnails are kept unless <paramref name="force"/>. Returns the saved path or null.</summary>
+    Task<string?> GenerateThumbnailAsync(NativeWidgetInfo widget, int width = 480, int height = 270, bool force = false);
 }

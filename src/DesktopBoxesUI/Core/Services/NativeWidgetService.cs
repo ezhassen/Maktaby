@@ -9,16 +9,26 @@ using System.Reflection;
 using System.Runtime.Loader;
 using System.Security.Cryptography;
 using System.Text;
+using System.Windows;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using Wpf.Ui.Appearance;
 
 namespace DesktopBoxesUI.Core.Services;
 
 /// <summary>Discovery + instantiation for native (DLL / source-compiled) widgets living in
-/// the shared UserWidgets root. Folder identity is the slug; the <c>kind</c> manifest
-/// field decides ownership (see <see cref="WidgetFolder"/>) so CSS folders are never
-/// touched here. Heavy work (Roslyn compile, assembly load) happens in
-/// <see cref="CreateInstance"/> — callers must offload it from the UI thread.</summary>
+/// the shared UserWidgets root. Folder identity is the slug; <c>nwidget.json</c> presence
+/// decides ownership (see <see cref="WidgetFolder"/>) so web folders are never touched
+/// here. Heavy work (Roslyn compile, assembly load) happens off the UI thread — callers
+/// must offload it; instantiation and thumbnail rendering require the UI thread.</summary>
 public sealed class NativeWidgetService : INativeWidgetService
 {
+    private readonly ISettingsService _settings;
+
+    public NativeWidgetService(ISettingsService settings)
+    {
+        _settings = settings;
+    }
     public string UserWidgetsRoot => Path.Combine(SettingsService.AppDataDir, "UserWidgets");
     public string NativeCacheRoot => Path.Combine(SettingsService.AppDataDir, "NativeCache");
 
@@ -87,21 +97,21 @@ public sealed class NativeWidgetService : INativeWidgetService
         var manifestPath = Path.Combine(folder, WidgetFolder.NativeManifestFileName);
         if (!File.Exists(manifestPath))
             return new NativeWidgetInfo(slug, source, folder, NativeWidgetManifest.DefaultFor(slug),
-                ResolveThumbnail(folder, null), "Missing nwidget.json.");
+                ResolveThumbnail(folder, null, source), "Missing nwidget.json.");
         NativeWidgetManifest? manifest;
         try
         {
             manifest = NativeWidgetManifest.TryParse(File.ReadAllText(manifestPath, Encoding.UTF8), slug, out var error);
             if (manifest is null)
                 return new NativeWidgetInfo(slug, source, folder, NativeWidgetManifest.DefaultFor(slug),
-                    ResolveThumbnail(folder, null), error ?? "Unparsable nwidget.json.");
+                    ResolveThumbnail(folder, null, source), error ?? "Unparsable nwidget.json.");
         }
         catch (Exception ex)
         {
             return new NativeWidgetInfo(slug, source, folder, NativeWidgetManifest.DefaultFor(slug),
-                ResolveThumbnail(folder, null), ex.Message);
+                ResolveThumbnail(folder, null, source), ex.Message);
         }
-        return new NativeWidgetInfo(slug, source, folder, manifest, ResolveThumbnail(folder, manifest.Thumbnail), null);
+        return new NativeWidgetInfo(slug, source, folder, manifest, ResolveThumbnail(folder, manifest.Thumbnail, source), null);
     }
 
     public NativeWidgetInfo? TryGetWidget(string slug)
@@ -231,6 +241,78 @@ public sealed class NativeWidgetService : INativeWidgetService
         }
     }
 
+    public Task<string?> GenerateThumbnailAsync(NativeWidgetInfo widget, int width = 480, int height = 270, bool force = false)
+    {
+        // No async work inside (single offscreen frame); the Task shape mirrors the web
+        // path so gallery code stays uniform. Must run on the UI thread (STA).
+        return Task.FromResult(GenerateThumbnail(widget, width, height, force));
+    }
+
+    private string? GenerateThumbnail(NativeWidgetInfo widget, int width, int height, bool force)
+    {
+        try
+        {
+            if (widget.LoadError is not null) return null;
+            // Rendering executes plugin code: trusted content only (same gate as hosting).
+            if (!IsTrusted(widget)) return null;
+            // Never write into the app install dir: built-in widgets render into the
+            // shared %AppData% thumbnail cache, user widgets next to their manifest.
+            string thumbPath = widget.Source == NativeWidgetSource.App
+                ? Path.Combine(SettingsService.AppDataDir, "WidgetThumbnails", widget.Slug + ".png")
+                : Path.Combine(widget.FolderPath,
+                    string.IsNullOrWhiteSpace(widget.Manifest.Thumbnail) ? "thumbnail.png" : widget.Manifest.Thumbnail!);
+            if (!force && File.Exists(thumbPath)) return thumbPath;
+            width = Math.Clamp(width, 16, 1024);
+            height = Math.Clamp(height, 16, 1024);
+
+            INativeWidget plugin;
+            try { plugin = CreateInstance(GetAssemblyPath(widget), widget); }
+            catch { return null; }
+            try
+            {
+                FrameworkElement visual;
+                try { visual = plugin.Visual; }
+                catch { return null; }
+                if (widget.Manifest.SupportsTheme)
+                {
+                    try { plugin.ApplyTheme(ResolveTheme()); } catch { }
+                }
+                // Offscreen layout at the target size: never parented, never visible.
+                visual.Measure(new Size(width, height));
+                visual.Arrange(new Rect(0, 0, width, height));
+                visual.UpdateLayout();
+                var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(visual);
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                Directory.CreateDirectory(Path.GetDirectoryName(thumbPath)!);
+                if (File.Exists(thumbPath)) File.Delete(thumbPath);
+                using var stream = File.Create(thumbPath);
+                encoder.Save(stream);
+                Serilog.Log.Information($"Native widget thumbnail: {widget.Slug} -> {thumbPath}");
+                return thumbPath;
+            }
+            finally { try { plugin.Dispose(); } catch { } }
+        }
+        catch { return null; }
+    }
+
+    private string? ResolveTheme()
+    {
+        string? global = null;
+        try { global = _settings.UserSettings.DefaultWebWidgetsTheme?.Trim().ToLowerInvariant(); } catch { }
+        if (global == "dark") return "dark";
+        if (global == "light") return "light";
+        try
+        {
+            var app = ApplicationThemeManager.GetAppTheme();
+            if (app == ApplicationTheme.Dark) return "dark";
+            if (app == ApplicationTheme.Light) return "light";
+            return ApplicationThemeManager.GetSystemTheme() == SystemTheme.Dark ? "dark" : "light";
+        }
+        catch { return null; }
+    }
+
     public string? GetContentHash(NativeWidgetInfo widget)
     {
         try
@@ -346,7 +428,7 @@ public sealed class NativeWidgetService : INativeWidgetService
     public INativeWidget CreateInstance(NativeWidgetInfo widget) =>
         CreateInstance(GetAssemblyPath(widget), widget);
 
-    private static string? ResolveThumbnail(string folder, string? name)
+    private static string? ResolveThumbnail(string folder, string? name, NativeWidgetSource source)
     {
         try
         {
@@ -355,6 +437,14 @@ public sealed class NativeWidgetService : INativeWidgetService
             var fallback = Path.Combine(folder, "thumbnail.png");
             if (!string.Equals(candidate, fallback, StringComparison.OrdinalIgnoreCase) && File.Exists(fallback))
                 return fallback;
+            // Built-ins live in the read-only install dir: generated thumbnails land in
+            // the shared %AppData% cache instead (same convention as web widgets).
+            if (source == NativeWidgetSource.App)
+            {
+                var cached = Path.Combine(SettingsService.AppDataDir, "WidgetThumbnails",
+                    Path.GetFileName(folder) + ".png");
+                if (File.Exists(cached)) return cached;
+            }
         }
         catch { }
         return null;

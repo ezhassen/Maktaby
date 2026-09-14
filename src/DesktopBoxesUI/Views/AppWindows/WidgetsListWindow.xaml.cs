@@ -92,15 +92,40 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
         WidgetsItems.ItemsSource = items;
         CountText.Text = $"{items.Count} widgets";
 
-        // Generate thumbnails for CSS widgets missing them, showing "Generating..." indicator.
-        // Native widgets use their thumbnail.png as-is (no offscreen render).
-        foreach (var item in items.Where(v => v.Kind == WidgetGalleryKind.Web && v.ThumbnailPath == null && v.SourceInfo is not null).ToList())
+        // Generate thumbnails for widgets missing them, showing "Generating..." indicator.
+        // Native widgets render offscreen via the service (trusted content only).
+        foreach (var item in items.Where(v => v.ThumbnailPath == null && (v.SourceInfo is not null || v.NativeInfo is not null)).ToList())
         {
             await RefreshThumbnail(item);
         }
     }
     async Task RefreshThumbnail(WidgetGalleryItem vm, bool force = false)
     {
+        if (vm.Kind == WidgetGalleryKind.Native)
+        {
+            if (vm.NativeInfo is null) return;
+            vm.IsGenerating = true;
+            try
+            {
+                int w = (int)Math.Clamp(vm.NativeInfo.Manifest.Width, 16, 1024);
+                int h = (int)Math.Clamp(vm.NativeInfo.Manifest.Height, 16, 1024);
+                var path = await _native.GenerateThumbnailAsync(vm.NativeInfo, w, h, force);
+                if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                {
+                    vm.ThumbnailPath = path;
+                }
+            }
+            catch
+            {
+                // Keep null -> will show "No preview"
+            }
+            finally
+            {
+                vm.IsGenerating = false;
+            }
+            await System.Threading.Tasks.Task.Delay(100);
+            return;
+        }
         if (vm.SourceInfo is null) return;
         vm.IsGenerating = true;
         try
@@ -145,7 +170,6 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     {
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
-            if (vm.Kind != WidgetGalleryKind.Web) return;
             await RefreshThumbnail(vm, force: true);
         }
     }
@@ -307,7 +331,15 @@ public sealed class WidgetGalleryItem : INotifyPropertyChanged
     public string? ThumbnailPath
     {
         get => _thumbnailPath;
-        set { if (_thumbnailPath != value) { _thumbnailPath = value; OnPropertyChanged(); OnPropertyChanged(nameof(ThumbnailBitmap)); } }
+        set
+        {
+            if (_thumbnailPath != value)
+            {
+                _thumbnailPath = value;
+                OnPropertyChanged();
+            }
+            OnPropertyChanged(nameof(ThumbnailBitmap));
+        }
     }
 
     public BitmapImage? ThumbnailBitmap
@@ -323,6 +355,10 @@ public sealed class WidgetGalleryItem : INotifyPropertyChanged
                 bitmap.BeginInit();
                 bitmap.UriSource = new Uri(_thumbnailPath);
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
+                // Regenerated thumbnails reuse the same file path: without this flag WPF
+                // serves the previously decoded bits from its URI cache and the gallery
+                // keeps showing the stale image after Refresh/Regenerate.
+                bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
                 bitmap.DecodePixelWidth = 240;
                 bitmap.EndInit();
                 bitmap.Freeze();

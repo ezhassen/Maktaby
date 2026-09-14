@@ -3,12 +3,12 @@ using System.IO;
 namespace DesktopBoxes.WidgetSdk;
 
 /// <summary>Which loader owns a widget folder. Detection is by manifest <em>filename</em> —
-/// <c>nwidget.json</c> means native, anything else (including a missing manifest) is CSS.
+/// <c>nwidget.json</c> means native, anything else (including a missing manifest) is web.
 /// No assembly is ever loaded, no code runs.</summary>
 public enum WidgetFolderKind
 {
     Unknown,
-    Css,
+    Web,
     Native,
 }
 
@@ -26,11 +26,11 @@ public static class WidgetFolder
             if (!Directory.Exists(folder)) return WidgetFolderKind.Unknown;
             return File.Exists(Path.Combine(folder, NativeManifestFileName))
                 ? WidgetFolderKind.Native
-                : WidgetFolderKind.Css; // legacy folders have no manifest at all
+                : WidgetFolderKind.Web; // legacy folders have no manifest at all
         }
         catch
         {
-            return WidgetFolderKind.Css;
+            return WidgetFolderKind.Web;
         }
     }
 }

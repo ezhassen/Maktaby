@@ -311,9 +311,6 @@
                                                         <DataTrigger Binding="{Binding IsGenerating}" Value="True">
                                                             <Setter Property="IsEnabled" Value="False" />
                                                         </DataTrigger>
-                                                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static views:WidgetGalleryKind.Native}">
-                                                            <Setter Property="Visibility" Value="Collapsed" />
-                                                        </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </ui:Button.Style>
