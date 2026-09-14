@@ -19,7 +19,7 @@ public enum WidgetGalleryKind
     Native,
 }
 
-public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvider
+public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvider, INotifyPropertyChanged
 {
     private readonly IWebWidgetService _svc;
     private readonly INativeWidgetService _native;
@@ -28,6 +28,44 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     public WidgetGalleryKind? SelectKind { get; }
     public WebWidgetInfo? SelectedInfo { get; private set; }
     public NativeWidgetInfo? SelectedNativeInfo { get; private set; }
+
+    private int _inFlight;
+    /// <summary>True while any thumbnail generation/compilation is running.
+    /// The window cannot be closed while set (see <see cref="OnClosing"/>).</summary>
+    public bool IsWorking
+    {
+        get;
+        private set
+        {
+            if (field != value)
+            {
+                field = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    private void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    private void BeginWork()
+    {
+        _inFlight++;
+        UpdateIsWorking();
+    }
+
+    private void EndWork()
+    {
+        _inFlight = Math.Max(0, _inFlight - 1);
+        UpdateIsWorking();
+    }
+
+    private void UpdateIsWorking()
+    {
+        IsWorking = _inFlight > 0;
+        try { CloseButton.IsEnabled = !IsWorking; } catch { }
+    }
 
     // The global dialog service renders WPF-UI content dialogs on this host.
     public ContentDialogHost DialogHost => RootContentDialogHost;
@@ -101,12 +139,27 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     }
     async Task RefreshThumbnail(WidgetGalleryItem vm, bool force = false)
     {
+        if (vm.Kind == WidgetGalleryKind.Native && vm.NativeInfo is null) return;
+        if (vm.Kind != WidgetGalleryKind.Native && vm.SourceInfo is null) return;
+        if (vm.IsGenerating) return;
+        BeginWork();
+        try { await RefreshThumbnailCore(vm, force); }
+        finally { EndWork(); }
+    }
+    async Task RefreshThumbnailCore(WidgetGalleryItem vm, bool force = false)
+    {
         if (vm.Kind == WidgetGalleryKind.Native)
         {
             if (vm.NativeInfo is null) return;
             vm.IsGenerating = true;
             try
             {
+                // First run compiles sources (seconds): off the UI thread so the gallery
+                // stays responsive. Rendering must stay on the UI thread (STA visuals).
+                vm.LoadingStatus = "Compiling plugin…";
+                try { await System.Threading.Tasks.Task.Run(() => _native.GetAssemblyPath(vm.NativeInfo)); }
+                catch { return; }
+                vm.LoadingStatus = "Rendering preview…";
                 int w = (int)Math.Clamp(vm.NativeInfo.Manifest.Width, 16, 1024);
                 int h = (int)Math.Clamp(vm.NativeInfo.Manifest.Height, 16, 1024);
                 var path = await _native.GenerateThumbnailAsync(vm.NativeInfo, w, h, force);
@@ -126,14 +179,15 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
             await System.Threading.Tasks.Task.Delay(100);
             return;
         }
-        if (vm.SourceInfo is null) return;
+        var sourceInfo = vm.SourceInfo;
+        if (sourceInfo is null) return;
         vm.IsGenerating = true;
         try
         {
             vm.ThumbnailPath = null;
             var thWidth = vm.Manifest.Width ?? 480;
             var thHeight = vm.Manifest.Height ?? 300;
-            var path = await _svc.GenerateThumbnailAsync(vm.SourceInfo, width: thWidth, height: thHeight, force: force);
+            var path = await _svc.GenerateThumbnailAsync(sourceInfo, width: thWidth, height: thHeight, force: force);
             if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
             {
                 vm.ThumbnailPath = path;
@@ -156,18 +210,21 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     }
     private void Refresh_Click(object sender, RoutedEventArgs e)
     {
+        if (IsWorking) return;
         try { _native.Refresh(); } catch { } // unload cached plugin assemblies: edited sources recompile on next load
         Refresh();
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
     {
+        if (IsWorking) return;
         var w = new WidgetDataWindow(null, isNew: true);
         if (w.ShowDialog() == true) Refresh();
     }
 
     private async void RegenerateThumbnail_Click(object sender, RoutedEventArgs e)
     {
+        //if (IsWorking) return;
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
             await RefreshThumbnail(vm, force: true);
@@ -175,6 +232,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
     }
     private async void Edit_Click(object sender, RoutedEventArgs e)
     {
+        if (IsWorking) return;
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
             if (vm.Kind == WidgetGalleryKind.Native)
@@ -199,6 +257,8 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
 
     private async void Delete_Click(object sender, RoutedEventArgs e)
     {
+        if (IsWorking) return;
+
         if (sender is FrameworkElement fe2 && fe2.Tag is WidgetGalleryItem vm2)
         {
             if (vm2.Kind == WidgetGalleryKind.Native)
@@ -229,6 +289,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
 
     private void Duplicate_Click(object sender, RoutedEventArgs e)
     {
+        if (IsWorking) return;
         if (sender is FrameworkElement fe && fe.Tag is WidgetGalleryItem vm)
         {
             if (vm.Kind != WidgetGalleryKind.Web) return;
@@ -253,6 +314,7 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
 
     private async void Place_Click(object sender, RoutedEventArgs e)
     {
+        if (IsWorking) return;
         if (sender is FrameworkElement fe3 && fe3.Tag is WidgetGalleryItem vm3)
         {
             if (vm3.Kind == WidgetGalleryKind.Native)
@@ -280,7 +342,24 @@ public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvide
         }
     }
 
-    private void Close_Click(object sender, RoutedEventArgs e) => Close();
+    private void Close_Click(object sender, RoutedEventArgs e)
+    {
+        if (IsWorking) return;
+        Close();
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        // Never strand an in-flight generation/compilation: its continuations touch this
+        // window's controls. Backstop for X/Alt+F4 (the Close button is disabled anyway).
+        // App shutdown always wins so exit can never hang here.
+        if (IsWorking && Application.Current?.Dispatcher.HasShutdownStarted != true)
+        {
+            e.Cancel = true;
+            return;
+        }
+        base.OnClosing(e);
+    }
 
     /// <summary>Trust-on-first-use consent: plugins are full-trust code, so placing a user
     /// widget asks once per content hash. Built-ins skip the prompt (shipped with the app).
@@ -376,6 +455,13 @@ public sealed class WidgetGalleryItem : INotifyPropertyChanged
     {
         get => _isGenerating;
         set { if (_isGenerating != value) { _isGenerating = value; OnPropertyChanged(); } }
+    }
+
+    private string _loadingStatus = "Generating thumbnail...";
+    public string LoadingStatus
+    {
+        get => _loadingStatus;
+        set { if (_loadingStatus != value) { _loadingStatus = value; OnPropertyChanged(); } }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

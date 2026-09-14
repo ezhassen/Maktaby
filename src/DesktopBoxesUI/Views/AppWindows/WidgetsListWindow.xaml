@@ -152,7 +152,7 @@
                                                     Margin="0,4,0,0"
                                                     FontSize="10"
                                                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                    Text="Generating thumbnail..." />
+                                                    Text="{Binding LoadingStatus}" />
                                             </StackPanel>
                                             <StackPanel
                                                 Margin="6"
@@ -359,6 +359,7 @@
                     Text="User widgets stored in %LocalAppData%\DesktopBoxes\UserWidgets" />
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <ui:Button
+                        x:Name="CloseButton"
                         Appearance="Secondary"
                         Click="Close_Click"
                         Content="Close" />
