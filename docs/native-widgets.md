@@ -120,6 +120,24 @@ the host. Keep handlers fast; never block the UI thread (compile/load already ha
 off-thread). Plugin constructors run on the UI thread and must return fast — defer
 heavy work (timers are fine to *create*, just don't fetch the internet in a ctor).
 
+## 5. Hosting other UI stacks (anything that is a `FrameworkElement`)
+
+`Visual` can wrap more than hand-built WPF — verified against the host:
+
+| stack | how | notes |
+|---|---|---|
+| WPF | return controls directly | full host hover/focus detection, no plugin events needed |
+| WinForms | `System.Windows.Forms.Integration.WindowsFormsHost` + any WinForms control | compile refs included; qualify ambiguous names (`System.Windows.Forms.Button` vs `System.Windows.Controls.Button` — the injected implicit usings cover the WPF side) |
+| Raw Win32 HWND | `HwndHost` subclass (`BuildWindowCore`/`DestroyWindowCore`) | works; host WPF hit-testing cannot see through airspace — raise the opt-in interaction events so chrome/activation keep working |
+| Direct3D11 | `D3DImage` (WPF) or `HwndHost` + own swapchain | stop presenting in `OnSuspend`; resume in `OnResume` |
+| SkiaSharp etc. | ship the NuGet DLLs next to your sources (`SKElement`); folder DLLs are added as compile references automatically (host-owned `DesktopBoxes.*` excluded to force type unification) | same airspace/interaction rules as HWND |
+| GTK | not supported | needs its own event loop; cannot be embedded in a WPF visual tree |
+
+HWND-backed content (WinForms, raw HWND, GPU swapchains) is subject to WPF airspace:
+the host's hover detection stops at the HWND boundary, so raise `Entered/Left/Clicked`
+(and friends) from the plugin — the host merges both sources. The window chrome lives
+in a separate top-level overlay window, so it never fights hosted HWNDs for airspace.
+
 ## 5. Lifecycle
 
 ```text

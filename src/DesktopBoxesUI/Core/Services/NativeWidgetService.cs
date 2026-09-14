@@ -595,7 +595,7 @@ public sealed class NativeWidgetService : INativeWidgetService
         trees.AddRange(sources.Select(f => CSharpSyntaxTree.ParseText(
             Microsoft.CodeAnalysis.Text.SourceText.From(File.ReadAllText(f, Encoding.UTF8), Encoding.UTF8),
             parseOptions, path: f)));
-        var references = TrustedReferences();
+        var references = TrustedReferences(widget.FolderPath);
         references.Add(MetadataReference.CreateFromFile(typeof(INativeWidget).Assembly.Location));
         var compilation = CSharpCompilation.Create(
             $"NativeWidget_{widget.Slug}",
@@ -631,31 +631,53 @@ public sealed class NativeWidgetService : INativeWidgetService
         return dllPath;
     }
 
-    private static List<MetadataReference> TrustedReferences()
+    private static List<MetadataReference> TrustedReferences(string pluginFolder)
     {
         var tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? "";
         var list = new List<MetadataReference>(256);
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var path in tpa.Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             try
             {
                 var name = Path.GetFileName(path);
-                // WPF + BCL surface. Everything else (WidgetSdk, plugin deps) resolves
-                // through the plugin load context at runtime, not at compile time.
+                // WPF (incl. WinForms interop) + BCL surface. Everything else (WidgetSdk,
+                // plugin deps) resolves through the plugin load context at runtime.
                 if (name.StartsWith("System.", StringComparison.Ordinal) ||
                     name.StartsWith("Microsoft.", StringComparison.Ordinal) ||
                     string.Equals(name, "PresentationFramework.dll", StringComparison.Ordinal) ||
                     string.Equals(name, "PresentationCore.dll", StringComparison.Ordinal) ||
                     string.Equals(name, "WindowsBase.dll", StringComparison.Ordinal) ||
+                    string.Equals(name, "WindowsFormsIntegration.dll", StringComparison.Ordinal) ||
                     string.Equals(name, "System.Xaml.dll", StringComparison.Ordinal) ||
                     string.Equals(name, "netstandard.dll", StringComparison.Ordinal) ||
                     string.Equals(name, "mscorlib.dll", StringComparison.Ordinal))
                 {
                     list.Add(MetadataReference.CreateFromFile(path));
+                    names.Add(Path.GetFileNameWithoutExtension(name));
                 }
             }
             catch { }
         }
+        // Third-party DLLs shipped next to the sources (SkiaSharp, Vortice, …) so source
+        // plugins can reference them. Host-owned assemblies are skipped to force type
+        // unification with the running host; unloadable (native) files are skipped quietly.
+        try
+        {
+            foreach (var path in Directory.EnumerateFiles(pluginFolder, "*.dll", SearchOption.TopDirectoryOnly)
+                         .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    var simple = Path.GetFileNameWithoutExtension(path);
+                    if (simple.StartsWith("DesktopBoxes.", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!names.Add(simple)) continue;
+                    list.Add(MetadataReference.CreateFromFile(path));
+                }
+                catch { }
+            }
+        }
+        catch { }
         return list;
     }
 
