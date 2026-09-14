@@ -16,7 +16,7 @@ public enum WidgetFolderKind
 /// native loader so a folder can never be claimed twice or missed by both.</summary>
 public static class WidgetFolder
 {
-    public const string ManifestFileName = "widget.json";
+    //public const string ManifestFileName = "widget.json";
     public const string NativeManifestFileName = "nwidget.json";
 
     public static WidgetFolderKind PeekKind(string folder)
