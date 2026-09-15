@@ -47,6 +47,9 @@ Follow it to keep the architecture clean and the build green.
   (`Shell32`/`ShellCom`); `Shell/` keeps only the calling services.
 - **Win32APIs/** — raw Win32 callers. `NativeMethods/Win32Apis.cs` is the UI's thin wrapper over
   `WindowsNative`; `Services` holds the callers. All declarations live in `WindowsNative`.
+  Desktop-band glue (ownership, tool-window/minimize styles, activation and z-order pins) lives
+  in `Win32APIs/Services/DesktopLayer.cs` — attach new desktop windows through
+  `DesktopLayer.Attach` instead of copying the sequence.
 - **Views / Controls / Converters / Resources / WPFServices/ AttachedProperties / Animation / App.xaml** — WPF only (ViewModels use `CommunityToolkit.Mvvm` source generators: `[ObservableProperty]`, `[RelayCommand]`).
   - **Views/DebugViews/** Wpf debugging overlays
   - **Views/AppWindows/** wpf main windows like settings and about etc

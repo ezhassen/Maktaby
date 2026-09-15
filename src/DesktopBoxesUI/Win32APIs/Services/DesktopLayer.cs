@@ -188,15 +188,6 @@ internal static class DesktopLayer
 
         if (msg == WM_WINDOWPOSCHANGING)
         {
-            // TEMP-DIAG(overlay-z): trace pure z-order requests for widget/overlay kinds.
-            bool traceZ = (o.Kind == Kind.Widget || o.Kind == Kind.Overlay)
-                && Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug;
-            IntPtr requestedAfter = IntPtr.Zero;
-            if (traceZ)
-            {
-                requestedAfter = System.Runtime.InteropServices.Marshal.PtrToStructure<WindowPos>(lParam).HwndInsertAfter;
-            }
-
             WindowDragController.SuppressShellSnap(lParam);
             bool suppressed = o.KeepBelowSuppressed?.Invoke() == true;
             if (!suppressed)
@@ -226,11 +217,6 @@ internal static class DesktopLayer
                     && (wpHold.Flags & SWP_SHOWWINDOW) == 0;
                 if (pureZ && (wpHold.HwndInsertAfter == IntPtr.Zero || !o.DesktopManager.IsDesktopWindow(wpHold.HwndInsertAfter)))
                 {
-                    // TEMP-DIAG(overlay-z): remove with the other overlay-z diagnostics.
-                    if (traceZ)
-                    {
-                        Logging.Log.Debug($"DesktopLayer HOLD kind={o.Kind} hwnd={Describe(hwnd)} req={Describe(wpHold.HwndInsertAfter)} flags=0x{wpHold.Flags:X}");
-                    }
                     wpHold.Flags |= SWP_NOZORDER;
                     System.Runtime.InteropServices.Marshal.StructureToPtr(wpHold, lParam, false);
                 }
@@ -248,11 +234,6 @@ internal static class DesktopLayer
                     && (wpMove.Flags & SWP_SHOWWINDOW) == 0;
                 if (hasMoveOrSize && (wpMove.HwndInsertAfter == IntPtr.Zero || !o.DesktopManager.IsDesktopWindow(wpMove.HwndInsertAfter)))
                 {
-                    // TEMP-DIAG(overlay-z): remove with the other overlay-z diagnostics.
-                    if (traceZ)
-                    {
-                        Logging.Log.Debug($"DesktopLayer NOZORDER kind={o.Kind} hwnd={Describe(hwnd)} req={Describe(wpMove.HwndInsertAfter)} flags=0x{wpMove.Flags:X}");
-                    }
                     wpMove.Flags |= SWP_NOZORDER;
                     System.Runtime.InteropServices.Marshal.StructureToPtr(wpMove, lParam, false);
                 }
@@ -264,18 +245,6 @@ internal static class DesktopLayer
                 EnsureAbove(hwnd, above);
             }
             catch { }
-
-            // TEMP-DIAG(overlay-z): see above.
-            if (traceZ)
-            {
-                var final = System.Runtime.InteropServices.Marshal.PtrToStructure<WindowPos>(lParam);
-                bool pureZ = (final.Flags & SWP_NOZORDER) == 0
-                    && (final.Flags & SWP_NOMOVE) != 0 && (final.Flags & SWP_NOSIZE) != 0;
-                if (pureZ || final.HwndInsertAfter != requestedAfter)
-                {
-                    Logging.Log.Debug($"DesktopLayer POSCHANGING kind={o.Kind} hwnd={Describe(hwnd)} req={Describe(requestedAfter)} final={Describe(final.HwndInsertAfter)} flags=0x{final.Flags:X}");
-                }
-            }
 
             return IntPtr.Zero;
         }
@@ -332,12 +301,6 @@ internal static class DesktopLayer
             return;
         }
 
-        // TEMP-DIAG(overlay-z): remove once the overlay-behind-owner drift is understood.
-        if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
-        {
-            Logging.Log.Debug($"DesktopLayer.EnsureAbove: CORRECTING owner={Describe(owner)} owned={Describe(owned)} nextBelow={Describe(NextOrdinaryBelow(owned))}");
-        }
-
         User32.SetWindowPos(owned, owner, 0, 0, 0, 0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
@@ -345,7 +308,6 @@ internal static class DesktopLayer
     /// <summary>
     /// Nearest window below <paramref name="hwnd"/> that actually paints there: skips topmost
     /// popups (they float above everything by design) and invisible windows. Bounded walk.
-    /// TEMP-DIAG(overlay-z): keep while the overlay pin is being validated.
     /// </summary>
     internal static IntPtr NextOrdinaryBelow(IntPtr hwnd)
     {
@@ -381,8 +343,4 @@ internal static class DesktopLayer
 
         return IntPtr.Zero;
     }
-
-    // TEMP-DIAG(overlay-z): see EnsureAbove.
-    private static string Describe(IntPtr hwnd)
-        => hwnd == IntPtr.Zero ? "<none>" : $"{Win32Apis.GetWindowClass(hwnd)}(0x{hwnd.ToInt64():X})";
 }

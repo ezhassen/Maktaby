@@ -65,21 +65,11 @@ public partial class WidgetChromeOverlay : Window
                 return;
             }
 
-            // TEMP-DIAG(overlay-z): remove once the overlay-behind-owner drift is understood.
-            if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
-            {
-                Logging.Log.Debug($"Overlay.EnsureAboveOwner: CORRECTING owner={Describe(owner)} self={Describe(self)} nextBelow={Describe(DesktopLayer.NextOrdinaryBelow(self))}");
-            }
-
             User32.SetWindowPos(self, owner, 0, 0, 0, 0,
                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
         }
         catch { }
     }
-
-    // TEMP-DIAG(overlay-z): see EnsureAboveOwner.
-    private static string Describe(IntPtr hwnd)
-        => hwnd == IntPtr.Zero ? "<none>" : $"{Win32Apis.GetWindowClass(hwnd)}(0x{hwnd.ToInt64():X})";
 
     #endregion
 

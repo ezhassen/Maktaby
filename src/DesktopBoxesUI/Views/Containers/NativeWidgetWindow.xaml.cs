@@ -395,24 +395,12 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
                 {
                     if (_chromeOverlay.ResizeMode != ResizeMode) _chromeOverlay.ResizeMode = ResizeMode;
                     _chromeOverlay.Show();
-                    // TEMP-DIAG(overlay-z): remove with the other overlay-z diagnostics.
-                    if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
-                    {
-                        var oh = new WindowInteropHelper(_chromeOverlay).Handle;
-                        var ow = new WindowInteropHelper(this).Handle;
-                        Logging.Log.Debug($"NativeWidgetWindow.UpdateChrome: overlay SHOWN aboveOwner={oh != IntPtr.Zero && DesktopLayer.NextOrdinaryBelow(oh) == ow}");
-                    }
                 }
                 EnsureOverlayAboveHost();
             }
             else if (_chromeOverlay.IsVisible)
             {
                 _chromeOverlay.Hide();
-                // TEMP-DIAG(overlay-z): remove with the other overlay-z diagnostics.
-                if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
-                {
-                    Logging.Log.Debug("NativeWidgetWindow.UpdateChrome: overlay HIDDEN");
-                }
             }
             else
             {

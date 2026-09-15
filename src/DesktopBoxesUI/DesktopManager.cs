@@ -1273,7 +1273,7 @@ public sealed class DesktopManager
     public bool IsDesktopWindow(IntPtr hWnd, bool checkSurfaceToo = true)
     {
         if (checkSurfaceToo && hWnd == Win32Apis.DesktopSurfaceHandle) return true;
-        // Check if hwnd belongs to our app's BoxContainerWindow / WebWidgetWindow
+        // Check if hwnd belongs to our app's containers or their chrome overlays.
         try
         {
             foreach (var w in _windows.Values)

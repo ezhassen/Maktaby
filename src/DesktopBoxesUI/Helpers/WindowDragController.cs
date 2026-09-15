@@ -356,21 +356,9 @@ internal sealed class WindowDragController
                 }
                 topDesktop = lastDesktop;
             }
-            // TEMP-DIAG(overlay-z): log actual pin actions (rewrites only — cheap).
-            if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
-            {
-                Logging.Log.Debug($"KeepBelowApps: hwnd={Describe(hwnd)} req={Describe(wp.HwndInsertAfter)} -> {Describe(topDesktop)}");
-            }
             wp.HwndInsertAfter = topDesktop;
             Marshal.StructureToPtr(wp, lParam, false);
         }
-    }
-
-    // TEMP-DIAG(overlay-z): remove with the other overlay-z diagnostics.
-    private static string Describe(IntPtr hwnd)
-    {
-        try { return hwnd == IntPtr.Zero ? "<none>" : $"{Win32Apis.GetWindowClass(hwnd)}(0x{hwnd.ToInt64():X})"; }
-        catch { return $"(0x{hwnd.ToInt64():X})"; }
     }
 
     private double GetScale(IntPtr hwnd) => _dpi.GetDpiForWindow(hwnd) / 96.0;
@@ -525,11 +513,6 @@ internal sealed class WindowDragController
                 _dragOffset = current;
                 _window.CaptureMouse();
                 Mouse.OverrideCursor = Cursors.SizeAll;
-                // TEMP-DIAG(overlay-z): drag boundaries for the rise-above-apps investigation.
-                if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
-                {
-                    Logging.Log.Debug($"TitleDrag BEGIN window={_window.GetType().Name}");
-                }
             }
         }
 
@@ -568,11 +551,6 @@ internal sealed class WindowDragController
 
         _dragging = false;
         IsTitleDragging = false;
-        // TEMP-DIAG(overlay-z): see TitleDrag.
-        if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
-        {
-            Logging.Log.Debug($"TitleDrag END window={_window.GetType().Name}");
-        }
         var src = DraggingSourceWindow;
         if (DraggingSourceWindow == _window) DraggingSourceWindow = null;
         _window.ReleaseMouseCapture();
