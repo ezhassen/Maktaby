@@ -395,6 +395,22 @@ public partial class FolderPortalControl : UserControl
         ClearSelection();
     }
 
+    /// <summary>True when the cursor (drop point) is over a window owned by another process —
+    /// i.e. the OLE drop landed outside the app. Call only after the drag ghost is closed so it
+    /// can never be mistaken for the target.</summary>
+    private static bool IsDropTargetExternal()
+    {
+        try
+        {
+            if (!DesktopBoxesUI.Win32.NativeMethods.Win32Apis.GetCursorPos(out var pt)) return false;
+            var hwnd = DesktopBoxesUI.Win32.NativeMethods.Win32Apis.WindowFromPoint(pt);
+            if (hwnd == IntPtr.Zero) return false;
+            DesktopBoxesUI.Win32.NativeMethods.Win32Apis.GetWindowThreadProcessId(hwnd, out uint pid);
+            return pid != (uint)System.Environment.ProcessId;
+        }
+        catch { return false; }
+    }
+
     private void SelectOnly(FolderItemViewModel vm)
     {
         ClearSelection();
@@ -573,6 +589,7 @@ public partial class FolderPortalControl : UserControl
 
         _dragging = true;
         WindowDragController.DraggingSourceWindow = Window.GetWindow(fe);
+        var dragEffect = DragDropEffects.None;
         try
         {
             _dragGhost = new DragGhostWindow();
@@ -585,7 +602,7 @@ public partial class FolderPortalControl : UserControl
             DragDrop.AddGiveFeedbackHandler(fe, OnGiveFeedback);
             var data = new DataObject(DataFormats.FileDrop, paths);
             // Also set as Shell IDList for virtual items if needed, but FileDrop covers most
-            DragDrop.DoDragDrop(fe, data, DragDropEffects.Copy | DragDropEffects.Link);
+            dragEffect = DragDrop.DoDragDrop(fe, data, DragDropEffects.Copy | DragDropEffects.Link);
         }
         finally
         {
@@ -596,7 +613,18 @@ public partial class FolderPortalControl : UserControl
             _dragOrigin = null;
             if (WindowDragController.DraggingSourceWindow == Window.GetWindow(fe))
                 WindowDragController.DraggingSourceWindow = null;
-            _suppressDragUntilMouseUp = true;
+            // The release that ends the drag may land in another app, which then never delivers
+            // a mouse-up to us. If the button is already up, the "until mouse up" window is over:
+            // leaving suppress set would defeat deactivation-clearing forever (stale selection
+            // in an inactive container). Only an Esc-cancel with the button still held keeps it
+            // until the real mouse-up arrives.
+            _suppressDragUntilMouseUp = Mouse.LeftButton != MouseButtonState.Released;
+            if (dragEffect == DragDropEffects.None || IsDropTargetExternal())
+            {
+                // Canceled, refused, or dropped outside our windows (another app took it):
+                // don't leave a stale selection behind in the source.
+                ClearSelection();
+            }
             var srcWin = WindowDragController.DraggingSourceWindow;
             if (WindowDragController.DraggingSourceWindow == Window.GetWindow(fe))
                 WindowDragController.DraggingSourceWindow = null;
