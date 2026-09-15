@@ -1177,6 +1177,26 @@ internal static class Win32Apis
             SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOZORDER);
     }
 
+    /// <summary>
+    /// Forces WS_EX_NOACTIVATE on a window that must never steal activation (the widget chrome
+    /// overlay: it forwards activation to its owner instead). The style change is flushed with
+    /// SWP_FRAMECHANGED so it takes effect immediately, without moving, sizing, reordering or
+    /// activating the window.
+    /// </summary>
+    public static void EnforceNoActivate(IntPtr hwnd)
+    {
+        int ex = User32.GetWindowLong(hwnd, GWL_EXSTYLE);
+        User32.SetWindowLong(hwnd, GWL_EXSTYLE, ex | (int)WS_EX_NOACTIVATE);
+        User32.SetWindowPos(
+            hwnd,
+            HWND_TOP,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
+    }
+
     private static readonly HashSet<IntPtr> _allowHide = new();
 
     /// <summary>

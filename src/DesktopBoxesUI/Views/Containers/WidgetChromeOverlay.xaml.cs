@@ -1,6 +1,7 @@
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.Win32.NativeMethods;
+using DesktopBoxesUI.Win32.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Input;
@@ -16,6 +17,7 @@ public partial class WidgetChromeOverlay : Window
 
     private readonly IWidgetChromeOwner _ownerWidget;
     private HwndSource? _hwndSource;
+    private HwndSourceHook? _layerHook;
     private WindowDragController? _drag;
     private readonly DesktopManager _desktopManager;
     private bool _isDragging;
@@ -28,6 +30,56 @@ public partial class WidgetChromeOverlay : Window
     public bool IsDragging => _drag?.IsDragging ?? _isDragging;
 
     public bool IsResizing => WindowDragController.IsNativeSizing;
+
+    /// <summary>The live HWND once the source is initialized, else <see cref="IntPtr.Zero"/>.</summary>
+    internal IntPtr Handle
+    {
+        get
+        {
+            try { return new WindowInteropHelper(this).Handle; }
+            catch { return IntPtr.Zero; }
+        }
+    }
+
+    /// <summary>
+    /// Re-inserts the overlay directly above its owner (no move/size/activate). Called after the
+    /// owner is shown or reactivated: those operations insert the owner at the top and would
+    /// otherwise bury the overlay behind the widget. No-op when already correctly ordered.
+    /// </summary>
+    public void EnsureAboveOwner()
+    {
+        try
+        {
+            var owner = new WindowInteropHelper(_ownerWidget.Window).Handle;
+            var self = Handle;
+            if (owner == IntPtr.Zero || self == IntPtr.Zero || !Win32Apis.IsWindow(owner) || !Win32Apis.IsWindow(self))
+            {
+                return;
+            }
+
+            // "Already above" walks down past topmost/invisible popups (IME, open menus) to the
+            // nearest ordinary window: testing the immediate neighbour misfires while such a
+            // window floats between overlay and owner.
+            if (DesktopLayer.NextOrdinaryBelow(self) == owner)
+            {
+                return;
+            }
+
+            // TEMP-DIAG(overlay-z): remove once the overlay-behind-owner drift is understood.
+            if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+            {
+                Logging.Log.Debug($"Overlay.EnsureAboveOwner: CORRECTING owner={Describe(owner)} self={Describe(self)} nextBelow={Describe(DesktopLayer.NextOrdinaryBelow(self))}");
+            }
+
+            User32.SetWindowPos(self, owner, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+        catch { }
+    }
+
+    // TEMP-DIAG(overlay-z): see EnsureAboveOwner.
+    private static string Describe(IntPtr hwnd)
+        => hwnd == IntPtr.Zero ? "<none>" : $"{Win32Apis.GetWindowClass(hwnd)}(0x{hwnd.ToInt64():X})";
 
     #endregion
 
@@ -69,19 +121,19 @@ public partial class WidgetChromeOverlay : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd != IntPtr.Zero)
         {
-            Win32Apis.MakeToolWindow(hwnd);
-            // Must be non-activating: Show() must not steal activation from owner.
-            // ShowActivated="False" in XAML already requests WS_EX_NOACTIVATE, but enforce it
-            // explicitly for the wpftmp AnyCPU build where style changes can be reapplied.
-            try
-            {
-                int ex = User32.GetWindowLong(hwnd, GWL_EXSTYLE);
-                User32.SetWindowLong(hwnd, GWL_EXSTYLE, ex | (int)WS_EX_NOACTIVATE);
-                User32.SetWindowPos(hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED | SWP_NOACTIVATE);
-            }
-            catch { }
             _hwndSource = HwndSource.FromHwnd(hwnd);
+            // Owned by the widget window (Owner set in ctor), so it always floats above it;
+            // never activates itself (forwards activation to the owner) and pins below the
+            // owner instead of below the desktop band.
+            _layerHook = DesktopLayer.Attach(hwnd, new DesktopLayer.Options
+            {
+                Kind = DesktopLayer.Kind.Overlay,
+                DesktopManager = _desktopManager,
+                MouseActivateResult = 3, // MA_NOACTIVATE
+                OnMouseActivate = () => { try { _ownerWidget.Window.Activate(); } catch { } },
+                KeepBelowSuppressed = () => IsDragging || IsResizing,
+                KeepBelowAnchor = () => _ownerWidget.Window.GetCriticalHandle(),
+            });
             _hwndSource?.AddHook(HwndHook);
         }
         // Drag controller for overlay chrome (title/resize) — updates both windows
@@ -96,15 +148,15 @@ public partial class WidgetChromeOverlay : Window
                 var positioning = App.Services.GetRequiredService<Core.Interfaces.IWindowPositioningService>();
                 var _hostContainers = App.Services.GetRequiredService<Core.Interfaces.IContainerService>();
                 var drag = new WindowDragController(
-                    this, App.Services.GetRequiredService<DesktopManager>(), monitor, dpi, snapping, positioning,
+                    this, monitor, dpi, snapping, positioning,
                     r => { _isDragging = true; Left = r.X; Top = r.Y; Width = r.Width; Height = r.Height; SyncOwnerToThis(); _isDragging = false; },
                     () => _hostContainers.GetContainers()
                             .Where(c => c.Id != _ownerWidget.ContainerViewModel.Id && c.IsVisible)
                             .Select(c => c.Bounds).ToList(),
                     () => { try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { } },
                     () => HeaderBorder.ActualHeight, getIsLocked: () => _ownerWidget.ContainerViewModel.IsLocked,
-                    handleHitTest: false, handleMouseActivate: false, handleKeepBelow: false);
-                drag.Attach(glueToDesktop: false);
+                    handleHitTest: false);
+                drag.Attach();
                 _drag = drag;
             }
             catch { }
@@ -133,6 +185,8 @@ public partial class WidgetChromeOverlay : Window
         try { PreviewMouseMove -= Header_MouseMove; } catch { }
         try { PreviewMouseLeftButtonUp -= Header_MouseUp; } catch { }
         try { _drag?.Detach(); } catch { }
+        DesktopLayer.Detach(_hwndSource, _layerHook);
+        _layerHook = null;
         if (_hwndSource != null)
         {
             _hwndSource.RemoveHook(HwndHook);
@@ -232,24 +286,17 @@ public partial class WidgetChromeOverlay : Window
     private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         const int WM_NCHITTEST = 0x0084;
-        const int WM_MOUSEACTIVATE = 0x0021;
-        const int WM_WINDOWPOSCHANGING = 0x0046;
         const int WM_ENTERSIZEMOVE = 0x0231;
         const int WM_EXITSIZEMOVE = 0x0232;
         const int WM_NCLBUTTONDOWN = 0x00A1;
         const int WM_NCLBUTTONUP = 0x00A2;
         const int WM_LBUTTONUP = 0x0202;
         const int WM_CAPTURECHANGED = 0x0215;
-        const int MA_NOACTIVATE = 3;
         const int HTTRANSPARENT = -1;
         const int HTLEFT = 10, HTRIGHT = 11, HTTOP = 12, HTTOPLEFT = 13, HTTOPRIGHT = 14, HTBOTTOM = 15, HTBOTTOMLEFT = 16, HTBOTTOMRIGHT = 17;
 
-        if (msg == WM_MOUSEACTIVATE)
-        {
-            handled = true;
-            try { _ownerWidget.Window.Activate(); } catch { }
-            return (IntPtr)MA_NOACTIVATE;
-        }
+        // Click-activation (MA_NOACTIVATE + owner activate) and the z-order pin live in the
+        // DesktopLayer hook now; this hook keeps hit-testing and drag/resize tracking only.
         if (msg == WM_NCLBUTTONDOWN) { _isDragging = true; return IntPtr.Zero; }
         if (msg == WM_NCLBUTTONUP || msg == WM_LBUTTONUP || msg == WM_CAPTURECHANGED) { if (_isDragging) { _isDragging = false; } return IntPtr.Zero; }
         if (msg == WM_ENTERSIZEMOVE) { _isDragging = true; return IntPtr.Zero; }
@@ -321,19 +368,6 @@ public partial class WidgetChromeOverlay : Window
                 return (IntPtr)HTTRANSPARENT;
             }
             catch { }
-        }
-        if (msg == WM_WINDOWPOSCHANGING)
-        {
-            WindowDragController.SuppressShellSnap(lParam);
-            if (!IsDragging && !IsResizing)
-            {
-                //    WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager);
-                WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager, parentWindowH: _ownerWidget.Window.GetCriticalHandle());
-            }
-            // KeepBelowApps intentionally NOT called for overlay — it's owned by WebWidgetWindow (Owner set in ctor)
-            // Owned windows are always above their owner; owner is kept below via WebWidgetWindow.KeepBelowApps.
-            // Calling KeepBelowApps for owned WS_EX_NOACTIVATE overlay would set HwndInsertAfter to topDesktop (below owner)
-            // and make chrome appear behind the widget, plus block TitleDrag.
         }
         return IntPtr.Zero;
     }

@@ -115,8 +115,8 @@ After editing:
 
 There are two implementations of "detect a double-click on empty desktop" (the trigger for
 **Temp Hide All boxes**). The active one is selected by `GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface`
-(`bool?`, defined in `GlobalFeaturesSwitches.cs`). **It is currently `true`** — the global mouse hook is the
-supported path; the custom `DesktopSurface` is experimental and has unresolved issues (see Known issues).
+(`bool?`, defined in `GlobalFeaturesSwitches.cs`). **It is currently `false`** — the custom surface path is
+active; the global mouse hook path is dormant (kept for experiments).
 
 - **Global low-level hook (`true`)** — `DesktopManager` calls `_mouseMonitor.Start()` which spins up
   `MouseMonitor` (`Win32APIs/Services/MouseMonitor.cs`), a `WH_MOUSE_LL` hook on a **dedicated STA background

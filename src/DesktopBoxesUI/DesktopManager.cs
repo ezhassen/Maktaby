@@ -1264,7 +1264,10 @@ public sealed class DesktopManager
     public bool IsDesktopWindow(Window wind, bool checkSurfaceToo = true)
     {
         if (checkSurfaceToo && wind is DesktopSurface) return true;
-        return wind is BoxContainerWindow || wind is WebWidgetWindow || wind is NativeWidgetWindow;//|| wind is WidgetChromeOverlay;
+        // The chrome overlay counts too: when the OS keeps an owner below its owned overlay,
+        // the insert-after is the overlay — misclassifying it as foreign makes the z-pin rip
+        // the owner above its own chrome on every activation/show.
+        return wind is BoxContainerWindow || wind is WebWidgetWindow || wind is NativeWidgetWindow || wind is WidgetChromeOverlay;
     }
 
     public bool IsDesktopWindow(IntPtr hWnd, bool checkSurfaceToo = true)
@@ -1280,6 +1283,16 @@ public sealed class DesktopManager
                 {
                     var wh = new System.Windows.Interop.WindowInteropHelper(w).Handle;
                     if (wh == hWnd) return true;
+                }
+            }
+
+            // Overlays are not in _windows (they belong to their owner, not a container).
+            foreach (Window w in App.Current.Windows)
+            {
+                if (w is WidgetChromeOverlay)
+                {
+                    var wh = new System.Windows.Interop.WindowInteropHelper(w).Handle;
+                    if (wh != IntPtr.Zero && wh == hWnd) return true;
                 }
             }
         }

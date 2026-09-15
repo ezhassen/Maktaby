@@ -4,6 +4,7 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32.NativeMethods;
+using DesktopBoxesUI.Win32.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.IO;
@@ -29,6 +30,7 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private bool _isHover;
     private bool _isActive;
     private HwndSource? _hwndSource;
+    private HwndSourceHook? _layerHook;
     private WidgetChromeOverlay? _chromeOverlay;
     private readonly DesktopManager _desktopManager;
     private bool ShowChromeOnHover = false;
@@ -75,7 +77,7 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
         //WidgetMenu.Closed += (_, _) => UpdateChrome();
         //WidgetMenu.Opened += (_, _) => UpdateChrome();
-        Activated += (_, _) => { _isActive = true; UpdateChrome(); };
+        Activated += (_, _) => { _isActive = true; UpdateChrome(); try { _chromeOverlay?.EnsureAboveOwner(); } catch { } };
         Deactivated += (_, _) => { _isActive = false; _isHover = false; UpdateChrome(); };
     }
 
@@ -138,37 +140,34 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private void Attach()
     {
         if (_attached) return;
-        //try
-        //{
-        var hwnd = new WindowInteropHelper(this).Handle;
-        _hwndSource = HwndSource.FromHwnd(hwnd);
-        Win32Apis.MakeToolWindow(hwnd);
-        Win32Apis.RegisterBoxWindow(hwnd);
-        // Own the box to the DesktopSurface when the custom surface is live (handle published);
-        // owned windows always float above their owner, so a box can never sink below (or lose
-        // clicks/activation to) the surface. Falls back to Progman when no surface exists.
-        Win32Apis.GlueToDesktop(hwnd, Win32Apis.DesktopSurfaceHandle);
-        Win32Apis.PreventMinimize(hwnd);
-        _hwndSource.AddHook(HwndHook);
-        _hwndSource.AddHook(Win32Apis.MinimizePreventionHook);
-        //}
-        //catch
-        //{
-        //    // Positioning can fail if the handle isn't ready yet; the window still shows.
-        //}
+        _hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        Win32Apis.RegisterBoxWindow(new WindowInteropHelper(this).Handle);
+        _layerHook = DesktopLayer.Attach(this, new DesktopLayer.Options
+        {
+            Kind = DesktopLayer.Kind.Widget,
+            DesktopManager = _desktopManager,
+            // Don't enforce the pin while the overlay drags — TitleDrag moves overlay+owner via Left/Top
+            // with SWP_NOZORDER; the pin would see a pure z-order change and fight the move.
+            // (BoxContainerWindow's pin also skips during move, same guard here.)
+            KeepBelowSuppressed = () => _chromeOverlay != null && (_chromeOverlay.IsDragging || _chromeOverlay.IsResizing),
+            ActiveChanged = active => { _isActive = active; UpdateChrome(); },
+            // The overlay must stay directly above this window: showing/raising the owner
+            // inserts it at the top and would otherwise bury the overlay behind the widget.
+            KeepAbove = () =>
+            {
+                try { return _chromeOverlay?.Handle ?? IntPtr.Zero; }
+                catch { return IntPtr.Zero; }
+            },
+        });
         _attached = true;
     }
 
     private void Detach()
     {
         _attached = false;
-        if (_hwndSource != null)
-        {
-            _hwndSource.RemoveHook(HwndHook);
-            try { _hwndSource.RemoveHook(Win32Apis.MinimizePreventionHook); } catch { }
-            try { _hwndSource.RemoveHook(HwndHook); } catch { }
-            _hwndSource = null;
-        }
+        DesktopLayer.Detach(_hwndSource, _layerHook);
+        _layerHook = null;
+        _hwndSource = null;
     }
 
 
@@ -177,36 +176,6 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
         //WidgetMenu.PlacementTarget = MenuButton;
         WidgetMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Mouse;
         WidgetMenu.IsOpen = true;
-    }
-
-    private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        const int WM_MOUSEACTIVATE = 0x0021;
-        const int WM_ACTIVATE = 0x0006;
-        const int WM_WINDOWPOSCHANGING = 0x0046;
-        const int MA_ACTIVATE = 1;
-        if (msg == WM_MOUSEACTIVATE)
-        {
-            // Allow click on WebView2 HWND to activate the WidgetWindow (otherwise focus stays on previous window)
-            handled = true;
-            return (IntPtr)MA_ACTIVATE;
-        }
-        if (msg == WM_ACTIVATE)
-        {
-            int low = wParam.ToInt32() & 0xFFFF;
-            _isActive = low != 0; // WA_INACTIVE = 0
-            UpdateChrome();
-        }
-        if (msg == WM_WINDOWPOSCHANGING)
-        {
-            WindowDragController.SuppressShellSnap(lParam);
-            // Don't enforce KeepBelowApps while overlay is dragging — TitleDrag moves overlay+owner via Left/Top
-            // with SWP_NOZORDER; KeepBelowApps would see pure z-order change and incorrectly reparent, blocking move.
-            // BoxContainerWindow's KeepBelowApps also skips during move (!noMove), same guard here.
-            if (_chromeOverlay == null || (!_chromeOverlay.IsDragging && !_chromeOverlay.IsResizing))
-                WindowDragController.KeepBelowApps(hwnd, lParam, _desktopManager);
-        }
-        return IntPtr.Zero;
     }
 
     private void OnWidgetMouseEnter(object? sender, EventArgs e)
@@ -319,10 +288,25 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
                 {
                     if (_chromeOverlay.ResizeMode != ResizeMode) _chromeOverlay.ResizeMode = ResizeMode;
                     _chromeOverlay.Show();
+                    // TEMP-DIAG(overlay-z): remove with the other overlay-z diagnostics.
+                    if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+                    {
+                        var oh = new WindowInteropHelper(_chromeOverlay).Handle;
+                        var ow = new WindowInteropHelper(this).Handle;
+                        Logging.Log.Debug($"WebWidgetWindow.UpdateChrome: overlay SHOWN aboveOwner={oh != IntPtr.Zero && DesktopLayer.NextOrdinaryBelow(oh) == ow}");
+                    }
                 }
                 EnsureOverlayAboveHost();
             }
-            else if (!shouldShow && _chromeOverlay.IsVisible) _chromeOverlay.Hide();
+            else if (!shouldShow && _chromeOverlay.IsVisible)
+            {
+                _chromeOverlay.Hide();
+                // TEMP-DIAG(overlay-z): remove with the other overlay-z diagnostics.
+                if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+                {
+                    Logging.Log.Debug("WebWidgetWindow.UpdateChrome: overlay HIDDEN");
+                }
+            }
             else if (!shouldShow)
             {
                 // Keep a hidden overlay tracking the owner (a DPI transition remaps hidden
@@ -352,8 +336,6 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
     internal void EnsureOverlayAboveHost()
     {
-        //try
-        //{
         if (_chromeOverlay is null) return;
         var ohwnd = new WindowInteropHelper(_chromeOverlay).Handle;
         if (ohwnd == IntPtr.Zero) return;
@@ -361,11 +343,9 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
         if (ownerH == IntPtr.Zero) return;
         User32.SetWindowLongPtr(ohwnd, GWL_HWNDPARENT, ownerH);
 
-        //User32.SetWindowPos(ohwnd, ownerH, 0, 0, 0, 0,
-        //    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-        //_chromeOverlay.Activate();
-        //}
-        //catch { }
+        // The owner re-set above does NOT move anything in the z-order; force the overlay
+        // directly above the owner so a show/raise that buried it cannot stick.
+        try { _chromeOverlay.EnsureAboveOwner(); } catch { }
     }
 
     private void MenuButton_Click(object sender, RoutedEventArgs e)
@@ -467,7 +447,7 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
     protected override void OnClosing(CancelEventArgs e)
     {
         // Overlay must be closed before owner handle is destroyed — otherwise overlay's
-        // HwndHook (KeepBelowApps/SyncOwnerToThis) and OwnerClosed re-entrancy run on half-torn-down owner.
+        // hook (pin/SyncOwnerToThis) and OwnerClosed re-entrancy run on half-torn-down owner.
         base.OnClosing(e);
         if (e.Cancel) return;
         var overlay = _chromeOverlay;
@@ -509,11 +489,6 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
         ShutdownWebView();
         // Overlay already closed in OnClosing — defensive null check only
         _chromeOverlay = null;
-        if (_hwndSource != null)
-        {
-            try { _hwndSource.RemoveHook(HwndHook); } catch { }
-            _hwndSource = null;
-        }
         var hwnd = new WindowInteropHelper(this).Handle;
         if (hwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(hwnd); } catch { }
         try { Detach(); } catch { }

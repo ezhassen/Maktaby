@@ -5,6 +5,7 @@ using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.HelpersViews;
 using DesktopBoxesUI.Win32.NativeMethods;
+using DesktopBoxesUI.Win32.Services;
 using WindowsNative;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Versioning;
@@ -35,8 +36,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     private readonly IWindowPositioningService _positioning;
     private readonly Action _save;
     private readonly WindowDragController _drag;
-    private readonly IMouseMonitor _mouseMonitor;
-    private readonly IZOrderService _zOrder = App.Services.GetRequiredService<IZOrderService>();
+    private System.Windows.Interop.HwndSourceHook? _layerHook;
+    private readonly IMouseMonitor _mouseMonitor;    private readonly IZOrderService _zOrder = App.Services.GetRequiredService<IZOrderService>();
     private readonly uint _currentProcessId = (uint)System.Environment.ProcessId;
     private readonly IDialogService _dialogs = App.Services!.GetRequiredService<IDialogService>();
 
@@ -137,7 +138,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         Height = vm.Height;
 
         _drag = new WindowDragController(
-            this, App.Services.GetRequiredService<DesktopManager>(),
+            this,
             monitor,
             dpi,
             snapping,
@@ -233,6 +234,11 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         ClampBoundsToWorkArea();
         ApplyRoll();
         UpdateLockVisuals();
+        _layerHook = DesktopLayer.Attach(this, new DesktopLayer.Options
+        {
+            Kind = DesktopLayer.Kind.Box,
+            DesktopManager = App.Services.GetRequiredService<DesktopManager>(),
+        });
         _drag.Attach();
     }
 
@@ -429,6 +435,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         _mouseMonitor.MouseButtonDown -= OnGlobalMouseDown;
         _vm.PropertyChanged -= OnContainerPropertyChanged;
         _drag.Detach();
+        try { DesktopLayer.Detach(System.Windows.Interop.HwndSource.FromHwnd(new WindowInteropHelper(this).Handle), _layerHook); } catch { }
+        _layerHook = null;
         if (_watchedBox != null) { _watchedBox.StopWatching(); _watchedBox = null; }
         if (_vm.BoxContainerVm != null)
         {

@@ -31,9 +31,6 @@ internal sealed class WindowDragController
     private const int WmExitSizeMove = 0x0232;
     private const int WmEnterSizeMove = 0x0231;
     private const int WmWindowPosChanging = 0x0046;
-    private const int WmMouseActivate = 0x0021;
-    private const int MaActivate = 1;
-    private const int MaNoActivate = 3;
     private const uint SwpNoSendChanging = 0x0400;
     private const uint SwpNoZOrder = 0x0004;
     private const uint SwpNoActivate = 0x0010;
@@ -55,7 +52,6 @@ internal sealed class WindowDragController
     private readonly IDpiService _dpi;
     private readonly IWindowSnappingService _snapping;
     private readonly IWindowPositioningService _positioning;
-    private readonly DesktopManager _desktopManager;
     private readonly Action<RectD> _setBounds;
     private readonly Func<List<RectD>> _getOthers;
     private readonly Action _onChanged;
@@ -80,12 +76,9 @@ internal sealed class WindowDragController
     }
 
     private readonly bool _handleHitTest;
-    private readonly bool _handleMouseActivate;
-    private readonly bool _handleKeepBelow;
 
     public WindowDragController(
         Window window,
-        DesktopManager desktopManager,
         IMonitorService monitor,
         IDpiService dpi,
         IWindowSnappingService snapping,
@@ -94,9 +87,7 @@ internal sealed class WindowDragController
         Func<List<RectD>> getOthers,
         Action onChanged,
         Func<double> getHeaderHeight, Func<bool>? getIsLocked = null,
-        bool handleHitTest = true,
-        bool handleMouseActivate = true,
-        bool handleKeepBelow = true)
+        bool handleHitTest = true)
     {
         _window = window;
         _monitor = monitor;
@@ -108,28 +99,21 @@ internal sealed class WindowDragController
         _onChanged = onChanged;
         _getHeaderHeight = getHeaderHeight;
         _getIsLocked = getIsLocked;
-        _desktopManager = desktopManager;
         _handleHitTest = handleHitTest;
-        _handleMouseActivate = handleMouseActivate;
-        _handleKeepBelow = handleKeepBelow;
     }
 
-    public void Attach(bool glueToDesktop = true)
+    /// <summary>
+    /// Installs the drag hook (hit-test, move/resize, snapping). Desktop-band glue (ownership,
+    /// tool-window styles, minimize immunity, activation pin) is <see cref="Win32.Services.DesktopLayer"/>'s
+    /// job now — call <c>DesktopLayer.Attach</c> for that before this.
+    /// </summary>
+    public void Attach()
     {
         try
         {
             var hwnd = new WindowInteropHelper(_window).Handle;
-            if (glueToDesktop)
-            {
-                // Own the box to the DesktopSurface when the custom surface is live (handle published);
-                // owned windows always float above their owner, so a box can never sink below (or lose
-                // clicks/activation to) the surface. Falls back to Progman when no surface exists.
-                Win32Apis.GlueToDesktop(hwnd, Win32Apis.DesktopSurfaceHandle);
-            }
-            Win32Apis.PreventMinimize(hwnd);
             _source = HwndSource.FromHwnd(hwnd);
             _source.AddHook(HwndHook);
-            _source.AddHook(Win32Apis.MinimizePreventionHook);
         }
         catch
         {
@@ -188,12 +172,6 @@ internal sealed class WindowDragController
     {
         switch (msg)
         {
-            case WmMouseActivate:
-                if (!_handleMouseActivate) return IntPtr.Zero;
-                // Activate on any click but don't bring above normal apps — keep in desktop layer
-                handled = true;
-                return (IntPtr)MaActivate;
-
             case WmNcHitTest:
                 if (!_handleHitTest) return IntPtr.Zero;
                 int ht = HitTest(lParam, hwnd);
@@ -224,8 +202,8 @@ internal sealed class WindowDragController
                 return IntPtr.Zero;
 
             case WmWindowPosChanging:
+                // Shell-snap suppression only; the desktop-band z-pin lives in DesktopLayer's hook.
                 SuppressShellSnap(lParam);
-                if (_handleKeepBelow) KeepBelowApps(hwnd, lParam, _desktopManager);
                 return IntPtr.Zero;
 
             default:
@@ -378,9 +356,21 @@ internal sealed class WindowDragController
                 }
                 topDesktop = lastDesktop;
             }
+            // TEMP-DIAG(overlay-z): log actual pin actions (rewrites only — cheap).
+            if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+            {
+                Logging.Log.Debug($"KeepBelowApps: hwnd={Describe(hwnd)} req={Describe(wp.HwndInsertAfter)} -> {Describe(topDesktop)}");
+            }
             wp.HwndInsertAfter = topDesktop;
             Marshal.StructureToPtr(wp, lParam, false);
         }
+    }
+
+    // TEMP-DIAG(overlay-z): remove with the other overlay-z diagnostics.
+    private static string Describe(IntPtr hwnd)
+    {
+        try { return hwnd == IntPtr.Zero ? "<none>" : $"{Win32Apis.GetWindowClass(hwnd)}(0x{hwnd.ToInt64():X})"; }
+        catch { return $"(0x{hwnd.ToInt64():X})"; }
     }
 
     private double GetScale(IntPtr hwnd) => _dpi.GetDpiForWindow(hwnd) / 96.0;
@@ -535,6 +525,11 @@ internal sealed class WindowDragController
                 _dragOffset = current;
                 _window.CaptureMouse();
                 Mouse.OverrideCursor = Cursors.SizeAll;
+                // TEMP-DIAG(overlay-z): drag boundaries for the rise-above-apps investigation.
+                if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+                {
+                    Logging.Log.Debug($"TitleDrag BEGIN window={_window.GetType().Name}");
+                }
             }
         }
 
@@ -573,6 +568,11 @@ internal sealed class WindowDragController
 
         _dragging = false;
         IsTitleDragging = false;
+        // TEMP-DIAG(overlay-z): see TitleDrag.
+        if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
+        {
+            Logging.Log.Debug($"TitleDrag END window={_window.GetType().Name}");
+        }
         var src = DraggingSourceWindow;
         if (DraggingSourceWindow == _window) DraggingSourceWindow = null;
         _window.ReleaseMouseCapture();

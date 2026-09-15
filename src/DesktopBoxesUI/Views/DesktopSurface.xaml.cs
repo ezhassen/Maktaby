@@ -110,7 +110,6 @@ public sealed partial class DesktopSurface : Window
         if (source != null)
         {
             source.AddHook(HwndHook);
-            source.AddHook(Win32Apis.MinimizePreventionHook);
         }
 
         // WPF registers each window with its own class WITHOUT CS_DBLCLKS, so Windows never
@@ -121,7 +120,13 @@ public sealed partial class DesktopSurface : Window
         User32.SetClassLong(helper.Handle, GCL_STYLE, classStyle | CS_DBLCLKS);
 
         Win32Apis.DesktopSurfaceHandle = helper.Handle;
-        Win32Apis.GlueToDesktopSurface(helper.Handle);
+        // Glue + minimize immunity live in DesktopLayer now; the surface keeps its bespoke input
+        // hook (forwarding, marquee, anchor pin) installed above.
+        DesktopLayer.Attach(helper.Handle, new DesktopLayer.Options
+        {
+            Kind = DesktopLayer.Kind.Surface,
+            DesktopManager = _desktopManager,
+        });
         _anchor = Win32Apis.GetDesktopAnchorHandle();
         _listView = ExplorerDesktopService.FindDesktopListView();
 
