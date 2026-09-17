@@ -227,6 +227,12 @@ public sealed class VideoRenderer : IWallpaperRenderer
 
     private void OnVideoFrameAvailable(MediaPlayer sender, object args)
     {
+        // The static snapshot's pixels are read under the lock (backbuffer access) but
+        // encoded + written outside it — GDI+ PNG encode and disk IO must never stall
+        // Pause/Resume/Dispose/OnMediaOpened behind the frame callback.
+        byte[]? staticPixels = null;
+        int staticW = 0, staticH = 0;
+        bool captureAttempted = false;
         lock (_sync)
         {
             if (_disposed || _surface is null || _surfaceHost.IsDisposed) return;
@@ -248,30 +254,63 @@ public sealed class VideoRenderer : IWallpaperRenderer
                 if (!_staticCaptured && _staticFramePath is not null && ++_frameCount >= 3)
                 {
                     _staticCaptured = true;
-                    try
-                    {
-                        _surfaceHost.SaveRegionPng(_staticCropX, _staticCropY, _width, _height, _staticFramePath);
-                        _onStaticFrame?.Invoke();
-                    }
-                    catch (Exception ex) { Serilog.Log.Error("Static frame capture failed", ex); }
-
-                    // Honor a pause that was deferred so this frame could be captured.
-                    if (_pauseDeferred)
-                    {
-                        _pauseDeferred = false;
-                        try { _player?.Pause(); } catch { }
-                    }
+                    captureAttempted = true;
+                    staticPixels = _surfaceHost.ReadRegionBytes(_staticCropX, _staticCropY, _width, _height, out staticW, out staticH);
                 }
 
                 _surfaceHost.Present();
             }
-            catch (ObjectDisposedException) { /* lost the race with teardown — shutting down */ }
-            catch (NullReferenceException) { /* Vortice NULL native pointer — shutting down */ }
+            catch (ObjectDisposedException) { return; } // lost the race with teardown — shutting down
+            catch (NullReferenceException) { return; } // Vortice NULL native pointer — shutting down
             catch (Exception ex)
             {
                 Serilog.Log.Error("Frame present failed", ex);
             }
         }
+
+        if (staticPixels is not null)
+        {
+            try
+            {
+                SaveStaticPng(staticPixels, staticW, staticH, _staticFramePath!);
+                _onStaticFrame?.Invoke();
+            }
+            catch (Exception ex) { Serilog.Log.Error("Static frame capture failed", ex); }
+        }
+
+        if (captureAttempted)
+        {
+            // Honor a pause that was deferred so this frame could be captured — independent
+            // of the save/present outcome above, as before.
+            lock (_sync)
+            {
+                if (_pauseDeferred && !_disposed)
+                {
+                    _pauseDeferred = false;
+                    try { _player?.Pause(); } catch { }
+                }
+            }
+        }
+    }
+
+    /// <summary>Lock-free: encodes BGRA pixels captured above into the static fallback PNG.
+    /// Runs on the MF callback thread but outside the renderer lock.</summary>
+    private static void SaveStaticPng(byte[] bgra, int w, int h, string path)
+    {
+        using var bmp = new System.Drawing.Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        var bits = bmp.LockBits(new System.Drawing.Rectangle(0, 0, w, h),
+            System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        try
+        {
+            // 32bpp stride is always exactly w*4 (DWORD-aligned), matching the packed source.
+            System.Runtime.InteropServices.Marshal.Copy(bgra, 0, bits.Scan0, bgra.Length);
+        }
+        finally
+        {
+            bmp.UnlockBits(bits);
+        }
+        System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
     }
 
     public void Pause()

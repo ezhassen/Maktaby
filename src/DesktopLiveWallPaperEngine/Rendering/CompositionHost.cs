@@ -514,19 +514,28 @@ public sealed class CompositionSurface : IDisposable
         Present();
     }
 
-    /// <summary>Reads back a region of the current backbuffer to a PNG — used to snapshot a
-    /// frame of the live wallpaper for the static desktop-switch fallback. Call before Present
-    /// (flip-model backbuffer contents are undefined afterward).</summary>
-    public void SaveRegionPng(int cropX, int cropY, int w, int h, string path)
+    /// <summary>Reads back a region of the current backbuffer into BGRA bytes — the GPU half
+    /// of the static desktop-switch snapshot. Call before Present (flip-model backbuffer
+    /// contents are undefined afterward).
+    ///
+    /// Split out of the old encode-and-save-in-one Bs: the PNG encode and file write now run
+    /// on the caller's thread outside every lock. Staging readback already stalls the GPU
+    /// pipeline; holding the renderer's lock across GDI+ encode + disk IO on top of that
+    /// stalled Pause/Resume/Dispose behind the frame callback.</summary>
+    /// <returns>The BGRA pixels (<c>actualW * actualH * 4</c> bytes), or null when there is
+    /// nothing to read (tearing down, empty region).</returns>
+    public byte[]? ReadRegionBytes(int cropX, int cropY, int w, int h, out int actualW, out int actualH)
     {
         lock (_gate)
         {
-            if (_disposed || SwapChain.NativePointer == IntPtr.Zero) return;
+            actualW = 0;
+            actualH = 0;
+            if (_disposed || SwapChain.NativePointer == IntPtr.Zero) return null;
             cropX = Math.Clamp(cropX, 0, Math.Max(Width - 1, 0));
             cropY = Math.Clamp(cropY, 0, Math.Max(Height - 1, 0));
             w = Math.Min(w, Width - cropX);
             h = Math.Min(h, Height - cropY);
-            if (w <= 0 || h <= 0) return;
+            if (w <= 0 || h <= 0) return null;
 
             var desc = new Texture2DDescription
             {
@@ -549,33 +558,30 @@ public sealed class CompositionSurface : IDisposable
                 var map = _host.Context.Map(staging, 0, MapMode.Read, Vortice.Direct3D11.MapFlags.None);
                 try
                 {
-                    using var bmp = new System.Drawing.Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                    var bits = bmp.LockBits(new System.Drawing.Rectangle(0, 0, w, h),
-                        System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                    try
+                    // One file-sized contiguous copy out of the mapped staging texture, then
+                    // Unmap immediately so the GPU is never held across managed allocation.
+                    var bytes = new byte[w * h * 4];
+                    unsafe
                     {
-                        unsafe
+                        fixed (byte* dst = bytes)
                         {
                             byte* src = (byte*)map.DataPointer;
-                            byte* dst = (byte*)bits.Scan0;
-                            for (int y = 0; y < h; y++)
-                                Buffer.MemoryCopy(src + (long)y * map.RowPitch, dst + (long)y * bits.Stride, w * 4, w * 4);
+                            byte* row = dst;
+                            for (int y = 0; y < h; y++, row += w * 4)
+                                Buffer.MemoryCopy(src + (long)y * map.RowPitch, row, w * 4, w * 4);
                         }
                     }
-                    finally
-                    {
-                        bmp.UnlockBits(bits);
-                    }
-                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
-                    bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+                    actualW = w;
+                    actualH = h;
+                    return bytes;
                 }
                 finally
                 {
                     _host.Context.Unmap(staging, 0);
                 }
             }
-            catch (ObjectDisposedException) { return; } // lost the race with host teardown
-            catch (NullReferenceException) { return; } // Vortice NULL native pointer — shutting down
+            catch (ObjectDisposedException) { return null; } // lost the race with host teardown
+            catch (NullReferenceException) { return null; } // Vortice NULL native pointer — shutting down
         }
     }
 
