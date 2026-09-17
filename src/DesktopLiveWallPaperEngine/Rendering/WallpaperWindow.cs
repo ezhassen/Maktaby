@@ -46,8 +46,11 @@ public sealed class WallpaperWindow : Win32Window
         Renderer = renderer;
         if (previous is null) return;
         previous.Dispose();
-        // Deferred: full blocking GC, eventual by design — never stall swapping here.
-        Task.Run(VideoRenderer.ReclaimMediaPipeline);
+        // The replacement is installed and rooted above, so the collect below only reaps the
+        // dead pipeline. Single-flight: a multi-monitor refresh or rapid switches collapse
+        // into one trailing collection instead of one stop-the-world stall each — and never
+        // on this thread.
+        VideoRenderer.ScheduleReclaimMediaPipeline();
     }
 
     protected override IntPtr HandleMessage(uint msg, IntPtr wParam, IntPtr lParam)

@@ -513,9 +513,6 @@ public sealed class Engine : IDisposable
             Serilog.Log.Information("Re-applying all wallpapers");
             foreach (var window in _windows.Values) window.Dispose();
             _windows.Clear();
-            // Deferred: the full blocking GC is the stall here, and reclamation is
-            // eventual by design — the rebuild below must not wait for it.
-            Task.Run(VideoRenderer.ReclaimMediaPipeline);
             _host?.EnsureLayer();
             ApplyFromConfig();
         }
@@ -526,6 +523,12 @@ public sealed class Engine : IDisposable
         finally
         {
             _reapplying = false;
+            // After the replacements are installed and rooted — never concurrently with the
+            // rebuild above. The forced full GC is stop-the-world: firing it before the rebuild
+            // suspended the very thread constructing the new pipeline, and overlapping storms
+            // (explorer restart + display change) piled up one stall each. Single-flight now
+            // collapses those into one trailing pass on a pool thread.
+            VideoRenderer.ScheduleReclaimMediaPipeline();
         }
     }
 

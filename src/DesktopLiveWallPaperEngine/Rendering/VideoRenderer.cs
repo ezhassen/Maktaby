@@ -323,13 +323,65 @@ public sealed class VideoRenderer : IWallpaperRenderer
     ///
     /// Left alone this compounds — every display change, monitor hot-plug or explorer restart
     /// stranded ~27 threads and ~24 MB, taking a long-running instance past 500 MB and 129
-    /// threads. All callers run this pooled: it blocks on the finalizer queue by design and
-    /// must never run on the UI thread.</summary>
+    /// threads. Background teardown calls this directly (it owns no live pipeline then); every
+    /// other caller must use <see cref="ScheduleReclaimMediaPipeline"/> instead: this blocks on
+    /// the finalizer queue by design and must never run on the UI thread, run concurrently
+    /// with a rebuild, or pile up one stall per wallpaper switch.</summary>
     public static void ReclaimMediaPipeline()
     {
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
+    }
+
+    /// <summary>Single-flight gate for <see cref="ReclaimMediaPipeline"/>. A forced full GC is
+    /// stop-the-world, so overlapping requests — display-change storms, multi-monitor refresh
+    /// loops, rapid wallpaper switches — used to queue a pile of them, each suspending every
+    /// managed thread including the one constructing the replacement pipeline. Concurrent
+    /// requests now collapse into at most one in-flight collection plus one trailing pass.
+    /// Callers schedule it <em>after</em> the replacements are installed and rooted, so the
+    /// collect only ever reaps the dead pipeline.</summary>
+    private static readonly object s_reclaimGate = new();
+    private static Task? s_reclaimTask;
+    private static bool s_reclaimQueued;
+
+    /// <summary>Queues a pipeline reclaim without blocking the caller. Safe to call per
+    /// wallpaper switch — rapid switches cost one trailing collection, not one each.</summary>
+    public static void ScheduleReclaimMediaPipeline()
+    {
+        lock (s_reclaimGate)
+        {
+            if (s_reclaimTask is { IsCompleted: false })
+            {
+                s_reclaimQueued = true;
+                return;
+            }
+            s_reclaimTask = Task.Run(ReclaimLoop);
+        }
+    }
+
+    private static void ReclaimLoop()
+    {
+        while (true)
+        {
+            try
+            {
+                ReclaimMediaPipeline();
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Error("Pipeline reclaim failed", ex);
+            }
+            lock (s_reclaimGate)
+            {
+                if (!s_reclaimQueued)
+                {
+                    s_reclaimTask = null;
+                    return;
+                }
+                s_reclaimQueued = false;
+            }
+        }
     }
 
     public void Dispose()
