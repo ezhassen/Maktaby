@@ -20,17 +20,34 @@ namespace DesktopLiveWallPaperEngine.Rendering;
 /// 26200. Additionally, only render operations (Draw/Clear/video-processor blits) can write
 /// flip-model backbuffers, so CPU bitmaps are drawn through Direct2D, and DWM composed only
 /// the monitor-spanning window's target in testing — hence one hwnd with a visual tree
-/// instead of one hwnd per element.</summary>
+/// instead of one hwnd per element.
+///
+/// The GPU device and its factories are shared process-wide (one <c>ID3D11Device</c> for all
+/// monitors): previously every wallpaper window created its own device, so a 3-monitor setup
+/// held 3 devices plus their DXGI/D2D/DComp objects, and every re-apply churned all of them.
+/// Only the per-HWND target and root visual remain per host. The shared state is
+/// reference-counted and released when the last host is disposed, so a full teardown (which
+/// disposes every host) still drops the device — correct across adapter changes such as
+/// dock/undock — while steady state and re-apply hold exactly one.</summary>
 public sealed class CompositionHost : IDisposable
 {
+    /// <summary>Borrowed from the shared state (see <see cref="SharedAcquire"/>): valid while
+    /// this host is alive. Do NOT dispose — lifetime belongs to the last-host-wins release.</summary>
     public ID3D11Device Device { get; private set; } = null!;
+    /// <summary>Borrowed from the shared state, like <see cref="Device"/>.</summary>
     public ID3D11DeviceContext Context { get; private set; } = null!;
 
+    /// <summary>Borrowed from the shared state, like <see cref="Device"/>.</summary>
     private IDXGIFactory2 _dxgiFactory = null!;
+    /// <summary>Borrowed from the shared state, like <see cref="Device"/>.</summary>
     private ID2D1Factory _d2dFactory = null!;
+    /// <summary>Shared across hosts: one DComp device serves every HWND target.
+    /// <c>Commit</c> applies all pending visual changes device-wide, which is harmless here —
+    /// each host only ever has its own target's changes pending.</summary>
     private IDCompositionDevice _dcompDevice = null!;
     private IDCompositionTarget _dcompTarget = null!;
     private IDCompositionVisual _rootVisual = null!;
+    private bool _disposed;
 
     public CompositionSurface? Content { get; private set; }
 
@@ -54,34 +71,143 @@ public sealed class CompositionHost : IDisposable
 
     public CompositionHost(IntPtr hwnd)
     {
-        D3D11.D3D11CreateDevice(null, DriverType.Hardware,
-            DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport,
-            null, out ID3D11Device? device).CheckError();
-        Device = device!;
-        Context = Device.ImmediateContext;
+        var shared = SharedAcquire();
+        bool constructed = false;
+        try
+        {
+            Device = shared.Device;
+            Context = shared.Context;
+            _dxgiFactory = shared.Dxgi;
+            _d2dFactory = shared.D2d;
+            _dcompDevice = shared.DComp;
+            _dcompDevice.CreateTargetForHwnd(hwnd, true, out _dcompTarget);
+            _rootVisual = _dcompDevice.CreateVisual();
 
-        using (var multithread = Context.QueryInterfaceOrNull<ID3D11Multithread>())
-            multithread?.SetMultithreadProtected(true);
+            // DirectComposition composes this target in physical pixels, 1:1 with the window — DWM
+            // applies no DPI scale to the visual tree. Everything downstream (window bounds, swapchain
+            // sizes, widget offsets) is already physical, so the root transform stays identity.
+            // Verified by covering the OS wallpaper with a solid colour and measuring what the live
+            // layer actually paints: identity covers 100% of a 2560x1600 display at 150% scaling,
+            // while a 96/dpi counter-scale leaves 55.7% of the screen bare.
+            LogWindowDpi(hwnd);
 
-        using var dxgiDevice = Device.QueryInterface<IDXGIDevice>();
-        using var adapter = dxgiDevice.GetAdapter();
-        _dxgiFactory = adapter.GetParent<IDXGIFactory2>();
-        _d2dFactory = D2D1.D2D1CreateFactory<ID2D1Factory>(FactoryType.MultiThreaded);
+            _dcompTarget.SetRoot(_rootVisual);
+            _dcompDevice.Commit();
+            constructed = true;
+        }
+        finally
+        {
+            if (!constructed)
+            {
+                try { _rootVisual?.Dispose(); } catch { /* never constructed — best effort */ }
+                try { _dcompTarget?.Dispose(); } catch { /* never constructed — best effort */ }
+                SharedRelease();
+            }
+        }
+    }
 
-        _dcompDevice = DComp.DCompositionCreateDevice<IDCompositionDevice>(dxgiDevice);
-        _dcompDevice.CreateTargetForHwnd(hwnd, true, out _dcompTarget);
-        _rootVisual = _dcompDevice.CreateVisual();
+    /// <summary>Process-wide GPU state shared by every host. Created once on first use,
+    /// released when the last host goes away. All members are owned by this object;
+    /// <see cref="SharedAcquire"/> transfers ownership into <c>s_shared</c> on success and
+    /// disposes every partial allocation on failure.</summary>
+    private sealed class SharedState(
+        ID3D11Device device,
+        ID3D11DeviceContext context,
+        IDXGIFactory2 dxgi,
+        ID2D1Factory d2d,
+        IDCompositionDevice dcomp)
+    {
+        public ID3D11Device Device { get; } = device;
+        public ID3D11DeviceContext Context { get; } = context;
+        public IDXGIFactory2 Dxgi { get; } = dxgi;
+        public ID2D1Factory D2d { get; } = d2d;
+        public IDCompositionDevice DComp { get; } = dcomp;
+    }
 
-        // DirectComposition composes this target in physical pixels, 1:1 with the window — DWM
-        // applies no DPI scale to the visual tree. Everything downstream (window bounds, swapchain
-        // sizes, widget offsets) is already physical, so the root transform stays identity.
-        // Verified by covering the OS wallpaper with a solid colour and measuring what the live
-        // layer actually paints: identity covers 100% of a 2560x1600 display at 150% scaling,
-        // while a 96/dpi counter-scale leaves 55.7% of the screen bare.
-        LogWindowDpi(hwnd);
+    private static readonly object s_sharedGate = new();
+    private static SharedState? s_shared;
+    private static int s_sharedRefs;
 
-        _dcompTarget.SetRoot(_rootVisual);
-        _dcompDevice.Commit();
+    /// <summary>Borrows the shared device, creating it for the first host. Callers that fail
+    /// to finish constructing after acquiring MUST call <see cref="SharedRelease"/> to balance
+    /// the reference — see the constructor's <c>finally</c>.</summary>
+    private static SharedState SharedAcquire()
+    {
+        lock (s_sharedGate)
+        {
+            if (s_shared is not null)
+            {
+                s_sharedRefs++;
+                return s_shared;
+            }
+
+            ID3D11Device? device = null;
+            ID3D11DeviceContext? context = null;
+            IDXGIFactory2? dxgi = null;
+            ID2D1Factory? d2d = null;
+            IDCompositionDevice? dcomp = null;
+            try
+            {
+                D3D11.D3D11CreateDevice(null, DriverType.Hardware,
+                    DeviceCreationFlags.BgraSupport | DeviceCreationFlags.VideoSupport,
+                    null, out device).CheckError();
+                context = device!.ImmediateContext;
+
+                using (var multithread = context.QueryInterfaceOrNull<ID3D11Multithread>())
+                    multithread?.SetMultithreadProtected(true);
+
+                using var dxgiDevice = device.QueryInterface<IDXGIDevice>();
+                using var adapter = dxgiDevice.GetAdapter();
+                dxgi = adapter.GetParent<IDXGIFactory2>();
+                d2d = D2D1.D2D1CreateFactory<ID2D1Factory>(FactoryType.MultiThreaded);
+
+                dcomp = DComp.DCompositionCreateDevice<IDCompositionDevice>(dxgiDevice);
+
+                s_shared = new SharedState(device, context, dxgi, d2d, dcomp);
+                s_sharedRefs = 1;
+                // Ownership transferred — the finally below must not dispose them.
+                device = null;
+                context = null;
+                dxgi = null;
+                d2d = null;
+                dcomp = null;
+                Serilog.Log.Information("Composition: shared D3D11 device created (first wallpaper window)");
+                return s_shared;
+            }
+            finally
+            {
+                // Failure path only: success nulled every local above.
+                try { dcomp?.Dispose(); } catch { }
+                try { d2d?.Dispose(); } catch { }
+                try { dxgi?.Dispose(); } catch { }
+                try { context?.Dispose(); } catch { }
+                try { device?.Dispose(); } catch { }
+            }
+        }
+    }
+
+    /// <summary>Releases one host's reference; the last release disposes the shared device
+    /// outside the gate (a concurrent <see cref="SharedAcquire"/> then simply creates a new
+    /// instance — the two never alias). Idempotent only via the host's <c>_disposed</c> guard:
+    /// every <see cref="Dispose"/> path must call this exactly once per successful acquire.</summary>
+    private static void SharedRelease()
+    {
+        SharedState? dead;
+        lock (s_sharedGate)
+        {
+            if (s_shared is null) return;
+            s_sharedRefs--;
+            if (s_sharedRefs > 0) return;
+            dead = s_shared;
+            s_shared = null;
+            s_sharedRefs = 0;
+        }
+        Serilog.Log.Information("Composition: shared D3D11 device released (last wallpaper window gone)");
+        try { dead.DComp.Dispose(); } catch { }
+        try { dead.D2d.Dispose(); } catch { }
+        try { dead.Dxgi.Dispose(); } catch { }
+        try { dead.Context.Dispose(); } catch { }
+        try { dead.Device.Dispose(); } catch { }
     }
 
     /// <summary>Recorded for bug reports: DPI scaling is where wallpaper layers usually go wrong.</summary>
@@ -228,18 +354,24 @@ public sealed class CompositionHost : IDisposable
     {
         lock (_tree)
         {
+            // SharedRelease below must run exactly once per successful acquire, so double
+            // disposal stops here. (Previously Dispose had no guard: harmless when every
+            // resource was per-host, fatal now that the device is reference-counted.)
+            if (_disposed) return;
+            _disposed = true;
             Content?.Dispose();
             Content = null;
             foreach (var surface in _overlays.Values) surface.Dispose();
             _overlays.Clear();
         }
-        _rootVisual?.Dispose();
-        _dcompTarget?.Dispose();
-        _dcompDevice?.Dispose();
-        _d2dFactory?.Dispose();
-        _dxgiFactory?.Dispose();
-        Context?.Dispose();
-        Device?.Dispose();
+        // Per-HWND resources only — the device and factories are borrowed from the shared
+        // state and released (not disposed) below.
+        try { _rootVisual?.Dispose(); } catch { /* tearing down */ }
+        _rootVisual = null!;
+        try { _dcompTarget?.Dispose(); } catch { /* tearing down */ }
+        _dcompTarget = null!;
+        SharedRelease();
+        GC.SuppressFinalize(this);
     }
 }
 
