@@ -19,6 +19,11 @@ internal sealed class DropIndicatorAdorner : Adorner
     public DropIndicatorAdorner(UIElement adorned)
         : base(adorned)
     {
+        // Never hit-testable: when the mouse moves over the drawn line/gap, hit-testing
+        // would otherwise land on this adorner instead of the items beneath — WPF then fires
+        // DragLeave (which removes the indicator) followed by DragOver (which re-adds it),
+        // i.e. a flash loop exactly while hovering the indicator.
+        IsHitTestVisible = false;
     }
 
     public double GapX { get; set; } = double.NaN;

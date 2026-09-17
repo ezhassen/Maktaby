@@ -16,6 +16,7 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace DesktopBoxesUI.Controls.ContainersControls;
 
@@ -39,10 +40,25 @@ public partial class BoxControl : UserControl
     private int _insertIndex = -1;
     private DragGhostWindow? _ghost;
 
-    // Drag visual gap - collapsed source items and placeholder in target
+    // Vertical edge auto-scroll while an item drag hovers: DragOver only fires while the
+    // mouse moves, so a timer drives the scroll (and the slot refresh) while it is held
+    // still in the top/bottom edge zone. Vertical only, by design.
+    private DispatcherTimer? _dragScrollTimer;
+    private bool _dragScrollActive;
+    // Last DragOver point in Scroll space. The tick MUST use this, never Mouse.GetPosition:
+    // live queries inside the OLE modal drag loop proved unreliable (phantom top-zone hits
+    // scrolling up out of nowhere, bottom zone never firing), while the DragOver coordinates
+    // demonstrably track the cursor (the slot indicator is computed from them).
+    private Point _lastDragPoint;
+    private bool _hasDragPoint;
+    // Hover grace: consecutive ticks inside the same zone direction before scrolling starts,
+    // so grabbing a top-row item (or sweeping through an edge) doesn't yank the view.
+    private int _zoneTicks;
+    private double _lastZoneDir;
+
+    // Drag visual gap - collapsed source items (target gap is adorner-only, no placeholder).
     private static readonly List<UIElement> _collapsedForDrag = new();
     private static BoxControl? _dragSourceControl;
-    private Border? _gapPlaceholder;
     private WrapPanel? _wrapPanelCache;
 
     // Selection / marquee state.
@@ -62,6 +78,8 @@ public partial class BoxControl : UserControl
         InitializeComponent();
         // Tab switches re-assign DataContext (UpdateBody) — re-resolve the icon size with it.
         DataContextChanged += (_, _) => RefreshIconSize();
+        // Torn down mid-drag (tab switch/close while hovering): never leave the scroll timer running.
+        Unloaded += (_, _) => StopDragAutoScroll();
     }
 
     /// <summary>The Box whose items are rendered by this control.</summary>
@@ -139,15 +157,15 @@ public partial class BoxControl : UserControl
         // Layout placeholder via WrapPanel.Children.Insert is not allowed for ItemsPanel (throws
         // InvalidOperationException). Visual gap is instead shown via DropIndicatorAdorner (small
         // 8px gap between items) which is an adorner overlay and does not affect layout.
-        // Keep _gapPlaceholder as a marker so HideGapPlaceholder can clear state without touching panel.
-        HideGapPlaceholder();
-        _gapPlaceholder = new Border { Width = 8, Height = IconSize + 36, Margin = new Thickness(2) };
+        // Intentionally allocation-free: the previous detached-Border marker was never added to
+        // the tree nor read anywhere, so constructing one per DragOver event was pure garbage.
     }
 
     private void HideGapPlaceholder()
     {
-        // No panel modification - just clear marker. Adorner gap is cleared via RemoveDropIndicator.
-        _gapPlaceholder = null;
+        // No panel modification and no marker state: the adorner owns the gap visual and is
+        // cleared via RemoveDropIndicator. Kept (with ShowGapPlaceholder) so call sites and any
+        // future real placeholder stay untouched.
     }
 
     /// <summary>Controls the vertical scrollbar visibility of the item list.</summary>
@@ -730,6 +748,7 @@ public partial class BoxControl : UserControl
         // highlight and the merge/move). Everything else is an item/file drop handled here.
         if (e.Data.GetDataPresent(DndFormats.SourceContainer))
         {
+            StopDragAutoScroll();
             RemoveDropIndicator();
             e.Effects = DragDropEffects.Move;
             return;
@@ -739,30 +758,106 @@ public partial class BoxControl : UserControl
         {
             HideGapPlaceholder();
             GetWrapPanel()?.UpdateLayout();
-            var pt = e.GetPosition(Scroll);
-            int newIdx = GetInsertIndex(pt);
-            if (newIdx != _insertIndex || _dropAdorner == null)
-            {
-                _insertIndex = newIdx;
-                ShowDropIndicator(_insertIndex);
-            }
-            else
-            {
-                ShowDropIndicator(_insertIndex);
-            }
+            _lastDragPoint = e.GetPosition(Scroll);
+            _hasDragPoint = true;
+            RefreshDropIndicatorForPoint(_lastDragPoint);
+            StartDragAutoScroll();
             e.Effects = e.Data.GetDataPresent(DndFormats.BoxItems) ? DragDropEffects.Move : DropHelper.GetEffect(e);
             e.Handled = true;
             return;
         }
 
+        StopDragAutoScroll();
         RemoveDropIndicator();
         _insertIndex = -1;
         e.Effects = DropHelper.GetEffect(e);
         e.Handled = true;
     }
 
+    /// <summary>Recomputes the insert slot for a point in <see cref="Scroll"/> space and moves
+    /// the indicator only when the slot (or its existence) changed. Shared by DragOver and
+    /// the auto-scroll timer: with the timer scrolling content under a stationary cursor,
+    /// the slot must refresh without waiting for the next mouse move.</summary>
+    private void RefreshDropIndicatorForPoint(Point pt)
+    {
+        int newIdx = GetInsertIndex(pt);
+        // Same slot: geometry depends only on the index, so the existing visual is already
+        // correct — rebuilding it per event only wastes layout/render passes.
+        if (newIdx != _insertIndex || _dropAdorner == null)
+        {
+            _insertIndex = newIdx;
+            ShowDropIndicator(_insertIndex);
+        }
+    }
+
+    /// <summary>Starts the edge auto-scroll timer (idempotent). Ticks scroll while the cursor
+    /// is held in the top/bottom edge zone, even with the mouse perfectly still.</summary>
+    private void StartDragAutoScroll()
+    {
+        if (_dragScrollTimer is null)
+        {
+            _dragScrollTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            _dragScrollTimer.Tick += DragScrollTick;
+        }
+        _dragScrollActive = true;
+        if (!_dragScrollTimer.IsEnabled) _dragScrollTimer.Start();
+    }
+
+    private void StopDragAutoScroll()
+    {
+        _dragScrollActive = false;
+        _hasDragPoint = false;
+        _zoneTicks = 0;
+        _lastZoneDir = 0;
+        try { _dragScrollTimer?.Stop(); } catch { }
+    }
+
+    /// <summary>Vertical edge auto-scroll tick. Runs on the cached DragOver point (see the
+    /// field note) and requires a ~150 ms continuous hover before moving, then ramps speed
+    /// with proximity to the viewport edge. The slot refreshes after every scroll so the
+    /// indicator tracks the content sliding under the cursor.</summary>
+    private void DragScrollTick(object? sender, EventArgs e)
+    {
+        if (!_dragScrollActive || !_hasDragPoint) return;
+        double viewport = Scroll.ViewportHeight > 0 ? Scroll.ViewportHeight : Scroll.ActualHeight;
+        if (viewport <= 0 || Scroll.ScrollableHeight <= 0) return;
+
+        Point pt = _lastDragPoint;
+        const double zone = 32;
+        double dir = 0;
+        if (pt.Y < zone) dir = -1;
+        else if (pt.Y > viewport - zone) dir = 1;
+        if (dir == 0)
+        {
+            _zoneTicks = 0;
+            _lastZoneDir = 0;
+            return; // inside: nothing to scroll (slot already matches the stationary mouse)
+        }
+        if (dir != _lastZoneDir)
+        {
+            _lastZoneDir = dir;
+            _zoneTicks = 0;
+        }
+        if (++_zoneTicks < 3) return; // hover grace: ~150 ms before the view moves
+
+        // 0 at the viewport edge (mouse may even be slightly outside) → full speed.
+        double edgeDist = dir < 0 ? pt.Y : viewport - pt.Y;
+        double proximity = Math.Clamp(1 - edgeDist / zone, 0, 1);
+        double step = 12 + 60 * proximity; // px per 50 ms tick: ~240/s gentle, ~1440/s fast
+        double target = Math.Clamp(Scroll.VerticalOffset + dir * step, 0, Scroll.ScrollableHeight);
+        if (target == Scroll.VerticalOffset) return; // already at the end
+        Scroll.ScrollToVerticalOffset(target);
+        // Flush pending layout before recomputing the slot: container transforms queried
+        // against a stale tree place the indicator a step behind the slid content (i.e.
+        // misplaced exactly while scrolling, correct when stopped). Same guarantee DragOver
+        // relies on; a no-op when the tree is already clean.
+        GetWrapPanel()?.UpdateLayout();
+        RefreshDropIndicatorForPoint(_lastDragPoint);
+    }
+
     private void BoxControl_DragLeave(object sender, DragEventArgs e)
     {
+        StopDragAutoScroll();
         RemoveDropIndicator();
         _insertIndex = -1;
     }
@@ -772,16 +867,19 @@ public partial class BoxControl : UserControl
         if (e.Data.GetDataPresent(DndFormats.SourceContainer))
         {
             // Handled by the owning BoxContainerWindow's Drop handler.
+            StopDragAutoScroll();
             RemoveDropIndicator();
             return;
         }
 
         if (DataContext is not BoxViewModel targetBox)
         {
+            StopDragAutoScroll();
             return;
         }
 
         var moved = await DropHelper.AddToBoxAsync(targetBox, Host, e, _insertIndex);
+        StopDragAutoScroll();
         RemoveDropIndicator();
         _insertIndex = -1;
 
