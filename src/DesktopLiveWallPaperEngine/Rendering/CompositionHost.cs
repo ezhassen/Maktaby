@@ -661,6 +661,9 @@ public sealed class CompositionSurface : IDisposable
         {
             if (_disposed) return;
             _disposed = true;
+            // Publisher-side release: the host subscribes per surface — drop the invocation
+            // list so dead surfaces release the host instead of carrying it.
+            DeviceLost = null;
             _d2dTarget?.Dispose();
             _d2dTarget = null;
             try { _host.RemoveVisual(Visual); } catch { /* host may be tearing down */ }
@@ -669,5 +672,6 @@ public sealed class CompositionSurface : IDisposable
             try { BackBuffer.Dispose(); } catch { }
             try { SwapChain.Dispose(); } catch { }
         }
+        GC.SuppressFinalize(this);
     }
 }

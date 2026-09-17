@@ -453,7 +453,12 @@ public sealed class VideoRenderer : IWallpaperRenderer
             }
             _surface?.Dispose();
             _surface = null;
+            // Publisher-side release: the engine subscribes per renderer without unsubscribing.
+            // Dropping the invocation list here means no in-flight MF callback can invoke into
+            // a dead session after teardown, and the dead renderer releases its subscriber.
+            PlaybackFailed = null;
             // The content surface and host belong to the WallpaperWindow.
         }
+        GC.SuppressFinalize(this);
     }
 }

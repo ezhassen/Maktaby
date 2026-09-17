@@ -77,6 +77,9 @@ public sealed class WallpaperWindow : Win32Window
         Renderer = null;
         Host?.Dispose();
         Host = null;
+        // Publisher-side release: the engine subscribes per window without unsubscribing.
+        // The dead window releases its subscriber instead of carrying it to the finalizer.
+        DeviceLost = null;
         base.Dispose();
     }
 }

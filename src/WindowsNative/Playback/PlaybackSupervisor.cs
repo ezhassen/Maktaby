@@ -478,22 +478,48 @@ public sealed class PlaybackSupervisor : IDisposable
 
     public void Dispose()
     {
+        bool first;
         lock (_gate)
         {
-            if (_disposed) return;
+            first = !_disposed;
             _disposed = true;
         }
-        _suspended = true;
-        // Stop the trailing edge first: an in-flight callback still early-outs on _disposed.
-        try { _locationDebounce.Dispose(); } catch { }
-        try
+        if (first)
         {
-            uint threadId = _hookThreadId;
-            if (threadId != 0)
-                User32.PostThreadMessageW(threadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
-            _hookThread?.Join(TimeSpan.FromSeconds(5));
+            _suspended = true;
+            // Stop the trailing edge first: an in-flight callback still early-outs on _disposed.
+            try { _locationDebounce.Dispose(); } catch { }
+            try
+            {
+                uint threadId = _hookThreadId;
+                if (threadId != 0)
+                    User32.PostThreadMessageW(threadId, WM_QUIT, IntPtr.Zero, IntPtr.Zero);
+                _hookThread?.Join(TimeSpan.FromSeconds(5));
+            }
+            catch { }
         }
-        catch { }
-        try { _hookReady.Dispose(); } catch { }
+        // Idempotent, so attempted on every call: with the hook thread joined above, its
+        // message queue — including any already-queued hook callbacks, which early-out on
+        // _disposed — is drained and the thread is dead, so no callback can land afterward.
+        // Unhook explicitly (thread death also removes them, eventually), then release the
+        // process-lifetime root: without this, every supervisor — with its policy/monitor
+        // closures reaching into the host — stays reachable forever, one per enable/disable
+        // cycle. (The sibling root in DesktopLayerHostBase stays by design: its hook lives
+        // on a pumping UI thread that outlives the unhook, so already-queued callbacks could
+        // still need the delegate after disposal.)
+        if (_hookThread is null || !_hookThread.IsAlive)
+        {
+            foreach (var hook in _hooks)
+            {
+                try { User32.UnhookWinEvent(hook); } catch { }
+            }
+            _hooks.Clear();
+            HookRoots.TryRemove(_winEventProc, out _);
+            PauseStateChanged = null;
+        }
+        if (first)
+        {
+            try { _hookReady.Dispose(); } catch { }
+        }
     }
 }

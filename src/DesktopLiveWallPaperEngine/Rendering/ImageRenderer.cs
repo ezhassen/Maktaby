@@ -209,6 +209,7 @@ public sealed class ImageRenderer : IWallpaperRenderer
             ClearImagesLocked();
             // The content surface and host belong to the WallpaperWindow.
         }
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>Frees the current selection's images. Caller holds <see cref="_sync"/> —
