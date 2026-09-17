@@ -54,6 +54,10 @@ public sealed class WebViewRenderer : IWallpaperRenderer
     private volatile bool _disposed;
     private string _path = "";
 
+    /// <summary>Browser PID, captured on the STA thread during init. Diagnostic use only
+    /// (the performance monitor rolls it into the WebView2 CPU/memory section).</summary>
+    private uint? _browserPid;
+
     private static Task<CoreWebView2Environment>? s_envTask;
 
     public WebViewRenderer(CompositionHost host, IntPtr hwnd, int width, int height,
@@ -297,6 +301,14 @@ public sealed class WebViewRenderer : IWallpaperRenderer
                 DetachControllerLocked();
                 _controller = controller;
                 _core = controller.CoreWebView2;
+                // Browser PID for diagnostics (performance monitor): captured on the STA
+                // thread alongside the controller (same affinity requirements apply).
+                try
+                {
+                    uint pid = _core.BrowserProcessId;
+                    if (pid != 0) _browserPid = pid;
+                }
+                catch { /* diagnostics only — navigation proceeds regardless */ }
             }
 
             try
@@ -581,6 +593,13 @@ public sealed class WebViewRenderer : IWallpaperRenderer
     /// <summary>Always false: the controller paints its own child HWND and owns no
     /// composition surface, so the host stays uninitialized and holds no GPU objects.</summary>
     public bool IsGPURender => false;
+
+    /// <summary>Browser process id for diagnostics, or null until the shared environment
+    /// exists. Thread-safe: written on the STA thread, read by the UI monitor.</summary>
+    public uint? BrowserProcessId
+    {
+        get { lock (_sync) return _browserPid; }
+    }
 
     /// <summary>Caller holds <see cref="_sync"/> and runs on the WebView STA thread.
     /// <c>Close</c> is the complete teardown on this SDK (verified against 1.0.4191.47:

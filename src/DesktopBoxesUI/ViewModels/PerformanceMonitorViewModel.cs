@@ -67,6 +67,9 @@ namespace DesktopBoxesUI.ViewModels
         private string _pauseReason = "";
         public string PauseReason { get => _pauseReason; set => SetField(ref _pauseReason, value); }
 
+        private string _webProcess = "-";
+        public string WebProcess { get => _webProcess; set => SetField(ref _webProcess, value); }
+
         private string _status = "";
         public string Status { get => _status; set => SetField(ref _status, value); }
     }
@@ -78,6 +81,14 @@ namespace DesktopBoxesUI.ViewModels
         private TimeSpan _prevTotalProcessorTime;
         private DateTime _prevTime;
         private readonly int _processorCount = Environment.ProcessorCount;
+
+        /// <summary>Previous CPU stamp per WebView2 PID, for the 1 Hz CPU roll-up. Pruned to
+        /// live PIDs on every refresh so restarts cannot grow it.</summary>
+        private readonly Dictionary<int, (TimeSpan Cpu, DateTime At)> _wvCpuPrev = new();
+
+        private ulong _prevIoRead;
+        private ulong _prevIoWrite;
+        private bool _ioBaselineSet;
 
         public ObservableCollection<PerformanceItem> Items { get; } = new();
 
@@ -95,11 +106,17 @@ namespace DesktopBoxesUI.ViewModels
         private double _totalCpu;
         public double TotalCpu { get => _totalCpu; set => SetField(ref _totalCpu, value); }
 
+        private string _totalIo = "I/O —";
+        public string TotalIo { get => _totalIo; set => SetField(ref _totalIo, value); }
+
         private int _webView2ProcessCount;
         public int WebView2ProcessCount { get => _webView2ProcessCount; set => SetField(ref _webView2ProcessCount, value); }
 
         private long _webView2MemoryMB;
         public long WebView2MemoryMB { get => _webView2MemoryMB; set => SetField(ref _webView2MemoryMB, value); }
+
+        private double _webView2Cpu;
+        public double WebView2Cpu { get => _webView2Cpu; set => SetField(ref _webView2Cpu, value); }
 
         private bool _isIdleMode;
         public bool IsIdleMode { get => _isIdleMode; set => SetField(ref _isIdleMode, value); }
@@ -112,13 +129,24 @@ namespace DesktopBoxesUI.ViewModels
             _prevTotalProcessorTime = _process.TotalProcessorTime;
             _prevTime = DateTime.UtcNow;
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-            _timer.Tick += (_, _) => Refresh();
+            _timer.Tick += OnTimerTick;
             _timer.Start();
             Refresh();
         }
 
+        private void OnTimerTick(object? sender, EventArgs e) => Refresh();
+
         private static string FormatBounds(double x, double y, double width, double height)
             => $"({x:0},{y:0} {width:0}x{height:0})";
+
+        private static string FormatBytes(double bytes)
+            => bytes switch
+            {
+                < 1024 => $"{bytes:0} B",
+                < 1024 * 1024 => $"{bytes / 1024:0.0} KB",
+                < 1024L * 1024 * 1024 => $"{bytes / (1024 * 1024):0.0} MB",
+                _ => $"{bytes / (1024L * 1024 * 1024):0.00} GB",
+            };
 
         private const double BoundsMismatchToleranceDip = 1.0;
 
@@ -225,7 +253,32 @@ namespace DesktopBoxesUI.ViewModels
                 // Use PrivateMemorySize to match Task Manager's "Memory (Private Working Set)" (WorkingSet includes shared pages)
                 TotalMemoryMB = _process.PrivateMemorySize64 / 1024 / 1024;
 
-                // WebView2: only our app's widgets (via BrowserProcessId), not all system msedgewebview2
+                // I/O throughput (read + write bytes/sec across disk/network/device).
+                try
+                {
+                    if (Win32.NativeMethods.Win32Apis.TryGetProcessIoCounters(_process.Handle, out ulong ioRead, out ulong ioWrite))
+                    {
+                        if (_ioBaselineSet && deltaMs > 0)
+                        {
+                            double r = ioRead >= _prevIoRead ? (ioRead - _prevIoRead) / (deltaMs / 1000.0) : 0;
+                            double w = ioWrite >= _prevIoWrite ? (ioWrite - _prevIoWrite) / (deltaMs / 1000.0) : 0;
+                            TotalIo = $"R {FormatBytes(r)}/s · W {FormatBytes(w)}/s";
+                        }
+                        _prevIoRead = ioRead;
+                        _prevIoWrite = ioWrite;
+                        _ioBaselineSet = true;
+                    }
+                    else
+                    {
+                        TotalIo = "I/O —";
+                    }
+                }
+                catch { }
+
+                // WebView2: our app's widget browsers (via BrowserProcessId) PLUS the live
+                // wallpaper's browser processes (via the engine's monitor states) — previously
+                // an HTML wallpaper's msedgewebview2 processes were invisible here, showing
+                // 0 processes / 0 MB while they were actually running.
                 long wvMem = 0;
                 var wvIds = new HashSet<int>();
                 try
@@ -245,7 +298,21 @@ namespace DesktopBoxesUI.ViewModels
                     }
                 }
                 catch { }
+                try
+                {
+                    var lw = App.Services?.GetService<LiveWallpaperManager>();
+                    if (lw is not null)
+                    {
+                        foreach (var s in lw.GetMonitorStates())
+                        {
+                            if (s.WebProcessId != 0) wvIds.Add(unchecked((int)s.WebProcessId));
+                        }
+                    }
+                }
+                catch { }
                 int wvCount = 0;
+                double wvCpu = 0;
+                var wvSeen = new HashSet<int>();
                 foreach (var pid in wvIds)
                 {
                     try
@@ -254,12 +321,23 @@ namespace DesktopBoxesUI.ViewModels
                         p.Refresh();
                         wvMem += p.PrivateMemorySize64;
                         wvCount++;
+                        var cur = p.TotalProcessorTime;
+                        if (_wvCpuPrev.TryGetValue(pid, out var prev))
+                        {
+                            double elMs = (now - prev.At).TotalMilliseconds;
+                            if (elMs > 0) wvCpu += (cur - prev.Cpu).TotalMilliseconds / elMs / _processorCount * 100.0;
+                        }
+                        _wvCpuPrev[pid] = (cur, now);
+                        wvSeen.Add(pid);
                     }
                     catch { }
                 }
+                // Drop vanished PIDs so the table cannot grow across wallpaper/browser restarts.
+                foreach (var dead in _wvCpuPrev.Keys.Where(k => !wvSeen.Contains(k)).ToList()) _wvCpuPrev.Remove(dead);
                 // Fallback: if no BrowserProcessId yet (WebView not initialized), show 0
                 WebView2ProcessCount = wvCount;
                 WebView2MemoryMB = wvMem / 1024 / 1024;
+                WebView2Cpu = Math.Clamp(wvCpu, 0, 100);
 
                 // Per-window items. Monitor-space rects (native pixels ÷ live monitor DPI)
                 // are the physical truth; window-space rects catch WPF-side drift. A stuck
@@ -397,6 +475,7 @@ namespace DesktopBoxesUI.ViewModels
                     existing.IsPaused = s.IsPaused;
                     existing.IsPlaying = s.IsPlaying;
                     existing.PauseReason = s.PauseReason;
+                    existing.WebProcess = s.WebProcessId == 0 ? "-" : s.WebProcessId.ToString();
                     existing.Status = !lw.EngineIsLive ? "Engine down"
                         : s.IsPaused ? $"Paused"
                         : s.IsPlaying ? "Playing"
@@ -413,8 +492,11 @@ namespace DesktopBoxesUI.ViewModels
 
         public void Dispose()
         {
-            _timer.Stop();
-            _timer.Tick -= (s, e) => Refresh();
+            // The old code detached a freshly allocated lambda here, which never matched the
+            // subscription — the 1 Hz refresh kept running after the window closed.
+            try { _timer.Stop(); } catch { }
+            try { _timer.Tick -= OnTimerTick; } catch { }
+            try { _process.Dispose(); } catch { }
         }
     }
 }

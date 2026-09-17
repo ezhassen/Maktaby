@@ -44,4 +44,7 @@ public static class Kernel32
 
     [DllImport("kernel32.dll")]
     public static extern nuint VirtualQuery(IntPtr address, out MEMORY_BASIC_INFORMATION buffer, nuint length);
+
+    [DllImport("kernel32.dll")]
+    public static extern bool GetProcessIoCounters(IntPtr hProcess, out IO_COUNTERS lpIoCounters);
 }

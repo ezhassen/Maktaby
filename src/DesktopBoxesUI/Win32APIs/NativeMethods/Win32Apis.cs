@@ -69,6 +69,24 @@ internal static class Win32Apis
 
     public static uint GetDpiForSystem() => User32.GetDpiForSystem();
 
+    /// <summary>Total I/O bytes transferred by a process (disk + network + device, cumulative).
+    /// False when the handle lacks query rights or the process is gone.</summary>
+    public static bool TryGetProcessIoCounters(IntPtr hProcess, out ulong readBytes, out ulong writeBytes)
+    {
+        readBytes = writeBytes = 0;
+        try
+        {
+            if (Kernel32.GetProcessIoCounters(hProcess, out var counters))
+            {
+                readBytes = counters.ReadTransferCount;
+                writeBytes = counters.WriteTransferCount;
+                return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
     /// <summary>Gets the current cursor position in physical screen pixels (works during a drag operation,
     /// unlike <see cref="Mouse.GetPosition"/> which is suppressed by the drag-drop capture).</summary>
     public static bool GetCursorPos(out POINT pt) => User32.GetCursorPos(out pt);

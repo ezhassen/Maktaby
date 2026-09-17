@@ -194,6 +194,19 @@ public struct MEMORY_BASIC_INFORMATION
     public uint Type;
 }
 
+/// <summary>Per-process I/O accounting from GetProcessIoCounters (all cumulative since
+/// process start; transfer counts are bytes covering disk, network and device I/O).</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct IO_COUNTERS
+{
+    public ulong ReadOperationCount;
+    public ulong WriteOperationCount;
+    public ulong OtherOperationCount;
+    public ulong ReadTransferCount;
+    public ulong WriteTransferCount;
+    public ulong OtherTransferCount;
+}
+
 /// <summary>SHFILEINFO for SHGetFileInfo.</summary>
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 public struct SHFILEINFOW

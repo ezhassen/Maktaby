@@ -897,7 +897,8 @@ public sealed class Engine : IDisposable
     /// engine mutates windows on its main thread.</summary>
     public sealed record MonitorWallpaperState(
         string Device, string Bounds, string File, string Renderer,
-        bool IsLoaded, bool IsPaused, bool IsPlaying, string PauseReason);
+        bool IsLoaded, bool IsPaused, bool IsPlaying, string PauseReason,
+        uint WebProcessId);
 
     public IReadOnlyList<MonitorWallpaperState> GetMonitorStates()
     {
@@ -934,7 +935,10 @@ public sealed class Engine : IDisposable
                     string bounds;
                     try { bounds = window.Monitor.Bounds.ToString(); }
                     catch { bounds = ""; }
-                    list.Add(new MonitorWallpaperState(entry.Key, bounds, file, kind, loaded, paused, playing, reason));
+                    uint webPid = 0;
+                    try { if (renderer is WebViewRenderer web) webPid = web.BrowserProcessId ?? 0; }
+                    catch { }
+                    list.Add(new MonitorWallpaperState(entry.Key, bounds, file, kind, loaded, paused, playing, reason, webPid));
                 }
                 catch { }
             }
