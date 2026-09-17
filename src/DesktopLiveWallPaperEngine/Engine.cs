@@ -52,6 +52,18 @@ public sealed class Engine : IDisposable
     /// same-named fresh windows created after it.</summary>
     private int _pauseEpoch;
 
+    /// <summary>Convergence backstop for display-topology changes. A display notification can
+    /// arrive before the new monitor enumerates and before Explorer resizes the layer parent:
+    /// the immediate re-apply then attaches the new window against stale geometry (fully
+    /// outside the parent → clipped → black, or missing entirely) with nothing re-checking
+    /// afterwards — until now, only a manual disable/enable healed it. The trailing pass
+    /// rebuilds, but only when the live windows still disagree with the settled OS topology,
+    /// so a converged immediate pass costs one cheap comparison and no flash.</summary>
+    private readonly object _settleGate = new();
+    private System.Threading.Timer? _settleTimer;
+    private int _settleGen;
+    private static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(2.5);
+
     private string StaticDir => Path.Combine(_appDataDir, "static");
     private string OriginalWallpaperFile => Path.Combine(_appDataDir, "original-wallpaper.txt");
     private string OriginalDesktopWallpapersFile => Path.Combine(_appDataDir, "original-vd-wallpapers.tsv");
@@ -127,6 +139,10 @@ public sealed class Engine : IDisposable
         };
         ApplyFromConfig();
         IsEnabled = true;
+        // The layer parent can still be settling (lazy WorkerW sizing after logon, display
+        // handshake): converge it the same way display changes do, instead of leaving a
+        // mis-attached monitor black until the next notification.
+        ScheduleSettledReapply();
     }
     public void EnsureEnabled()
     {
@@ -161,6 +177,9 @@ public sealed class Engine : IDisposable
             // session (overlapping rebuild paths double-dispose native objects).
             if (_host is not null) _host.LayerLost -= OnLayerLost;
             Interlocked.Increment(ref _pauseEpoch);
+            // Deterministically retire any armed settled-topology pass: its epoch guard
+            // would drop it anyway, but it belongs to this session and must not run in the next.
+            lock (_settleGate) _settleGen++;
             _playback?.Dispose();
             _playback = null;
             var messageHwnd = _messageWindow?.Hwnd ?? IntPtr.Zero;
@@ -532,6 +551,95 @@ public sealed class Engine : IDisposable
         }
     }
 
+    /// <summary>Arms the settled-topology trailing pass (callers: the display-change / explorer-
+    /// restart handlers, and <see cref="Enable"/> for the symmetric attach-too-early race at
+    /// startup). Re-armed by every notification, so a storm collapses into one trailing pass;
+    /// each firing runs only for the latest generation. Thread-safe: handlers run on the main
+    /// thread, the firing lands on the pool.</summary>
+    private void ScheduleSettledReapply()
+    {
+        System.Threading.Timer? old;
+        int gen;
+        lock (_settleGate)
+        {
+            _settleGen++;
+            gen = _settleGen;
+            old = _settleTimer;
+            _settleTimer = new System.Threading.Timer(_ => SettledReapplyFired(gen), null, SettleDelay, Timeout.InfiniteTimeSpan);
+        }
+        try { old?.Dispose(); } catch { }
+    }
+
+    private void SettledReapplyFired(int gen)
+    {
+        // Pool thread. Disabled/torn-down sessions have nothing live; the epoch guard in the
+        // posted action covers a Disable/Enable that lands after this check.
+        if (!IsEnabled) return;
+        lock (_settleGate)
+        {
+            if (gen != _settleGen) return; // superseded by a newer notification, or torn down
+        }
+        RunOnSessionAction(() =>
+        {
+            lock (_settleGate)
+            {
+                if (gen != _settleGen) return;
+            }
+            // Converged already (the common storm case) — verifying costs one enumeration
+            // and a few rect compares, while a blind rebuild would flash every monitor.
+            if (TopologyMatchesWindows()) return;
+            Serilog.Log.Information("Settled topology disagrees with live windows — re-applying");
+            ReapplyAll();
+        });
+    }
+
+    /// <summary>True when every OS monitor has exactly one live window and each sits exactly
+    /// where the current layer geometry puts it. Runs on the main thread. Anything else —
+    /// a monitor that arrived after the last attach, or a window attached against a
+    /// stale-sized parent (fully clipped → black on the new display) — needs a rebuild,
+    /// which is the proven-safe path (a manual disable/enable does exactly this).</summary>
+    private bool TopologyMatchesWindows()
+    {
+        List<MonitorInfo> monitors;
+        try
+        {
+            monitors = MonitorTracker.Enumerate();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning($"Settled-topology check could not enumerate monitors: {ex.Message}");
+            return false;
+        }
+        var host = _host;
+        if (host is null || monitors.Count != _windows.Count) return false;
+        RECT parent;
+        try
+        {
+            parent = host.ParentScreenRect();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning($"Settled-topology check could not read the layer parent: {ex.Message}");
+            return false;
+        }
+        foreach (var monitor in monitors)
+        {
+            if (!_windows.TryGetValue(monitor.Device, out var window)) return false;
+            var hwnd = window.Hwnd;
+            if (hwnd == IntPtr.Zero || !User32.IsWindow(hwnd)) return false;
+            // Same mapping Attach used — but read-only: incremental repositioning proved
+            // unsafe on multi-monitor, so drift here means rebuild, never nudge.
+            var expected = MonitorTracker.ScreenToParentClient(monitor.Bounds, parent);
+            int expLeft = parent.Left + expected.Left;
+            int expTop = parent.Top + expected.Top;
+            User32.GetWindowRect(hwnd, out var current);
+            if (current.Left != expLeft || current.Top != expTop ||
+                current.Width != expected.Width || current.Height != expected.Height)
+                return false;
+        }
+        return true;
+    }
+
     // ---- pause/resume ---------------------------------------------------------------------
 
     private void OnPauseStateChanged(string monitorDevice, PauseReason reason)
@@ -800,6 +908,7 @@ public sealed class Engine : IDisposable
             {
                 Serilog.Log.Warning("Explorer restarted (TaskbarCreated) — re-attaching");
                 _engine.RunOnSessionAction(_engine.ReapplyAll);
+                _engine.ScheduleSettledReapply();
                 return IntPtr.Zero;
             }
             switch (msg)
@@ -810,6 +919,9 @@ public sealed class Engine : IDisposable
                 case WM_DISPLAYCHANGE:
                     Serilog.Log.Information("Display change — re-applying");
                     _engine.RunOnSessionAction(_engine.ReapplyAll);
+                    // The notification can precede the settled topology (new monitor not yet
+                    // enumerable, layer parent not yet resized): the trailing pass converges it.
+                    _engine.ScheduleSettledReapply();
                     return IntPtr.Zero;
                 case WM_WTSSESSION_CHANGE:
                     if (_engine._playback is { } playback)
@@ -842,6 +954,16 @@ public sealed class Engine : IDisposable
     public void Dispose()
     {
         Disable();
+        // Retire the settled-topology timer: pending firings observe the bumped generation
+        // (plus !IsEnabled) and return without posting.
+        System.Threading.Timer? settle;
+        lock (_settleGate)
+        {
+            settle = _settleTimer;
+            _settleTimer = null;
+            _settleGen++;
+        }
+        try { settle?.Dispose(); } catch { }
         Task? teardown;
         lock (_gate) teardown = _teardownTask;
         if (teardown is not null && !teardown.IsCompleted)

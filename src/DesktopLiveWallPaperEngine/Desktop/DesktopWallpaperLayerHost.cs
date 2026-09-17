@@ -71,7 +71,14 @@ public sealed class DesktopWallpaperLayerHost : DesktopLayerHostBase
             EnsureWorkerWAtBottom();
         }
 
-        lock (_attachSync) _attached.Add(hwnd);
+        lock (_attachSync)
+        {
+            _attached.Add(hwnd);
+            // Re-applies re-attach every window while this ledger clears only on layer loss:
+            // drop handles that died with a previous session so it cannot grow without bound
+            // across display-change storms.
+            _attached.RemoveAll(h => h != hwnd && !User32.IsWindow(h));
+        }
         Serilog.Log.Information($"Attached 0x{hwnd:X} at {client} ({Layer.Topology})");
     }
 
