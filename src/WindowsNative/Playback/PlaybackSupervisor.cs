@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
 using System.Text;
 using static WindowsNative.Win32Constants;
+using Timer = System.Threading.Timer;
 
 namespace WindowsNative.Playback;
 
@@ -12,7 +13,7 @@ public sealed record PauseMonitor(string Device, RECT Bounds, RECT WorkArea);
 
 /// <summary>Event-driven pause supervisor: pauses per-monitor content (live wallpapers,
 /// suspendable widgets) hidden under fullscreen apps (and resumes them) with no polling
-/// loop and no timers.
+/// loop.
 ///
 /// Every input the policy (<see cref="PauseDecision"/>) reads arrives as an event:
 /// <list type="bullet">
@@ -20,8 +21,11 @@ public sealed record PauseMonitor(string Device, RECT Bounds, RECT WorkArea);
 /// dedicated thread with its own message pump (a hook thread that never pumps would never
 /// fire);</item>
 /// <item>geometry drifts of any top-level window via <c>EVENT_OBJECT_LOCATIONCHANGE</c>,
-/// coalesced per-window on actual rect changes, so the hook storm of a window drag costs one
-/// cheap compare per event;</item>
+/// coalesced per-window on actual rect changes and throttled to one full evaluation per
+/// <see cref="LocationThrottleMs"/>, so the hook storm of a window drag costs one cheap
+/// compare per event plus ~5 captures a second instead of dozens. Throttled events arm a
+/// single-shot trailing timer so the settled rect is still evaluated shortly after motion
+/// stops (drag end is additionally covered immediately by MOVESIZEEND);</item>
 /// <item>session lock/unlock, display on/off and battery-saver transitions via pushed
 /// notifications (<c>WM_WTSSESSION_CHANGE</c>, power-setting messages), which land in
 /// <see cref="SessionLocked"/> / <see cref="DisplayOff"/> / <see cref="Invalidate"/>;</item>
@@ -33,7 +37,7 @@ public sealed record PauseMonitor(string Device, RECT Bounds, RECT WorkArea);
 /// monitor pauses when ANY qualifying window covers it, so an unfocused fullscreen app keeps
 /// its monitor paused (foreground-only checks wrongly resumed it the moment focus moved to
 /// the other screen). Minimized, cloaked, shell and own-process windows are excluded from
-/// the capture. One transient-noise hold remains (still no timers): a lone exclusive-D3D
+/// the capture. One transient-noise hold remains (no polling involved): a lone exclusive-D3D
 /// flag flip with the window list otherwise identical is held as transition noise.
 /// Evaluation is skipped entirely while <see cref="Suspend"/>ed (user-paused), and
 /// <see cref="Resume"/> re-evaluates immediately, preserving the old no-spurious-resume contract.
@@ -64,6 +68,20 @@ public sealed class PlaybackSupervisor : IDisposable
     /// Rebuilt from every full capture; any window's geometry can now flip some monitor's
     /// coverage, not just the foreground window's.</summary>
     private readonly Dictionary<IntPtr, RECT> _lastRects = [];
+
+    /// <summary>Minimum spacing between two full evaluations triggered by
+    /// <c>EVENT_OBJECT_LOCATIONCHANGE</c>. A drag/resize fires dozens of these per second and
+    /// each full evaluation walks every top-level window (<c>EnumWindows</c> + class name +
+    /// rect + cloaked check each), so unthrottled storms pinned the hook thread and spiked
+    /// CPU for the whole drag. Foreground/minimize/move-size-end evaluations stay immediate.</summary>
+    private const int LocationThrottleMs = 200;
+
+    /// <summary>Single-shot trailing edge for throttled LOCATIONCHANGE events: fires one last
+    /// evaluation after motion settles so a skipped final rect can never stay stale. Armed only
+    /// while a storm is being throttled (and disarmed by the next immediate evaluation), so it
+    /// is idle — no ticking, no polling — outside drags/resizes. Disposed with the supervisor.</summary>
+    private readonly Timer _locationDebounce;
+    private long _lastLocationEvalMs;
 
     /// <summary>Inputs of the last applied evaluation. QUNS (exclusive-D3D-fullscreen) has no
     /// owning event and flaps during mode transitions; a flip unaccompanied by any other input
@@ -113,6 +131,7 @@ public sealed class PlaybackSupervisor : IDisposable
         _extraExcluded = extraExcludedWindowClasses;
         _winEventProc = OnWinEvent;
         HookRoots.TryAdd(_winEventProc, 0);
+        _locationDebounce = new Timer(_ => LocationDebounced(), null, Timeout.Infinite, Timeout.Infinite);
         _hookThread = new Thread(HookThreadMain) { IsBackground = true, Name = "PlaybackEvents" };
         _hookThread.Start();
         // Bounded wait: close the gap where a foreground switch could land before the hooks
@@ -240,9 +259,48 @@ public sealed class PlaybackSupervisor : IDisposable
                     lock (_gate) tracked = _lastRects.Remove(hwnd);
                     if (!tracked) return;
                 }
-                Reevaluate();
+                EvaluateLocationThrottled();
                 break;
         }
+    }
+
+    /// <summary>LOCATIONCHANGE entry point: at most one full evaluation per
+    /// <see cref="LocationThrottleMs"/> during a storm, with the overflow collapsing into a
+    /// single trailing evaluation (see <see cref="LocationDebounced"/>). The per-window rect
+    /// cache above is still updated on every event, so the trailing evaluation observes the
+    /// settled geometry even though the intermediate ones were skipped.</summary>
+    private void EvaluateLocationThrottled()
+    {
+        long now = Environment.TickCount64;
+        lock (_gate)
+        {
+            if (_disposed || _suspended) return;
+            if (now - _lastLocationEvalMs < LocationThrottleMs)
+            {
+                try { _locationDebounce.Change(LocationThrottleMs, Timeout.Infinite); }
+                catch (ObjectDisposedException) { }
+                return;
+            }
+            _lastLocationEvalMs = now;
+            // An immediate evaluation already observes the latest rect, so a previously armed
+            // trailing edge would only re-evaluate identical inputs — disarm it.
+            try { _locationDebounce.Change(Timeout.Infinite, Timeout.Infinite); }
+            catch (ObjectDisposedException) { }
+        }
+        Reevaluate();
+    }
+
+    /// <summary>Runs on the pool (single-shot timer): the settled evaluation for a throttled
+    /// storm. <see cref="Reevaluate"/> re-reads every input itself and early-outs when
+    /// disposed/suspended, so this needs no additional guarding beyond the timestamp.</summary>
+    private void LocationDebounced()
+    {
+        lock (_gate)
+        {
+            if (_disposed || _suspended) return;
+            _lastLocationEvalMs = Environment.TickCount64;
+        }
+        Reevaluate();
     }
 
     private void Reevaluate()
@@ -426,6 +484,8 @@ public sealed class PlaybackSupervisor : IDisposable
             _disposed = true;
         }
         _suspended = true;
+        // Stop the trailing edge first: an in-flight callback still early-outs on _disposed.
+        try { _locationDebounce.Dispose(); } catch { }
         try
         {
             uint threadId = _hookThreadId;
