@@ -75,7 +75,7 @@ public sealed class ContainerVisibilityRow : ViewModelBase, IDisposable
 /// Drives <see cref="Views.SettingsView"/>. Edits the persisted <see cref="Settings.UserSettings"/>
 /// (app theme, default box appearance and colors) and applies them live via
 /// <see cref="App.ApplyTheme"/> and <see cref="App.ApplyBoxAppearance"/>. Also exposes the launch-on-startup
-/// toggle (mirrored to <see cref="StartupManager"/>) and a per-setting "reset to default" command that
+/// toggle (staged by the checkbox, applied to <see cref="StartupManager"/> on Save) and a per-setting "reset to default" command that
 /// reads each property's <see cref="DefaultValueAttribute"/>.
 /// </summary>
 public sealed class SettingsViewModel : ViewModelBase, IDisposable
@@ -97,23 +97,23 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     // CSS Widgets theme: "App" follows app theme, otherwise Dark/Light override for switchable widgets (null = App)
     public IReadOnlyList<string> WebWidgetThemeOptions { get; } = new[] { "App", "Dark", "Light" };
 
-    /// <summary>True when the app is registered to launch on Windows startup.</summary>
+    // Log level: Serilog levels, staged by the selector and applied on Save.
+    public IReadOnlyList<string> LogLevelOptions { get; } = new[] { "Verbose", "Debug", "Information", "Warning", "Error", "Fatal" };
+
+    private string _selectedLogLevelOption = "Warning";
+    public string SelectedLogLevelOption
+    {
+        get => _selectedLogLevelOption;
+        set => SetField(ref _selectedLogLevelOption, value);
+    }
+
+    /// <summary>Staged launch-on-startup choice. Toggling stages the value only — the
+    /// system shortcut is created/removed in <see cref="Save"/>, never by the checkbox itself.</summary>
     private bool _launchOnStartup;
     public bool LaunchOnStartup
     {
         get => _launchOnStartup;
-        set
-        {
-            if (!SetField(ref _launchOnStartup, value))
-            {
-                return;
-            }
-
-            if (value) StartupManager.Enable();
-            else StartupManager.Disable();
-            AppJSettings.Instance.LaunchOnStartup = value;
-            AppJSettings.Instance.Save();
-        }
+        set => SetField(ref _launchOnStartup, value);
     }
 
     /// <summary>Resets a single editable setting to its <see cref="DefaultValueAttribute"/> value.</summary>
@@ -246,6 +246,8 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         _defaultBoxIconSize = s.DefaultBoxIconSize;
 
         _launchOnStartup = StartupManager.IsEnabled;
+
+        _selectedLogLevelOption = (AppJSettings.Instance.LogEventLevel ?? Logging.DefaultLogEventLevel).ToString();
 
         SaveCommand = new RelayCommand(_ => Save());
         ResetToDefaultCommand = new RelayCommand(ResetToDefault);
@@ -398,6 +400,19 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         _settingsService.Save();
         App.ApplyTheme(s.SelectedTheme);
         App.ApplyBoxAppearance();
+        // Apply the staged launch-on-startup choice only here: flipping the checkbox stages
+        // the value, and Save is the single point that touches system state for it.
+        if (_launchOnStartup) StartupManager.Enable();
+        else StartupManager.Disable();
+        AppJSettings.Instance.LaunchOnStartup = _launchOnStartup;
+        // Log level likewise: persist the staged choice and flip the live switch immediately
+        // (the settings-file watcher would converge it within ~300 ms anyway).
+        if (Enum.TryParse<Serilog.Events.LogEventLevel>(_selectedLogLevelOption, ignoreCase: true, out var logLevel))
+        {
+            AppJSettings.Instance.LogEventLevel = logLevel;
+            try { Logging.LevelSwitch.MinimumLevel = logLevel; } catch { }
+        }
+        AppJSettings.Instance.Save();
         // Refresh all CSS widgets that follow the global theme (CanSwitchTheme=null) or app theme
         try
         {

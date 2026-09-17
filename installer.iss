@@ -22,9 +22,26 @@
 AppId={{6D63481B-105C-49A8-8C5E-52F761DD120B}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-VersionInfoVersion={#MyNumericVersion}
-AppCopyright=Copyright (C) 2026 ezhassen.
+AppPublisher=Ezz Hassan
+AppCopyright=Copyright (C) 2026 Ezz Hassan.
 AppVerName={#MyAppName} {#MyAppVersion}
+; Full version-resource identity: heuristic scanners and SmartScreen weigh missing
+; Company/Product metadata as a (weak) malware signal. Names must match the assembly
+; metadata in Directory.Build.targets (Company "Ezz Hassan") — one consistent publisher
+; everywhere builds reputation instead of splitting it.
+VersionInfoVersion={#MyNumericVersion}
+VersionInfoCompany=Ezz Hassan
+VersionInfoProductName={#MyAppName}
+VersionInfoDescription={#MyAppName} setup
+VersionInfoCopyright=Copyright (C) 2026 Ezz Hassan.
+VersionInfoTextVersion={#MyAppVersion}
+; Optional Authenticode signing (the single biggest false-positive reducer — an unsigned,
+; admin-privileged, freshly-built setup with no reputation is exactly what generic
+; heuristics fire on). Configure once, then uncomment:
+;   SignTool=signtool sign /tr http://timestamp.digicert.com /td sha256 /fd sha256 /a $f
+;   SignedUninstaller=yes
+; (SignTool itself is registered with: iscc /Ssigntool="signtool sign ... $f" setup.iss,
+; or via Tools > Configure Sign Tools in Inno Setup.)
 DefaultDirName={commonpf}\Desktop Boxes
 DefaultGroupName={#MyAppName}
 OutputDir=..\..\..\..\Installer
@@ -33,8 +50,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 UsedUserAreasWarning=no
 ShowLanguageDialog=auto
-InternalCompressLevel=ultra64
-Compression=lzma2/ultra64
+; lzma2/max, not ultra64: ultra-grade solid compression raises the output's entropy into
+; the range packer heuristics look at, for little size gain — and it slows every build.
+InternalCompressLevel=max
+Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern dynamic
 SourceDir=src\DesktopBoxesUI\bin\Publish

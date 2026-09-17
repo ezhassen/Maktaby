@@ -67,7 +67,7 @@
                     <ListBoxItem Content="Preview" Tag="SectionPreview" />
                     <ListBoxItem Content="Appearance" Tag="SectionAppearance" />
                     <ListBoxItem Content="Boxes" Tag="SectionBoxes" />
-                    <ListBoxItem Content="CSS Widgets" Tag="SectionWebWidgets" />
+                    <ListBoxItem Content="Widgets" Tag="SectionWebWidgets" />
                     <ListBoxItem Content="Containers" Tag="SectionContainers" />
                     <ListBoxItem Content="General" Tag="SectionGeneral" />
                     <ListBoxItem Content="Snapshot" Tag="SectionSnapshot" />
@@ -407,10 +407,10 @@
                     <GroupBox
                         x:Name="SectionWebWidgets"
                         Margin="0,0,0,12"
-                        Header="CSS Widgets">
+                        Header="Widgets">
                         <StackPanel Margin="8">
                             <StackPanel Margin="0,0,0,8">
-                                <TextBlock FontWeight="Bold" Text="Default CSS Widgets theme" />
+                                <TextBlock FontWeight="Bold" Text="Default Widgets theme" />
                                 <TextBlock
                                     Margin="0,0,0,4"
                                     FontSize="11"
@@ -491,11 +491,19 @@
                         Header="General">
                         <StackPanel Margin="8">
                             <CheckBox Content="Launch DesktopBoxes on Windows startup" IsChecked="{Binding LaunchOnStartup}" />
-                            <TextBlock
-                                Margin="0,4,0,0"
-                                FontSize="11"
-                                Foreground="#999999"
-                                Text="Adds (or removes) the app from your personal Run key so it starts when you sign in." />
+                            <StackPanel Margin="12,12,0,8">
+                                <TextBlock FontWeight="Bold" Text="Log level" />
+                                <TextBlock
+                                    Margin="0,0,0,4"
+                                    FontSize="11"
+                                    Foreground="#999999"
+                                    Text="Applied on Save. Verbose/Debug help diagnosing issues; Warning and above stay quiet." />
+                                <ComboBox
+                                    Width="200"
+                                    HorizontalAlignment="Left"
+                                    ItemsSource="{Binding LogLevelOptions}"
+                                    SelectedItem="{Binding SelectedLogLevelOption, UpdateSourceTrigger=PropertyChanged}" />
+                            </StackPanel>
                         </StackPanel>
                     </GroupBox>
 

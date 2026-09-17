@@ -31,9 +31,9 @@ public class AppJSettings
     public Guid AppIdentity { get; set; }
 
     /// <summary>
-    /// When true the app registers itself in the current user's Run key so it launches on Windows
-    /// startup. The actual Run-key entry is managed by <see cref="Win32APIs.Services.StartupManager"/>;
-    /// this only persists the user's preference.
+    /// When true the app registers itself in the current user's Startup folder so it launches
+    /// on Windows startup. The actual shortcut is managed by
+    /// <see cref="Win32APIs.Services.StartupManager"/>; this only persists the user's preference.
     /// </summary>
     public bool LaunchOnStartup { get; set; }
 
@@ -44,7 +44,8 @@ public class AppJSettings
     public static void Reload()
     {
         //RegisterJsonConverters();
-        if (!File.Exists(FilePath))
+        var jsFile = FilePath;
+        if (!File.Exists(jsFile))
         {
             _Instance = new AppJSettings()
             {
@@ -55,7 +56,7 @@ public class AppJSettings
             return;
         }
 
-        var _appJS = JsonHelper.DeserializeFromFile<AppJSettings>(FilePath);
+        var _appJS = JsonHelper.DeserializeFromFile<AppJSettings>(jsFile);
         if (_appJS is null) throw new InvalidOperationException("Cannot load AppJSettings");
         bool save = false;
         if (_appJS.AppIdentity == Guid.Empty)
@@ -74,7 +75,11 @@ public class AppJSettings
 
     public void Save()
     {
-        JsonHelper.SafeWriteJson(FilePath, this);
+        var jsFile = FilePath;
+        var jsFileDir = Path.GetDirectoryName(jsFile);
+        if (!Directory.Exists(jsFileDir)) Directory.CreateDirectory(jsFileDir!);
+
+        JsonHelper.SafeWriteJson(jsFile, this);
     }
     //private static void RegisterJsonConverters()
     //{
