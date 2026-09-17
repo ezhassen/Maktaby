@@ -30,7 +30,9 @@ public sealed class WallpaperWindow : Win32Window
     public event Action? DeviceLost;
 
     /// <summary>Creates the composition host — call after the window is attached to the
-    /// wallpaper layer. Idempotent, so the DeviceLost forwarding is wired exactly once.</summary>
+    /// wallpaper layer. Idempotent, so the DeviceLost forwarding is wired exactly once.
+    /// Cheap until a renderer demands a surface: the GPU objects are built lazily, so web
+    /// renderers (own HWND, no surface) never touch the GPU.</summary>
     public CompositionHost EnsureHost()
     {
         if (Host is not null) return Host;

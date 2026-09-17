@@ -149,6 +149,10 @@ public sealed class ImageRenderer : IWallpaperRenderer
 
     public void Paint(IntPtr hdc) { /* composition-presented */ }
 
+    /// <summary>Always true: the frame reaches the screen through Direct2D onto the host's
+    /// composition surface (flip-model backbuffers accept only render operations).</summary>
+    public bool IsGPURender => true;
+
     /// <summary>True while holding an animated GIF (its animator runs and pause supervision
     /// applies). Static images never need the pause supervisor — the engine uses this to
     /// run no hook thread at all for all-static sessions.</summary>

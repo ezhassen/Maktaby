@@ -28,7 +28,12 @@ namespace DesktopLiveWallPaperEngine.Rendering;
 /// Only the per-HWND target and root visual remain per host. The shared state is
 /// reference-counted and released when the last host is disposed, so a full teardown (which
 /// disposes every host) still drops the device — correct across adapter changes such as
-/// dock/undock — while steady state and re-apply hold exactly one.</summary>
+/// dock/undock — while steady state and re-apply hold exactly one.
+///
+/// Creation is lazy on top of that: the constructor stores only the HWND, and the device +
+/// target + root visual are built on first surface demand (<see cref="CreateContent"/> /
+/// <see cref="CreateOverlay"/>). Only the video and image renderers need a surface — the web
+/// renderer paints its own child HWND — so a web-only session creates zero GPU objects.</summary>
 public sealed class CompositionHost : IDisposable
 {
     /// <summary>Borrowed from the shared state (see <see cref="SharedAcquire"/>): valid while
@@ -48,6 +53,10 @@ public sealed class CompositionHost : IDisposable
     private IDCompositionTarget _dcompTarget = null!;
     private IDCompositionVisual _rootVisual = null!;
     private bool _disposed;
+
+    /// <summary>Owning window. Stored at construction; the GPU objects for it are built
+    /// lazily by <see cref="EnsureInitializedLocked"/>.</summary>
+    private readonly IntPtr _hwnd;
 
     public CompositionSurface? Content { get; private set; }
 
@@ -71,6 +80,18 @@ public sealed class CompositionHost : IDisposable
 
     public CompositionHost(IntPtr hwnd)
     {
+        // Lightweight: no GPU objects yet. The shared device, this host's target and its
+        // root visual are built on first surface demand — a web-only session (whose renderer
+        // paints its own child HWND and never calls CreateContent) never touches the GPU.
+        _hwnd = hwnd;
+    }
+
+    /// <summary>Builds the shared device and this host's target/visual on first surface
+    /// demand. Caller holds <see cref="_tree"/>. A failed attempt releases its reference
+    /// and leaves the host uninitialized so the next demand retries cleanly.</summary>
+    private void EnsureInitializedLocked()
+    {
+        if (_dcompDevice is not null) return;
         var shared = SharedAcquire();
         bool constructed = false;
         try
@@ -80,7 +101,7 @@ public sealed class CompositionHost : IDisposable
             _dxgiFactory = shared.Dxgi;
             _d2dFactory = shared.D2d;
             _dcompDevice = shared.DComp;
-            _dcompDevice.CreateTargetForHwnd(hwnd, true, out _dcompTarget);
+            _dcompDevice.CreateTargetForHwnd(_hwnd, true, out _dcompTarget);
             _rootVisual = _dcompDevice.CreateVisual();
 
             // DirectComposition composes this target in physical pixels, 1:1 with the window — DWM
@@ -89,7 +110,7 @@ public sealed class CompositionHost : IDisposable
             // Verified by covering the OS wallpaper with a solid colour and measuring what the live
             // layer actually paints: identity covers 100% of a 2560x1600 display at 150% scaling,
             // while a 96/dpi counter-scale leaves 55.7% of the screen bare.
-            LogWindowDpi(hwnd);
+            LogWindowDpi(_hwnd);
 
             _dcompTarget.SetRoot(_rootVisual);
             _dcompDevice.Commit();
@@ -100,7 +121,15 @@ public sealed class CompositionHost : IDisposable
             if (!constructed)
             {
                 try { _rootVisual?.Dispose(); } catch { /* never constructed — best effort */ }
+                _rootVisual = null!;
                 try { _dcompTarget?.Dispose(); } catch { /* never constructed — best effort */ }
+                _dcompTarget = null!;
+                // Back to uninitialized: borrowed references must not outlive the release.
+                _dcompDevice = null!;
+                _d2dFactory = null!;
+                _dxgiFactory = null!;
+                Context = null!;
+                Device = null!;
                 SharedRelease();
             }
         }
@@ -217,10 +246,15 @@ public sealed class CompositionHost : IDisposable
         catch { /* diagnostic only */ }
     }
 
-    /// <summary>The main wallpaper surface (opaque). Recreatable for cover-crop layouts.</summary>
+    /// <summary>The main wallpaper surface (opaque). Recreatable for cover-crop layouts.
+    /// First call also builds the GPU objects (see <see cref="EnsureInitializedLocked"/>).</summary>
     public CompositionSurface CreateContent(int width, int height, int offsetX = 0, int offsetY = 0)
     {
-        lock (_tree) return CreateContentCore(width, height, offsetX, offsetY);
+        lock (_tree)
+        {
+            EnsureInitializedLocked();
+            return CreateContentCore(width, height, offsetX, offsetY);
+        }
     }
 
     /// <summary>Atomically replaces the content surface only if <paramref name="current"/> is still
@@ -286,11 +320,13 @@ public sealed class CompositionHost : IDisposable
     }
 
     /// <summary>A transparent surface composed above the content (clock and friends). Keyed, so
-    /// each widget owns its own visual and creating one does not destroy another's.</summary>
+    /// each widget owns its own visual and creating one does not destroy another's.
+    /// First call also builds the GPU objects (see <see cref="EnsureInitializedLocked"/>).</summary>
     public CompositionSurface CreateOverlay(string key, int width, int height, int offsetX, int offsetY)
     {
         lock (_tree)
         {
+            EnsureInitializedLocked();
             RemoveOverlayCore(key);
             var surface = new CompositionSurface(this, width, height, premultipliedAlpha: true, offsetX, offsetY);
             surface.DeviceLost += RaiseDeviceLost;
@@ -331,6 +367,35 @@ public sealed class CompositionHost : IDisposable
         lock (_tree) _rootVisual.RemoveVisual(visual);
     }
 
+    /// <summary>Returns this host to the uninitialized state when nothing needs its GPU
+    /// objects anymore: drops the target/visual and this host's shared-device reference.
+    /// The engine calls this after switching to a renderer that owns no surface (web) —
+    /// windows outlive wallpaper changes, so without it the shared device would stay pinned
+    /// after the last video/image is gone. A later video/image switch re-initializes lazily.
+    ///
+    /// No-op when never initialized, or while surfaces still exist (content or widget
+    /// overlays): tearing down live visuals here would black out content that still needs
+    /// them, so such callers keep the device.</summary>
+    public void ReleaseDeviceIfUnused()
+    {
+        lock (_tree)
+        {
+            if (_dcompDevice is null) return; // never initialized — nothing held
+            if (Content is not null || _overlays.Count != 0) return; // still presenting
+            try { _rootVisual?.Dispose(); } catch { /* tearing down */ }
+            _rootVisual = null!;
+            try { _dcompTarget?.Dispose(); } catch { /* tearing down */ }
+            _dcompTarget = null!;
+            _dcompDevice = null!;
+            _d2dFactory = null!;
+            _dxgiFactory = null!;
+            Context = null!;
+            Device = null!;
+            SharedRelease();
+        }
+        Serilog.Log.Information("Composition: host GPU released (switched to a non-GPU renderer)");
+    }
+
     internal void Commit()
     {
         lock (_tree) _dcompDevice.Commit();
@@ -354,9 +419,9 @@ public sealed class CompositionHost : IDisposable
     {
         lock (_tree)
         {
-            // SharedRelease below must run exactly once per successful acquire, so double
-            // disposal stops here. (Previously Dispose had no guard: harmless when every
-            // resource was per-host, fatal now that the device is reference-counted.)
+            // The _disposed guard also guarantees SharedRelease runs exactly once per
+            // successful acquire (previously no guard existed: harmless with per-host
+            // resources, fatal once the device became reference-counted).
             if (_disposed) return;
             _disposed = true;
             Content?.Dispose();
@@ -365,12 +430,17 @@ public sealed class CompositionHost : IDisposable
             _overlays.Clear();
         }
         // Per-HWND resources only — the device and factories are borrowed from the shared
-        // state and released (not disposed) below.
+        // state and released (not disposed) below. All three are null when no surface was
+        // ever demanded, in which case there is nothing to release.
         try { _rootVisual?.Dispose(); } catch { /* tearing down */ }
         _rootVisual = null!;
         try { _dcompTarget?.Dispose(); } catch { /* tearing down */ }
         _dcompTarget = null!;
-        SharedRelease();
+        if (_dcompDevice is not null)
+        {
+            _dcompDevice = null!;
+            SharedRelease();
+        }
         GC.SuppressFinalize(this);
     }
 }

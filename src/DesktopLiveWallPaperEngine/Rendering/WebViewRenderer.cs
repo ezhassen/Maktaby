@@ -578,6 +578,10 @@ public sealed class WebViewRenderer : IWallpaperRenderer
 
     public void Paint(IntPtr hdc) { /* HWND child paints itself; nothing to do on WM_PAINT */ }
 
+    /// <summary>Always false: the controller paints its own child HWND and owns no
+    /// composition surface, so the host stays uninitialized and holds no GPU objects.</summary>
+    public bool IsGPURender => false;
+
     /// <summary>Caller holds <see cref="_sync"/> and runs on the WebView STA thread.
     /// <c>Close</c> is the complete teardown on this SDK (verified against 1.0.4191.47:
     /// neither the controller nor <c>CoreWebView2</c> implements <c>IDisposable</c>) — the

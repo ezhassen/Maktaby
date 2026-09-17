@@ -33,6 +33,9 @@ public sealed class VideoRenderer : IWallpaperRenderer
     /// nothing shown to the user. Carries (path, codecOrError) so the caller can name the fix.</summary>
     public event Action<string, string>? PlaybackFailed;
 
+    /// <summary>Always true: decoded frames are copied onto the host's composition surface.</summary>
+    public bool IsGPURender => true;
+
     private readonly string? _staticFramePath;
     private readonly Action? _onStaticFrame;
     private int _staticCropX;

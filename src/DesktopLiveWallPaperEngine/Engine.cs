@@ -419,6 +419,14 @@ public sealed class Engine : IDisposable
         window.SetRenderer(renderer);
         renderer.Load(path);
 
+        // A switch away from GPU presentation must not pin GPU objects on the reused
+        // window: when the new renderer owns no surface, drop this host's target/visual
+        // (and the shared device reference with it when no other host needs it). The next
+        // video/image switch re-initializes lazily; widget overlays, if any, keep the
+        // device via ReleaseDeviceIfUnused's in-use guard.
+        if (!renderer.IsGPURender)
+            host.ReleaseDeviceIfUnused();
+
         _playback?.Invalidate(); // re-evaluate pause state for the fresh renderer
         Serilog.Log.Information($"Wallpaper applied on {monitor.Device} {monitor.Bounds}: {path}");
     }
