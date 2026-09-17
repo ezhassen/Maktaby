@@ -36,9 +36,22 @@ public sealed class ImageRenderer : IWallpaperRenderer
     bool loaded;
     public void Load(string path)
     {
+        // Deliberately FromFile, not a memory buffer: the OS file lock keeps the displayed
+        // wallpaper stable — the file cannot be swapped or deleted out from under the live
+        // wallpaper. Static images release it immediately after drawing (see below);
+        // animated GIFs hold it while displayed and stream frames from disk on demand
+        // instead of pinning the whole file in memory.
         var image = Image.FromFile(path);
         lock (_sync)
         {
+            if (_disposed)
+            {
+                image.Dispose();
+                return;
+            }
+            // A re-Load replaces everything: free the previous selection first instead of
+            // stranding its bitmaps (and its animator).
+            ClearImagesLocked();
             _canvas = new Bitmap(_width, _height, PixelFormat.Format32bppPArgb);
             _rect = FitCalculator.Compute(image.Width, image.Height, _width, _height, _fit);
 
@@ -49,6 +62,7 @@ public sealed class ImageRenderer : IWallpaperRenderer
                 _animating = true;
                 DrawAndPresent(image, highQuality: false);
                 CaptureStatic();
+                loaded = true;
                 return;
             }
 
@@ -62,7 +76,7 @@ public sealed class ImageRenderer : IWallpaperRenderer
     }
     public bool IsLoaded()
     {
-        return loaded;
+        lock (_sync) return loaded;
     }
 
     private void CaptureStatic()
@@ -71,9 +85,19 @@ public sealed class ImageRenderer : IWallpaperRenderer
         try
         {
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_staticFramePath)!);
-            // _canvas is already the monitor-sized composed frame (fit applied) — save directly.
-            using var copy = new Bitmap(_canvas);
-            copy.Save(_staticFramePath, ImageFormat.Png);
+            if (_animated is not null)
+            {
+                // Animated: animator callbacks keep mutating the canvas — snapshot it.
+                // _canvas is already the monitor-sized composed frame (fit applied).
+                using var copy = new Bitmap(_canvas);
+                copy.Save(_staticFramePath, ImageFormat.Png);
+            }
+            else
+            {
+                // Static: the canvas is immutable after Load — save it directly instead of
+                // a transient full-size copy (~33 MB at 4K) on every apply.
+                _canvas.Save(_staticFramePath, ImageFormat.Png);
+            }
             _onStaticFrame?.Invoke();
         }
         catch (Exception ex)
@@ -170,15 +194,24 @@ public sealed class ImageRenderer : IWallpaperRenderer
         {
             if (_disposed) return;
             _disposed = true;
-            if (_animated is not null)
-            {
-                if (_animating) ImageAnimator.StopAnimate(_animated, OnFrameChanged);
-                _animated.Dispose();
-                _animated = null;
-            }
-            _canvas?.Dispose();
-            _canvas = null;
+            ClearImagesLocked();
             // The content surface and host belong to the WallpaperWindow.
         }
+    }
+
+    /// <summary>Frees the current selection's images. Caller holds <see cref="_sync"/> —
+    /// shared by Load (re-selection) and Dispose so a re-Load cannot strand bitmaps
+    /// or a running animator.</summary>
+    private void ClearImagesLocked()
+    {
+        if (_animated is not null)
+        {
+            if (_animating) ImageAnimator.StopAnimate(_animated, OnFrameChanged);
+            _animated.Dispose();
+            _animated = null;
+            _animating = false;
+        }
+        _canvas?.Dispose();
+        _canvas = null;
     }
 }
