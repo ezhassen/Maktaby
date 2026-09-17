@@ -52,6 +52,10 @@ public sealed class Engine : IDisposable
     /// same-named fresh windows created after it.</summary>
     private int _pauseEpoch;
 
+    /// <summary>User's manual pause (PlayPause sets, PlayStart clears). Preserved across
+    /// supervisor recreation so an all-static interval cannot silently lose it.</summary>
+    private bool _userPaused;
+
     /// <summary>Convergence backstop for display-topology changes. A display notification can
     /// arrive before the new monitor enumerates and before Explorer resizes the layer parent:
     /// the immediate re-apply then attaches the new window against stale geometry (fully
@@ -114,7 +118,25 @@ public sealed class Engine : IDisposable
 
         //_tray = new TrayIcon(_messageWindow.Hwnd);
 
-        _playback = new PlaybackSupervisor(
+        ApplyFromConfig();
+        IsEnabled = true;
+        // Only when something can actually pause: static images cost nothing when covered,
+        // so an all-static session runs no hook thread and evaluates nothing. The fresh
+        // supervisor's own initial evaluation covers the current state (renderers already
+        // exist, unlike the old create-before-apply order that needed an Invalidate).
+        UpdatePauseSupervision();
+        // The layer parent can still be settling (lazy WorkerW sizing after logon, display
+        // handshake): converge it the same way display changes do, instead of leaving a
+        // mis-attached monitor black until the next notification.
+        ScheduleSettledReapply();
+    }
+
+    /// <summary>Creates the pause supervisor unless one is already live. Carries over the
+    /// user's manual pause so a supervision gap (all-static interval) cannot lose it.</summary>
+    private void EnsurePlayback()
+    {
+        if (_playback is not null) return;
+        var playback = new PlaybackSupervisor(
             // The supervisor reads a shared PausePolicy; map the persisted config each time.
             () => new PausePolicy
             {
@@ -128,7 +150,7 @@ public sealed class Engine : IDisposable
             // Our own surface window must never pause a monitor — engine-only exclusion
             // (the desktop app passes its own classes instead).
             new HashSet<string>([WallpaperWindow.ClassName], StringComparer.OrdinalIgnoreCase));
-        _playback.PauseStateChanged += (device, reason) =>
+        playback.PauseStateChanged += (device, reason) =>
         {
             var epoch = Volatile.Read(ref _pauseEpoch);
             RunOnMainThread(() =>
@@ -137,12 +159,28 @@ public sealed class Engine : IDisposable
                 OnPauseStateChanged(device, reason);
             });
         };
-        ApplyFromConfig();
-        IsEnabled = true;
-        // The layer parent can still be settling (lazy WorkerW sizing after logon, display
-        // handshake): converge it the same way display changes do, instead of leaving a
-        // mis-attached monitor black until the next notification.
-        ScheduleSettledReapply();
+        if (_userPaused) playback.Suspend();
+        _playback = playback;
+    }
+
+    /// <summary>Aligns the supervisor with the live renderer mix: video, web and animated GIF
+    /// need pause supervision; static images never do. Called after every apply loop so only
+    /// mix transitions (not repeat applies) pay the hook-thread teardown/startup.</summary>
+    private void UpdatePauseSupervision()
+    {
+        if (!IsEnabled) return;
+        bool need = false;
+        foreach (var window in _windows.Values)
+        {
+            if (window.Renderer is VideoRenderer or WebViewRenderer) { need = true; break; }
+            if (window.Renderer is ImageRenderer image && image.IsAnimated) { need = true; break; }
+        }
+        if (need) EnsurePlayback();
+        else if (_playback is not null)
+        {
+            _playback.Dispose();
+            _playback = null;
+        }
     }
     public void EnsureEnabled()
     {
@@ -249,6 +287,7 @@ public sealed class Engine : IDisposable
 
     public void PlayStart()
     {
+        _userPaused = false;
         // Fires on the monitor's timer thread; _windows belongs to the main thread.
         // Session-scoped: a resume posted just before a Disable must not resume the next session.
         RunOnSessionAction(() =>
@@ -267,6 +306,7 @@ public sealed class Engine : IDisposable
 
     public void PlayPause()
     {
+        _userPaused = true;
         // Suspend auto evaluation first: no transitions can fire while user-paused
         // (previously a closing fullscreen app auto-resumed behind the user's back).
         _playback?.Suspend();
@@ -305,6 +345,7 @@ public sealed class Engine : IDisposable
                 Serilog.Log.Error($"Failed to apply wallpaper on {monitor.Device}", ex);
             }
         }
+        UpdatePauseSupervision();
     }
 
     private void ApplyToMonitor(MonitorInfo monitor, string path)
@@ -404,6 +445,7 @@ public sealed class Engine : IDisposable
             _config.Assign(monitorDevice, path);
             //ConfigStore.Save(_config);
         }
+        UpdatePauseSupervision();
     }
 
     /// <summary>Full rebuild: display change, explorer restart, or layer destruction.</summary>
@@ -801,6 +843,7 @@ public sealed class Engine : IDisposable
                     Serilog.Log.Error($"Refresh failed on {monitor.Device}", ex);
                 }
             }
+            UpdatePauseSupervision();
         }
     }
 

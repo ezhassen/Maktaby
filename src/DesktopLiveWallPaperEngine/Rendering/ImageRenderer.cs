@@ -149,6 +149,14 @@ public sealed class ImageRenderer : IWallpaperRenderer
 
     public void Paint(IntPtr hdc) { /* composition-presented */ }
 
+    /// <summary>True while holding an animated GIF (its animator runs and pause supervision
+    /// applies). Static images never need the pause supervisor — the engine uses this to
+    /// run no hook thread at all for all-static sessions.</summary>
+    public bool IsAnimated
+    {
+        get { lock (_sync) return _animated is not null; }
+    }
+
     public void Pause()
     {
         lock (_sync)
