@@ -33,8 +33,10 @@ public static class DesktopWallpaper
     {
         try
         {
-            _ = new DesktopWallpaperClass();
-            return true;
+            // Released immediately: without this the probe RCW lives until finalization.
+            object probe = new DesktopWallpaperClass();
+            try { return true; }
+            finally { Marshal.ReleaseComObject(probe); }
         }
         catch (Exception ex) when (ex.HResult == unchecked((int)0x80040154))
         {
@@ -54,9 +56,21 @@ public static class DesktopWallpaper
     {
         if (ComAvailable.Value)
         {
+            IDesktopWallpaper dw;
             try
             {
-                var dw = (IDesktopWallpaper)new DesktopWallpaperClass();
+                dw = (IDesktopWallpaper)new DesktopWallpaperClass();
+            }
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning($"IDesktopWallpaper activation failed ({ex.Message}); using SPI");
+                SetSingle(imagePath);
+                return;
+            }
+            // One activation per static-fallback write: released deterministically instead of
+            // riding the finalizer queue (this runs per monitor per wallpaper apply).
+            try
+            {
                 try { dw.SetPosition(DesktopWallpaperPosition.Fill); } catch { }
 
                 string? monitorId = FindMonitorId(dw, monitorBounds);
@@ -71,6 +85,10 @@ public static class DesktopWallpaper
             catch (Exception ex)
             {
                 Serilog.Log.Warning($"IDesktopWallpaper failed ({ex.Message}); using SPI");
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(dw);
             }
         }
         SetSingle(imagePath);

@@ -89,6 +89,14 @@ public sealed class Engine : IDisposable
     /// </summary>
     public void Enable()
     {
+        // Re-entrancy guard: a second Enable over a live session would orphan the message
+        // window, power registrations, layer host, GPU device and hook thread it replaces.
+        // All refresh paths go through RefreshWallpapers/ReapplyAll instead.
+        if (IsEnabled)
+        {
+            Serilog.Log.Information("Enable called while already enabled — ignoring");
+            return;
+        }
         // New session, new generation: transitions computed before this point name
         // windows from older sessions and must be dropped (see _pauseEpoch).
         Interlocked.Increment(ref _pauseEpoch);
@@ -199,14 +207,15 @@ public sealed class Engine : IDisposable
         TeardownSnapshot? snapshot = null;
         lock (_gate)
         {
-            // A previous teardown is still draining (only possible after an Enable timed
-            // out waiting for it). If this session left nothing live, there is nothing
-            // to snapshot; otherwise drain it too — disjoint objects, idempotent restore.
-            bool draining = _teardownTask is { IsCompleted: false };
+            // If this session left nothing live (already/never enabled, possibly with a
+            // previous teardown still draining), there is nothing to snapshot; otherwise
+            // drain that too — disjoint objects, idempotent restore.
             bool live = _playback is not null || _windows.Count > 0 || _power is not null
                 || _messageWindow is not null || _host is not null;
-            if (draining && !live)
+            if (!live)
             {
+                // Nothing to snapshot, no teardown to run — skip the pointless full GC +
+                // file ops below.
                 IsEnabled = false;
                 return;
             }
@@ -417,7 +426,18 @@ public sealed class Engine : IDisposable
             renderer = video;
         }
         window.SetRenderer(renderer);
-        renderer.Load(path);
+        try
+        {
+            renderer.Load(path);
+        }
+        catch
+        {
+            // Load failed after the install above (and after the new surface replaced the
+            // old one in the renderer constructor): leave no zombie behind. The per-monitor
+            // catch in the caller logs; the monitor falls through to the OS wallpaper.
+            window.ClearRenderer();
+            throw;
+        }
 
         // A switch away from GPU presentation must not pin GPU objects on the reused
         // window: when the new renderer owns no surface, drop this host's target/visual

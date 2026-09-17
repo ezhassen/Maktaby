@@ -55,6 +55,17 @@ public sealed class WallpaperWindow : Win32Window
         VideoRenderer.ScheduleReclaimMediaPipeline();
     }
 
+    /// <summary>Drops the current renderer without replacement, for a failed
+    /// <see cref="IWallpaperRenderer.Load"/>: disposes the never-presented renderer, clears
+    /// the reference, and removes its empty surface — so the monitor falls through to the OS
+    /// wallpaper instead of a black frame fronted by a zombie renderer.</summary>
+    public void ClearRenderer()
+    {
+        Renderer?.Dispose();
+        Renderer = null;
+        Host?.ClearContent();
+    }
+
     protected override IntPtr HandleMessage(uint msg, IntPtr wParam, IntPtr lParam)
     {
         switch (msg)
