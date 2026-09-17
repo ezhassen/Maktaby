@@ -82,17 +82,13 @@ public sealed class WebViewRenderer : IWallpaperRenderer
         private const uint RunActionsMessage = WM_APP + 7;
 
         private static volatile IntPtr s_hostHwnd;
-        private static volatile int s_threadId;
         private static HostWindow? s_host; // rooted process-lifetime; the thread never shuts down
         private static readonly WebSyncContext s_sync = new();
         private static readonly object s_gate = new();
         private static readonly ManualResetEventSlim s_ready = new(false);
 
-        public static bool IsCurrentThread =>
-            Environment.CurrentManagedThreadId == s_threadId;
-
         /// <summary>Starts the thread on first use (idempotent) and reports whether its
-        /// message pump is up. Call before Post/PostAsync/Send.</summary>
+        /// message pump is up. Call before Post/PostAsync.</summary>
         public static bool Ensure()
         {
             if (s_hostHwnd != IntPtr.Zero) return true;
@@ -116,15 +112,10 @@ public sealed class WebViewRenderer : IWallpaperRenderer
 
         public static void PostAsync(Func<Task> factory) => s_sync.Post(_ => { _ = factory(); }, null);
 
-        /// <summary>Synchronous round-trip, bounded so a stuck WebView2 cannot hang engine
-        /// teardown. Safe to call from the STA thread itself (runs inline).</summary>
-        public static void Send(Action action, TimeSpan timeout) => s_sync.Send(_ => action(), null, timeout);
-
         private static void ThreadMain()
         {
             try
             {
-                s_threadId = Environment.CurrentManagedThreadId;
                 SynchronizationContext.SetSynchronizationContext(s_sync);
                 var host = new HostWindow();
                 s_host = host;
@@ -154,27 +145,6 @@ public sealed class WebViewRenderer : IWallpaperRenderer
                 var hwnd = s_hostHwnd;
                 if (hwnd != IntPtr.Zero)
                     User32.PostMessageW(hwnd, RunActionsMessage, IntPtr.Zero, IntPtr.Zero);
-            }
-
-            public void Send(SendOrPostCallback d, object? state, TimeSpan timeout)
-            {
-                if (IsCurrentThread)
-                {
-                    d(state);
-                    return;
-                }
-                using var done = new ManualResetEventSlim(false);
-                Exception? error = null;
-                Post(_ =>
-                {
-                    try { d(state); }
-                    catch (Exception ex) { error = ex; }
-                    finally { done.Set(); }
-                }, null);
-                if (!done.Wait(timeout))
-                    throw new TimeoutException("Web wallpaper UI thread did not respond.");
-                if (error is not null)
-                    throw error;
             }
 
             public void Drain()
@@ -259,11 +229,21 @@ public sealed class WebViewRenderer : IWallpaperRenderer
         lock (_sync) return _loaded && !_disposed && _controller is not null;
     }
 
+    private static readonly object s_envGate = new();
+
     private static Task<CoreWebView2Environment> GetEnvironmentAsync(string userDataFolder)
     {
-        // No lock needed: first write wins, and the engine always passes the same folder.
-        s_envTask ??= CoreWebView2Environment.CreateAsync(null, userDataFolder);
-        return s_envTask;
+        // The engine always passes the same folder, so sharing one environment is correct —
+        // but a settled-faulty task must never be cached: without the check below, a missing
+        // Evergreen runtime (or an unreadable user-data dir) on the very first load fails every
+        // later wallpaper silently for the rest of the process instead of retrying.
+        lock (s_envGate)
+        {
+            if (s_envTask is { IsFaulted: false, IsCanceled: false })
+                return s_envTask;
+            s_envTask = CoreWebView2Environment.CreateAsync(null, userDataFolder);
+            return s_envTask;
+        }
     }
 
     /// <summary>Runs on the WebView STA thread (queued from <see cref="Load"/>); every await
@@ -598,7 +578,11 @@ public sealed class WebViewRenderer : IWallpaperRenderer
 
     public void Paint(IntPtr hdc) { /* HWND child paints itself; nothing to do on WM_PAINT */ }
 
-    /// <summary>Caller holds <see cref="_sync"/> and runs on the WebView STA thread.</summary>
+    /// <summary>Caller holds <see cref="_sync"/> and runs on the WebView STA thread.
+    /// <c>Close</c> is the complete teardown on this SDK (verified against 1.0.4191.47:
+    /// neither the controller nor <c>CoreWebView2</c> implements <c>IDisposable</c>) — the
+    /// managed RCWs unroot here and release on the next GC, which Dispose's posted detach
+    /// expedites through the shared reclaim scheduler.</summary>
     private void DetachControllerLocked()
     {
         if (_navigationHandler is not null && _core is not null)
@@ -624,19 +608,22 @@ public sealed class WebViewRenderer : IWallpaperRenderer
             if (_disposed) return;
             _disposed = true;
         }
-        // Teardown must run on the STA thread that owns the controller.
+        // Teardown is queued, never blocking: ReapplyAll disposes on the engine thread, which
+        // an in-flight InitializeAsync may be synchronously waiting on through the parent
+        // window (creation interacts with it — verified to deadlock when the owner is blocked).
+        // A synchronous round-trip here would hang the rebuild on a stuck WebView2; the posted
+        // detach instead lets the engine thread proceed, which unblocks the init, which then
+        // observes the bumped generation above and drops its own controller. Detach is
+        // idempotent and every callback re-checks _disposed, so the window between Dispose
+        // and the detach running is safe by construction.
         if (!WebViewThread.Ensure())
             return;
-        try
+        WebViewThread.Post(() =>
         {
-            WebViewThread.Send(() =>
-            {
-                lock (_sync) DetachControllerLocked();
-            }, TimeSpan.FromSeconds(10));
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning($"Web wallpaper teardown timed out: {ex.Message}");
-        }
+            lock (_sync) DetachControllerLocked();
+            // The controller/Core RCWs unrooted above; collect them promptly instead of waiting
+            // for the next wallpaper switch (single-flight — a no-op when one already runs).
+            VideoRenderer.ScheduleReclaimMediaPipeline();
+        });
     }
 }
