@@ -172,6 +172,16 @@ public sealed class Engine : IDisposable
             _messageWindow = null;
             _host = null;
             _deviceLoss = null;
+            // Drop actions posted by the dying session (first-frame static captures,
+            // pause/resume requests, re-apply requests): the message window is gone so
+            // nothing drains them anymore, and the next Enable must not inherit them — a
+            // stale static fallback would overwrite the fresh session's OS wallpaper, a
+            // stale pause would freeze it, a stale re-apply would flash-rebuild it.
+            // Worker posts landing after this clear carry the pre-bump epoch and are
+            // dropped at drain by RunOnSessionAction, so this cannot strand live work.
+            int dropped = 0;
+            while (_mainThreadActions.TryDequeue(out _)) dropped++;
+            if (dropped > 0) Serilog.Log.Information($"Dropped {dropped} stale main-thread action(s) from the disabled session");
             Task? task = null;
             task = Task.Run(() =>
             {
@@ -221,7 +231,8 @@ public sealed class Engine : IDisposable
     public void PlayStart()
     {
         // Fires on the monitor's timer thread; _windows belongs to the main thread.
-        RunOnMainThread(() =>
+        // Session-scoped: a resume posted just before a Disable must not resume the next session.
+        RunOnSessionAction(() =>
         {
             foreach (var window in _windows.Values)
             {
@@ -241,7 +252,8 @@ public sealed class Engine : IDisposable
         // (previously a closing fullscreen app auto-resumed behind the user's back).
         _playback?.Suspend();
         // Fires on the monitor's timer thread; _windows belongs to the main thread.
-        RunOnMainThread(() =>
+        // Session-scoped: a pause posted just before a Disable must not pause the next session.
+        RunOnSessionAction(() =>
         {
             foreach (var window in _windows.Values)
             {
@@ -310,7 +322,10 @@ public sealed class Engine : IDisposable
         // previous wallpaper — no flash before our live layer returns.
         var staticPath = StaticPath(monitor.Device);
         var captured = monitor;
-        Action onStatic = () => RunOnMainThread(() =>
+        // Session-scoped: the renderer invokes this on its own (MF/WebView) thread, which
+        // can be in flight across a Disable — a stale fallback must not overwrite the next
+        // session's OS wallpaper.
+        Action onStatic = () => RunOnSessionAction(() =>
         {
             try { DesktopWallpaper.SetForMonitor(captured.Device, captured.Bounds, staticPath); }
             catch (Exception ex) { Serilog.Log.Error("Set static fallback failed", ex); }
@@ -380,7 +395,9 @@ public sealed class Engine : IDisposable
     /// modal box over someone's desktop is a worse bug than the one being reported.</summary>
     private void OnPlaybackFailed(string path, string detail)
     {
-        RunOnMainThread(() =>
+        // Session-scoped like the rest: a failure surfacing after a session change belongs
+        // to dead windows and must not log against (or confuse) the new session.
+        RunOnSessionAction(() =>
         {
             string codec = detail == "unsupported or missing decoder" ? "unsupported" : detail;
             // No codec identifier reaches here: MediaPlayerFailedEventArgs carries no FourCC, and
@@ -549,6 +566,24 @@ public sealed class Engine : IDisposable
         _mainThreadActions.Enqueue(action);
         if (_messageWindow is not null)
             User32.PostMessageW(_messageWindow.Hwnd, MessageWindow.RunActionsMessage, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <summary>Session-scoped <see cref="RunOnMainThread"/>: captures the current session epoch
+    /// at post time and drops the action if a Disable/Enable/ReapplyAll intervened before it
+    /// drains. Use this for everything that touches session-owned objects (windows, renderers,
+    /// the OS wallpaper) — worker threads (first-frame static capture, pause transitions) and
+    /// UI requests (play/pause, re-apply) can both be in flight across a session boundary, and
+    /// without the guard their actions land on the next session's windows. Raw
+    /// <see cref="RunOnMainThread"/> stays for the call sites that already capture and check the
+    /// epoch themselves (<see cref="OnDeviceLost"/>, <see cref="OnLayerLost"/>, pause fan-out).</summary>
+    public void RunOnSessionAction(Action action)
+    {
+        var epoch = Volatile.Read(ref _pauseEpoch);
+        RunOnMainThread(() =>
+        {
+            if (epoch != Volatile.Read(ref _pauseEpoch)) return;
+            action();
+        });
     }
 
     private void DrainMainThreadActions()
@@ -761,7 +796,7 @@ public sealed class Engine : IDisposable
             if (msg == _engine._taskbarCreatedMessage)
             {
                 Serilog.Log.Warning("Explorer restarted (TaskbarCreated) — re-attaching");
-                _engine.RunOnMainThread(_engine.ReapplyAll);
+                _engine.RunOnSessionAction(_engine.ReapplyAll);
                 return IntPtr.Zero;
             }
             switch (msg)
@@ -771,7 +806,7 @@ public sealed class Engine : IDisposable
                     return IntPtr.Zero;
                 case WM_DISPLAYCHANGE:
                     Serilog.Log.Information("Display change — re-applying");
-                    _engine.RunOnMainThread(_engine.ReapplyAll);
+                    _engine.RunOnSessionAction(_engine.ReapplyAll);
                     return IntPtr.Zero;
                 case WM_WTSSESSION_CHANGE:
                     if (_engine._playback is { } playback)
