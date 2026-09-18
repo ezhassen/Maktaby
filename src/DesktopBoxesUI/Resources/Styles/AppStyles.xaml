@@ -65,13 +65,11 @@
         x:Key="ItemIcon_Disable"
         x:Shared="False"
         FontSize="16"
-        Foreground="{Binding RelativeSource={RelativeSource AncestorType=MenuItem}, Path=Foreground}"
         Symbol="PlugDisconnected20" />
     <ui:SymbolIcon
         x:Key="ItemIcon_Enable"
         x:Shared="False"
         FontSize="16"
-        Foreground="{Binding RelativeSource={RelativeSource AncestorType=MenuItem}, Path=Foreground}"
         Symbol="PlugConnected20" />
     <ui:SymbolIcon
         x:Key="ItemIcon_Settings"
