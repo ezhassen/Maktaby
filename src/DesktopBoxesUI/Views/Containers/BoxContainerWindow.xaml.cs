@@ -1437,8 +1437,15 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void TabItem_DragLeave(object sender, DragEventArgs e)
     {
-        // Keep timer - hover will still switch if briefly leaving; cancel only when leaving TabStrip entirely
-        // Checked via mouse over TabStrip in DragLeave of window
+        // Leaving the tab cancels its pending switch: a fast sweep across the strip arms and
+        // cancels each tab in turn, so only a genuine 400 ms dwell ever fires. (Position checks
+        // can't do this — IsMouseOver freezes inside an OLE drag loop and cursor math proved
+        // fragile here; routed enter/leave is the reliable signal.)
+        if (sender is Button { Tag: BoxViewModel vm } && ReferenceEquals(_pendingHoverTab, vm))
+        {
+            _pendingHoverTab = null;
+            try { _tabHoverTimer?.Stop(); } catch { }
+        }
     }
 
     private void StartTabHoverTimer()
@@ -1448,17 +1455,22 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         _tabHoverTimer.Tick += (s, ev) =>
         {
             _tabHoverTimer.Stop();
-            if (_pendingHoverTab != null && _vm.BoxContainerVm != null && _vm.BoxContainerVm.Tabs.Contains(_pendingHoverTab))
-            {
-                int idx = _vm.BoxContainerVm.Tabs.IndexOf(_pendingHoverTab);
-                if (idx >= 0 && idx != _vm.BoxContainerVm.SelectedIndex)
-                {
-                    _vm.BoxContainerVm.SelectedIndex = idx;
-                    UpdateBody();
-                    Activate();
-                }
-            }
+            var pending = _pendingHoverTab;
             _pendingHoverTab = null;
+            if (pending is null || _vm.BoxContainerVm is null || !_vm.BoxContainerVm.Tabs.Contains(pending))
+            {
+                return;
+            }
+
+            // No position check here by design: leaving the button cancels via DragLeave
+            // above, so a firing timer always means an uninterrupted 400 ms dwell.
+            int idx = _vm.BoxContainerVm.Tabs.IndexOf(pending);
+            if (idx >= 0 && idx != _vm.BoxContainerVm.SelectedIndex)
+            {
+                _vm.BoxContainerVm.SelectedIndex = idx;
+                UpdateBody();
+                Activate();
+            }
         };
         _tabHoverTimer.Start();
     }
