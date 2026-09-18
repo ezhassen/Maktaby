@@ -444,8 +444,15 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
     private void Change_Click(object sender, RoutedEventArgs e)
     {
-        var w = new WidgetsListWindow(selectMode: true, selectKind: WidgetGalleryKind.Native);
-        if (w.ShowDialog() == true && w.SelectedNativeInfo is not null)
+        var w = new WidgetsListWindow(selectMode: true);
+        if (w.ShowDialog() != true) return;
+        // Cross-kind pick: a web widget replaces this native widget wholesale at the same bounds.
+        if (w.SelectedNativeInfo is null && w.SelectedInfo is not null)
+        {
+            ReplaceWithWeb(w.SelectedInfo);
+            return;
+        }
+        if (w.SelectedNativeInfo is not null)
         {
             var info = w.SelectedNativeInfo;
             _container.NativeWidgetName = info.Slug;
@@ -458,6 +465,19 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
             LoadNativeWidgetAsync();
             UpdateChrome();
         }
+    }
+
+    /// <summary>Replaces this native widget with a web one: the old container is removed
+    /// (window closes via the collection change) and the web widget is created at the exact
+    /// same bounds — creation auto-opens its window activated.</summary>
+    private void ReplaceWithWeb(WebWidgetInfo info)
+    {
+        var bounds = _container.Bounds;
+        var dm = App.Services.GetRequiredService<DesktopManager>();
+        var main = App.Services.GetRequiredService<MainViewModel>();
+        dm.RemoveContainer(_container.Id);
+        main.CreateWebWidgetAt(info.Slug, info.Source, bounds.X, bounds.Y, bounds.Width, bounds.Height);
+        try { dm.SaveAsyncFireAndForget(); } catch { }
     }
 
     private void Duplicate_Click(object sender, RoutedEventArgs e)
