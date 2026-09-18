@@ -4,8 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="clr-namespace:DesktopBoxesUI.ViewModels"
     xmlns:models2="clr-namespace:DesktopBoxesUI.Core.Models;assembly=WPFShared"
-    xmlns:views="clr-namespace:DesktopBoxesUI.Views"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:views="clr-namespace:DesktopBoxesUI.Views"
     Title="Widgets"
     Width="860"
     Height="560"
@@ -13,6 +13,97 @@
     MinHeight="400"
     Icon="/Assets/app.ico"
     WindowStartupLocation="CenterScreen">
+    <ui:FluentWindow.Resources>
+        <!--
+            Local button chrome for the per-item action buttons below. They live inside an
+            ItemTemplate, where WPF-UI's own Button template misfires: its hover/pressed triggers
+            copy Button DPs via {Binding RelativeSource=TemplatedParent} (NOT TemplateBinding),
+            and a DataTemplate child's TemplatedParent is the hosting ContentPresenter — which has
+            no PressedForeground/MouseOverBackground DPs (binding Error 40 on every hover/press).
+            This template mirrors the same Button DPs with TemplateBinding (template-relative, so
+            always the Button) and explicit state triggers. Base colors follow WPF-UI's style/API:
+            Secondary + Transparent from style defaults, Primary from accent brushes.
+        -->
+        <ControlTemplate x:Key="GalleryRowButtonTemplate" TargetType="ui:Button">
+            <Border
+                x:Name="Bd"
+                Padding="{TemplateBinding Padding}"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="4"
+                SnapsToDevicePixels="True">
+                <StackPanel
+                    HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                    VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                    Orientation="Horizontal">
+                    <ContentPresenter
+                        x:Name="ControlIcon"
+                        Margin="0,0,6,0"
+                        VerticalAlignment="Center"
+                        Content="{TemplateBinding Icon}"
+                        TextElement.Foreground="{TemplateBinding Foreground}" />
+                    <ContentPresenter
+                        x:Name="Cp"
+                        VerticalAlignment="Center"
+                        Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                        RecognizesAccessKey="True"
+                        TextElement.Foreground="{TemplateBinding Foreground}" />
+                </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+                <Trigger Property="Appearance" Value="Transparent">
+                    <Setter TargetName="Bd" Property="Background" Value="Transparent" />
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="Transparent" />
+                </Trigger>
+                <Trigger Property="Appearance" Value="Primary">
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentButtonBackground}" />
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentButtonBackground}" />
+                    <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource AccentButtonForeground}" />
+                    <Setter TargetName="ControlIcon" Property="TextElement.Foreground" Value="{DynamicResource AccentButtonForeground}" />
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ButtonBackgroundPointerOver}" />
+                </Trigger>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="Appearance" Value="Primary" />
+                        <Condition Property="IsMouseOver" Value="True" />
+                    </MultiTrigger.Conditions>
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentButtonBackgroundPointerOver}" />
+                    <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource AccentButtonForegroundPointerOver}" />
+                    <Setter TargetName="ControlIcon" Property="TextElement.Foreground" Value="{DynamicResource AccentButtonForegroundPointerOver}" />
+                </MultiTrigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ButtonBackgroundPressed}" />
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource ButtonBorderBrushPressed}" />
+                    <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource ButtonForegroundPressed}" />
+                    <Setter TargetName="ControlIcon" Property="TextElement.Foreground" Value="{DynamicResource ButtonForegroundPressed}" />
+                </Trigger>
+                <MultiTrigger>
+                    <MultiTrigger.Conditions>
+                        <Condition Property="Appearance" Value="Primary" />
+                        <Condition Property="IsPressed" Value="True" />
+                    </MultiTrigger.Conditions>
+                    <Setter TargetName="Bd" Property="Background" Value="{DynamicResource AccentButtonBackgroundPressed}" />
+                    <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource AccentButtonBorderBrushPressed}" />
+                    <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource AccentButtonForegroundPressed}" />
+                    <Setter TargetName="ControlIcon" Property="TextElement.Foreground" Value="{DynamicResource AccentButtonForegroundPressed}" />
+                </MultiTrigger>
+                <Trigger Property="IsEnabled" Value="False">
+                    <Setter TargetName="Cp" Property="TextElement.Foreground" Value="{DynamicResource ButtonForegroundDisabled}" />
+                    <Setter TargetName="ControlIcon" Property="TextElement.Foreground" Value="{DynamicResource ButtonForegroundDisabled}" />
+                </Trigger>
+                <DataTrigger Binding="{Binding Content, ElementName=ControlIcon}" Value="{x:Null}">
+                    <Setter TargetName="ControlIcon" Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Content, ElementName=Cp}" Value="{x:Null}">
+                    <Setter TargetName="ControlIcon" Property="Margin" Value="0" />
+                </DataTrigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
+    </ui:FluentWindow.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -219,6 +310,7 @@
                                             Click="Place_Click"
                                             Content="Place"
                                             Tag="{Binding}"
+                                            Template="{StaticResource GalleryRowButtonTemplate}"
                                             Visibility="{Binding DataContext.IsSelectMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibilityConverter}}">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
@@ -241,6 +333,7 @@
                                             Click="Edit_Click"
                                             Icon="{ui:SymbolIcon Symbol=Edit20}"
                                             Tag="{Binding}"
+                                            Template="{StaticResource GalleryRowButtonTemplate}"
                                             ToolTip="Edit">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
@@ -265,6 +358,7 @@
                                             Click="Edit_Click"
                                             Icon="{ui:SymbolIcon Symbol=Folder20}"
                                             Tag="{Binding}"
+                                            Template="{StaticResource GalleryRowButtonTemplate}"
                                             ToolTip="Open widget folder">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
@@ -283,6 +377,7 @@
                                             Click="Duplicate_Click"
                                             Icon="{ui:SymbolIcon Copy24}"
                                             Tag="{Binding}"
+                                            Template="{StaticResource GalleryRowButtonTemplate}"
                                             ToolTip="Duplicate">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
@@ -304,6 +399,7 @@
                                             Click="RegenerateThumbnail_Click"
                                             Icon="{ui:SymbolIcon Symbol=ArrowSync20}"
                                             Tag="{Binding}"
+                                            Template="{StaticResource GalleryRowButtonTemplate}"
                                             ToolTip="Regenerate Thumbnail">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
@@ -321,6 +417,7 @@
                                             Appearance="Transparent"
                                             Click="Delete_Click"
                                             Tag="{Binding}"
+                                            Template="{StaticResource GalleryRowButtonTemplate}"
                                             ToolTip="Delete (user widgets only)">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
