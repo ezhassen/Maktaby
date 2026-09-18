@@ -297,8 +297,8 @@ public partial class App : Application
             WindowState = WindowState.Minimized,
             WindowStyle = WindowStyle.None,
             ShowInTaskbar = false,
-            AllowsTransparency = true,
-            Background = System.Windows.Media.Brushes.Transparent,
+            // No AllowsTransparency: this host is never visibly shown, and a layered
+            // redirect for an invisible 0x0 window is pure DWM overhead.
             Visibility = Visibility.Hidden,
         };
 
