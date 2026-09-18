@@ -15,12 +15,13 @@ namespace DesktopBoxesUI.ViewModels;
 /// (the tabbed boxes). For a <see cref="DesktopItemContainerType.Custom"/> widget it exposes
 /// <see cref="CustomTypeName"/>.
 /// </summary>
-public sealed class ContainerViewModel : ViewModelBase
+public sealed class ContainerViewModel : ViewModelBase, IDisposable
 {
     private readonly DesktopItemContainer _container;
     private readonly IconImageService _icons;
     private readonly IBoxService _boxService;
     private readonly BoxContainerViewModel? _boxContainerVm;
+    private bool _disposed;
 
     public ContainerViewModel(DesktopItemContainer container, IconImageService icons, IBoxService boxService)
     {
@@ -31,15 +32,33 @@ public sealed class ContainerViewModel : ViewModelBase
         if (container.Type == DesktopItemContainerType.BoxContainer && container.ChildContainer != null)
         {
             _boxContainerVm = new BoxContainerViewModel(container.ChildContainer, icons, boxService);
-            _boxContainerVm.SelectedIndexChanged += () =>
-            {
-                OnPropertyChanged(nameof(ActiveBox));
-                OnPropertyChanged(nameof(Title));
-            };
+            _boxContainerVm.SelectedIndexChanged += OnSelectedIndexChanged;
             _boxContainerVm.Tabs.CollectionChanged += OnTabsChanged;
             foreach (var t in _boxContainerVm.Tabs)
                 t.PropertyChanged += OnBoxPropertyChanged;
         }
+    }
+
+    /// <summary>Detaches from the owned tab container (long-lived child events pin otherwise).
+    /// Tab VMs themselves are disposed by the remover (see <c>MainViewModel.RemoveContainer</c>);
+    /// disposal here is re-entrant-safe.</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_boxContainerVm != null)
+        {
+            _boxContainerVm.SelectedIndexChanged -= OnSelectedIndexChanged;
+            _boxContainerVm.Tabs.CollectionChanged -= OnTabsChanged;
+            foreach (var t in _boxContainerVm.Tabs)
+                t.PropertyChanged -= OnBoxPropertyChanged;
+        }
+    }
+
+    private void OnSelectedIndexChanged()
+    {
+        OnPropertyChanged(nameof(ActiveBox));
+        OnPropertyChanged(nameof(Title));
     }
 
     private void OnTabsChanged(object? sender, NotifyCollectionChangedEventArgs e)

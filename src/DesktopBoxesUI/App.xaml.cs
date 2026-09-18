@@ -83,6 +83,9 @@ public partial class App : Application
         ApplicationThemeManager.Changed += (_, _) => ApplyBoxAppearance();
         // Ensure WebWidget storage roots exist (UserWidgets + EBWebView)
         try { Services.GetRequiredService<IWebWidgetService>().EnsureUserWidgetsRoot(); } catch { }
+        // Gallery previews get their own environment under the managed tree (not %TEMP%), so the
+        // startup prune below covers it. Must precede any preview control init.
+        try { WPFShared.Controls.WebWidgetControl.UserDataFolder = Path.Combine(SettingsService.AppDataDir, "EBWebView.Previews"); } catch { }
         // Prune regenerable Chromium payload caches (GPU/shader/crash/logs, oversized HTTP cache)
         // off the UI thread: single-instance guard above guarantees no other process holds them.
         _ = Task.Run(() => WebViewUserDataMaintenance.TryPrune(SettingsService.AppDataDir));

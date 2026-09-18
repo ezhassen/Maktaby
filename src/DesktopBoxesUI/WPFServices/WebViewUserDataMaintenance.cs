@@ -28,7 +28,20 @@ public static class WebViewUserDataMaintenance
     {
         try
         {
-            string envRoot = Path.Combine(appDataDir, "EBWebView");
+            // Main widget environment plus the gallery-preview environment (see App.OnStartup).
+            PruneEnvironment(Path.Combine(appDataDir, "EBWebView"));
+            PruneEnvironment(Path.Combine(appDataDir, "EBWebView.Previews"));
+        }
+        catch
+        {
+            // Maintenance must never fail startup.
+        }
+    }
+
+    private static void PruneEnvironment(string envRoot)
+    {
+        try
+        {
             if (!Directory.Exists(envRoot))
             {
                 return;
@@ -71,7 +84,7 @@ public static class WebViewUserDataMaintenance
         }
         catch
         {
-            // Maintenance must never fail startup.
+            // Per-environment best effort.
         }
     }
 

@@ -175,6 +175,7 @@ public sealed class MainViewModel : ViewModelBase
                 try { _boxService.RemoveBox(tab.Model.Id); } catch { }
                 try { tab.Dispose(); } catch { }
             }
+            try { vm.Dispose(); } catch { }
         }
 
         _containers.RemoveContainer(vm.Id);

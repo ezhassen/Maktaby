@@ -18,6 +18,11 @@ public partial class WebWidgetControl : UserControl
     private Task? _initTask;
     private static Task<CoreWebView2Environment>? s_envTask;
 
+    /// <summary>User-data folder for the gallery preview environment. Defaults to a %TEMP% folder;
+    /// the host should point it under the managed app-data dir at startup so it is pruned with the
+    /// main environment instead of accumulating in Temp. Must be set before first use.</summary>
+    public static string UserDataFolder { get; set; } = Path.Combine(Path.GetTempPath(), "EzzDesktopBoxesUI_EBWebView");
+
     public event EventHandler? WidgetMouseEnter;
     public event EventHandler? WidgetMouseLeave;
     public event EventHandler? WidgetClicked;
@@ -156,7 +161,7 @@ public partial class WebWidgetControl : UserControl
             try { WebView.DefaultBackgroundColor = Color.Transparent; } catch { }
 
             //var userData = SettingsService.AppDataDir;//Path.Combine(SettingsService.AppDataDir, "EBWebView");
-            var userData = Path.Combine(Path.GetTempPath(), "EzzDesktopBoxesUI_EBWebView");
+            var userData = UserDataFolder;
             try { Directory.CreateDirectory(userData); } catch { }
 
             // Share the same CoreWebView2Environment across all widget controls.
