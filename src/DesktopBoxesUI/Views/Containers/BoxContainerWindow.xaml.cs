@@ -154,6 +154,10 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
         Loaded += OnLoaded;
         Closed += OnClosed;
+        // Hidden windows (Temp Hide All, tray hide) miss nothing visually: suspend the folder
+        // watcher while invisible; re-showing refreshes through ManageFolderWatcher if events
+        // were missed. Self-subscription dies with the window — no detach needed.
+        IsVisibleChanged += (_, _) => ManageFolderWatcher();
         BoxMenu.Opened += BoxMenu_Opened;
         _vm.PropertyChanged += OnContainerPropertyChanged;
     }
@@ -551,13 +555,15 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         bool shouldWatch = _vm.ActiveBox != null
             && _vm.ActiveBox.IsFolderPortal
             && _vm.ActiveBox.HasFolder
-            && !_vm.IsRolled;
+            && !_vm.IsRolled
+            && IsVisible;
 
         if (shouldWatch)
         {
             _watchedBox = _vm.ActiveBox!;
             _watchedBox.StartWatching();
-            _ = _watchedBox.RefreshFolderAsync();
+            // Lazy: loads only when never loaded for this path (tab switches back are instant).
+            _ = _watchedBox.EnsureFolderLoadedAsync();
         }
         else
         {
@@ -684,7 +690,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         var vm = _vm.BoxContainerVm.AddTab("Folder Portal");
         vm.BoxType = BoxType.FolderPortal;
         vm.FolderPath = null;
-        vm.FolderPortalViewMode = FolderPortalViewMode.Icons;
+        vm.FolderPortalViewMode = FolderPortalViewMode.Details;
         UpdateBody();
         _save();
     }

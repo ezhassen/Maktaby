@@ -25,6 +25,19 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
     private IDisposable? _folderWatcher; // parent of FolderPath to detect root delete/rename/move
     private bool _isWatching;
     private bool _disposed;
+    // Lazy folder loading: background tabs never enumerate until first selected. The path the
+    // items were last loaded for (stale after navigation — compared per Ensure, never reset);
+    // plus coalescing flags so concurrent refreshes re-run once instead of stacking.
+    private string? _folderLoadedForPath;
+    // Read on UI + pool threads as the coalesce guard (best-effort); all writes go through
+    // SetLoadingFlag so the PropertyChanged notification is never skipped.
+    private bool _isLoadingFolder;
+    private bool _reloadRequested;
+    // Watcher gap tracking: while unwatched (background tab, rolled/hidden window) filesystem
+    // events are missed, so the next Ensure must refresh. _watchEpoch guards the clear against
+    // a stop that lands mid-load (its events belong to the next cycle, not this snapshot).
+    private bool _watchMissedChanges;
+    private int _watchEpoch;
     private string? _currentFolderPath; // transient navigation, null = root (FolderPath)
     private readonly Stack<string> _navBack = new();
     private readonly Stack<string> _navForward = new();
@@ -37,10 +50,8 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
             box.Items.Where(i => !ShellItemFilter.IsExcluded(i.Path)).Select(i => new BoxItemViewModel(i, icons)));
         _box.Items.CollectionChanged += OnBoxItemsChanged;
         FolderItems = new ObservableCollection<FolderItemViewModel>();
-        if (_box.BoxType == BoxType.FolderPortal && !string.IsNullOrWhiteSpace(_box.FolderPath))
-        {
-            _ = RefreshFolderAsync();
-        }
+        // Lazy: no enumeration here — the folder loads on first selection (EnsureFolderLoadedAsync
+        // via ManageFolderWatcher / OnDataContextChanged), so background tabs cost nothing.
     }
 
     public System.Guid Id => _box.Id;
@@ -229,12 +240,90 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
         catch { return true; }
     }
 
+    /// <summary>True while a folder load is in flight (binds the loading indicator).</summary>
+    public bool IsLoadingFolder
+    {
+        get => _isLoadingFolder;
+        private set => SetField(ref _isLoadingFolder, value);
+    }
+
+    /// <summary>Reloads the folder view. Concurrent calls coalesce: a refresh requested while a
+    /// load is in flight re-runs once afterwards instead of stacking parallel enumerations.</summary>
     public async Task RefreshFolderAsync()
     {
-        string? effective = CurrentFolderPath;
+        if (_disposed) return;
+        if (IsLoadingFolder)
+        {
+            _reloadRequested = true;
+            return;
+        }
+
+        // The setter owns the write: presetting the field here would make SetField's
+        // equality check swallow the notification and stick the loading indicator on.
+        SetLoadingFlag(true);
+        try
+        {
+            do
+            {
+                _reloadRequested = false;
+                await LoadFolderCoreAsync().ConfigureAwait(false);
+            }
+            while (_reloadRequested && !_disposed);
+        }
+        finally
+        {
+            SetLoadingFlag(false);
+        }
+    }
+
+    /// <summary>Loads the folder when its contents are stale for the current path: never loaded,
+    /// path changed, or watcher gaps (background tab / rolled / hidden) may have missed events.
+    /// Otherwise (loaded, watched, same path) tab switches back are instant.</summary>
+    public Task EnsureFolderLoadedAsync()
+    {
+        if (_disposed) return Task.CompletedTask;
+        if (_box.BoxType != BoxType.FolderPortal || !HasFolder) return Task.CompletedTask;
+        if (!IsLoadingFolder && !_watchMissedChanges && string.Equals(_folderLoadedForPath, CurrentFolderPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.CompletedTask;
+        }
+
+        return RefreshFolderAsync();
+    }
+
+    private void SetLoadingFlag(bool value)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(() => IsLoadingFolder = value);
+        }
+        else
+        {
+            IsLoadingFolder = value;
+        }
+    }
+
+    private void RunOnUi(Action action)
+    {
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            dispatcher.Invoke(action);
+        }
+        else
+        {
+            action();
+        }
+    }
+
+    private async Task LoadFolderCoreAsync()
+    {
+        string effective = CurrentFolderPath;
+        int epoch = _watchEpoch;
         if (_box.BoxType != BoxType.FolderPortal || string.IsNullOrWhiteSpace(effective) || !Directory.Exists(effective))
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() =>
+            RunOnUi(() =>
             {
                 FolderItems.Clear();
                 // Notify placeholder state may have changed (e.g., current folder deleted, or root missing on load)
@@ -248,37 +337,65 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
             {
                 // Current subfolder missing but root exists: keep showing empty, watcher will be updated via ManageFolderWatcher
             }
+            MarkFolderFresh(effective, epoch);
             return;
         }
 
         string folder = effective;
-        List<string> entries;
+        // Enumeration + filtering + VM construction + sorting are pure IO/CPU: keep them off the
+        // UI thread so large or network folders never freeze the desktop while loading.
+        // Null = transient enumeration failure: stay retryable instead of marking loaded.
+        List<FolderItemViewModel>? newItems;
         try
         {
-            entries = Directory.EnumerateFileSystemEntries(folder).ToList();
+            newItems = await Task.Run(() =>
+            {
+                List<string> entries;
+                try
+                {
+                    entries = Directory.EnumerateFileSystemEntries(folder).ToList();
+                }
+                catch
+                {
+                    return (List<FolderItemViewModel>?)null;
+                }
+
+                // Exclude desktop.ini etc via filter on path filename and hidden/system per Explorer settings
+                entries = entries.Where(p => !ShellItemFilter.IsExcluded(p) && ShouldShowEntry(p)).ToList();
+                return SortEntries(entries.Select(p => new FolderItemViewModel(p, _icons))).ToList();
+            }).ConfigureAwait(false);
         }
         catch
         {
-            System.Windows.Application.Current?.Dispatcher.Invoke(() => FolderItems.Clear());
             return;
         }
 
-        // Exclude desktop.ini etc via filter on path filename and hidden/system per Explorer settings
-        entries = entries.Where(p => !ShellItemFilter.IsExcluded(p) && ShouldShowEntry(p)).ToList();
-
-        var newItems = entries.Select(p => new FolderItemViewModel(p, _icons)).ToList();
-        // Apply sort before assigning
-        newItems = SortEntries(newItems).ToList();
-
-        var dispatcher = System.Windows.Application.Current?.Dispatcher;
-        if (dispatcher != null && !dispatcher.CheckAccess())
+        if (newItems is null)
         {
-            await dispatcher.InvokeAsync(() => ApplyFolderItems(newItems));
+            return;
         }
-        else
+
+        // Navigated away (or disposed) mid-load: skip the stale apply — the newer refresh owns it.
+        if (_disposed || !string.Equals(effective, CurrentFolderPath, StringComparison.OrdinalIgnoreCase))
         {
-            ApplyFolderItems(newItems);
+            return;
         }
+
+        RunOnUi(() => ApplyFolderItems(newItems));
+        MarkFolderFresh(effective, epoch);
+    }
+
+    /// <summary>Records a completed load — unless the watcher was stopped mid-load, in which case
+    /// the missed flag (and its newer epoch) survives so the next Ensure refreshes again.</summary>
+    private void MarkFolderFresh(string effective, int epoch)
+    {
+        if (epoch != _watchEpoch)
+        {
+            return;
+        }
+
+        _folderLoadedForPath = effective;
+        _watchMissedChanges = false;
     }
 
     private void ApplyFolderItems(List<FolderItemViewModel> newItems)
@@ -541,6 +658,9 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
     {
         if (!_isWatching) return;
         _isWatching = false;
+        // From here on filesystem events are missed: force the next Ensure to refresh.
+        _watchMissedChanges = true;
+        _watchEpoch++;
         try { _watcher?.Dispose(); } catch { }
         _watcher = null;
         try { _folderWatcher?.Dispose(); } catch { }

@@ -66,7 +66,7 @@ public partial class FolderPortalControl : UserControl
         UpdateView();
         if (newVm != null && newVm.IsFolderPortal && newVm.HasFolder)
         {
-            _ = newVm.RefreshFolderAsync();
+            _ = newVm.EnsureFolderLoadedAsync();
         }
     }
 
@@ -1013,27 +1013,34 @@ public partial class FolderPortalControl : UserControl
     private void FocusItem(int index)
     {
         if (Box == null || index < 0 || index >= Box.FolderItems.Count) return;
+        // With virtualization the container may not exist: scroll it into view first
+        // (two passes — the first establishes extent/viewport, the second lands the offset),
+        // then resolve the now-realized container.
+        if (FindVisualChild<DesktopBoxesUI.Controls.VirtualizingIconPanel>(IconsList) is DesktopBoxesUI.Controls.VirtualizingIconPanel panel)
+        {
+            panel.BringIndexIntoView(index);
+            IconsList.UpdateLayout();
+            panel.BringIndexIntoView(index);
+            IconsList.UpdateLayout();
+        }
         var cp = IconsList.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
         var border = (cp?.FindName("ItemBorder") as Border) ?? FindVisualChild<Border>(cp);
         border?.Focus();
     }
 
+    /// <summary>Outer tile cell edge: tile (IconSize+36 via TileWidth) + Border Margin 4.
+    /// Must match the virtualizing panel's ItemWidth/ItemHeight (ConverterParameter=40).</summary>
+    private const double TileOuterExtra = 40;
+
     private int GetColumnCount()
     {
         if (Box == null || Box.FolderItems.Count == 0) return 1;
-        var first = IconsList.ItemContainerGenerator.ContainerFromIndex(0) as UIElement;
-        if (first == null) return 1;
-        double top0 = first.TransformToAncestor(IconsScroll).Transform(new Point(0, 0)).Y;
-        int cols = 0;
-        for (int i = 0; i < Box.FolderItems.Count; i++)
-        {
-            var c = IconsList.ItemContainerGenerator.ContainerFromIndex(i) as UIElement;
-            if (c == null) break;
-            double top = c.TransformToAncestor(IconsScroll).Transform(new Point(0, 0)).Y;
-            if (Math.Abs(top - top0) < 1) cols++;
-            else break;
-        }
-        return Math.Max(1, cols);
+        // Arithmetic, not container-walking: with virtualization unrealized containers return
+        // null from ContainerFromIndex, which broke the old row scan whenever row 0 was scrolled out.
+        double tile = IconSize + TileOuterExtra;
+        double width = IconsList.ActualWidth;
+        if (width <= 0 || tile <= 0) return 1;
+        return Math.Max(1, (int)Math.Floor(width / tile));
     }
 
     private void Control_IsKeyboardFocusWithinChanged(object sender, DependencyPropertyChangedEventArgs e)

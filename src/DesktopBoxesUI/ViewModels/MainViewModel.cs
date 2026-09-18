@@ -89,7 +89,7 @@ public sealed class MainViewModel : ViewModelBase
         var box = _boxService.CreateBox("Folder Portal", left, top, width, height);
         box.BoxType = BoxType.FolderPortal;
         box.FolderPath = folderPath;
-        box.FolderPortalViewMode = FolderPortalViewMode.Icons;
+        box.FolderPortalViewMode = FolderPortalViewMode.Details;
         box.FolderSortBy = FolderSortMode.Name;
         box.FolderSortAscending = true;
         // Name will be synced to folder name on first FolderPath set via BoxViewModel; keep generic until then
