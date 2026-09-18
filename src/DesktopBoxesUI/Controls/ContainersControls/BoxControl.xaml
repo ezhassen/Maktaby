@@ -5,6 +5,7 @@
     xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
     d:DesignHeight="200"
     d:DesignWidth="240"
@@ -24,11 +25,12 @@
         <conv:AdaptiveTileSizeConverter x:Key="TileWidth" />
         <conv:AdaptiveTileSizeConverter x:Key="TileHeight" />
     </UserControl.Resources>
-    <ScrollViewer
-        x:Name="Scroll"
-        Background="{DynamicResource BoxBackground}"
-        HorizontalScrollBarVisibility="Disabled"
-        VerticalScrollBarVisibility="Auto">
+    <Grid>
+        <ScrollViewer
+            x:Name="Scroll"
+            Background="{DynamicResource BoxBackground}"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
         <Grid x:Name="ItemsHost" Background="{DynamicResource BoxBackground}">
             <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}">
                 <ItemsControl.ItemsPanel>
@@ -103,4 +105,31 @@
             </Canvas>
         </Grid>
     </ScrollViewer>
+        <!--  Copying pill: bottom-centered, fixed while scrolling; shown only while external
+          files copy in (IsCopyingFiles), hit-test off so it never blocks drops beneath it.  -->
+        <Border
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Margin="0,0,0,8"
+            Padding="10,6"
+            Background="#CC1E1E1E"
+            BorderBrush="#FF7FB2FF"
+            BorderThickness="1"
+            CornerRadius="12"
+            IsHitTestVisible="False"
+            Visibility="{Binding IsCopyingFiles, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+            <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                <ui:ProgressRing
+                    Width="16"
+                    Height="16"
+                    IsIndeterminate="True" />
+                <TextBlock
+                    Margin="8,0,0,0"
+                    VerticalAlignment="Center"
+                    FontSize="11"
+                    Foreground="White"
+                    Text="{Binding CopyStatusText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+            </StackPanel>
+        </Border>
+    </Grid>
 </UserControl>

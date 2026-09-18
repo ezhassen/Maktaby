@@ -22,6 +22,10 @@ internal static class DropHelper
 {
     private const string ShellIdListFormat = "Shell IDList Array";
 
+    /// <summary>Copy progress for a file drop: <see cref="Processed"/> of <see cref="Total"/> done,
+    /// <see cref="CurrentName"/> is the file being copied.</summary>
+    public sealed record DropProgress(int Processed, int Total, string CurrentName);
+
     public static DragDropEffects GetEffect(DragEventArgs e)
     {
         var allowed = e.AllowedEffects;
@@ -151,7 +155,7 @@ internal static class DropHelper
         return null;
     }
 
-    public static async Task<List<BoxItem>?> AddToBoxAsync(BoxViewModel target, MainViewModel? host, DragEventArgs e, int insertIndex = -1)
+    public static async Task<List<BoxItem>?> AddToBoxAsync(BoxViewModel target, MainViewModel? host, DragEventArgs e, int insertIndex = -1, IProgress<DropProgress>? progress = null)
     {
         if (e.Data.GetDataPresent(DndFormats.BoxItems))
         {
@@ -181,17 +185,20 @@ internal static class DropHelper
             // Batch resolve: collect file paths that need shell copy and PIDL entries
             var fileEntries = new List<(Win32Apis.ShellItemEntry entry, string b64)>();
             var resolvedItems = new List<(BoxItem? item, int origIdx)>();
+            int done = 0;
             for (int i = 0; i < entries.Length; i++)
             {
                 var entry = entries[i];
                 if (entry.FilePath != null)
                 {
+                    progress?.Report(new DropProgress(done + 1, entries.Length, Path.GetFileName(entry.FilePath)));
                     var resolved = await ResolveDroppedFileAsync(entry.FilePath, fileOps);
                     var bi = BoxItemFactory.FromPath(resolved);
                     resolvedItems.Add((bi, i));
                 }
                 else if (entry.Pidl != null)
                 {
+                    progress?.Report(new DropProgress(done + 1, entries.Length, "shortcut"));
                     var b64 = Convert.ToBase64String(entry.Pidl);
                     var resolved = await ResolveDroppedPidlAsync(b64, fileOps);
                     BoxItem? bi = null;
@@ -199,6 +206,7 @@ internal static class DropHelper
                     else bi = BoxItemFactory.FromShellPidl(b64, Win32Apis.GetPidlDisplayName(b64));
                     resolvedItems.Add((bi, i));
                 }
+                done++;
             }
 
             int at = insertIndex < 0 ? -1 : Math.Min(insertIndex, target.Items.Count);

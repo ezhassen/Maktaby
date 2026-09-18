@@ -5,7 +5,6 @@ using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Views.HelpersViews;
 using DesktopBoxesUI.Win32.NativeMethods;
-using WindowsNative;
 using DesktopBoxesUI.WPFServices;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics;
@@ -17,6 +16,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
+using WindowsNative;
 
 namespace DesktopBoxesUI.Controls.ContainersControls;
 
@@ -55,6 +55,9 @@ public partial class BoxControl : UserControl
     // so grabbing a top-row item (or sweeping through an edge) doesn't yank the view.
     private int _zoneTicks;
     private double _lastZoneDir;
+    // Copy-pill generation: guards the async-posted progress callbacks against out-of-order
+    // delivery (a stale "show" must not resurrect the pill after its drop hid it).
+    private int _copyingSeq;
 
     // Drag visual gap - collapsed source items (target gap is adorner-only, no placeholder).
     // Instance-scoped: a static list would pin one control's live visuals from another drag
@@ -95,6 +98,26 @@ public partial class BoxControl : UserControl
     {
         get => (double)GetValue(IconSizeProperty);
         private set => SetValue(IconSizeProperty, value);
+    }
+
+    /// <summary>True while an external file drop is being copied in (binds the copying pill).</summary>
+    public static readonly DependencyProperty IsCopyingFilesProperty = DependencyProperty.Register(
+        nameof(IsCopyingFiles), typeof(bool), typeof(BoxControl), new PropertyMetadata(false));
+
+    public bool IsCopyingFiles
+    {
+        get => (bool)GetValue(IsCopyingFilesProperty);
+        private set => SetValue(IsCopyingFilesProperty, value);
+    }
+
+    /// <summary>Human-readable copy status (e.g. "Copying 3 of 12 — big.zip").</summary>
+    public static readonly DependencyProperty CopyStatusTextProperty = DependencyProperty.Register(
+        nameof(CopyStatusText), typeof(string), typeof(BoxControl), new PropertyMetadata(string.Empty));
+
+    public string CopyStatusText
+    {
+        get => (string)GetValue(CopyStatusTextProperty);
+        private set => SetValue(CopyStatusTextProperty, value);
     }
     public void UpdateChrome(bool show)
     {
@@ -877,7 +900,39 @@ public partial class BoxControl : UserControl
             return;
         }
 
-        var moved = await DropHelper.AddToBoxAsync(targetBox, Host, e, _insertIndex);
+        // External file drops copy on a background thread with no other feedback: report
+        // per-file progress into the copying pill (first report shows it, completion hides it).
+        // Internal Box-item moves are instant — no indicator, no flash.
+        // Progress<T> posts callbacks asynchronously: for a fast drop (e.g. a Start Menu .lnk)
+        // a "show" post can land AFTER the finally below hid the pill, sticking it on. The
+        // sequence guard drops stale posts and lets only the owning drop hide.
+        int copySeq = ++_copyingSeq;
+        IProgress<DropHelper.DropProgress>? progress = null;
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent("Shell IDList Array"))
+        {
+            progress = new Progress<DropHelper.DropProgress>(p =>
+            {
+                if (copySeq != _copyingSeq) return;
+                IsCopyingFiles = true;
+                CopyStatusText = p.Total > 1
+                    ? $"Copying {p.Processed} of {p.Total} — {p.CurrentName}"
+                    : $"Copying {p.CurrentName}…";
+            });
+        }
+
+        List<DesktopBoxesUI.Core.Models.BoxItem>? moved;
+        try
+        {
+            moved = await DropHelper.AddToBoxAsync(targetBox, Host, e, _insertIndex, progress);
+        }
+        finally
+        {
+            if (copySeq == _copyingSeq)
+            {
+                _copyingSeq++;
+                IsCopyingFiles = false;
+            }
+        }
         StopDragAutoScroll();
         RemoveDropIndicator();
         _insertIndex = -1;
