@@ -127,7 +127,7 @@ After editing:
 There are two implementations of "detect a double-click on empty desktop" (the trigger for
 **Temp Hide All boxes**). The active one is selected by `GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface`
 (`bool?`, defined in `GlobalFeaturesSwitches.cs`). **It is currently `false`** — the custom surface path is
-active; the global mouse hook path is dormant (kept for experiments).
+active and stable; the global mouse hook path is dormant (kept for experiments).
 
 - **Global low-level hook (`true`)** — `DesktopManager` calls `_mouseMonitor.Start()` which spins up
   `MouseMonitor` (`Win32APIs/Services/MouseMonitor.cs`), a `WH_MOUSE_LL` hook on a **dedicated STA background
@@ -138,14 +138,23 @@ active; the global mouse hook path is dormant (kept for experiments).
   `UnregisterBoxWindow`) + `Win32Apis.IsDesktopEmptyPoint` (an `LVM_HITTEST` that confirms the point is
   not on an icon). `DesktopDoubleClick` is wired in `App.xaml.cs` to `DesktopManager.ToggleHideAllBoxes()`.
   **This path only observes input; it never captures or swallows it, so it does not interfere with other
-  apps/games.** Prefer this path.
+  apps/games.**
 - **Custom surface (`false`)** — `DesktopManager.EnsureSurface()` shows `Views/DesktopSurface.xaml`, a
   top-level layered WPF window glued to the desktop root that forwards mouse input to the Explorer
-  list-view and detects the double-click itself (`WM_NCHITTEST` + two `WM_LBUTTONDOWN`s). Its
-  above-icons layer lifecycle (probe via the engine's probe, attach, WinEvent layer watch,
+  list-view and detects the double-click itself (`WM_NCHITTEST` + two `WM_LBUTTONDOWN`s — WPF windows
+  are created without `CS_DBLCLKS`, so `WM_LBUTTONDBLCLK` is never delivered; the surface adds the
+  style itself in `OnLoaded`, and double-click is still confirmed manually from two `WM_LBUTTONDOWN`s).
+  Its above-icons layer lifecycle (probe via the engine's probe, attach, WinEvent layer watch,
   re-glue on loss) is owned by `Win32APIs/Services/DesktopWidgetLayerHost.cs`, hosted in
   `DesktopManager` — the counterpart to the engine's `DesktopWallpaperLayerHost` (which sits
-  BELOW the icons). See Known issues before touching this path.
+  BELOW the icons). Layering facts that must keep holding: the background uses a **non-zero alpha**
+  (`#01000000`) so the window stays hit-testable while visually invisible (`WindowFromPoint` skips
+  fully-transparent windows); the surface stays a **top-level** window (a `WS_EX_LAYERED` child would
+  paint behind the non-layered Explorer list-view — never reparent via `SetParent`); z-order is pinned
+  via `WM_WINDOWPOSCHANGING` against the root from `Win32Apis.GetDesktopRootHandle` (which must never
+  return `0`); `WS_EX_NOACTIVATE` + `WM_MOUSEACTIVATE` handling must not suppress the activation OLE
+  drag/drop needs. Hook hygiene is detach-before-attach (`DetachLayerGlue`, cached `_surfaceHwnd`) —
+  `Loaded` refires on every Hide→Show cycle and must never stack hooks.
 
 `ToggleHideAllBoxes` (in `DesktopManager`) toggles `HideAllBoxes`/`ShowAllBoxes`; hides wrap each window
 in `Win32Apis.AllowHide` so `MinimizePreventionHook` doesn't re-show it, and the surface/tray stay visible
@@ -161,22 +170,6 @@ that draws, at the cursor, the hit-test result, z-order, and the surface's style
 
 ## Known issues
 
-- **Custom `DesktopSurface` (flag `false`) is a work-in-progress and currently broken.** Recurring,
-  hard-to-fix problems from past attempts:
-  - A fully transparent (`AllowsTransparency`, alpha `0`) WPF window is skipped by `WindowFromPoint`, so it
-    is never the hit target. The background must use a **non-zero alpha** (`#01000000`) to be hit-testable
-    while visually invisible.
-  - A `WS_EX_LAYERED` **child** window is always painted *behind* its non-layered siblings (the Explorer
-    list-view), so the surface must stay a **top-level** window — reparenting it to `Progman`/`WorkerW`
-    via `SetParent` does not work.
-  - The surface keeps getting raised **above application windows** on click/activation. Mitigations tried:
-    `WM_WINDOWPOSCHANGING` z-order override (root must be resolved via `Win32Apis.GetDesktopRootHandle`,
-    which must never return `0` or glue silently no-ops), `WS_EX_NOACTIVATE`, and `WM_MOUSEACTIVATE` →
-    `MA_NOACTIVATE` (which **broke OLE drag/drop** because it suppressed the activation the drop target
-    needs; gating it on `!_dragging` was the next attempt). **Bottom line: keep the global hook enabled;
-    do not invest more in the surface unless the user explicitly asks.**
-  - WPF windows are created without `CS_DBLCLKS`, so `WM_LBUTTONDBLCLK` is never delivered; double-click is
-    detected manually from two `WM_LBUTTONDOWN`s.
 - **`BoxContainerWindow` custom tab-drag** (moving a box tab between containers) has two unfixed bugs:
   1. A dropped tab is not visible after drop when the target container is on a different monitor / a
      different `BoxContainerWindow` than the source.
