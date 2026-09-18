@@ -53,10 +53,15 @@ internal sealed class WindowDragController
     private readonly IWindowSnappingService _snapping;
     private readonly IWindowPositioningService _positioning;
     private readonly Action<RectD> _setBounds;
-    private readonly Func<List<RectD>> _getOthers;
+    private readonly Action<List<RectD>> _collectOthers;
     private readonly Action _onChanged;
     private readonly Func<double> _getHeaderHeight;
     private readonly Func<bool>? _getIsLocked;
+    // Pooled per-pixel scratch: GetSnapTargets runs on every WM_MOVING/WM_SIZING/mouse-move
+    // during a drag. Reusing these (consumed synchronously by the caller) avoids a List +
+    // LINQ iterator-chain allocation per pixel. Never hold across calls.
+    private readonly List<RectD> _snapOthers = new();
+    private readonly RectD[] _snapScreen = new RectD[1];
     private HwndSource? _source;
     private SnapOverlay? _overlay;
     private bool _dragging;
@@ -84,7 +89,7 @@ internal sealed class WindowDragController
         IWindowSnappingService snapping,
         IWindowPositioningService positioning,
         Action<RectD> setBounds,
-        Func<List<RectD>> getOthers,
+        Action<List<RectD>> collectOthers,
         Action onChanged,
         Func<double> getHeaderHeight, Func<bool>? getIsLocked = null,
         bool handleHitTest = true)
@@ -95,7 +100,7 @@ internal sealed class WindowDragController
         _snapping = snapping;
         _positioning = positioning;
         _setBounds = setBounds;
-        _getOthers = getOthers;
+        _collectOthers = collectOthers;
         _onChanged = onChanged;
         _getHeaderHeight = getHeaderHeight;
         _getIsLocked = getIsLocked;
@@ -222,9 +227,10 @@ internal sealed class WindowDragController
         var r = Marshal.PtrToStructure<NcRect>(lParam);
         var moving = RectD.FromXYWH(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
         var (screen, others) = GetSnapTargets(moving, hwnd);
+        _snapScreen[0] = screen;
         double threshold = 8 * GetScale(hwnd);
         double padding = SnapPaddingDip * GetScale(hwnd);
-        var result = _snapping.SnapMove(moving, new[] { screen }, others, threshold, padding);
+        var result = _snapping.SnapMove(moving, _snapScreen, others, threshold, padding);
 
         WriteRect(lParam, ClampToScreen(result.Rect, screen));
         ShowGuides(result.Guides, hwnd);
@@ -236,12 +242,13 @@ internal sealed class WindowDragController
         var r = Marshal.PtrToStructure<NcRect>(lParam);
         var moving = RectD.FromXYWH(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
         var (screen, others) = GetSnapTargets(moving, hwnd);
+        _snapScreen[0] = screen;
         double threshold = 8 * GetScale(hwnd);
         double padding = SnapPaddingDip * GetScale(hwnd);
         double minW = _window.MinWidth * GetScale(hwnd);
         double minH = _window.MinHeight * GetScale(hwnd);
 
-        var result = _snapping.SnapResize(moving, edge, new SizeD(minW, minH), new[] { screen }, others, threshold, padding);
+        var result = _snapping.SnapResize(moving, edge, new SizeD(minW, minH), _snapScreen, others, threshold, padding);
         var final = ClampResize(result.Rect, screen, edge, minW, minH);
 
         WriteRect(lParam, final);
@@ -404,6 +411,8 @@ internal sealed class WindowDragController
         return RectD.FromXYWH(l, t, rt - l, b - t);
     }
 
+    /// <summary>Collects snap targets into pooled scratch buffers (see <see cref="_snapOthers"/>).
+    /// The returned list is reused on the next call — consume it synchronously.</summary>
     private (RectD Screen, List<RectD> Others) GetSnapTargets(RectD moving, IntPtr hwnd)
     {
         var scale = GetScale(hwnd);
@@ -412,15 +421,20 @@ internal sealed class WindowDragController
         // every box must stay contained within it. Snap AND clamp against that single work area
         // (taskbar excluded); multi-monitor support would relax this later.
         var screen = _monitor.GetPrimaryWorkArea();
-        var others = new List<RectD>();
+        var others = _snapOthers;
+        others.Clear();
+        // A merge-then-split session could balloon capacity; trim back to a sane bound.
+        if (others.Capacity > 512) others.TrimExcess();
 
-        foreach (var other in _getOthers())
+        _collectOthers(others);
+        for (int i = 0; i < others.Count; i++)
         {
+            var other = others[i];
             double l = other.X * scale;
             double t = other.Y * scale;
             double r = (other.X + other.Width) * scale;
             double b = (other.Y + other.Height) * scale;
-            others.Add(RectD.FromXYWH(l, t, r - l, b - t));
+            others[i] = RectD.FromXYWH(l, t, r - l, b - t);
         }
 
         return (screen, others);
@@ -536,9 +550,10 @@ internal sealed class WindowDragController
 
         var moving = RectD.FromXYWH(dipLeft * scale, dipTop * scale, _window.Width * scale, _window.Height * scale);
         var (screen, others) = GetSnapTargets(moving, hwnd);
+        _snapScreen[0] = screen;
         double threshold = 8 * scale;
         double padding = SnapPaddingDip * scale;
-        var result = _snapping.SnapMove(moving, new[] { screen }, others, threshold, padding);
+        var result = _snapping.SnapMove(moving, _snapScreen, others, threshold, padding);
 
         var clamped = ClampToScreen(result.Rect, screen);
         _window.Left = clamped.X / scale;

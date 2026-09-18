@@ -83,6 +83,9 @@ public partial class App : Application
         ApplicationThemeManager.Changed += (_, _) => ApplyBoxAppearance();
         // Ensure WebWidget storage roots exist (UserWidgets + EBWebView)
         try { Services.GetRequiredService<IWebWidgetService>().EnsureUserWidgetsRoot(); } catch { }
+        // Prune regenerable Chromium payload caches (GPU/shader/crash/logs, oversized HTTP cache)
+        // off the UI thread: single-instance guard above guarantees no other process holds them.
+        _ = Task.Run(() => WebViewUserDataMaintenance.TryPrune(SettingsService.AppDataDir));
 
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 

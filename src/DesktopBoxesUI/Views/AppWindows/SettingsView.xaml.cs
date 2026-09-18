@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Wpf.Ui.Controls;
 using WPFShared.Interfaces;
 
@@ -34,10 +35,32 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
         BuildPreviewItems();
 
         // Keep the preview in sync with every edit (the VM raises PropertyChanged per field).
-        vm.PropertyChanged += (_, _) => UpdatePreview();
+        // Slider drags fire dozens per second: coalesce to one update per dispatcher pass.
+        vm.PropertyChanged += (_, _) => RequestPreviewUpdate();
         UpdatePreview();
 
         Closed += (_, _) => (DataContext as IDisposable)?.Dispose();
+    }
+
+    private bool _previewUpdatePending;
+
+    private void RequestPreviewUpdate()
+    {
+        if (_previewUpdatePending) return;
+        _previewUpdatePending = true;
+        try
+        {
+            Dispatcher.BeginInvoke(() =>
+            {
+                _previewUpdatePending = false;
+                if (!IsLoaded) return; // closed while coalescing: nothing to repaint
+                UpdatePreview();
+            }, DispatcherPriority.Background);
+        }
+        catch
+        {
+            _previewUpdatePending = false;
+        }
     }
 
     // The global dialog service renders WPF-UI content dialogs on this host.

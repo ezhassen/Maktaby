@@ -140,9 +140,7 @@ public partial class WidgetChromeOverlay : Window
                 var drag = new WindowDragController(
                     this, monitor, dpi, snapping, positioning,
                     r => { _isDragging = true; Left = r.X; Top = r.Y; Width = r.Width; Height = r.Height; SyncOwnerToThis(); _isDragging = false; },
-                    () => _hostContainers.GetContainers()
-                            .Where(c => c.Id != _ownerWidget.ContainerViewModel.Id && c.IsVisible)
-                            .Select(c => c.Bounds).ToList(),
+                    others => { foreach (var c in _hostContainers.GetContainers()) if (c.Id != _ownerWidget.ContainerViewModel.Id && c.IsVisible) others.Add(c.Bounds); },
                     () => { try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { } },
                     () => HeaderBorder.ActualHeight, getIsLocked: () => _ownerWidget.ContainerViewModel.IsLocked,
                     handleHitTest: false);

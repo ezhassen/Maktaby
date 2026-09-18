@@ -147,7 +147,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             snapping,
             _positioning,
             r => ApplyDraggedBounds(r),
-            () => _host.Containers.Where(c => c.Id != _vm.Id).Select(GetDropRect).ToList(),
+            others => { foreach (var c in _host.Containers) if (c.Id != _vm.Id) others.Add(GetDropRect(c)); },
             _save,
             () => HeaderBorder.ActualHeight,
             getIsLocked: () => _vm.IsLocked);
