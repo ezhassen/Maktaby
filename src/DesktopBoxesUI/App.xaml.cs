@@ -112,7 +112,7 @@ public partial class App : Application
             {
                 foreach (var w in Windows.OfType<BoxContainerWindow>())
                 {
-                    w.BoxContent.RefreshIconSize();
+                    w.BoxContent?.RefreshIconSize();
                 }
             });
         };

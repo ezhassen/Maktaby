@@ -1,4 +1,5 @@
 using DesktopBoxesUI.Controls;
+using DesktopBoxesUI.Controls.ContainersControls;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Helpers;
@@ -279,8 +280,12 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         MenuRollDir.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         RollButton.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
         LockButton.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
-        BoxContent.Visibility = isBox ? Visibility.Visible : Visibility.Collapsed;
-        Placeholder.Visibility = isBox ? Visibility.Collapsed : Visibility.Visible;
+        if (!isBox)
+        {
+            // Custom-type container: no tabbed box — show the placeholder (box kinds are
+            // owned by UpdateBody, which OnLoaded calls right after this).
+            ShowBodyChild(EnsurePlaceholder());
+        }
         UpdateChrome();
     }
 
@@ -385,7 +390,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
     private void ApplyIconSize(BoxViewModel active)
     {
-        BoxContent.RefreshIconSize();
+        BoxContent?.RefreshIconSize();
         SyncIconSizeChecks();
         _save();
     }
@@ -404,7 +409,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         MenuIconSizeLarge.IsChecked = size == 96;
 
         _suppressIconSizeSlider = true;
-        if (MenuIconSizeSlider != null)
+        if (MenuIconSizeSlider != null && BoxContent != null)
         {
             MenuIconSizeSlider.Value = BoxContent.IconSize; // effective: resolves Auto/default fallbacks
             if (MenuIconSizeValueText != null)
@@ -525,35 +530,121 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         TabStrip.BorderBrush = palette.HeaderBorder;
 
         // Re-resolve per-box/default icon size (user may have changed DefaultBoxIconSize).
-        BoxContent.RefreshIconSize();
-        FolderPortalContent.RefreshIconSize();
+        BoxContent?.RefreshIconSize();
+        FolderPortalContent?.RefreshIconSize();
     }
 
     private BoxViewModel? _watchedBox;
+
+    // Body children are built on demand into BodyContent (single cached instance per kind):
+    // only the active content kind ever exists, so hidden controls never load, bind, or
+    // handle input. Detached instances keep no subscriptions (both controls detach on Unloaded).
+    private BoxControl? _boxContent;
+    private FolderPortalControl? _folderPortalContent;
+    private Border? _placeholder;
+
+    public BoxControl? BoxContent => _boxContent;
+    public FolderPortalControl? FolderPortalContent => _folderPortalContent;
 
     private void UpdateBody()
     {
         if (_vm.ActiveBox != null)
         {
-            BoxContent.DataContext = _vm.ActiveBox;
-            BoxContent.RequestSave = _save;
-            BoxContent.Host = _host;
-            FolderPortalContent.DataContext = _vm.ActiveBox;
-            FolderPortalContent.Host = _host;
-            FolderPortalContent.RequestSave = _save;
-
             bool isFolder = _vm.ActiveBox.BoxType == BoxType.FolderPortal;
-            BoxContent.Visibility = isFolder ? Visibility.Collapsed : Visibility.Visible;
-            FolderPortalContent.Visibility = isFolder ? Visibility.Visible : Visibility.Collapsed;
-            // Keep placeholder logic in ApplyType, but ensure correct BoxContent state
-            FolderPortalContent.UpdateView();
+            if (isFolder)
+            {
+                var fp = EnsureFolderPortalContent();
+                fp.DataContext = _vm.ActiveBox;
+                fp.Host = _host;
+                fp.RequestSave = _save;
+                ShowBodyChild(fp);
+                // Keep placeholder logic in ApplyType, but ensure correct content state
+                fp.UpdateView();
+            }
+            else
+            {
+                var bc = EnsureBoxContent();
+                bc.DataContext = _vm.ActiveBox;
+                bc.RequestSave = _save;
+                bc.Host = _host;
+                ShowBodyChild(bc);
+            }
         }
         else
         {
-            BoxContent.Visibility = Visibility.Collapsed;
-            FolderPortalContent.Visibility = Visibility.Collapsed;
+            ShowBodyChild(null);
         }
         ManageFolderWatcher();
+    }
+
+    /// <summary>Shows <paramref name="visible"/> (adding it on first use), removing any other
+    /// body child. Same-child calls are no-ops; <c>null</c> clears the body.</summary>
+    private void ShowBodyChild(FrameworkElement? visible)
+    {
+        for (int i = BodyContent.Children.Count - 1; i >= 0; i--)
+        {
+            var c = BodyContent.Children[i];
+            if (!ReferenceEquals(c, visible))
+            {
+                BodyContent.Children.RemoveAt(i);
+            }
+        }
+
+        if (visible != null && !BodyContent.Children.Contains(visible))
+        {
+            BodyContent.Children.Add(visible);
+        }
+    }
+
+    private BoxControl EnsureBoxContent()
+    {
+        if (_boxContent is null)
+        {
+            _boxContent = new BoxControl();
+        }
+
+        return _boxContent;
+    }
+
+    private FolderPortalControl EnsureFolderPortalContent()
+    {
+        if (_folderPortalContent is null)
+        {
+            _folderPortalContent = new FolderPortalControl();
+        }
+
+        return _folderPortalContent;
+    }
+
+    private Border EnsurePlaceholder()
+    {
+        if (_placeholder != null)
+        {
+            return _placeholder;
+        }
+
+        var title = new TextBlock
+        {
+            FontSize = 14,
+            Foreground = Brushes.White,
+            Text = "Custom Widget",
+            TextAlignment = TextAlignment.Center,
+        };
+        var sub = new TextBlock
+        {
+            Foreground = new SolidColorBrush(Color.FromRgb(0xcc, 0xcc, 0xcc)),
+            TextAlignment = TextAlignment.Center,
+        };
+        sub.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding("CustomTypeName"));
+        var panel = new StackPanel
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        panel.Children.Add(title);
+        panel.Children.Add(sub);
+        _placeholder = new Border { Padding = new Thickness(16), Child = panel };
+        return _placeholder;
     }
 
     internal void ManageFolderWatcher()

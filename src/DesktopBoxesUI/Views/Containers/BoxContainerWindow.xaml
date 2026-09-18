@@ -3,7 +3,6 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:containers="clr-namespace:DesktopBoxesUI.Views.Containers"
-    xmlns:containersControls="clr-namespace:DesktopBoxesUI.Controls.ContainersControls"
     xmlns:controls="clr-namespace:DesktopBoxesUI.Controls"
     xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -39,7 +38,12 @@
             feet at the bottom that hug the strip) and no bottom border so it reads as connected.
         -->
         <ControlTemplate x:Key="TabButtonTemplate" TargetType="Button">
-            <Grid Margin="3,1">
+            <!--
+                Bottom margin 0: the tab shape's flat bottom edge sits flush on the box body
+                so the selected tab reads as connected (its bottom border is already removed).
+                Snapped to kill fractional-pixel hairlines at the junction on scaled displays.
+            -->
+            <Grid Margin="3,1,3,0" SnapsToDevicePixels="True">
                 <Path
                     x:Name="Fill"
                     Data="M0,30 L0,10 Q0,0 10,0 L90,0 Q100,0 100,10 L100,30 L0,30 Z"
@@ -63,8 +67,8 @@
 
         <Style x:Key="TabButtonStyle" TargetType="Button">
             <Setter Property="Template" Value="{StaticResource TabButtonTemplate}" />
-            <Setter Property="Margin" Value="4,0" />
-            <Setter Property="Padding" Value="8,2" />
+            <Setter Property="Margin" Value="4,0,4,0" />
+            <Setter Property="Padding" Value="8,2,8,0" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="Background" Value="Transparent" />
@@ -84,6 +88,11 @@
                     <Setter Property="Foreground" Value="{DynamicResource BoxForeground}" />
                     <Setter Property="BorderBrush" Value="{DynamicResource BoxBorder}" />
                     <Setter Property="BorderThickness" Value="1,1,1,0" />
+                    <!--
+                        Overlap the body by 1px: buries any residual seam/outline cap so the
+                        active tab and box render as one surface.
+                    -->
+                    <Setter Property="Margin" Value="4,0,4,-1" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
@@ -366,7 +375,7 @@
                 <Border
                     x:Name="TabStrip"
                     MaxHeight="36"
-                    Padding="4,2"
+                    Padding="4,2,4,0"
                     Background="Transparent"
                     BorderThickness="0"
                     DockPanel.Dock="Top">
@@ -426,29 +435,9 @@
                     </Grid>
                 </Border>
 
-                <Grid x:Name="BodyContent">
-                    <containersControls:BoxControl x:Name="BoxContent" DataContext="{Binding ActiveBox}" />
-                    <containersControls:FolderPortalControl
-                        x:Name="FolderPortalContent"
-                        DataContext="{Binding ActiveBox}"
-                        Visibility="Collapsed" />
-                    <Border
-                        x:Name="Placeholder"
-                        Padding="16"
-                        Visibility="Collapsed">
-                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <TextBlock
-                                FontSize="14"
-                                Foreground="White"
-                                Text="Custom Widget"
-                                TextAlignment="Center" />
-                            <TextBlock
-                                Foreground="#cccccc"
-                                Text="{Binding CustomTypeName}"
-                                TextAlignment="Center" />
-                        </StackPanel>
-                    </Border>
-                </Grid>
+                <!--  Body host: children (BoxControl / FolderPortalControl / custom placeholder)
+                  are built on demand in code-behind — only the active kind ever exists here.  -->
+                <Grid x:Name="BodyContent" />
             </DockPanel>
             <ui:ContentDialogHost x:Name="RootContentDialogHost" />
         </Grid>
