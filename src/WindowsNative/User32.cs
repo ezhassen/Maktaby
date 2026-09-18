@@ -44,6 +44,9 @@ public static partial class User32
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool DestroyWindow(IntPtr hwnd);
 
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool UnregisterClass(string className, IntPtr instance);
+
     [DllImport("user32.dll")]
     public static extern bool ShowWindow(IntPtr hwnd, int cmdShow);
 

@@ -85,6 +85,7 @@ public sealed class BoxContainerViewModel : ViewModelBase
         }
 
         var doomed = _model.Boxes[index];
+        var doomedVm = Tabs[index];
         // User-initiated delete: preserve DesktopItems by moving them into the default box.
         // Moves (allowDefault:true) keep the box intact, so no migration there.
         if (!allowDefault && doomed.BoxType == BoxType.DesktopItems && doomed.Items.Count > 0)
@@ -94,6 +95,10 @@ public sealed class BoxContainerViewModel : ViewModelBase
 
         Tabs.RemoveAt(index);
         _model.Boxes.RemoveAt(index);
+
+        // The tab is gone for good (cross-container moves build a fresh VM via InsertBox):
+        // detach it from the model and stop its watchers so it can be collected.
+        doomedVm.Dispose();
 
         // A deleted box must stop receiving auto-routed files. (Moves re-register via InsertBox.)
         _boxService.RemoveBox(doomed.Id);

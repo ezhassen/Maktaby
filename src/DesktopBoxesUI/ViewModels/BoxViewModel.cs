@@ -17,13 +17,14 @@ namespace DesktopBoxesUI.ViewModels;
 /// model collection (which the file-rule coordinator updates), so a single source of truth is kept.
 /// For <see cref="BoxType.FolderPortal"/> the <see cref="FolderItems"/> collection is the live folder view.
 /// </summary>
-public sealed class BoxViewModel : ViewModelBase
+public sealed class BoxViewModel : ViewModelBase, IDisposable
 {
     private readonly Box _box;
     private readonly IconImageService _icons;
     private IDisposable? _watcher; // contents of CurrentFolderPath
     private IDisposable? _folderWatcher; // parent of FolderPath to detect root delete/rename/move
     private bool _isWatching;
+    private bool _disposed;
     private string? _currentFolderPath; // transient navigation, null = root (FolderPath)
     private readonly Stack<string> _navBack = new();
     private readonly Stack<string> _navForward = new();
@@ -43,6 +44,17 @@ public sealed class BoxViewModel : ViewModelBase
     }
 
     public System.Guid Id => _box.Id;
+
+    /// <summary>Detaches from the underlying <see cref="Box"/> model and stops folder watching so a
+    /// removed tab's view-model is collectable. Disposed VMs are never reused (moves create a new VM
+    /// via <c>InsertBox</c>).</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _box.Items.CollectionChanged -= OnBoxItemsChanged;
+        StopWatching();
+    }
 
     /// <summary>The underlying <see cref="Box"/> model (used when moving a box between containers).</summary>
     public Box Model => _box;
@@ -271,8 +283,47 @@ public sealed class BoxViewModel : ViewModelBase
 
     private void ApplyFolderItems(List<FolderItemViewModel> newItems)
     {
-        FolderItems.Clear();
-        foreach (var it in newItems) FolderItems.Add(it);
+        // In-place diff keyed by path: reuses surviving VMs (and their already-loaded icons),
+        // emitting only deltas instead of N notifications + a full re-layout per refresh.
+        // Reuse cannot go stale: FileSize/ModifiedTime are live getters, and renames change the path.
+        var wanted = new HashSet<string>(newItems.Select(v => v.Path), StringComparer.OrdinalIgnoreCase);
+        for (int i = FolderItems.Count - 1; i >= 0; i--)
+        {
+            if (!wanted.Contains(FolderItems[i].Path))
+            {
+                FolderItems.RemoveAt(i);
+            }
+        }
+
+        var live = new Dictionary<string, FolderItemViewModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var vm in FolderItems)
+        {
+            live[vm.Path] = vm;
+        }
+
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            var vm = live.TryGetValue(newItems[i].Path, out var existing) ? existing : newItems[i];
+            if (i < FolderItems.Count)
+            {
+                if (!ReferenceEquals(FolderItems[i], vm))
+                {
+                    int at = FolderItems.IndexOf(vm);
+                    if (at >= 0)
+                    {
+                        FolderItems.Move(at, i);
+                    }
+                    else
+                    {
+                        FolderItems.Insert(i, vm);
+                    }
+                }
+            }
+            else
+            {
+                FolderItems.Add(vm);
+            }
+        }
     }
 
     private IEnumerable<FolderItemViewModel> SortEntries(IEnumerable<FolderItemViewModel> items)

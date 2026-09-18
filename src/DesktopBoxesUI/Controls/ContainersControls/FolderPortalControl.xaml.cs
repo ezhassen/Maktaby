@@ -82,6 +82,8 @@ public partial class FolderPortalControl : UserControl
         }
     }
 
+    private bool _detailsHandlersHooked;
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         UpdateView();
@@ -89,6 +91,17 @@ public partial class FolderPortalControl : UserControl
         DetailsGrid.CanUserResizeColumns = true;
         foreach (var col in DetailsGrid.Columns)
             col.CanUserResize = true;
+        // The folder VM outlives this control (tab switches re-parent it): (re)attach
+        // idempotently — Loaded refires on hide/show without a DataContext change.
+        if (Box is BoxViewModel loadedVm)
+        {
+            loadedVm.PropertyChanged -= OnBoxPropertyChanged;
+            loadedVm.PropertyChanged += OnBoxPropertyChanged;
+        }
+        // Loaded refires on hide/show cycles: hook the handled-events-too handlers once,
+        // otherwise every reload stacks another duplicate invocation.
+        if (_detailsHandlersHooked) return;
+        _detailsHandlersHooked = true;
         // DataGridRow events are often marked handled by DataGrid's internal selection logic.
         // Register with handledEventsToo so dragging / double-click / right-click / middle-click still fire.
         DetailsGrid.AddHandler(UIElement.PreviewMouseDownEvent, new MouseButtonEventHandler(DetailsGrid_OnPreviewMouseDown), true);
@@ -228,6 +241,12 @@ public partial class FolderPortalControl : UserControl
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         if (_renameService.IsEditing) _renameService.Dismiss();
+        // Detach from the long-lived folder VM so it can't pin this unloaded control
+        // (re-attached in OnLoaded / OnDataContextChanged).
+        if (Box is BoxViewModel vm)
+        {
+            vm.PropertyChanged -= OnBoxPropertyChanged;
+        }
     }
 
     public void UpdateView()

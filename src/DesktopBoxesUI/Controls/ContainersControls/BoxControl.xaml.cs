@@ -57,8 +57,9 @@ public partial class BoxControl : UserControl
     private double _lastZoneDir;
 
     // Drag visual gap - collapsed source items (target gap is adorner-only, no placeholder).
-    private static readonly List<UIElement> _collapsedForDrag = new();
-    private static BoxControl? _dragSourceControl;
+    // Instance-scoped: a static list would pin one control's live visuals from another drag
+    // (or leak them if a drag aborts), and cross-instance collapse/restore races.
+    private readonly List<UIElement> _collapsedForDrag = new();
     private WrapPanel? _wrapPanelCache;
 
     // Selection / marquee state.
@@ -120,7 +121,6 @@ public partial class BoxControl : UserControl
     private void CollapseDraggedItems(List<BoxItemViewModel> dragged)
     {
         RestoreCollapsedItems();
-        _dragSourceControl = this;
         foreach (var vm in dragged)
         {
             if (Box is null) continue;
@@ -135,14 +135,13 @@ public partial class BoxControl : UserControl
         }
     }
 
-    private static void RestoreCollapsedItems()
+    private void RestoreCollapsedItems()
     {
         foreach (var c in _collapsedForDrag)
         {
             c.Visibility = Visibility.Visible;
         }
         _collapsedForDrag.Clear();
-        _dragSourceControl = null;
     }
 
     private WrapPanel? GetWrapPanel()

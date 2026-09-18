@@ -366,3 +366,6 @@ tools/make-icon.ps1
 Installer/*.*
 BuildVersion.inc
 /.cpmigrate_backup
+
+# AI agent working files (local todos, notes, scratch — never commit)
+.ai/

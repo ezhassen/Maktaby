@@ -57,6 +57,9 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     // Thickness of the TitleBar strip (unrotated header height). Captured once; for Left/Right rolls the
     // header is rotated and fills the full window height, so its measured height can no longer be used.
     private double _headerThickness = 30;
+    // The tabs VM instance this window subscribed to (detached in OnClosed so a closed
+    // window is never pinned by the long-lived view-model).
+    private BoxContainerViewModel? _subscribedTabsVm;
 
     //static BoxContainerWindow()
     //{
@@ -215,12 +218,13 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         UpdateBody();
         if (_vm.BoxContainerVm != null)
         {
-            _vm.BoxContainerVm.SelectedIndexChanged += () =>
-        {
-            UpdateBody();
-            RefreshRemoveTabMenu();
-        };
-            _vm.BoxContainerVm.PropertyChanged += OnBoxContainerVmPropertyChanged;
+            // Loaded can refire (hide/show cycles); detach first so handlers never stack,
+            // and remember the instance so OnClosed detaches from the right one.
+            _subscribedTabsVm = _vm.BoxContainerVm;
+            _subscribedTabsVm.SelectedIndexChanged -= OnSelectedTabChanged;
+            _subscribedTabsVm.PropertyChanged -= OnBoxContainerVmPropertyChanged;
+            _subscribedTabsVm.SelectedIndexChanged += OnSelectedTabChanged;
+            _subscribedTabsVm.PropertyChanged += OnBoxContainerVmPropertyChanged;
         }
 
         UpdateChrome();
@@ -240,6 +244,12 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             DesktopManager = App.Services.GetRequiredService<DesktopManager>(),
         });
         _drag.Attach();
+    }
+
+    private void OnSelectedTabChanged()
+    {
+        UpdateBody();
+        RefreshRemoveTabMenu();
     }
 
     private void OnBoxContainerVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -434,6 +444,16 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     {
         _mouseMonitor.MouseButtonDown -= OnGlobalMouseDown;
         _vm.PropertyChanged -= OnContainerPropertyChanged;
+        if (_subscribedTabsVm != null)
+        {
+            _subscribedTabsVm.SelectedIndexChanged -= OnSelectedTabChanged;
+            _subscribedTabsVm.PropertyChanged -= OnBoxContainerVmPropertyChanged;
+            _subscribedTabsVm = null;
+        }
+        // A pending hover-switch must not fire (and Activate()) after the window is gone.
+        try { _tabHoverTimer?.Stop(); } catch { }
+        _tabHoverTimer = null;
+        _pendingHoverTab = null;
         _drag.Detach();
         try { DesktopLayer.Detach(System.Windows.Interop.HwndSource.FromHwnd(new WindowInteropHelper(this).Handle), _layerHook); } catch { }
         _layerHook = null;

@@ -407,6 +407,10 @@ public sealed class WidgetGalleryItem : INotifyPropertyChanged
     public string LoadError { get; set; } = "";
 
     private string? _thumbnailPath;
+    // Decoded bitmap cache: bindings re-evaluate the getter often, and a fresh
+    // BitmapImage decode per evaluation is a gallery-wide decode storm. Any (re)set of
+    // the path — including same-path regeneration — drops the cache for a single re-decode.
+    private BitmapImage? _thumbnailBitmap;
     public string? ThumbnailPath
     {
         get => _thumbnailPath;
@@ -417,6 +421,7 @@ public sealed class WidgetGalleryItem : INotifyPropertyChanged
                 _thumbnailPath = value;
                 OnPropertyChanged();
             }
+            _thumbnailBitmap = null;
             OnPropertyChanged(nameof(ThumbnailBitmap));
         }
     }
@@ -425,6 +430,11 @@ public sealed class WidgetGalleryItem : INotifyPropertyChanged
     {
         get
         {
+            if (_thumbnailBitmap != null)
+            {
+                return _thumbnailBitmap;
+            }
+
             if (string.IsNullOrEmpty(_thumbnailPath) || !System.IO.File.Exists(_thumbnailPath))
                 return null;
 
@@ -441,6 +451,7 @@ public sealed class WidgetGalleryItem : INotifyPropertyChanged
                 bitmap.DecodePixelWidth = 240;
                 bitmap.EndInit();
                 bitmap.Freeze();
+                _thumbnailBitmap = bitmap;
                 return bitmap;
             }
             catch

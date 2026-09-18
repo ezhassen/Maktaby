@@ -42,6 +42,9 @@ public partial class WebWidgetControl : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Loaded can refire without an Unloaded seam (re-parenting): detach first so neither
+        // the visibility nor the theme subscription can stack duplicates.
+        try { IsVisibleChanged -= OnIsVisibleChanged; } catch { }
         try { IsVisibleChanged += OnIsVisibleChanged; } catch { }
         if (_isInitialized)
         {
@@ -88,14 +91,18 @@ public partial class WebWidgetControl : UserControl
         else Resume();
     }
 
+    private bool _themeSubscribed;
+
     private void SubscribeTheme()
     {
-        try { ApplicationThemeManager.Changed += OnAppThemeChanged; } catch { }
+        if (_themeSubscribed) return;
+        try { ApplicationThemeManager.Changed += OnAppThemeChanged; _themeSubscribed = true; } catch { }
     }
 
     private void UnsubscribeTheme()
     {
         try { ApplicationThemeManager.Changed -= OnAppThemeChanged; } catch { }
+        _themeSubscribed = false;
     }
 
     private void OnAppThemeChanged(ApplicationTheme current, System.Windows.Media.Color systemAccent)

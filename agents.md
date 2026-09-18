@@ -107,6 +107,11 @@ After editing:
 2. `dotnet build` (fix all errors; avoid introducing warnings)
 3. If UI changed, run the app and confirm the WPF window opens and "New Box" works.
 
+## AI working files
+
+- Keep all agent-local todos, notes, plans and scratch files under the repo-root `.ai/` directory (e.g. `.ai/todo.md`). Never scatter them across the repo.
+- `.ai/` is git-ignored — it never gets committed. Do not force-add it.
+
 ## Performance expectations
 
 - The app runs continuously. Avoid polling, timers, and excessive `Dispatcher` usage.

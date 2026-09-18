@@ -231,6 +231,14 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
             _hwnd = IntPtr.Zero;
         }
 
+        // The class name embeds a fresh Guid per Start (see EnsureWindow): without an
+        // explicit unregister each Start/Stop cycle (disable toggle, Explorer restart)
+        // leaks a USER atom + class registration.
+        if (!string.IsNullOrEmpty(_className))
+        {
+            try { User32.UnregisterClass(_className, Kernel32.GetModuleHandle(null)); } catch { }
+        }
+
         _atom = 0;
         _className = null;
     }

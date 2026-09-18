@@ -129,6 +129,12 @@ internal sealed class WindowDragController
             _source = null;
         }
 
+        // A close/abort mid title-drag skips EndTitleDrag: never pin the dead window statically.
+        if (ReferenceEquals(DraggingSourceWindow, _window))
+        {
+            DraggingSourceWindow = null;
+        }
+
         _overlay?.Close();
         _overlay = null;
     }

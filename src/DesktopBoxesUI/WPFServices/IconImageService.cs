@@ -1,6 +1,6 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Win32.NativeMethods;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Runtime.Versioning;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,19 +17,68 @@ namespace DesktopBoxesUI.WPFServices;
 /// ImageSources, caching the result so the underlying GDI handle is extracted and destroyed
 /// exactly once. Lives in the UI layer (not Core), so it is allowed to touch WPF and the native
 /// wrapper. Keeps the icon GDI handle lifetime short to avoid exhausting GDI objects.
+/// Caches are LRU-bounded (<see cref="MaxCacheEntries"/> each) so a long session that touches
+/// many distinct files cannot grow memory without limit.
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class IconImageService
 {
+    private const int MaxCacheEntries = 1000;
+
     private readonly IShellIconService _shellIcon;
-    private readonly ConcurrentDictionary<string, ImageSource?> _cache = new();
-    private readonly ConcurrentDictionary<string, ImageSource?> _pidlCache = new();
+    private readonly object _cacheLock = new();
+    private readonly Dictionary<string, LinkedListNode<LruEntry>> _cacheIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LinkedList<LruEntry> _cacheOrder = new();
+    private readonly Dictionary<string, LinkedListNode<LruEntry>> _pidlIndex = new(StringComparer.OrdinalIgnoreCase);
+    private readonly LinkedList<LruEntry> _pidlOrder = new();
+
+    private sealed record LruEntry(string Key, ImageSource? Value);
 
     public IconImageService(IShellIconService shellIcon) => _shellIcon = shellIcon;
 
+    private bool TryGet(Dictionary<string, LinkedListNode<LruEntry>> index, LinkedList<LruEntry> order, string key, out ImageSource? value)
+    {
+        lock (_cacheLock)
+        {
+            if (index.TryGetValue(key, out var node))
+            {
+                // Refresh recency; the frozen ImageSource itself is immutable and shareable.
+                order.Remove(node);
+                order.AddLast(node);
+                value = node.Value.Value;
+                return true;
+            }
+        }
+
+        value = null;
+        return false;
+    }
+
+    private void Add(Dictionary<string, LinkedListNode<LruEntry>> index, LinkedList<LruEntry> order, string key, ImageSource value)
+    {
+        lock (_cacheLock)
+        {
+            if (index.TryGetValue(key, out var existing))
+            {
+                order.Remove(existing);
+                order.AddLast(existing);
+                return;
+            }
+
+            var node = order.AddLast(new LruEntry(key, value));
+            index[key] = node;
+            while (index.Count > MaxCacheEntries && order.First != null)
+            {
+                var oldest = order.First;
+                order.RemoveFirst();
+                index.Remove(oldest.Value.Key);
+            }
+        }
+    }
+
     public async Task<ImageSource?> GetIconAsync(string path, CancellationToken cancellationToken = default)
     {
-        if (_cache.TryGetValue(path, out var cached))
+        if (TryGet(_cacheIndex, _cacheOrder, path, out var cached))
         {
             return cached;
         }
@@ -41,9 +90,16 @@ public sealed class IconImageService
         {
             if (token is IntPtr hicon && hicon != IntPtr.Zero)
             {
-                source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                source.Freeze();
-                Win32Apis.DestroyIcon(hicon);
+                try
+                {
+                    source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                    source.Freeze();
+                }
+                finally
+                {
+                    Win32Apis.DestroyIcon(hicon);
+                }
+
                 return;
             }
 
@@ -52,9 +108,15 @@ public sealed class IconImageService
             IntPtr hbitmap = Win32Apis.GetIconBitmapForPath(path);
             if (hbitmap != IntPtr.Zero)
             {
-                source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                source.Freeze();
-                Win32Apis.DeleteObject(hbitmap);
+                try
+                {
+                    source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                    source.Freeze();
+                }
+                finally
+                {
+                    Win32Apis.DeleteObject(hbitmap);
+                }
             }
         }, cancellationToken);
 
@@ -62,7 +124,7 @@ public sealed class IconImageService
         // must stay retryable instead of being frozen as a permanent blank icon.
         if (source is not null)
         {
-            _cache[path] = source;
+            Add(_cacheIndex, _cacheOrder, path, source);
         }
 
         return source;
@@ -73,7 +135,7 @@ public sealed class IconImageService
     /// an additional resolution source so the icon follows PIDL-only link targets.</summary>
     public async Task<ImageSource?> GetIconFromPidlAsync(string pidlBase64, string? filePath = null, CancellationToken cancellationToken = default)
     {
-        if (_pidlCache.TryGetValue(pidlBase64, out var cached))
+        if (TryGet(_pidlIndex, _pidlOrder, pidlBase64, out var cached))
         {
             return cached;
         }
@@ -86,9 +148,16 @@ public sealed class IconImageService
             IntPtr hbitmap = Win32Apis.GetIconBitmapForPidl(pidlBase64);
             if (hbitmap != IntPtr.Zero)
             {
-                source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                source.Freeze();
-                Win32Apis.DeleteObject(hbitmap);
+                try
+                {
+                    source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                    source.Freeze();
+                }
+                finally
+                {
+                    Win32Apis.DeleteObject(hbitmap);
+                }
+
                 return;
             }
 
@@ -97,9 +166,16 @@ public sealed class IconImageService
                 IntPtr hbmpPath = Win32Apis.GetIconBitmapForPath(filePath);
                 if (hbmpPath != IntPtr.Zero)
                 {
-                    source = Imaging.CreateBitmapSourceFromHBitmap(hbmpPath, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                    source.Freeze();
-                    Win32Apis.DeleteObject(hbmpPath);
+                    try
+                    {
+                        source = Imaging.CreateBitmapSourceFromHBitmap(hbmpPath, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                        source.Freeze();
+                    }
+                    finally
+                    {
+                        Win32Apis.DeleteObject(hbmpPath);
+                    }
+
                     return;
                 }
             }
@@ -107,9 +183,15 @@ public sealed class IconImageService
             IntPtr hicon = Win32Apis.GetIconForPidl(pidlBase64);
             if (hicon != IntPtr.Zero)
             {
-                source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                source.Freeze();
-                Win32Apis.DestroyIcon(hicon);
+                try
+                {
+                    source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                    source.Freeze();
+                }
+                finally
+                {
+                    Win32Apis.DestroyIcon(hicon);
+                }
             }
         }, cancellationToken);
 
@@ -117,7 +199,7 @@ public sealed class IconImageService
         // Successes only — see GetIconAsync.
         if (source is not null)
         {
-            _pidlCache[pidlBase64] = source;
+            Add(_pidlIndex, _pidlOrder, pidlBase64, source);
         }
 
         return source;
