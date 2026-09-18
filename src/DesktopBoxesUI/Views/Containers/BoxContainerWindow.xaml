@@ -112,6 +112,58 @@
                     CornerRadius="8,8,0,0"
                     DockPanel.Dock="Top">
                     <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto, auto">
+                        <!--  Title layer first (bottom z-order): spans the full header width so the
+                          title stays centered whether or not the side buttons are visible. Buttons
+                          declare later (top z) so they remain clickable above it.  -->
+                        <Grid
+                            x:Name="TitleArea"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="4"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            Background="Transparent"
+                            MouseLeftButtonDown="TitleArea_MouseLeftButtonDown">
+                            <Grid
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Background="Transparent">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ui:SymbolIcon
+                                    x:Name="TitleFolderIcon"
+                                    Grid.Column="0"
+                                    Width="14"
+                                    Height="14"
+                                    Margin="0,0,6,0"
+                                    VerticalAlignment="Center"
+                                    Foreground="{DynamicResource BoxHeaderForeground}"
+                                    Symbol="Folder24"
+                                    Visibility="{Binding ActiveBox.IsFolderPortal, Converter={StaticResource BoolToVis}}" />
+                                <TextBlock
+                                    x:Name="TitleText"
+                                    Grid.Column="1"
+                                    MinWidth="40"
+                                    MaxWidth="220"
+                                    VerticalAlignment="Center"
+                                    Foreground="White"
+                                    MouseLeftButtonDown="TitleText_MouseLeftButtonDown"
+                                    Text="{Binding Title}"
+                                    TextAlignment="Center"
+                                    TextTrimming="CharacterEllipsis" />
+                            </Grid>
+                            <TextBox
+                                x:Name="TitleEdit"
+                                MinWidth="120"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                KeyDown="TitleEdit_KeyDown"
+                                LostFocus="TitleEdit_LostFocus"
+                                Text="{Binding ActiveBox.Name, UpdateSourceTrigger=PropertyChanged}"
+                                TextAlignment="Center"
+                                Visibility="Collapsed" />
+                        </Grid>
                         <Button
                             x:Name="MenuButton"
                             Grid.Column="0"
@@ -291,55 +343,6 @@
                                 </ContextMenu>
                             </Button.ContextMenu>
                         </Button>
-
-                        <Grid
-                            x:Name="TitleArea"
-                            Grid.Column="1"
-                            HorizontalAlignment="Stretch"
-                            VerticalAlignment="Stretch"
-                            Background="Transparent"
-                            MouseLeftButtonDown="TitleArea_MouseLeftButtonDown">
-                            <Grid
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Background="Transparent">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <ui:SymbolIcon
-                                    x:Name="TitleFolderIcon"
-                                    Grid.Column="0"
-                                    Width="14"
-                                    Height="14"
-                                    Margin="0,0,6,0"
-                                    VerticalAlignment="Center"
-                                    Foreground="{DynamicResource BoxHeaderForeground}"
-                                    Symbol="Folder24"
-                                    Visibility="{Binding ActiveBox.IsFolderPortal, Converter={StaticResource BoolToVis}}" />
-                                <TextBlock
-                                    x:Name="TitleText"
-                                    Grid.Column="1"
-                                    MinWidth="40"
-                                    MaxWidth="220"
-                                    VerticalAlignment="Center"
-                                    Foreground="White"
-                                    MouseLeftButtonDown="TitleText_MouseLeftButtonDown"
-                                    Text="{Binding Title}"
-                                    TextAlignment="Center"
-                                    TextTrimming="CharacterEllipsis" />
-                            </Grid>
-                            <TextBox
-                                x:Name="TitleEdit"
-                                MinWidth="120"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                KeyDown="TitleEdit_KeyDown"
-                                LostFocus="TitleEdit_LostFocus"
-                                Text="{Binding ActiveBox.Name, UpdateSourceTrigger=PropertyChanged}"
-                                TextAlignment="Center"
-                                Visibility="Collapsed" />
-                        </Grid>
 
                         <Button
                             x:Name="LockButton"
