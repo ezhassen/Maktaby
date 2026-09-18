@@ -4,13 +4,13 @@ using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.Containers;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
-using WindowsNative;
-using static WindowsNative.Win32Constants;
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
+using WindowsNative;
+using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views;
 
@@ -37,6 +37,16 @@ public sealed partial class DesktopSurface : Window
     // Set once the window is glued; until then the WM_WINDOWPOSCHANGING guard leaves WPF's initial
     // layout alone. Re-resolved lazily (see HwndHook) so Explorer restarts and icon show/hide toggles
     // — which swap the inner topmost window — are picked up without any polling.
+    // Hook/layer pairing: Loaded refires on every Hide→Show cycle (the manager hides the
+    // surface while desktop icons are shown), so detach-before-attach — otherwise each cycle
+    // stacks another HwndHook + layer hook. Closed detaches outright.
+    private HwndSource? _surfaceSource;
+    private HwndSourceHook? _layerHook;
+    // Surface HWND cached at load (when the handle is guaranteed valid) and published to
+    // Win32Apis.DesktopSurfaceHandle. Re-resolving per call is wasteful, and after Close the
+    // handle is Zero — all users must go through this field (or the static) with a Zero guard.
+    private IntPtr _surfaceHwnd = IntPtr.Zero;
+
     private IntPtr _anchor;
 
     // --- Temporary z-order diagnostics (written to %TEMP%\dbx_surface.log; remove once stable) ---
@@ -93,36 +103,57 @@ public sealed partial class DesktopSurface : Window
         Height = SystemParameters.WorkArea.Height;
 
         Loaded += OnLoaded;
+        Closed += (_, _) => { DetachLayerGlue(); _surfaceHwnd = IntPtr.Zero; Win32Apis.DesktopSurfaceHandle = IntPtr.Zero; };
     }
 
     /// <summary>Re-covers the (possibly changed) primary work area after a display/DPI/resolution change
     /// and re-resolves the desktop anchor.</summary>
     internal void Relayout()
     {
-        Win32Apis.PositionSurfaceOverDesktop(new WindowInteropHelper(this).Handle);
+        if (_surfaceHwnd != IntPtr.Zero)
+        {
+            Win32Apis.PositionSurfaceOverDesktop(_surfaceHwnd);
+        }
         _anchor = Win32Apis.GetDesktopAnchorHandle();
+    }
+
+    /// <summary>Removes this cycle's input hook and desktop-layer hooks (safe to call with
+    /// nothing installed; each removal is independently exception-proof).</summary>
+    private void DetachLayerGlue()
+    {
+        if (_surfaceSource != null)
+        {
+            try { _surfaceSource.RemoveHook(HwndHook); } catch { }
+        }
+        try { DesktopLayer.Detach(_surfaceSource, _layerHook); } catch { }
+        _surfaceSource = null;
+        _layerHook = null;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
+        // Hide→Show refires Loaded: drop the previous cycle's hooks before reinstalling.
+        DetachLayerGlue();
         var helper = new WindowInteropHelper(this);
-        var source = HwndSource.FromHwnd(helper.Handle);
+        _surfaceHwnd = helper.Handle;
+        var source = HwndSource.FromHwnd(_surfaceHwnd);
         if (source != null)
         {
             source.AddHook(HwndHook);
+            _surfaceSource = source;
         }
 
         // WPF registers each window with its own class WITHOUT CS_DBLCLKS, so Windows never
         // synthesizes WM_LBUTTONDBLCLK for us (which historically forced manual double-click timing
         // in the hook). Each HwndWrapper class is unique to this window, so adding the style here
         // enables system double-click detection — correct timing/distance for free.
-        int classStyle = User32.GetClassLong(helper.Handle, GCL_STYLE);
-        User32.SetClassLong(helper.Handle, GCL_STYLE, classStyle | CS_DBLCLKS);
+        int classStyle = User32.GetClassLong(_surfaceHwnd, GCL_STYLE);
+        User32.SetClassLong(_surfaceHwnd, GCL_STYLE, classStyle | CS_DBLCLKS);
 
-        Win32Apis.DesktopSurfaceHandle = helper.Handle;
+        Win32Apis.DesktopSurfaceHandle = _surfaceHwnd;
         // Glue + minimize immunity live in DesktopLayer now; the surface keeps its bespoke input
         // hook (forwarding, marquee, anchor pin) installed above.
-        DesktopLayer.Attach(helper.Handle, new DesktopLayer.Options
+        _layerHook = DesktopLayer.Attach(_surfaceHwnd, new DesktopLayer.Options
         {
             Kind = DesktopLayer.Kind.Surface,
             DesktopManager = _desktopManager,
@@ -139,16 +170,16 @@ public sealed partial class DesktopSurface : Window
                 var boxHwnd = new WindowInteropHelper(box).Handle;
                 if (boxHwnd != IntPtr.Zero)
                 {
-                    Win32Apis.GlueToDesktop(boxHwnd, helper.Handle);
+                    Win32Apis.GlueToDesktop(boxHwnd, _surfaceHwnd);
                 }
             }
         }
         if (Logging.LevelSwitch.MinimumLevel == Serilog.Events.LogEventLevel.Debug)
         {
-            Logging.Log.Debug($"glued: surface={Describe(helper.Handle)} anchor={Describe(_anchor)} "
-                + $"prev={Describe(Win32Apis.GetWindow(helper.Handle, GW_HWNDPREV))} "
-                + $"next={Describe(Win32Apis.GetWindow(helper.Handle, GW_HWNDNEXT))} "
-                + $"topmost={(User32.GetWindowLong(helper.Handle, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0}");
+            Logging.Log.Debug($"glued: surface={Describe(_surfaceHwnd)} anchor={Describe(_anchor)} "
+                + $"prev={Describe(Win32Apis.GetWindow(_surfaceHwnd, GW_HWNDPREV))} "
+                + $"next={Describe(Win32Apis.GetWindow(_surfaceHwnd, GW_HWNDNEXT))} "
+                + $"topmost={(User32.GetWindowLong(_surfaceHwnd, GWL_EXSTYLE) & WS_EX_TOPMOST) != 0}");
         }
     }
 
@@ -629,8 +660,7 @@ public sealed partial class DesktopSurface : Window
     /// <summary>Normalized marquee rectangle in screen DIPs plus the surface's DPI scale.</summary>
     private void GetMarqueeRectDip(out double scale, out double x, out double y, out double w, out double h)
     {
-        var hwnd = new WindowInteropHelper(this).Handle;
-        scale = hwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow(hwnd) / 96.0 : 1.0;
+        scale = _surfaceHwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow(_surfaceHwnd) / 96.0 : 1.0;
         x = Math.Min(_marqueeStart.X, _marqueeEnd.X) / scale;
         y = Math.Min(_marqueeStart.Y, _marqueeEnd.Y) / scale;
         w = Math.Abs(_marqueeEnd.X - _marqueeStart.X) / scale;
@@ -779,8 +809,7 @@ public sealed partial class DesktopSurface : Window
     /// </summary>
     private Point GetScreenPoint()
     {
-        var hwnd = new WindowInteropHelper(this).Handle;
-        double scale = hwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow(hwnd) / 96.0 : 1.0;
+        double scale = _surfaceHwnd != IntPtr.Zero ? Win32Apis.GetDpiForWindow(_surfaceHwnd) / 96.0 : 1.0;
         if (Win32Apis.GetCursorPos(out POINT pt))
         {
             return new Point(pt.X / scale, pt.Y / scale);

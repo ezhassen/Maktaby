@@ -166,6 +166,15 @@ public sealed class MainViewModel : ViewModelBase
 
                 MoveDesktopItemsToDefault(box);
             }
+
+            // Teardown: unregister the models from routing and detach the tab VMs from them.
+            // Without this the process-wide box registry pins every deleted container's VMs
+            // (via Items.CollectionChanged) forever.
+            foreach (var tab in vm.BoxContainerVm.Tabs.ToList())
+            {
+                try { _boxService.RemoveBox(tab.Model.Id); } catch { }
+                try { tab.Dispose(); } catch { }
+            }
         }
 
         _containers.RemoveContainer(vm.Id);
