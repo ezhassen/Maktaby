@@ -35,6 +35,13 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
     private WinEventProc? _winEventProc;
     private bool _refreshQueued;
     private readonly System.Windows.Threading.DispatcherTimer _safetyNet;
+    // Back-off: the safety-net exists for the hidden-icons case (zero layout events), but a
+    // remote-proc read every 10s forever is wasteful when the value never moves. After a run of
+    // stable ticks the interval stretches; any observed change snaps it back to fast.
+    private static readonly TimeSpan FastInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan SlowInterval = TimeSpan.FromSeconds(60);
+    private const int StableTicksToSlow = 6;
+    private int _stableTicks;
 
     public DesktopIconSizeService()
     {
@@ -67,7 +74,11 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
 
     /// <summary>Queue a debounced refresh — call from input paths that observe a possible icon-size
     /// gesture (e.g. the surface forwarding a Ctrl+wheel to Explorer). Cheap when idle.</summary>
-    public void NotifyPossibleChange() => QueueRefresh();
+    public void NotifyPossibleChange()
+    {
+        SetFastInterval();
+        QueueRefresh();
+    }
 
     /// <summary>Suspends monitoring: unhooks the WinEvent and stops the safety-net timer. The last
     /// resolved value stays available via <see cref="Current"/>.</summary>
@@ -89,10 +100,24 @@ public sealed class DesktopIconSizeService : IDesktopIconSizeService
         {
             _current = size;
             Changed?.Invoke(size);
+            SetFastInterval();
         }
         else if (_current <= 0)
         {
             _current = size;
+        }
+        else if (++_stableTicks >= StableTicksToSlow && _safetyNet.Interval != SlowInterval)
+        {
+            _safetyNet.Interval = SlowInterval;
+        }
+    }
+
+    private void SetFastInterval()
+    {
+        _stableTicks = 0;
+        if (_safetyNet.Interval != FastInterval)
+        {
+            _safetyNet.Interval = FastInterval;
         }
     }
 

@@ -364,10 +364,13 @@ public sealed class VirtualizingIconPanel :
             int column =
                 index % _columns;
 
+            // This panel owns scrolling (IScrollInfo, no ScrollContentPresenter transform):
+            // children must be arranged in viewport space, i.e. minus the scroll offset.
+            // Arranging at absolute row positions is what made icons "disappear" on scroll.
             child.Arrange(
                 new Rect(
                     column * ColumnWidth,
-                    row * RowHeight,
+                    (row * RowHeight) - _offsetY,
                     ItemWidth,
                     ItemHeight));
         }
@@ -433,12 +436,6 @@ public sealed class VirtualizingIconPanel :
          * If the number of columns changed, the old
          * realized index mapping is no longer trustworthy.
          */
-        if (_firstIndex >= 0)//&& _columnsChangedSinceLastLayout
-        {
-            Rebuild(firstIndex, lastIndex);
-            return;
-        }
-
         if (_firstIndex < 0)
         {
             Rebuild(
@@ -447,6 +444,27 @@ public sealed class VirtualizingIconPanel :
 
             return;
         }
+
+        /*
+         * No overlap with the realized window (far jump from scrollbar drag,
+         * BringIndexIntoView, or a collection reset): generating the whole gap
+         * just to trim it is O(distance) waste — rebuild the window directly.
+         */
+        if (firstIndex > _lastIndex ||
+            lastIndex < _firstIndex)
+        {
+            Rebuild(
+                firstIndex,
+                lastIndex);
+
+            return;
+        }
+
+        /*
+         * Overlapping window: extend incrementally and let Cleanup() trim the
+         * far side. (An unconditional Rebuild here — as before — regenerates every
+         * visible container on each scroll tick and defeats virtualization.)
+         */
 
         if (firstIndex < _firstIndex)
         {
