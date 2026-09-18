@@ -31,6 +31,23 @@ public static class DesktopWallpaper
     /// per process; a missing server is an environmental fact, not a per-call error.</summary>
     private static readonly Lazy<bool> ComAvailable = new(() =>
     {
+        // Registry pre-check: on builds where the IDesktopWallpaper server isn't registered
+        // (e.g. Win11 25H2 dev) activation throws REGDB_E_CLASSNOTREG — a first-chance
+        // COMException in the debugger on every live-wallpaper start. Skip the activation
+        // entirely when the CLSID key is absent; the try/catch below stays as the net for
+        // subtler mismatches (e.g. registry-view skew).
+        try
+        {
+            using var key = Microsoft.Win32.Registry.ClassesRoot.OpenSubKey(
+                @"CLSID\{C2CF3110-460B-4D97-BF42-7ED4146F695C}");
+            if (key is null)
+            {
+                Serilog.Log.Information("IDesktopWallpaper COM server is not registered on this build; per-monitor wallpaper falls back to SPI");
+                return false;
+            }
+        }
+        catch { /* fall through to the activation probe */ }
+
         try
         {
             // Released immediately: without this the probe RCW lives until finalization.
