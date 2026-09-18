@@ -6,7 +6,6 @@ using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Views.HelpersViews;
 using DesktopBoxesUI.Win32.NativeMethods;
 using DesktopBoxesUI.Win32.Services;
-using WindowsNative;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Versioning;
 using System.Windows;
@@ -16,6 +15,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using WindowsNative;
 using WPFShared.Interfaces;
 
 namespace DesktopBoxesUI.Views.Containers;
@@ -37,7 +37,12 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     private readonly Action _save;
     private readonly WindowDragController _drag;
     private System.Windows.Interop.HwndSourceHook? _layerHook;
-    private readonly IMouseMonitor _mouseMonitor;    private readonly IZOrderService _zOrder = App.Services.GetRequiredService<IZOrderService>();
+    // HWND captured at attach time (OnLoaded), when the handle is guaranteed valid. By Closed
+    // the HWND is usually destroyed, so re-resolving it there yields Zero and FromHwnd(Zero)
+    // throws — detach must use this cached value instead.
+    private IntPtr _layerHwnd = IntPtr.Zero;
+    private readonly IMouseMonitor _mouseMonitor;
+    private readonly IZOrderService _zOrder = App.Services.GetRequiredService<IZOrderService>();
     private readonly uint _currentProcessId = (uint)System.Environment.ProcessId;
     private readonly IDialogService _dialogs = App.Services!.GetRequiredService<IDialogService>();
 
@@ -242,7 +247,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         ClampBoundsToWorkArea();
         ApplyRoll();
         UpdateLockVisuals();
-        _layerHook = DesktopLayer.Attach(this, new DesktopLayer.Options
+        _layerHwnd = new WindowInteropHelper(this).Handle;
+        _layerHook = DesktopLayer.Attach(_layerHwnd, new DesktopLayer.Options
         {
             Kind = DesktopLayer.Kind.Box,
             DesktopManager = App.Services.GetRequiredService<DesktopManager>(),
@@ -459,7 +465,14 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         _tabHoverTimer = null;
         _pendingHoverTab = null;
         _drag.Detach();
-        try { DesktopLayer.Detach(System.Windows.Interop.HwndSource.FromHwnd(new WindowInteropHelper(this).Handle), _layerHook); } catch { }
+        // Detach via the attach-time HWND: re-resolving the handle here would yield Zero (already
+        // destroyed) and FromHwnd(Zero) throws. A destroyed-but-nonzero HWND resolves to null and
+        // Detach no-ops — no exception on any close path.
+        if (_layerHwnd != IntPtr.Zero)
+        {
+            try { DesktopLayer.Detach(System.Windows.Interop.HwndSource.FromHwnd(_layerHwnd), _layerHook); } catch { }
+            _layerHwnd = IntPtr.Zero;
+        }
         _layerHook = null;
         if (_watchedBox != null) { _watchedBox.StopWatching(); _watchedBox = null; }
         if (_vm.BoxContainerVm != null)

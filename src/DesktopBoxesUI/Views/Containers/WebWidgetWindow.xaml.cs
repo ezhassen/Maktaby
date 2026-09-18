@@ -30,6 +30,7 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private bool _isHover;
     private bool _isActive;
     private HwndSource? _hwndSource;
+    private IntPtr _layerHwnd = IntPtr.Zero;
     private HwndSourceHook? _layerHook;
     private WidgetChromeOverlay? _chromeOverlay;
     private readonly DesktopManager _desktopManager;
@@ -140,9 +141,10 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private void Attach()
     {
         if (_attached) return;
-        _hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
-        Win32Apis.RegisterBoxWindow(new WindowInteropHelper(this).Handle);
-        _layerHook = DesktopLayer.Attach(this, new DesktopLayer.Options
+        _layerHwnd = new WindowInteropHelper(this).Handle;
+        _hwndSource = HwndSource.FromHwnd(_layerHwnd);
+        Win32Apis.RegisterBoxWindow(_layerHwnd);
+        _layerHook = DesktopLayer.Attach(_layerHwnd, new DesktopLayer.Options
         {
             Kind = DesktopLayer.Kind.Widget,
             DesktopManager = _desktopManager,
@@ -477,8 +479,7 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
         ShutdownWebView();
         // Overlay already closed in OnClosing — defensive null check only
         _chromeOverlay = null;
-        var hwnd = new WindowInteropHelper(this).Handle;
-        if (hwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(hwnd); } catch { }
+        if (_layerHwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(_layerHwnd); } catch { }
         try { Detach(); } catch { }
         try { base.OnClosed(e); } catch { }
     }

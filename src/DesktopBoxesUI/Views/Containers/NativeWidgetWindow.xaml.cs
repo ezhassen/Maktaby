@@ -12,8 +12,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
-using Wpf.Ui.Appearance;
 using WindowsNative;
+using Wpf.Ui.Appearance;
 using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views.Containers;
@@ -36,6 +36,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private NativeWidgetInfo? _info;
     private int _loadGeneration;
     private WidgetChromeOverlay? _chromeOverlay;
+    private IntPtr _layerHwnd = IntPtr.Zero;
     private HwndSource? _hwndSource;
     private HwndSourceHook? _layerHook;
     private bool _isHover;
@@ -284,8 +285,9 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private void Attach()
     {
         if (_attached) return;
-        _hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
-        Win32Apis.RegisterBoxWindow(new WindowInteropHelper(this).Handle);
+        _layerHwnd = new WindowInteropHelper(this).Handle;
+        _hwndSource = HwndSource.FromHwnd(_layerHwnd);
+        Win32Apis.RegisterBoxWindow(_layerHwnd);
         _layerHook = DesktopLayer.Attach(this, new DesktopLayer.Options
         {
             Kind = DesktopLayer.Kind.Widget,
@@ -335,8 +337,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         try
         {
             Win32Apis.GetCursorPos(out var pt);
-            var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero && Win32Apis.GetWindowRect(hwnd, out var rect))
+            if (_layerHwnd != IntPtr.Zero && Win32Apis.GetWindowRect(_layerHwnd, out var rect))
             {
                 if (pt.X >= rect.Left && pt.X <= rect.Right && pt.Y >= rect.Top && pt.Y <= rect.Bottom)
                     return;
@@ -361,8 +362,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         try { Activate(); } catch { }
         try
         {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero) Win32Apis.SetForegroundWindow(hwnd);
+            if (_layerHwnd != IntPtr.Zero) Win32Apis.SetForegroundWindow(_layerHwnd);
         }
         catch { }
         _isActive = true;
@@ -522,8 +522,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     {
         ShutdownPlugin();
         _chromeOverlay = null;
-        var hwnd = new WindowInteropHelper(this).Handle;
-        if (hwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(hwnd); } catch { }
+        if (_layerHwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(_layerHwnd); } catch { }
         try { Detach(); } catch { }
         try { base.OnClosed(e); } catch { }
     }
