@@ -111,6 +111,9 @@ After editing:
 
 - Keep all agent-local todos, notes, plans and scratch files under the repo-root `.ai/` directory (e.g. `.ai/todo.md`). Never scatter them across the repo.
 - `.ai/` is git-ignored — it never gets committed. Do not force-add it.
+- `.ai/todo.md` is a forward-looking list only: open todos, bug/survey tickets, verification steps.
+  Mark finished items `[x]` with a one-line how — never log completed-work narratives or round
+  histories in it.
 
 ## Performance expectations
 
