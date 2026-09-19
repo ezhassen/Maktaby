@@ -66,8 +66,11 @@ public sealed class ClockWidget : NativeWidgetControl
         };
         _face = new Ellipse { Fill = _faceBrush, StrokeThickness = 6, Effect = _shadow };
 
-        var grid = new Grid { Width = Size, Height = Size };
-        grid.Children.Add(_face);
+        // Static layer (face, ticks, numerals, labels): cached as one bitmap so the 10 Hz hand
+        // updates composite over it instead of re-tessellating + re-blurring (DropShadow) the
+        // whole face every frame. Hands stay live above it.
+        var staticLayer = new Grid { Width = Size, Height = Size };
+        staticLayer.Children.Add(_face);
         for (int i = 0; i < 12; i++)
         {
             double a = i * Math.PI / 6;
@@ -83,8 +86,12 @@ public sealed class ClockWidget : NativeWidgetControl
                 StrokeThickness = cardinal ? 4 : 2,
             };
             (cardinal ? _cardinals : _ticks).Add(tick);
-            grid.Children.Add(tick);
+            staticLayer.Children.Add(tick);
         }
+        // Cache after children are in (before first render): one bitmap composite per frame.
+        staticLayer.CacheMode = new BitmapCache { EnableClearType = false, SnapsToDevicePixels = false };
+        var grid = new Grid { Width = Size, Height = Size };
+        grid.Children.Add(staticLayer);
         _hourHand = Hand(9, 84);
         _minuteHand = Hand(7, 117);
         _secondHand = Hand(3, 129);
@@ -105,7 +112,7 @@ public sealed class ClockWidget : NativeWidgetControl
                 RenderTransform = new TranslateTransform(Math.Sin(na) * 114, -Math.Cos(na) * 114),
             };
             _hourNumerals.Add(numeral);
-            grid.Children.Add(numeral);
+            staticLayer.Children.Add(numeral);
         }
         _ampmText = new TextBlock
         {
@@ -115,7 +122,7 @@ public sealed class ClockWidget : NativeWidgetControl
             VerticalAlignment = VerticalAlignment.Center,
             RenderTransform = new TranslateTransform(0, 52),
         };
-        grid.Children.Add(_ampmText);
+        staticLayer.Children.Add(_ampmText);
         _dateText = new TextBlock
         {
             FontSize = 18,
@@ -123,7 +130,7 @@ public sealed class ClockWidget : NativeWidgetControl
             VerticalAlignment = VerticalAlignment.Center,
             RenderTransform = new TranslateTransform(0, 72),
         };
-        grid.Children.Add(_dateText);
+        staticLayer.Children.Add(_dateText);
         _cap = new Ellipse
         {
             Width = 16.5,
@@ -324,16 +331,23 @@ public sealed class ClockWidget : NativeWidgetControl
         base.Dispose(disposing);
     }
 
+    private double _lastHour = double.NaN;
+    private double _lastMinute = double.NaN;
+    private double _lastSecond = double.NaN;
+
     private void UpdateHands()
     {
         try
         {
             _secondHand.Visibility = _showSeconds ? Visibility.Visible : Visibility.Collapsed;
             var now = DateTime.Now;
-            SetHand(_hourHand, ((now.Hour % 12) + now.Minute / 60.0) / 12.0, 84);
-            SetHand(_minuteHand, (now.Minute + now.Second / 60.0) / 60.0, 117);
+            SetHandOnce(_hourHand, ((now.Hour % 12) + now.Minute / 60.0) / 12.0, 84, ref _lastHour);
+            SetHandOnce(_minuteHand, (now.Minute + now.Second / 60.0) / 60.0, 117, ref _lastMinute);
             double seconds = _smoothSeconds ? now.Second + now.Millisecond / 1000.0 : now.Second;
-            SetHand(_secondHand, seconds / 60.0, 129);
+            if (_showSeconds)
+            {
+                SetHandOnce(_secondHand, seconds / 60.0, 129, ref _lastSecond);
+            }
             if (_showAmPm)
             {
                 var dtf = CultureInfo.CurrentCulture.DateTimeFormat;
@@ -348,6 +362,15 @@ public sealed class ClockWidget : NativeWidgetControl
             }
         }
         catch { }
+    }
+
+    /// <summary>Moves a hand only when its fraction actually changed — untouched visuals
+    /// don't invalidate, so an idle minute costs zero renders instead of 600.</summary>
+    private static void SetHandOnce(Line hand, double fraction, double length, ref double last)
+    {
+        if (fraction == last) return;
+        last = fraction;
+        SetHand(hand, fraction, length);
     }
 
     private static void SetHand(Line hand, double fraction, double length)
