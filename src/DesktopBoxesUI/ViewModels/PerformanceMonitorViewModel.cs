@@ -103,6 +103,9 @@ namespace DesktopBoxesUI.ViewModels
         private long _totalMemoryMB;
         public long TotalMemoryMB { get => _totalMemoryMB; set => SetField(ref _totalMemoryMB, value); }
 
+        private long _managedMemoryMB;
+        public long ManagedMemoryMB { get => _managedMemoryMB; set => SetField(ref _managedMemoryMB, value); }
+
         private double _totalCpu;
         public double TotalCpu { get => _totalCpu; set => SetField(ref _totalCpu, value); }
 
@@ -252,6 +255,9 @@ namespace DesktopBoxesUI.ViewModels
                 _process.Refresh();
                 // Use PrivateMemorySize to match Task Manager's "Memory (Private Working Set)" (WorkingSet includes shared pages)
                 TotalMemoryMB = _process.PrivateMemorySize64 / 1024 / 1024;
+                // Managed heap split: if Total climbs while this stays flat, the growth is native
+                // (Media Foundation, COM, GDI) rather than .NET objects.
+                try { ManagedMemoryMB = System.GC.GetTotalMemory(false) / 1024 / 1024; } catch { }
 
                 // I/O throughput (read + write bytes/sec across disk/network/device).
                 try

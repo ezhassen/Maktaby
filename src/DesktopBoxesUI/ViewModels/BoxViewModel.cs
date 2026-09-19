@@ -788,14 +788,203 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // Batched targeted updates: filesystem bursts (copy jobs, AV/indexer catch-up after
+    // sleep) arrive as hundreds of events. Enumerating + rebuilding the whole folder per event
+    // pins the CPU and churns the LOH; instead events accumulate here and ONE trailing UI pass
+    // applies them as single-item deltas. Anything ambiguous falls back to a full refresh, so
+    // correctness can never regress — only speed.
+    private readonly object _pendingGate = new();
+    private readonly List<FileSystemChange> _pendingChanges = new();
+    private bool _drainScheduled;
+    private const int ChangeOverflowFullRefresh = 1000;
+    private const int ChangeHardCap = 5000;
+
     private void OnFolderChanged(FileSystemChange change)
     {
-        // Debounce: file copy can fire many events; coalesce to one refresh.
+        lock (_pendingGate)
+        {
+            if (_pendingChanges.Count >= ChangeHardCap)
+            {
+                // Pathological storm: drop the backlog, one full refresh covers everything.
+                _pendingChanges.Clear();
+                _pendingChanges.Add(new FileSystemChange(FileSystemChangeKind.Unknown, ""));
+            }
+            else
+            {
+                _pendingChanges.Add(change);
+            }
+
+            if (_drainScheduled) return;
+            _drainScheduled = true;
+        }
+
+        // Debounce: a file copy fires many events; coalesce to one trailing drain.
         System.Windows.Application.Current?.Dispatcher.BeginInvoke(async () =>
         {
             await Task.Delay(120);
-            await RefreshFolderAsync();
+            await DrainFolderChangesAsync();
         }, System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private async Task DrainFolderChangesAsync()
+    {
+        List<FileSystemChange> batch;
+        lock (_pendingGate)
+        {
+            _drainScheduled = false;
+            batch = new List<FileSystemChange>(_pendingChanges);
+            _pendingChanges.Clear();
+        }
+
+        if (_disposed || batch.Count == 0) return;
+        if (_box.BoxType != BoxType.FolderPortal) return;
+
+        // Storm overflow or ambiguous marker: full refresh covers everything at once.
+        if (batch.Count >= ChangeOverflowFullRefresh
+            || batch.Any(c => c.Kind == FileSystemChangeKind.Unknown))
+        {
+            await RefreshFolderAsync();
+            return;
+        }
+
+        string effective = CurrentFolderPath;
+        if (string.IsNullOrWhiteSpace(effective) || !Directory.Exists(effective))
+        {
+            await RefreshFolderAsync();
+            return;
+        }
+
+        // Any event outside the current folder (subfolder noise, renames across folders):
+        // fall back — targeted math only covers direct children.
+        foreach (var c in batch)
+        {
+            if (!IsDirectChild(c.Path, effective)
+                || (c.OldPath != null && !IsDirectChild(c.OldPath, effective) && !string.IsNullOrEmpty(c.OldPath)))
+            {
+                await RefreshFolderAsync();
+                return;
+            }
+        }
+
+        var dispatcher = System.Windows.Application.Current?.Dispatcher;
+        if (dispatcher != null && !dispatcher.CheckAccess())
+        {
+            await dispatcher.InvokeAsync(() => ApplyFolderDeltas(batch, effective));
+        }
+        else
+        {
+            ApplyFolderDeltas(batch, effective);
+        }
+    }
+
+    private static bool IsDirectChild(string path, string folder)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return false;
+        try
+        {
+            var dir = Path.GetDirectoryName(path);
+            return string.Equals(dir?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                folder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Applies a batch of single-item deltas (UI thread). New VMs load icons lazily on
+    /// render — unlike a full refresh, this allocates almost nothing per event.</summary>
+    private void ApplyFolderDeltas(List<FileSystemChange> batch, string effective)
+    {
+        if (_disposed) return;
+        // Navigated away while the batch waited: a full load owns the new folder.
+        if (!string.Equals(CurrentFolderPath, effective, StringComparison.OrdinalIgnoreCase)) return;
+
+        bool structural = false;
+        bool meta = false;
+        foreach (var c in batch)
+        {
+            switch (c.Kind)
+            {
+                case FileSystemChangeKind.Created:
+                    if (TryAddSingleItem(c.Path)) structural = true;
+                    break;
+                case FileSystemChangeKind.Deleted:
+                    structural |= RemoveSingleItem(c.Path);
+                    break;
+                case FileSystemChangeKind.Changed:
+                    if (TouchSingleItem(c.Path)) meta = true;
+                    break;
+                case FileSystemChangeKind.Renamed:
+                    if (!string.IsNullOrEmpty(c.OldPath)) structural |= RemoveSingleItem(c.OldPath);
+                    if (TryAddSingleItem(c.Path)) structural = true;
+                    break;
+                default:
+                    _ = RefreshFolderAsync();
+                    return;
+            }
+        }
+
+        // One in-memory re-sort covers date/size ordering after metadata changes.
+        if (structural || (meta && (_box.FolderSortBy == FolderSortMode.DateModified || _box.FolderSortBy == FolderSortMode.Size)))
+        {
+            ApplyFolderSort();
+        }
+
+        _folderLoadedForPath = effective;
+        _watchMissedChanges = false;
+    }
+
+    private bool TryAddSingleItem(string path)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(path)) return false;
+            if (!File.Exists(path) && !Directory.Exists(path)) return false;
+            if (ShellItemFilter.IsExcluded(path) || !ShouldShowEntry(path)) return false;
+            foreach (var vm in FolderItems)
+            {
+                if (string.Equals(vm.Path, path, StringComparison.OrdinalIgnoreCase)) return false;
+            }
+
+            FolderItems.Add(new FolderItemViewModel(path, _icons));
+            return true;
+        }
+        catch { return false; }
+    }
+
+    private bool RemoveSingleItem(string path)
+    {
+        try
+        {
+            for (int i = FolderItems.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(FolderItems[i].Path, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    FolderItems.RemoveAt(i);
+                    return true;
+                }
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    private bool TouchSingleItem(string path)
+    {
+        try
+        {
+            foreach (var vm in FolderItems)
+            {
+                if (string.Equals(vm.Path, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    vm.ReloadIcon();
+                    return true;
+                }
+            }
+            // Changed file we don't show (or arrived before its Created): refresh to be sure.
+            _ = RefreshFolderAsync();
+        }
+        catch { }
+        return false;
     }
 
     public async Task<bool> RenameFolderItemAsync(FolderItemViewModel vm, string newName)

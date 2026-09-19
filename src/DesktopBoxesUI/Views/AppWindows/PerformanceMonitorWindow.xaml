@@ -72,6 +72,11 @@
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        Text="{Binding ManagedMemoryMB, StringFormat={}Managed heap: {0} MB}" />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                         Text="{Binding WebView2ProcessCount, StringFormat={}WebView2: {0} processes}" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center">
