@@ -96,12 +96,12 @@ public sealed class MyWidget : NativeWidgetControl
 
 ### Sample
 
-`samples/NativeClockWidget/` is a complete source-mode plugin (analog clock, pure code,
-no XAML): copy it to `UserWidgets/NativeClock/` (folder name is the identity) or place
-the built-in `NativeClock` (shipped in `NativeWidgets/`, same code) straight from the
-gallery. It demonstrates `Suspend`/`Resume` (timer control), `ApplyTheme` (dark/light
-faces) and the discovery contract. Place it from the gallery — it carries the `Native`
-badge (`App` source badge for the built-in).
+The built-in `NativeClock` (shipped in `NativeWidgets/`, pure code, no XAML) doubles as the
+reference plugin: place it straight from the gallery — it carries the `Native` badge (`App`
+source badge for the built-in). It demonstrates `Suspend`/`Resume` (timer control),
+`ApplyTheme` (dark/light faces), user settings (`showTicks`, `secondsHandMode`, …) and the
+discovery contract. To experiment on a copy, duplicate its folder to
+`UserWidgets/NativeClock/` (folder name is the identity) and edit the sources there.
 
 ## 4. `INativeWidget` reference
 
@@ -131,7 +131,7 @@ public ClockWidget()
     // (name, displayName, description, kind, onChanged, default, options)
     DefineSetting("secondsHandMode", "Second hand", "How the second hand behaves",
         WidgetSettingKind.ListOfStrings, () => UpdateHands(), defaultValue: "smooth",
-        listOfAvilableStrings: new Dictionary<string, string>
+        listOfAvailableStrings: new Dictionary<string, string>
         {
             ["hide"] = "Hide",
             ["smooth"] = "Smooth sweep",
@@ -148,7 +148,7 @@ private void UpdateHands()
 ```
 
 `WidgetSettingKind` is `String` (`string`), `Number` (`double`), `Boolean` (`bool`) or
-`ListOfStrings` (`string` key from `listOfAvilableStrings`, rendered as a combo box);
+`ListOfStrings` (`string` key from `listOfAvailableStrings`, rendered as a combo box);
 mismatched writes throw `ArgumentException`. `ValueChanged` fires on the UI thread for host
 edits too; `Reset()` restores `DefaultValue`. Raw `INativeWidget` implementations (not deriving
 from the base) can implement `IWidgetSettingsProvider` directly with their own list.

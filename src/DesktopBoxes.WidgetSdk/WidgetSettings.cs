@@ -21,23 +21,23 @@ public sealed class WidgetSetting : IDisposable
 {
     private object? _value;
 
-    public WidgetSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvilableStrings = null)
+    public WidgetSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvailableStrings = null)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
             throw new System.ArgumentException("Setting name must not be empty.", nameof(name));
         }
-        if (kind == WidgetSettingKind.ListOfStrings && (listOfAvilableStrings is null || listOfAvilableStrings.Count == 0))
+        if (kind == WidgetSettingKind.ListOfStrings && (listOfAvailableStrings is null || listOfAvailableStrings.Count == 0))
         {
-            throw new InvalidOperationException("If WidgetSetting kind is ListOfStrings must provide listOfAvilableStrings");
+            throw new InvalidOperationException("ListOfStrings settings require a non-empty available-strings map.");
         }
 
         Name = name;
         Description = description ?? "";
         Kind = kind;
         DisplayName = string.IsNullOrWhiteSpace(displayName) ? name : displayName;
-        ListOfAvilableStrings = listOfAvilableStrings;
-        DefaultValue = Coerce(defaultValue, kind, nameof(defaultValue), listOfAvilableStrings);
+        ListOfAvailableStrings = listOfAvailableStrings;
+        DefaultValue = Coerce(defaultValue, kind, nameof(defaultValue), listOfAvailableStrings);
         _value = DefaultValue;
         if (onValueChanged is not null) this.ValueChanged += (_, _) => { onValueChanged(); };
     }
@@ -65,7 +65,7 @@ public sealed class WidgetSetting : IDisposable
         get => _value;
         set
         {
-            var coerced = Coerce(value, Kind, nameof(value), ListOfAvilableStrings);
+            var coerced = Coerce(value, Kind, nameof(value), ListOfAvailableStrings);
             if (Equals(_value, coerced))
             {
                 return;
@@ -132,10 +132,11 @@ public sealed class WidgetSetting : IDisposable
     }
 
     /// <summary>
-    /// Defined List of avilable strings if <see cref="Kind"/> is <see cref="WidgetSettingKind.ListOfStrings"/> [settingValue, DisplayName]
+    /// <summary>Available options when <see cref="Kind"/> is
+    /// <see cref="WidgetSettingKind.ListOfStrings"/>, as value → display-name pairs.</summary>
     /// </summary>
     [JsonIgnore]
-    public Dictionary<string, string>? ListOfAvilableStrings { get; }
+    public Dictionary<string, string>? ListOfAvailableStrings { get; }
 
     #region Dispose pattern
 

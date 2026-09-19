@@ -26,11 +26,11 @@ public class NativeWidgetControl : UserControl, INativeWidget, IWidgetSettingsPr
     /// <see cref="WidgetSetting.Value"/>.</summary>
     IReadOnlyList<WidgetSetting> IWidgetSettingsProvider.Settings => _settings;
 
-    protected WidgetSetting DefineSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvilableStrings = null)
+    protected WidgetSetting DefineSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvailableStrings = null)
     {
         if (_settings.Exists(s => s.Name == name)) throw new System.ArgumentException($"Duplicate widget setting '{name}'.", nameof(WidgetSetting));
 
-        var setting = new WidgetSetting(name, displayName, description, kind, onValueChanged, defaultValue: defaultValue, listOfAvilableStrings: listOfAvilableStrings);
+        var setting = new WidgetSetting(name, displayName, description, kind, onValueChanged, defaultValue: defaultValue, listOfAvailableStrings: listOfAvailableStrings);
         _settings.Add(setting);
         return setting;
     }

@@ -148,7 +148,7 @@ public sealed class ClockWidget : NativeWidgetControl
         // Cached in fields — UpdateHands runs at 10 Hz and must not re-resolve per frame.
         var secondsMode = DefineSetting("secondsHandMode", "Second hand", "How the second hand behaves",
             WidgetSettingKind.ListOfStrings, OnSecondsHandModeChanged, defaultValue: "smooth",
-            listOfAvilableStrings: new Dictionary<string, string>
+            listOfAvailableStrings: new Dictionary<string, string>
             {
                 ["hide"] = "Hide",
                 ["smooth"] = "Smooth sweep",
@@ -157,9 +157,9 @@ public sealed class ClockWidget : NativeWidgetControl
         _secondsHandMode = secondsMode;
         ApplySecondsHandMode(applyTimerRate: false);
         //
-        var showTicks = DefineSetting("showTicks", "Minute ticks", "Which tick marks to show",
+        var showTicks = DefineSetting("showTicks", "Tick marks", "Which tick marks to show",
             WidgetSettingKind.ListOfStrings, OnShowTicksChanged, defaultValue: "all",
-            listOfAvilableStrings: new Dictionary<string, string>
+            listOfAvailableStrings: new Dictionary<string, string>
             {
                 ["hide"] = "Hide",
                 ["all"] = "Show all",
@@ -169,7 +169,7 @@ public sealed class ClockWidget : NativeWidgetControl
         //
         DefineSetting("showHours", "Hour numbers", "Which hour numbers to show",
             WidgetSettingKind.ListOfStrings, OnShowHoursChanged, defaultValue: "hide",
-            listOfAvilableStrings: new Dictionary<string, string>
+            listOfAvailableStrings: new Dictionary<string, string>
             {
                 ["hide"] = "Hide",
                 ["all"] = "Show all",

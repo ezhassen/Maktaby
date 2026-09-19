@@ -84,7 +84,7 @@ public partial class WidgetSettingsWindow : Wpf.Ui.Controls.FluentWindow
                 var combo = new ComboBox
                 {
                     Margin = new Thickness(0, 2, 0, 0),
-                    ItemsSource = setting.ListOfAvilableStrings,
+                    ItemsSource = setting.ListOfAvailableStrings,
                     DisplayMemberPath = "Value",
                     SelectedValuePath = "Key",
                     SelectedValue = setting.GetString(),

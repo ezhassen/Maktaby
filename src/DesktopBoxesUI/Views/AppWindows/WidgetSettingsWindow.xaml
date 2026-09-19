@@ -36,11 +36,11 @@
             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0">
             <Grid>
-                <ui:Button
-                    HorizontalAlignment="Left"
-                    Appearance="Secondary"
-                    Click="Reset_Click"
-                    Content="Reset defaults" />
+                    <ui:Button
+                        HorizontalAlignment="Left"
+                        Appearance="Secondary"
+                        Click="Reset_Click"
+                        Content="Reset to defaults" />
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <ui:Button
                         Appearance="Secondary"
