@@ -204,6 +204,16 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
             return;
         }
         ApplyThemeToPlugin();
+        // Settings load after the visual exists: declared defaults show first, stored values
+        // apply through ValueChanged (widgets cache them there).
+        try
+        {
+            if (plugin is DesktopBoxes.WidgetSdk.IWidgetSettingsProvider provider && _info != null)
+            {
+                App.Services.GetRequiredService<INativeWidgetSettingsService>().LoadInto(_info, provider);
+            }
+        }
+        catch { }
         if (!IsVisible || WindowState == WindowState.Minimized)
         {
             try { plugin.Suspend(); } catch { }
@@ -440,6 +450,27 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         // The owner re-set above does NOT move anything in the z-order; force the overlay
         // directly above the owner so a show/raise that buried it cannot stick.
         try { _chromeOverlay.EnsureAboveOwner(); } catch { }
+    }
+
+    private void WidgetMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        // Settings entry only when the loaded plugin actually exposes settings.
+        bool hasSettings = false;
+        try { hasSettings = _plugin is DesktopBoxes.WidgetSdk.IWidgetSettingsProvider p && p.Settings.Count > 0; } catch { }
+        SettingsMenuItem.Visibility = hasSettings ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        if (_plugin is not DesktopBoxes.WidgetSdk.IWidgetSettingsProvider provider || provider.Settings.Count == 0) return;
+        if (_info is null) return;
+        try
+        {
+            var svc = App.Services.GetRequiredService<INativeWidgetSettingsService>();
+            var w = new Views.AppWindows.WidgetSettingsWindow(_info, provider, svc) { Owner = this };
+            w.ShowDialog();
+        }
+        catch { }
     }
 
     private void Change_Click(object sender, RoutedEventArgs e)

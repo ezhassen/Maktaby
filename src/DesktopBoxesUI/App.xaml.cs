@@ -229,6 +229,7 @@ public partial class App : Application
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<IWebWidgetService, WebWidgetService>();
         services.AddSingleton<INativeWidgetService, NativeWidgetService>();
+        services.AddSingleton<INativeWidgetSettingsService, NativeWidgetSettingsService>();
 
         // Win32 watchers
         services.AddSingleton<IMouseMonitor, MouseMonitor>();

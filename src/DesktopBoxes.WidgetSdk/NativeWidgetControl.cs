@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -12,11 +13,45 @@ namespace DesktopBoxes.WidgetSdk;
 /// call the <c>Raise*</c> methods for the interaction events the host cannot see
 /// (e.g. content hosted through an HWND airspace). For pure WPF visuals the host
 /// detects mouse/focus itself — raising events is then optional.</summary>
-public class NativeWidgetControl : UserControl, INativeWidget
+public class NativeWidgetControl : UserControl, INativeWidget, IWidgetSettingsProvider
 {
     public FrameworkElement Visual => this;
 
     public bool IsSuspended { get; private set; }
+
+    private readonly List<WidgetSetting> _settings = new();
+
+    /// <summary>Settings declared via <see cref="DefineSetting"/> (empty by default).
+    /// The host renders one editor per entry and writes back through
+    /// <see cref="WidgetSetting.Value"/>.</summary>
+    IReadOnlyList<WidgetSetting> IWidgetSettingsProvider.Settings => _settings;
+
+    protected WidgetSetting DefineSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvilableStrings = null)
+    {
+        if (_settings.Exists(s => s.Name == name)) throw new System.ArgumentException($"Duplicate widget setting '{name}'.", nameof(WidgetSetting));
+
+        var setting = new WidgetSetting(name, displayName, description, kind, onValueChanged, defaultValue: defaultValue, listOfAvilableStrings: listOfAvilableStrings);
+        _settings.Add(setting);
+        return setting;
+    }
+
+    /// <summary>Declares a user-editable setting (call from the derived constructor).
+    /// Names must be unique per widget; duplicates throw.</summary>
+    protected WidgetSetting DefineSetting(WidgetSetting setting)
+    {
+        if (setting is null) throw new System.ArgumentNullException(nameof(setting));
+        if (_settings.Exists(s => s.Name == setting.Name))
+        {
+            throw new System.ArgumentException($"Duplicate widget setting '{setting.Name}'.", nameof(setting));
+        }
+
+        _settings.Add(setting);
+        return setting;
+    }
+
+    /// <summary>Finds a declared setting by name (<c>null</c> when absent).</summary>
+    protected WidgetSetting? FindSetting(string name) =>
+        _settings.Find(s => s.Name == name);
 
     public void Suspend()
     {
@@ -75,5 +110,14 @@ public class NativeWidgetControl : UserControl, INativeWidget
         GC.SuppressFinalize(this);
     }
 
-    protected virtual void Dispose(bool disposing) { }
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_settings?.Any() == true)
+        {
+            foreach (var item in _settings)
+            {
+                item.Dispose();
+            }
+        }
+    }
 }

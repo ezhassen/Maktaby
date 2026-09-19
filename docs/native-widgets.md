@@ -120,6 +120,39 @@ the host. Keep handlers fast; never block the UI thread (compile/load already ha
 off-thread). Plugin constructors run on the UI thread and must return fast — defer
 heavy work (timers are fine to *create*, just don't fetch the internet in a ctor).
 
+### User settings (optional)
+
+Derive from `NativeWidgetControl` and declare settings in the constructor — the host renders
+one editor per setting and writes back through `Value` (persisted per placed widget):
+
+```csharp
+public ClockWidget()
+{
+    // (name, displayName, description, kind, onChanged, default, options)
+    DefineSetting("secondsHandMode", "Second hand", "How the second hand behaves",
+        WidgetSettingKind.ListOfStrings, () => UpdateHands(), defaultValue: "smooth",
+        listOfAvilableStrings: new Dictionary<string, string>
+        {
+            ["hide"] = "Hide",
+            ["smooth"] = "Smooth sweep",
+            ["step"] = "Step once per second",
+        });
+    // ...
+}
+
+private void UpdateHands()
+{
+    string mode = FindSetting("secondsHandMode")!.GetString(); // "hide" | "smooth" | "step"
+    // ... (cache the mode in a field — UpdateHands runs at 10 Hz)
+}
+```
+
+`WidgetSettingKind` is `String` (`string`), `Number` (`double`), `Boolean` (`bool`) or
+`ListOfStrings` (`string` key from `listOfAvilableStrings`, rendered as a combo box);
+mismatched writes throw `ArgumentException`. `ValueChanged` fires on the UI thread for host
+edits too; `Reset()` restores `DefaultValue`. Raw `INativeWidget` implementations (not deriving
+from the base) can implement `IWidgetSettingsProvider` directly with their own list.
+
 ## 5. Hosting other UI stacks (anything that is a `FrameworkElement`)
 
 `Visual` can wrap more than hand-built WPF — verified against the host:

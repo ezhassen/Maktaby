@@ -1,4 +1,6 @@
 using DesktopBoxes.WidgetSdk;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -29,8 +31,18 @@ public sealed class ClockWidget : NativeWidgetControl
     private readonly Line _hourHand;
     private readonly Line _minuteHand;
     private readonly Line _secondHand;
+    private readonly List<TextBlock> _hourNumerals = new();
+    private readonly TextBlock _ampmText;
+    private readonly TextBlock _dateText;
     private readonly Ellipse _cap;
     private readonly DispatcherTimer _timer;
+    private WidgetSetting? _secondsHandMode;
+    private bool _showSeconds = true;
+    private string _showTicksMode = "all";
+    private bool _smoothSeconds = true;
+    private string _showHoursMode = "hide";
+    private bool _showAmPm;
+    private bool _showDate;
 
     public ClockWidget()
     {
@@ -79,6 +91,39 @@ public sealed class ClockWidget : NativeWidgetControl
         grid.Children.Add(_hourHand);
         grid.Children.Add(_minuteHand);
         grid.Children.Add(_secondHand);
+        // Hour numerals (1-12) on a 102px ring + AM/PM and short date below center, all
+        // centered via translate-from-center so text size never offsets them.
+        for (int h = 1; h <= 12; h++)
+        {
+            double na = h * Math.PI / 6;
+            var numeral = new TextBlock
+            {
+                Text = h.ToString(),
+                FontSize = 16,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                RenderTransform = new TranslateTransform(Math.Sin(na) * 114, -Math.Cos(na) * 114),
+            };
+            _hourNumerals.Add(numeral);
+            grid.Children.Add(numeral);
+        }
+        _ampmText = new TextBlock
+        {
+            FontSize = 16,
+            FontWeight = FontWeights.Bold,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            RenderTransform = new TranslateTransform(0, 52),
+        };
+        grid.Children.Add(_ampmText);
+        _dateText = new TextBlock
+        {
+            FontSize = 18,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            RenderTransform = new TranslateTransform(0, 72),
+        };
+        grid.Children.Add(_dateText);
         _cap = new Ellipse
         {
             Width = 16.5,
@@ -93,10 +138,123 @@ public sealed class ClockWidget : NativeWidgetControl
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _timer.Tick += (_, _) => UpdateHands();
-        _timer.Start();
+        // Start on load, not in the ctor: a constructed-but-never-shown instance (gallery
+        // preview host, background tab) must not tick. Suspend-aware so a suspended reload
+        // doesn't restart behind the host's back.
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+
+        // Demo user settings (see docs/native-widgets.md): the host renders an editor for each.
+        // Cached in fields — UpdateHands runs at 10 Hz and must not re-resolve per frame.
+        var secondsMode = DefineSetting("secondsHandMode", "Second hand", "How the second hand behaves",
+            WidgetSettingKind.ListOfStrings, OnSecondsHandModeChanged, defaultValue: "smooth",
+            listOfAvilableStrings: new Dictionary<string, string>
+            {
+                ["hide"] = "Hide",
+                ["smooth"] = "Smooth sweep",
+                ["step"] = "Step once per second",
+            });
+        _secondsHandMode = secondsMode;
+        ApplySecondsHandMode(applyTimerRate: false);
+        //
+        var showTicks = DefineSetting("showTicks", "Minute ticks", "Which tick marks to show",
+            WidgetSettingKind.ListOfStrings, OnShowTicksChanged, defaultValue: "all",
+            listOfAvilableStrings: new Dictionary<string, string>
+            {
+                ["hide"] = "Hide",
+                ["all"] = "Show all",
+                ["quarters"] = "Quarters only",
+            });
+        _showTicksMode = showTicks.GetString();
+        //
+        DefineSetting("showHours", "Hour numbers", "Which hour numbers to show",
+            WidgetSettingKind.ListOfStrings, OnShowHoursChanged, defaultValue: "hide",
+            listOfAvilableStrings: new Dictionary<string, string>
+            {
+                ["hide"] = "Hide",
+                ["all"] = "Show all",
+                ["quarters"] = "Quarters only",
+            });
+        _showHoursMode = FindSetting("showHours")?.GetString() ?? "hide";
+        //
+        DefineSetting("showAmPm", "AM/PM", "Show AM/PM below the center",
+            WidgetSettingKind.Boolean, () => { _showAmPm = FindSetting("showAmPm")?.GetBoolean() == true; ApplyExtrasVisibility(); UpdateHands(); },
+            defaultValue: false);
+        _showAmPm = FindSetting("showAmPm")?.GetBoolean() == true;
+        //
+        DefineSetting("showDate", "Short date", "Show the short date below the center",
+            WidgetSettingKind.Boolean, () => { _showDate = FindSetting("showDate")?.GetBoolean() == true; ApplyExtrasVisibility(); UpdateHands(); },
+            defaultValue: false);
+        _showDate = FindSetting("showDate")?.GetBoolean() == true;
+        //
+        ApplyTimerRate();
+        ApplyTickVisibility();
+        ApplyExtrasVisibility();
 
         OnApplyTheme(null);
+        //UpdateHands();//applied onLoaded
+    }
+
+    private void OnShowTicksChanged()
+    {
+        _showTicksMode = FindSetting("showTicks")?.GetString() ?? "all";
+        ApplyTickVisibility();
+    }
+
+    private void OnSecondsHandModeChanged()
+    {
+        ApplySecondsHandMode();
         UpdateHands();
+    }
+
+    /// <summary>Folds the combined second-hand mode into the cached flags.</summary>
+    private void ApplySecondsHandMode(bool applyTimerRate = true)
+    {
+        string mode = _secondsHandMode?.GetString() ?? "smooth";
+        _showSeconds = mode != "hide";
+        _smoothSeconds = mode == "smooth";
+        if (applyTimerRate) ApplyTimerRate();
+    }
+
+    private void ApplyTimerRate()
+    {
+        // No second hand, no sub-minute work: tick once a minute.
+        try { _timer.Interval = TimeSpan.FromMilliseconds(!_showSeconds ? 60000 : (_smoothSeconds ? 100 : 1000)); } catch { }
+    }
+
+    private void ApplyTickVisibility()
+    {
+        try
+        {
+            var minorsVis = _showTicksMode == "all" ? Visibility.Visible : Visibility.Collapsed;
+            var cardinalsVis = _showTicksMode != "hide" ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var t in _ticks) t.Visibility = minorsVis;
+            foreach (var t in _cardinals) t.Visibility = cardinalsVis;
+        }
+        catch { }
+    }
+
+    private void OnShowHoursChanged()
+    {
+        _showHoursMode = FindSetting("showHours")?.GetString() ?? "hide";
+        ApplyExtrasVisibility();
+    }
+
+    private void ApplyExtrasVisibility()
+    {
+        try
+        {
+            for (int i = 0; i < _hourNumerals.Count; i++)
+            {
+                int h = i + 1;
+                _hourNumerals[i].Visibility = _showHoursMode == "all"
+                    || (_showHoursMode == "quarters" && h % 3 == 0)
+                    ? Visibility.Visible : Visibility.Collapsed;
+            }
+            _ampmText.Visibility = _showAmPm ? Visibility.Visible : Visibility.Collapsed;
+            _dateText.Visibility = _showDate ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch { }
     }
 
     private static Line Hand(double thickness, double length) => new()
@@ -121,6 +279,18 @@ public sealed class ClockWidget : NativeWidgetControl
         try { _timer.Start(); } catch { }
     }
 
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        if (IsSuspended) return;
+        UpdateHands();
+        try { _timer.Start(); } catch { }
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        try { _timer.Stop(); } catch { }
+    }
+
     protected override void OnApplyTheme(string? theme)
     {
         bool light = string.Equals(theme, "light", StringComparison.OrdinalIgnoreCase);
@@ -132,6 +302,10 @@ public sealed class ClockWidget : NativeWidgetControl
         _shadow.Opacity = light ? 0.15 : 0.5;
         foreach (var t in _ticks) t.Stroke = light ? Brushes.LightGray : new SolidColorBrush(Color.FromRgb(0x55, 0x55, 0x55));
         foreach (var t in _cardinals) t.Stroke = light ? Brushes.DimGray : new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
+        var numeralBrush = light ? Brushes.DimGray : new SolidColorBrush(Color.FromRgb(0x88, 0x88, 0x88));
+        foreach (var t in _hourNumerals) t.Foreground = numeralBrush;
+        _ampmText.Foreground = numeralBrush;
+        _dateText.Foreground = numeralBrush;
         _hourHand.Stroke = light ? new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D)) : Brushes.WhiteSmoke;
         _minuteHand.Stroke = light ? new SolidColorBrush(Color.FromRgb(0x4A, 0x4A, 0x4A)) : Brushes.LightGray;
         _secondHand.Stroke = new SolidColorBrush(Color.FromRgb(0xFF, 0x52, 0x52));
@@ -154,10 +328,24 @@ public sealed class ClockWidget : NativeWidgetControl
     {
         try
         {
+            _secondHand.Visibility = _showSeconds ? Visibility.Visible : Visibility.Collapsed;
             var now = DateTime.Now;
             SetHand(_hourHand, ((now.Hour % 12) + now.Minute / 60.0) / 12.0, 84);
             SetHand(_minuteHand, (now.Minute + now.Second / 60.0) / 60.0, 117);
-            SetHand(_secondHand, (now.Second + now.Millisecond / 1000.0) / 60.0, 129);
+            double seconds = _smoothSeconds ? now.Second + now.Millisecond / 1000.0 : now.Second;
+            SetHand(_secondHand, seconds / 60.0, 129);
+            if (_showAmPm)
+            {
+                var dtf = CultureInfo.CurrentCulture.DateTimeFormat;
+                string ap = now.Hour < 12 ? dtf.AMDesignator : dtf.PMDesignator;
+                if (string.IsNullOrWhiteSpace(ap)) ap = now.Hour < 12 ? "AM" : "PM";
+                if (_ampmText.Text != ap) _ampmText.Text = ap;
+            }
+            if (_showDate)
+            {
+                string d = now.ToString("d", CultureInfo.CurrentCulture);
+                if (_dateText.Text != d) _dateText.Text = d;
+            }
         }
         catch { }
     }

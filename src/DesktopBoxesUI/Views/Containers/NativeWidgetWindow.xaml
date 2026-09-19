@@ -21,10 +21,19 @@
     WindowStyle="None">
     <Grid>
         <Grid.ContextMenu>
-            <ContextMenu x:Name="WidgetMenu">
+            <ContextMenu x:Name="WidgetMenu" Opened="WidgetMenu_Opened">
                 <MenuItem Click="Change_Click" Header="Change Widget">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="ArrowSwap24" />
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem
+                    x:Name="SettingsMenuItem"
+                    Click="Settings_Click"
+                    Header="Widget Settings…"
+                    Visibility="Collapsed">
+                    <MenuItem.Icon>
+                        <ui:SymbolIcon Symbol="Settings20" />
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
