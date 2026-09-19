@@ -455,7 +455,7 @@
                 IsHitTestVisible="False"
                 Orientation="Vertical"
                 Visibility="{Binding IsLoadingFolder, Converter={StaticResource BoolToVis}}">
-                <ui:ProgressRing IsIndeterminate="True" />
+                <ui:ProgressRing IsIndeterminate="{Binding IsLoadingFolder}" />
                 <TextBlock
                     Margin="0,8,0,0"
                     FontSize="11"

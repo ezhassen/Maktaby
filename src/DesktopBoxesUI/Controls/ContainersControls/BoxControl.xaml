@@ -122,10 +122,12 @@
             IsHitTestVisible="False"
             Visibility="{Binding IsCopyingFiles, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
             <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                <!--  IsIndeterminate bound (not constant True): an indeterminate ring animates
+                  forever even while Collapsed, which is a permanent render loop per box.  -->
                 <ui:ProgressRing
                     Width="16"
                     Height="16"
-                    IsIndeterminate="True" />
+                    IsIndeterminate="{Binding IsCopyingFiles, RelativeSource={RelativeSource AncestorType=UserControl}}" />
                 <TextBlock
                     Margin="8,0,0,0"
                     VerticalAlignment="Center"

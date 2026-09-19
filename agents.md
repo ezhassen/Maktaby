@@ -122,6 +122,12 @@ After editing:
 - Use event-driven APIs (monitor/DPI/Explorer/filesystem notifications) wherever possible.
 - Cache icons and load them lazily. Don't retain Shell/COM objects longer than needed.
 - Avoid per-frame or per-item allocations in hot paths.
+- Looping visuals must stop when not visible: `Visibility.Collapsed` hides but does NOT stop
+  animation clocks — an indeterminate `ProgressRing`, `Storyboard` or any looping animation keeps
+  invalidating (and re-rendering its whole window) forever. Gate the loop itself on the live
+  condition (e.g. bind `IsIndeterminate` to the flag that shows the indicator, stop storyboards
+  in `OnSuspend`/`Unloaded`/`Dispose`), never just on visibility. One forgotten ring per box
+  window scales into a permanent multi-percent idle baseline.
 
 ## Feature flags & desktop input detection
 

@@ -238,7 +238,7 @@
                                                     Width="20"
                                                     Height="20"
                                                     HorizontalAlignment="Center"
-                                                    IsIndeterminate="True" />
+                                                    IsIndeterminate="{Binding IsGenerating}" />
                                                 <TextBlock
                                                     Margin="0,4,0,0"
                                                     FontSize="10"
