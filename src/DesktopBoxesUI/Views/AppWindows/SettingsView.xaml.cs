@@ -69,7 +69,7 @@ public partial class SettingsView : FluentWindow, IContentDialogHostProvider
     private readonly IDialogService _dialogs = App.Services!.GetRequiredService<IDialogService>();
 
     private static readonly string[] _sectionNames =
-        { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionWebWidgets", "SectionContainers", "SectionGeneral", "SectionSnapshot" };
+        { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionWebWidgets", "SectionContainers", "SectionLiveWallpaper", "SectionGeneral", "SectionSnapshot" };
 
     // Clicking a tab scrolls its section to the top of the viewport and plays a brief orange focus border.
     private void CategoryList_PreviewMouseDown(object sender, MouseButtonEventArgs e)

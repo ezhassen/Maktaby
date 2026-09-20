@@ -205,12 +205,12 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         set => SetField(ref _defaultBoxIconSize, value);
     }
 
-    /// <summary>Max MB of video/GIF bytes preloaded into RAM (0 = disabled). Clamped 0..1024 on save.</summary>
+    /// <summary>Max MB of video/GIF bytes preloaded into RAM (0 = disabled). Clamped 0..1024.</summary>
     private int _liveWallpaperPreloadMaxMB = 100;
     public int LiveWallpaperPreloadMaxMB
     {
         get => _liveWallpaperPreloadMaxMB;
-        set => SetField(ref _liveWallpaperPreloadMaxMB, value);
+        set => SetField(ref _liveWallpaperPreloadMaxMB, System.Math.Clamp(value, 0, 1024));
     }
 
     public ICommand SaveCommand { get; }

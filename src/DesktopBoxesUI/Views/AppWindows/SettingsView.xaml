@@ -499,10 +499,22 @@
                                     Text="Max MB of video/GIF bytes kept in RAM and shared by all monitors showing the same file. Applied on Save without rebuilding playback. 0 disables preloading (stream from disk)."
                                     TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBox
-                                        Width="80"
+                                    <ui:NumberBox
+                                        Width="150"
                                         HorizontalAlignment="Left"
-                                        Text="{Binding LiveWallpaperPreloadMaxMB, UpdateSourceTrigger=PropertyChanged}" />
+                                        ClearButtonEnabled="False"
+                                        LargeChange="10"
+                                        Maximum="1024"
+                                        Minimum="0"
+                                        SmallChange="1"
+                                        TextAlignment="Center"
+                                        Value="{Binding LiveWallpaperPreloadMaxMB, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ui:Button
+                                        Command="{Binding ResetToDefaultCommand}"
+                                        CommandParameter="LiveWallpaperPreloadMaxMB"
+                                        Style="{StaticResource ResetButton}">
+                                        <ui:SymbolIcon Symbol="ArrowCounterclockwise24" />
+                                    </ui:Button>
                                     <TextBlock
                                         Margin="6,0,0,0"
                                         VerticalAlignment="Center"
