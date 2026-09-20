@@ -3,6 +3,7 @@ using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Settings;
 using DesktopBoxesUI.ViewModels;
 using DesktopBoxesUI.Win32APIs.Services;
+using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -204,6 +205,14 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         set => SetField(ref _defaultBoxIconSize, value);
     }
 
+    /// <summary>Max MB of video/GIF bytes preloaded into RAM (0 = disabled). Clamped 0..1024 on save.</summary>
+    private int _liveWallpaperPreloadMaxMB = 100;
+    public int LiveWallpaperPreloadMaxMB
+    {
+        get => _liveWallpaperPreloadMaxMB;
+        set => SetField(ref _liveWallpaperPreloadMaxMB, value);
+    }
+
     public ICommand SaveCommand { get; }
 
     public SettingsViewModel(ISettingsService settingsService, MainViewModel mainVm, DesktopManager desktopManager)
@@ -244,6 +253,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         _defaultBoxBorderThickness = s.DefaultBoxBorderThickness;
         _defaultBoxTitleBarColorsSameAsBox = s.DefaultBoxTitleBarColorsSameAsBox;
         _defaultBoxIconSize = s.DefaultBoxIconSize;
+        _liveWallpaperPreloadMaxMB = s.LiveWallpaperPreloadMaxMB;
 
         _launchOnStartup = StartupManager.IsEnabled;
 
@@ -397,6 +407,8 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         s.DefaultBoxBorderThickness = _defaultBoxBorderThickness;
         s.DefaultBoxTitleBarColorsSameAsBox = _defaultBoxTitleBarColorsSameAsBox;
         s.DefaultBoxIconSize = _defaultBoxIconSize;
+        s.LiveWallpaperPreloadMaxMB = System.Math.Clamp(_liveWallpaperPreloadMaxMB, 0, 1024);
+        _liveWallpaperPreloadMaxMB = s.LiveWallpaperPreloadMaxMB;
         _settingsService.Save();
         App.ApplyTheme(s.SelectedTheme);
         App.ApplyBoxAppearance();
@@ -438,5 +450,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         catch { }
         // Start/suspend the live desktop icon-size watcher to match the new setting.
         App.SyncDesktopIconSizeWatcher();
+        // Push the preload cap to a running engine (no rebuild needed).
+        try { App.Services.GetRequiredService<LiveWallpaperManager>().ApplyPreloadCap(); } catch { }
     }
 }

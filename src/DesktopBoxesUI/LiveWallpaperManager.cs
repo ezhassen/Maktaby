@@ -66,6 +66,7 @@ public sealed class LiveWallpaperManager
             var _config = new EngineConfig();
             //_config.Wallpapers.Add(wallpaperAssignment);
             _config.Assign("*", _settings.UserSettings.LiveWallpaperPath!);
+            _config.PreloadMaxBytes = PreloadCapBytes(_settings.UserSettings.LiveWallpaperPreloadMaxMB);
             _engine = new Engine(_config, SettingsService.AppDataDir);
         }
         return _engine;
@@ -75,6 +76,21 @@ public sealed class LiveWallpaperManager
     {
         var eng = GetEngine();
         if (eng is not null) action(eng);
+    }
+
+    private static long PreloadCapBytes(int mb) => Math.Max(0, Math.Min(1024, mb)) * 1024L * 1024L;
+
+    /// <summary>Applies the preload cap (settings change): live-updates a running engine,
+    /// otherwise stored for the next <see cref="GetEngine"/> build.</summary>
+    public void ApplyPreloadCap()
+    {
+        try { _engine?.SetPreloadCap(PreloadCapBytes(_settings.UserSettings.LiveWallpaperPreloadMaxMB)); } catch { }
+    }
+
+    /// <summary>Total preloaded bytes currently pinned (shared across monitors).</summary>
+    public long GetPreloadTotalBytes()
+    {
+        try { return _engine?.PreloadTotalBytes() ?? 0; } catch { return 0; }
     }
 
     public void Initialize()

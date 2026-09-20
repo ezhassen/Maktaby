@@ -70,6 +70,9 @@ namespace DesktopBoxesUI.ViewModels
         private string _webProcess = "-";
         public string WebProcess { get => _webProcess; set => SetField(ref _webProcess, value); }
 
+        private string _preloaded = "-";
+        public string Preloaded { get => _preloaded; set => SetField(ref _preloaded, value); }
+
         private string _status = "";
         public string Status { get => _status; set => SetField(ref _status, value); }
     }
@@ -482,16 +485,20 @@ namespace DesktopBoxesUI.ViewModels
                     existing.IsPlaying = s.IsPlaying;
                     existing.PauseReason = s.PauseReason;
                     existing.WebProcess = s.WebProcessId == 0 ? "-" : s.WebProcessId.ToString();
+                    existing.Preloaded = s.PreloadedBytes > 0 ? $"{s.PreloadedBytes / 1024 / 1024} MB" : "-";
                     existing.Status = !lw.EngineIsLive ? "Engine down"
                         : s.IsPaused ? $"Paused"
                         : s.IsPlaying ? "Playing"
                         : s.IsLoaded ? "Loaded" : "Loading";
                 }
                 foreach (var r in toRemove) LiveWallpaperMonitors.Remove(r);
+                long preloadedTotal = 0;
+                try { preloadedTotal = lw.GetPreloadTotalBytes(); } catch { }
+                string preloadedText = preloadedTotal > 0 ? $", preloaded {preloadedTotal / 1024 / 1024} MB" : "";
                 LiveWallpaperSummary = !lw.IsEnabled ? "Disabled"
                     : !lw.HasWallpaper ? "Enabled, no file"
                     : !lw.EngineIsLive ? $"Enabled, engine down ({states.Count} windows)"
-                    : $"{states.Count} monitor(s), {playing} playing, {paused} paused";
+                    : $"{states.Count} monitor(s), {playing} playing, {paused} paused{preloadedText}";
             }
             catch { }
         }

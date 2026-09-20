@@ -27,6 +27,10 @@ public sealed class EngineConfig
     public double Volume { get; set; } = 0.3;
     public PauseConfig Pause { get; set; } = new();
 
+    /// <summary>Cap in bytes for the shared in-memory media cache (videos, animated GIFs at or
+    /// under this size are read once and shared by all monitors showing them). 0 disables.</summary>
+    public long PreloadMaxBytes { get; set; } = 100L * 1024 * 1024;
+
     /// <summary>
     /// 
     /// </summary>

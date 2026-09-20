@@ -1,4 +1,5 @@
 using DesktopLiveWallPaperEngine.Config;
+using System.IO;
 using Vortice.DXGI;
 using Windows.Graphics.DirectX.Direct3D11;
 using Windows.Media.Core;
@@ -38,6 +39,9 @@ public sealed class VideoRenderer : IWallpaperRenderer
 
     private readonly string? _staticFramePath;
     private readonly Action? _onStaticFrame;
+    private readonly PreloadedMediaCache? _preload;
+    private PreloadedMedia? _lease;
+    private Windows.Storage.Streams.InMemoryRandomAccessStream? _memStream;
     private int _staticCropX;
     private int _staticCropY;
     private bool _staticCaptured;
@@ -48,7 +52,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
     private bool _paused;
 
     public VideoRenderer(CompositionHost host, int width, int height, FitMode fit, bool muted, double volume,
-        string? staticFramePath = null, Action? onStaticFrame = null)
+        string? staticFramePath = null, Action? onStaticFrame = null, PreloadedMediaCache? preload = null)
     {
         _hostComposition = host;
         _width = width;
@@ -56,6 +60,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
         _fit = fit;
         _staticFramePath = staticFramePath;
         _onStaticFrame = onStaticFrame;
+        _preload = preload;
 
         _surfaceHost = host.CreateContent(width, height);
         WrapBackBuffer();
@@ -67,6 +72,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
             IsMuted = muted,
             Volume = volume,
             RealTimePlayback = true,
+            AutoPlay = false, // sources are set explicitly; upgrades swap without auto-starting
         };
         _player.CommandManager.IsEnabled = false; // keep media keys away from the wallpaper
         _player.MediaOpened += OnMediaOpened;
@@ -103,14 +109,127 @@ public sealed class VideoRenderer : IWallpaperRenderer
         // Identifies this selection for the delayed retry below. Without it, a retry armed for the
         // previous file lands a second later and reinstates a source that Load has already disposed
         // and replaced — either an error on a dead source or the new wallpaper silently reverting.
-        Interlocked.Increment(ref _loadGeneration);
+        int generation = Interlocked.Increment(ref _loadGeneration);
         _retriedAfterFailure = false; // a new file deserves its own retry
+        lock (_sync) DropLeaseLocked();
         var previous = _source;
         _source = MediaSource.CreateFromUri(new Uri(path));
         _player.Source = _source;
         previous?.Dispose(); // a re-Load would otherwise strand the old source
         _player.Play();
         Serilog.Log.Information($"Video loaded: {path}");
+        // Small files play better from RAM: read on the pool, then swap the file source for the
+        // memory one (at most one restart, invisible on a looping wallpaper).
+        _ = UpgradeToPreloadedAsync(path, generation);
+    }
+
+    /// <summary>Content types for stream-backed playback. Unknown extensions skip preloading
+    /// (the URI path handles them).</summary>
+    private static readonly IReadOnlyDictionary<string, string> StreamContentTypes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            [".mp4"] = "video/mp4",
+            [".m4v"] = "video/x-m4v",
+            [".mov"] = "video/quicktime",
+            [".avi"] = "video/x-msvideo",
+            [".wmv"] = "video/x-ms-wmv",
+            [".webm"] = "video/webm",
+            [".mkv"] = "video/x-matroska",
+        };
+
+    private async Task UpgradeToPreloadedAsync(string path, int generation)
+    {
+        try
+        {
+            if (_preload is null) return;
+            if (!StreamContentTypes.TryGetValue(Path.GetExtension(path), out var contentType)) return;
+            var entry = await _preload.AcquireAsync(path).ConfigureAwait(false);
+            if (entry is null) return; // too big / unreadable / changed: keep streaming from disk
+            var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+            try
+            {
+                using (var writer = new Windows.Storage.Streams.DataWriter(stream))
+                {
+                    writer.WriteBytes(entry.Bytes);
+                    await writer.StoreAsync().AsTask().ConfigureAwait(false);
+                    await writer.FlushAsync().AsTask().ConfigureAwait(false);
+                }
+
+                stream.Seek(0);
+            }
+            catch
+            {
+                try { stream.Dispose(); } catch { }
+                _preload.Release(entry);
+                return;
+            }
+
+            MediaSource? mem = null;
+            lock (_sync)
+            {
+                if (_disposed || _player is null
+                    || generation != Volatile.Read(ref _loadGeneration)
+                    || !string.Equals(_path, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { stream.Dispose(); } catch { }
+                    _preload.Release(entry);
+                    return;
+                }
+
+                try
+                {
+                    mem = MediaSource.CreateFromStream(stream, contentType);
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Warning($"Memory-source swap failed ({ex.Message}); keeping disk stream");
+                    try { stream.Dispose(); } catch { }
+                    _preload.Release(entry);
+                    return;
+                }
+
+                var previous = _source;
+                try
+                {
+                    _player.Source = mem;
+                }
+                catch
+                {
+                    // Roll back: the file source stays live, the memory objects die here.
+                    try { mem.Dispose(); } catch { }
+                    try { stream.Dispose(); } catch { }
+                    _preload.Release(entry);
+                    return;
+                }
+
+                _source = mem;
+                DropLeaseLocked();
+                _lease = entry;
+                _memStream = stream;
+                previous?.Dispose();
+                if (!_paused)
+                {
+                    try { _player.Play(); } catch { }
+                }
+
+                Serilog.Log.Information($"Video preloaded into memory ({entry.Length / 1024 / 1024} MB shared): {path}");
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>Drops the preloaded lease and its stream. Caller holds <see cref="_sync"/>.</summary>
+    private void DropLeaseLocked()
+    {
+        var stream = _memStream;
+        _memStream = null;
+        try { stream?.Dispose(); } catch { }
+        var lease = _lease;
+        _lease = null;
+        if (lease != null)
+        {
+            try { _preload?.Release(lease); } catch { }
+        }
     }
     public bool IsLoaded()
     {
@@ -448,6 +567,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
                 try { _player.Source = null; } catch { }
                 _source?.Dispose();
                 _source = null;
+                DropLeaseLocked();
                 _player.Dispose();
                 _player = null;
             }

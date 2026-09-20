@@ -17,6 +17,11 @@ public sealed class ImageRenderer : IWallpaperRenderer
     private readonly CompositionSurface _surface;
     private readonly string? _staticFramePath;
     private readonly Action? _onStaticFrame;
+    private readonly PreloadedMediaCache? _preload;
+    private PreloadedMedia? _lease;
+    private System.IO.MemoryStream? _preloadStream;
+    private string _path = "";
+    private bool _usingPreload;
     private Bitmap? _canvas;            // reused draw target sized to the window
     private Image? _animated;           // original image when it is an animated GIF
     private FitRect _rect;
@@ -24,29 +29,69 @@ public sealed class ImageRenderer : IWallpaperRenderer
     private bool _disposed;
 
     public ImageRenderer(CompositionHost host, int width, int height, FitMode fit,
-        string? staticFramePath = null, Action? onStaticFrame = null)
+        string? staticFramePath = null, Action? onStaticFrame = null, PreloadedMediaCache? preload = null)
     {
         _width = width;
         _height = height;
         _fit = fit;
         _staticFramePath = staticFramePath;
         _onStaticFrame = onStaticFrame;
+        _preload = preload;
         _surface = host.CreateContent(width, height);
     }
     bool loaded;
     public void Load(string path)
     {
-        // Deliberately FromFile, not a memory buffer: the OS file lock keeps the displayed
-        // wallpaper stable — the file cannot be swapped or deleted out from under the live
-        // wallpaper. Static images release it immediately after drawing (see below);
-        // animated GIFs hold it while displayed and stream frames from disk on demand
-        // instead of pinning the whole file in memory.
-        var image = Image.FromFile(path);
+        // Animated GIFs under the preload cap play from shared memory (zero disk I/O while
+        // looping); everything else keeps the deliberate FromFile behavior below. A re-Load
+        // that hits the cache flips to memory; a file-backed animated GIF upgrades itself
+        // once the background fill lands (see UpgradeGifAsync).
+        _path = path;
+        _usingPreload = false;
+        Image? image = null;
+        PreloadedMedia? lease = null;
+        System.IO.MemoryStream? preloadStream = null;
+        bool fromPreload = false;
+        if (_preload != null && string.Equals(Path.GetExtension(path), ".gif", StringComparison.OrdinalIgnoreCase))
+        {
+            var entry = _preload.TryGet(path);
+            if (entry != null)
+            {
+                try
+                {
+                    preloadStream = new System.IO.MemoryStream(entry.Bytes, writable: false);
+                    image = Image.FromStream(preloadStream);
+                    lease = entry;
+                    fromPreload = true;
+                }
+                catch
+                {
+                    try { preloadStream?.Dispose(); } catch { }
+                    try { _preload.Release(entry); } catch { }
+                    image = null;
+                    lease = null;
+                    preloadStream = null;
+                    fromPreload = false;
+                }
+            }
+        }
+
+        if (image is null)
+        {
+            // Deliberately FromFile, not a memory buffer: the OS file lock keeps the displayed
+            // wallpaper stable — the file cannot be swapped or deleted out from under the live
+            // wallpaper. Static images release it immediately after drawing (see below);
+            // animated GIFs hold it while displayed and stream frames from disk on demand
+            // instead of pinning the whole file in memory. Throws like before on failure
+            // (the caller clears the zombie renderer).
+            image = Image.FromFile(path);
+        }
         lock (_sync)
         {
             if (_disposed)
             {
                 image.Dispose();
+                DropLease(lease, preloadStream);
                 return;
             }
             // A re-Load replaces everything: free the previous selection first instead of
@@ -58,20 +103,74 @@ public sealed class ImageRenderer : IWallpaperRenderer
             if (ImageAnimator.CanAnimate(image))
             {
                 _animated = image;
+                if (fromPreload)
+                {
+                    _lease = lease;
+                    _preloadStream = preloadStream;
+                    _usingPreload = true;
+                }
                 ImageAnimator.Animate(image, OnFrameChanged);
                 _animating = true;
                 DrawAndPresent(image, highQuality: false);
                 CaptureStatic();
                 loaded = true;
+                if (!fromPreload && IsGifPath(path))
+                {
+                    _ = UpgradeGifAsync(path);
+                }
+
                 return;
             }
 
+            // Static (or a GIF that turned out static): cache refs serve no purpose.
+            DropLease(lease, preloadStream);
             using (image)
             {
                 DrawAndPresent(image, highQuality: true);
             }
             CaptureStatic();
             loaded = true;
+        }
+    }
+
+    private static bool IsGifPath(string path)
+    {
+        try { return string.Equals(Path.GetExtension(path), ".gif", StringComparison.OrdinalIgnoreCase); }
+        catch { return false; }
+    }
+
+    /// <summary>Reads a file-backed animated GIF into the shared cache on the pool, then
+    /// re-Loads so playback flips to memory. One upgrade per path (the re-Load hits the
+    /// cache synchronously and never re-arms).</summary>
+    private async Task UpgradeGifAsync(string path)
+    {
+        try
+        {
+            if (_preload is null) return;
+            var entry = await _preload.AcquireAsync(path).ConfigureAwait(false);
+            if (entry is null) return; // too big / unreadable / changed: keep disk streaming
+            try { _preload.Release(entry); } catch { }
+            bool current;
+            lock (_sync)
+            {
+                current = !_disposed && !_usingPreload
+                    && string.Equals(_path, path, StringComparison.OrdinalIgnoreCase)
+                    && _animated is not null;
+            }
+
+            if (!current) return;
+            try { Load(path); } catch { }
+        }
+        catch { }
+    }
+
+    /// <summary>Drops a not-yet-committed lease/stream pair (no fields touched).</summary>
+    private void DropLease(PreloadedMedia? lease, System.IO.MemoryStream? stream)
+    {
+        try { stream?.Dispose(); } catch { }
+        if (lease != null)
+        {
+            try { _preload?.Release(lease); } catch { }
         }
     }
     public bool IsLoaded()
@@ -226,5 +325,15 @@ public sealed class ImageRenderer : IWallpaperRenderer
         }
         _canvas?.Dispose();
         _canvas = null;
+        var stream = _preloadStream;
+        _preloadStream = null;
+        try { stream?.Dispose(); } catch { }
+        var lease = _lease;
+        _lease = null;
+        _usingPreload = false;
+        if (lease != null)
+        {
+            try { _preload?.Release(lease); } catch { }
+        }
     }
 }

@@ -78,9 +78,26 @@ public sealed class Engine : IDisposable
     {
         _config = config;
         _appDataDir = appDataDir;
+        _preload = new PreloadedMediaCache(config.PreloadMaxBytes);
     }
 
     public bool IsEnabled { get; private set; }
+
+    /// <summary>Shared in-memory media store (videos + animated GIFs under the cap).</summary>
+    public PreloadedMediaCache PreloadCache => _preload;
+    private readonly PreloadedMediaCache _preload;
+
+    /// <summary>Live-updates the preload cap (settings change); over-cap unreferenced bytes drop.</summary>
+    public void SetPreloadCap(long maxBytes)
+    {
+        try { _preload.MaxBytes = maxBytes; } catch { }
+    }
+
+    /// <summary>Total preloaded bytes currently pinned (shared across monitors).</summary>
+    public long PreloadTotalBytes()
+    {
+        try { return _preload.TotalBytes; } catch { return 0; }
+    }
 
     /// <summary>
     /// Start/Enable the engine. Waits (bounded) for a previous background teardown:
@@ -126,6 +143,11 @@ public sealed class Engine : IDisposable
 
         //_tray = new TrayIcon(_messageWindow.Hwnd);
 
+        // Supervision BEFORE creating renderers: the pause state (e.g. a fullscreen app
+        // already covering the desktop) must exist when ApplyToMonitor enforces it post-Load.
+        // The supervisor only fires on transitions — a pre-existing fullscreen produces none,
+        // so creating renderers first left them Playing under it with no event ever coming.
+        EnsurePlayback();
         ApplyFromConfig();
         IsEnabled = true;
         // Only when something can actually pause: static images cost nothing when covered,
@@ -411,7 +433,7 @@ public sealed class Engine : IDisposable
         IWallpaperRenderer renderer;
         if (ImageExtensions.Contains(Path.GetExtension(path)))
         {
-            renderer = new ImageRenderer(host, monitor.Bounds.Width, monitor.Bounds.Height, _config.Fit, staticPath, onStatic);
+            renderer = new ImageRenderer(host, monitor.Bounds.Width, monitor.Bounds.Height, _config.Fit, staticPath, onStatic, _preload);
         }
         else if (IsWebPath(path))
         {
@@ -421,7 +443,7 @@ public sealed class Engine : IDisposable
         else
         {
             var video = new VideoRenderer(host, monitor.Bounds.Width, monitor.Bounds.Height, _config.Fit,
-                _config.MuteVideo, _config.Volume, staticPath, onStatic);
+                _config.MuteVideo, _config.Volume, staticPath, onStatic, _preload);
             video.PlaybackFailed += OnPlaybackFailed;
             renderer = video;
         }
@@ -438,6 +460,19 @@ public sealed class Engine : IDisposable
             window.ClearRenderer();
             throw;
         }
+
+        // Enforce the current pause state on the fresh renderer: pause events fire on
+        // transitions, so a pause that predates (or lands mid-) creation is already over
+        // and would never be delivered again — e.g. starting the app under a fullscreen
+        // window left every monitor Playing with Fullscreen as the reason.
+        try
+        {
+            if (_userPaused || (_playback?.GetPauseReason(monitor.Device) ?? PauseReason.None) != PauseReason.None)
+            {
+                renderer.Pause();
+            }
+        }
+        catch { }
 
         // A switch away from GPU presentation must not pin GPU objects on the reused
         // window: when the new renderer owns no surface, drop this host's target/visual
@@ -898,7 +933,7 @@ public sealed class Engine : IDisposable
     public sealed record MonitorWallpaperState(
         string Device, string Bounds, string File, string Renderer,
         bool IsLoaded, bool IsPaused, bool IsPlaying, string PauseReason,
-        uint WebProcessId);
+        uint WebProcessId, long PreloadedBytes);
 
     public IReadOnlyList<MonitorWallpaperState> GetMonitorStates()
     {
@@ -938,7 +973,14 @@ public sealed class Engine : IDisposable
                     uint webPid = 0;
                     try { if (renderer is WebViewRenderer web) webPid = web.BrowserProcessId ?? 0; }
                     catch { }
-                    list.Add(new MonitorWallpaperState(entry.Key, bounds, file, kind, loaded, paused, playing, reason, webPid));
+                    long preloaded = 0;
+                    try
+                    {
+                        var full = _config.WallpaperFor(entry.Key);
+                        if (!string.IsNullOrEmpty(full)) preloaded = _preload.PreloadedBytesFor(full);
+                    }
+                    catch { }
+                    list.Add(new MonitorWallpaperState(entry.Key, bounds, file, kind, loaded, paused, playing, reason, webPid, preloaded));
                 }
                 catch { }
             }

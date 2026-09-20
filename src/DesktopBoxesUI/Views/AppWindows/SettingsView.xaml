@@ -69,6 +69,7 @@
                     <ListBoxItem Content="Boxes" Tag="SectionBoxes" />
                     <ListBoxItem Content="Widgets" Tag="SectionWebWidgets" />
                     <ListBoxItem Content="Containers" Tag="SectionContainers" />
+                    <ListBoxItem Content="Live Wallpaper" Tag="SectionLiveWallpaper" />
                     <ListBoxItem Content="General" Tag="SectionGeneral" />
                     <ListBoxItem Content="Snapshot" Tag="SectionSnapshot" />
                 </ListBox>
@@ -484,7 +485,34 @@
                             </DataGrid>
                         </StackPanel>
                     </GroupBox>
-
+                    <GroupBox
+                        x:Name="SectionLiveWallpaper"
+                        Margin="0,0,0,12"
+                        Header="Live Wallpaper">
+                        <StackPanel Margin="8">
+                            <StackPanel Margin="12,12,0,8">
+                                <TextBlock FontWeight="Bold" Text="Live wallpaper preload" />
+                                <TextBlock
+                                    Margin="4,0,0,4"
+                                    FontSize="11"
+                                    Foreground="#999999"
+                                    Text="Max MB of video/GIF bytes kept in RAM and shared by all monitors showing the same file. Applied on Save without rebuilding playback. 0 disables preloading (stream from disk)."
+                                    TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBox
+                                        Width="80"
+                                        HorizontalAlignment="Left"
+                                        Text="{Binding LiveWallpaperPreloadMaxMB, UpdateSourceTrigger=PropertyChanged}" />
+                                    <TextBlock
+                                        Margin="6,0,0,0"
+                                        VerticalAlignment="Center"
+                                        FontSize="11"
+                                        Foreground="#999999"
+                                        Text="MB (0–1024)" />
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </GroupBox>
                     <GroupBox
                         x:Name="SectionGeneral"
                         Margin="0,0,0,12"

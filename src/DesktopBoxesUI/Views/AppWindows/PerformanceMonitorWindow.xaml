@@ -340,6 +340,11 @@
                             Header="Web PID" />
 
                         <DataGridTextColumn
+                            Width="90"
+                            Binding="{Binding Preloaded}"
+                            Header="Preloaded" />
+
+                        <DataGridTextColumn
                             Width="110"
                             Binding="{Binding Status}"
                             Header="Status" />

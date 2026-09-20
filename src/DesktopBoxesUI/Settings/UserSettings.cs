@@ -143,6 +143,11 @@ public class UserSettings
     [Category("LiveWallpaper"), DefaultValue(true)]
     public bool LiveWallpaperPlaying { get; set; } = true;
 
+    /// <summary>Max total MB of video/GIF bytes pinned in RAM and shared by all monitors showing
+    /// the same file (0 disables preloading; files over the cap stream from disk).</summary>
+    [Category("LiveWallpaper"), DefaultValue(100)]
+    public int LiveWallpaperPreloadMaxMB { get; set; } = 100;
+
     #endregion
 
 }
