@@ -763,7 +763,11 @@ public sealed class Engine : IDisposable
     {
         if (!IsEnabled) return;
         try { _host?.EnsureLayer(); }
-        catch (Exception ex) { Serilog.Log.Warning($"Layer re-probe failed: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Warning))
+                Serilog.Log.Warning("Layer re-probe failed: {Error}", ex.Message);
+        }
         ReassertAllPlacements();
         ScheduleSettledReapply();
     }
@@ -783,7 +787,11 @@ public sealed class Engine : IDisposable
                 if (window.Hwnd == IntPtr.Zero || !User32.IsWindow(window.Hwnd)) continue;
                 host.ReassertPlacement(window.Hwnd, window.Monitor.Bounds);
             }
-            catch (Exception ex) { Serilog.Log.Warning($"Placement re-assert failed on {entry.Key}: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Warning))
+                    Serilog.Log.Warning("Placement re-assert failed on {Monitor}: {Error}", entry.Key, ex.Message);
+            }
         }
     }
 
@@ -797,7 +805,11 @@ public sealed class Engine : IDisposable
         _resumeRecycled = false;
         _resumeBaselinePrivateBytes = CurrentPrivateBytes();
         try { _host?.ValidateLayer(); }
-        catch (Exception ex) { Serilog.Log.Warning($"Resume layer validation failed: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Warning))
+                Serilog.Log.Warning("Resume layer validation failed: {Error}", ex.Message);
+        }
         ScheduleSettledReapply(ResumeSettleDelay);
         Serilog.Log.Information(
             "Resumed from sleep — layer validated, settled pass armed (private bytes baseline {BaselineMb} MB)",

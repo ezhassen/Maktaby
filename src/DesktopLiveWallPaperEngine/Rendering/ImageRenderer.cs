@@ -150,7 +150,8 @@ public sealed class ImageRenderer : IWallpaperRenderer
             var entry = await _preload.AcquireAsync(path).ConfigureAwait(false);
             if (entry is null)
             {
-                Serilog.Log.Debug($"GIF preload unavailable for {path} (over cap, unreadable, or changed) — streaming frames from disk");
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                    Serilog.Log.Debug("GIF preload unavailable for {Path} (over cap, unreadable, or changed) — streaming frames from disk", path);
                 return;
             }
             try { _preload.Release(entry); } catch { }
@@ -164,14 +165,21 @@ public sealed class ImageRenderer : IWallpaperRenderer
 
             if (!current)
             {
-                Serilog.Log.Debug($"GIF preload swap skipped for {path} (superseded by a newer load or tearing down)");
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                    Serilog.Log.Debug("GIF preload swap skipped for {Path} (superseded by a newer load or tearing down)", path);
                 return;
             }
-            try { Load(path); } catch (Exception ex) { Serilog.Log.Debug($"GIF preload re-load failed for {path} ({ex.Message})"); }
+            try { Load(path); }
+            catch (Exception ex)
+            {
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                    Serilog.Log.Debug("GIF preload re-load failed for {Path} ({Error})", path, ex.Message);
+            }
         }
         catch (Exception ex)
         {
-            Serilog.Log.Debug(ex, $"GIF preload upgrade failed for {path}");
+            if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                Serilog.Log.Debug(ex, "GIF preload upgrade failed for {Path}", path);
         }
     }
 

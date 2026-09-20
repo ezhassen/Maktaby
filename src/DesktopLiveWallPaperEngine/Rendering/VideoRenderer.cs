@@ -143,12 +143,14 @@ public sealed class VideoRenderer : IWallpaperRenderer
         {
             if (_preload is null)
             {
-                Serilog.Log.Debug($"Video preload skipped (no cache) for {path}");
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                    Serilog.Log.Debug("Video preload skipped (no cache) for {Path}", path);
                 return;
             }
             if (!StreamContentTypes.TryGetValue(Path.GetExtension(path), out var contentType))
             {
-                Serilog.Log.Debug($"Video preload skipped by design for {path} (extension not preloaded; streaming from disk)");
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                    Serilog.Log.Debug("Video preload skipped by design for {Path} (extension not preloaded; streaming from disk)", path);
                 return;
             }
             // Explicit hit check first so the log answers "is the cache working?": AcquireAsync
@@ -160,7 +162,8 @@ public sealed class VideoRenderer : IWallpaperRenderer
             entry ??= await _preload.AcquireAsync(path).ConfigureAwait(false);
             if (entry is null)
             {
-                Serilog.Log.Warning($"Video preload unavailable for {path} (over the {(_preload.MaxBytes / 1024 / 1024)} MB cap, unreadable, or changed on disk) — looping playback will keep streaming from disk");
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Warning))
+                    Serilog.Log.Warning("Video preload unavailable for {Path} (over the {CapMb} MB cap, unreadable, or changed on disk) — looping playback will keep streaming from disk", path, _preload.MaxBytes / 1024 / 1024);
                 return;
             }
             var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
@@ -182,7 +185,8 @@ public sealed class VideoRenderer : IWallpaperRenderer
             }
             catch (Exception ex)
             {
-                Serilog.Log.Warning($"Video preload fill failed for {path} ({ex.Message}); keeping disk stream");
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Warning))
+                    Serilog.Log.Warning("Video preload fill failed for {Path} ({Error}); keeping disk stream", path, ex.Message);
                 try { stream.Dispose(); } catch { }
                 _preload.Release(entry);
                 return;
@@ -195,7 +199,8 @@ public sealed class VideoRenderer : IWallpaperRenderer
                     || generation != Volatile.Read(ref _loadGeneration)
                     || !string.Equals(_path, path, StringComparison.OrdinalIgnoreCase))
                 {
-                    Serilog.Log.Debug($"Video preload swap skipped for {path} (superseded by a newer load or tearing down)");
+                    if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                        Serilog.Log.Debug("Video preload swap skipped for {Path} (superseded by a newer load or tearing down)", path);
                     try { stream.Dispose(); } catch { }
                     _preload.Release(entry);
                     return;
@@ -207,7 +212,8 @@ public sealed class VideoRenderer : IWallpaperRenderer
                 }
                 catch (Exception ex)
                 {
-                    Serilog.Log.Warning($"Memory-source swap failed ({ex.Message}); keeping disk stream");
+                    if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Warning))
+                        Serilog.Log.Warning("Memory-source swap failed ({Error}); keeping disk stream", ex.Message);
                     try { stream.Dispose(); } catch { }
                     _preload.Release(entry);
                     return;
@@ -221,7 +227,8 @@ public sealed class VideoRenderer : IWallpaperRenderer
                 catch (Exception ex)
                 {
                     // Roll back: the file source stays live, the memory objects die here.
-                    Serilog.Log.Debug($"Video preload swap failed for {path} ({ex.Message}); keeping disk stream");
+                    if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                        Serilog.Log.Debug("Video preload swap failed for {Path} ({Error}); keeping disk stream", path, ex.Message);
                     try { mem.Dispose(); } catch { }
                     try { stream.Dispose(); } catch { }
                     _preload.Release(entry);
@@ -238,12 +245,14 @@ public sealed class VideoRenderer : IWallpaperRenderer
                     try { _player.Play(); } catch { }
                 }
 
-                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Serilog.Log.Information($"Video preload cache {(hit ? "HIT" : "MISS + filled")} ({entry.Length / 1024 / 1024} MB shared): {path}");
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+                    Serilog.Log.Information("Video preload cache {Outcome} ({SharedMb} MB shared): {Path}", hit ? "HIT" : "MISS + filled", entry.Length / 1024 / 1024, path);
             }
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, $"Video preload upgrade failed for {path}; keeping disk stream");
+            if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Debug))
+                Serilog.Log.Debug(ex, "Video preload upgrade failed for {Path}", path);
         }
     }
 
