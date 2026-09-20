@@ -51,6 +51,7 @@
             <Separator />
             <Separator />
             <MenuItem
+                x:Name="menuSettings"
                 Click="Settings_Click"
                 Header="Settings"
                 Icon="{StaticResource ItemIcon_Settings}" />
@@ -91,7 +92,10 @@
                     Icon="{StaticResource ItemIcon_Delete}"
                     StaysOpenOnClick="True" />
             </MenuItem>
-            <MenuItem Header="Theme" Icon="{StaticResource ItemIcon_Theme}">
+            <MenuItem
+                x:Name="menu_theme"
+                Header="Theme"
+                Icon="{StaticResource ItemIcon_Theme}">
                 <MenuItem
                     x:Name="menu_theme_system"
                     Click="Theme_Click"

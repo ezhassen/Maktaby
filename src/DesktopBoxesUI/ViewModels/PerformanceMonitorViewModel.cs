@@ -127,6 +127,12 @@ namespace DesktopBoxesUI.ViewModels
         private bool _isIdleMode;
         public bool IsIdleMode { get => _isIdleMode; set => SetField(ref _isIdleMode, value); }
 
+        private bool _isAppDisabled;
+        public bool IsAppDisabled { get => _isAppDisabled; set => SetField(ref _isAppDisabled, value); }
+
+        private bool _isLiveWallpaperDisabled;
+        public bool IsLiveWallpaperDisabled { get => _isLiveWallpaperDisabled; set => SetField(ref _isLiveWallpaperDisabled, value); }
+
         private string _layoutAnchorStatus = "";
         public string LayoutAnchorStatus { get => _layoutAnchorStatus; set => SetField(ref _layoutAnchorStatus, value); }
 
@@ -443,6 +449,7 @@ namespace DesktopBoxesUI.ViewModels
                 bool allHidden = dm?.AllBoxesHidden == true;
                 bool anyVisibleWidget = Items.Any(i => (i.Type == "Web" || i.Type == "Native") && i.IsVisible && !i.IsSuspended);
                 IsIdleMode = allHidden || !anyVisibleWidget;
+                try { IsAppDisabled = dm?.IsDisabled == true; } catch { }
                 try { LayoutAnchorStatus = dm?.GetLayoutAnchorStatus() ?? "DesktopManager unavailable"; } catch { }
 
                 RefreshLiveWallpaper();
@@ -458,11 +465,13 @@ namespace DesktopBoxesUI.ViewModels
                 if (lw is null)
                 {
                     LiveWallpaperEnabled = false;
+                    IsLiveWallpaperDisabled = true;
                     LiveWallpaperSummary = "unavailable";
                     LiveWallpaperMonitors.Clear();
                     return;
                 }
                 LiveWallpaperEnabled = lw.IsEnabled;
+                IsLiveWallpaperDisabled = !lw.IsEnabled;
                 int paused = 0, playing = 0;
                 var states = lw.GetMonitorStates();
                 var toRemove = LiveWallpaperMonitors.ToList();

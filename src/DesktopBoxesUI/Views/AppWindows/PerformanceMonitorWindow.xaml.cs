@@ -13,7 +13,31 @@ namespace DesktopBoxesUI.Views
             InitializeComponent();
             _vm = new PerformanceMonitorViewModel();
             DataContext = _vm;
-            Closed += (_, _) => _vm.Dispose();
+            _vm.PropertyChanged += OnViewModelPropertyChanged;
+            Closed += (_, _) =>
+            {
+                try { _vm.PropertyChanged -= OnViewModelPropertyChanged; } catch { }
+                _vm.Dispose();
+            };
+        }
+
+        // Grids are replaced (not overlaid) by the Disabled placeholders: local Visibility
+        // values here, so the grids keep their implicit theme styling (a local Style would
+        // replace it — WPF-UI defines no keyed DataGrid style to base on).
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            try
+            {
+                if (e.PropertyName == nameof(PerformanceMonitorViewModel.IsAppDisabled))
+                {
+                    WindowsGrid.Visibility = _vm.IsAppDisabled ? Visibility.Collapsed : Visibility.Visible;
+                }
+                else if (e.PropertyName == nameof(PerformanceMonitorViewModel.IsLiveWallpaperDisabled))
+                {
+                    LiveWallpaperGrid.Visibility = _vm.IsLiveWallpaperDisabled ? Visibility.Collapsed : Visibility.Visible;
+                }
+            }
+            catch { }
         }
 
         private void WindowsGrid_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)

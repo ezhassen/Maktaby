@@ -1,7 +1,6 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
-using WindowsNative;
 using System;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -10,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using WindowsNative;
 using Wpf.Ui.Tray.Controls;
 
 namespace DesktopBoxesUI.Controls;
@@ -78,7 +78,7 @@ public partial class TrayIconUI
         foreach (var item in contextMenu.Items)
         {
             // disable all menu items except MenuToggleDisable, exit, about, liveWallpaper
-            if (item == MenuToggleDisable || item == menuExit || item == menuAbout || item == menuLiveWallpaper) continue;
+            if (item == MenuToggleDisable || item == menuExit || item == menuAbout || item == menuLiveWallpaper || item == menuPerformance || item == menu_theme) continue;
             if (item is not MenuItem mItem) continue;
             mItem.IsEnabled = !isDisabled;
         }
