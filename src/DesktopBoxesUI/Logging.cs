@@ -5,17 +5,10 @@ using Microsoft.Extensions.Configuration;
 using Serilog;
 using Serilog.Core;
 using Serilog.Exceptions;
-using System;
-using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
-using System.Threading;
 using ThreadingTimer = System.Threading.Timer;
 
 namespace DesktopBoxesUI;
-
-
 
 public static class Logging
 {
@@ -119,6 +112,7 @@ public static class Logging
                 };
                 _watcher.EnableRaisingEvents = true;
             }
+            if (_log.IsEnabled(Serilog.Events.LogEventLevel.Information)) _log.Information("Default Logger Initialized");
         }
         //if (Serilog.Log.Logger != _log) Serilog.Log.Logger = _log;
     }
@@ -166,6 +160,7 @@ public static class Logging
     /// </summary>
     public static void DisposeAllDefaultLoggers()
     {
+        if (_log?.IsEnabled(Serilog.Events.LogEventLevel.Information) == true) _log.Information("Default Logger Ended");
         _log?.Dispose();
         _log = null;
         _watcher?.Dispose();

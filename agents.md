@@ -194,4 +194,27 @@ that draws, at the cursor, the hit-test result, z-order, and the surface's style
   (`Danger`), plus **Copy details**; only **Exit Application** shuts down — closing via the X button,
   Alt+F4 or any system close just dismisses the dialog (treated as Continue). If you add new global
   exception sources, keep the `HasChosenContinue` / `RequestClose(bool)` contract intact.
+- **Post-sleep/hibernate native video-memory leak (measured 2026-09-20, mitigated not curable):**
+  private bytes climb to 1–3 GB after resume. Dump + ETL diagnosis: destroying an active frame-server
+  `MediaPlayer` orphans ~32 MB/monitor of Intel GPU driver video memory (`d3d9 → igd9trinity64 → dxgkrnl`,
+  write-combined private mappings, ~6 MB/s in the post-resume state). Managed teardown is complete when this
+  happens (zero renderers/players/D3D wrappers left, threads reaped) — the strands are purely native and only
+  a driver reset reclaims them, so **every full video-pipeline destroy has a permanent ~32 MB/monitor cost**.
+  Consequences, all in `DesktopLiveWallPaperEngine/Engine.cs` unless noted: transient notifications (display
+  change, TaskbarCreated, unlock) must NEVER run an immediate `ReapplyAll` — they go through
+  `OnTopologyMightHaveChanged` (cheap re-glue) + the settled pass, which rebuilds only on real topology
+  disagreement; `ReapplyAll` is reserved for genuine layer/device loss. Resume arms a 10 s settle
+  (`ResumeSettleDelay`) plus one recycle gated on actually-elevated private bytes (900 MB absolute /
+  +350 MB growth, once per resume + 30 min cooldown — `EvaluatePostResumeRecycle`); unlock must not shorten
+  a pending resume settle (`OnSessionUnlocked`). Do not add polling memory watchdogs (event-driven checks
+  only, per Performance expectations above). Related fixes shipped with it: `VideoRenderer` preload never
+  worked until `DataWriter.DetachStream()` was added before disposal (undisposed writer closed the stream →
+  `Seek(0)` ODE, silently swallowed → disk streaming forever); preload outcome is logged per upgrade
+  (`HIT` / `MISS + filled` / `unavailable`, `VideoRenderer` + GIF path in `ImageRenderer`), and tray actions
+  log in `LiveWallpaperManager` so manual toggles are attributable. `VirtualDesktopWallpaper` can only scope
+  orphan `Desktops\{guid}` keys via the `VirtualDesktopIDs` value — absent on some builds (then it falls back
+  to all subkeys, hence `Saved 155…` log lines); `SetAll`/`Restore` are diff-before-write so steady state
+  costs reads only. If private bytes keep climbing with no `Settled topology disagrees` / recycle lines in
+  the log, the stranding is happening on live pipelines (driver state) — widen the recycle window, do not
+  add more rebuilds.
 - **WPF transparent hit-test & `WebView2CompositionControl`:** `CssWidgetControl` uses `WebView2CompositionControl` (not `WebView2`/`HwndHost`), which is a WPF-native composition control with no airspace — WPF hit-testing works over it. However, `WebView2CompositionControl.MouseEnter`/`MouseLeave` WPF events do **not** fire reliably (especially when the widget window is not active), so hover detection must **not** depend on them. Instead, all hover/click detection comes from the DOM bridge: inject `document.addEventListener('mouseenter'/'mouseleave'/'click', ()=>chrome.webview.postMessage(...))` via `AddScriptToExecuteOnDocumentCreatedAsync`, handle `WebMessageReceived` in `CssWidgetControl` (`WidgetMouseEnter/Leave/Clicked` events), and forward to `CssWidgetWindow`. `CssWidgetWindow` tracks cursor entering/leaving the widget window bounds via HWND-level `WM_MOUSEMOVE`/`WM_MOUSELEAVE` in `HwndHook` (not WPF `MouseEnter`/`MouseLeave`). `WindowDragController` hit-test already respects `ResizeMode` for non-resizable widgets. **`CssWidgetWindow` chrome:** `HeaderBorder` visibility uses split hover state (`_isWebViewHover` from DOM bridge + `_isWindowHover` from `WM_MOUSEMOVE`/`WM_MOUSELEAVE` in `HwndHook`). `ResizeBorder` (`#60FFFFFF` 1px outline) is **always visible for active resizable windows** (`_isActive && canResize`), not hover-dependent — hover-based toggling fights `WM_NCHITTEST` edge hits (`HTLEFT`/`HTRIGHT`/etc.) which cause rapid `MouseEnter`/`MouseLeave` cycles and visible flicker on inactive windows. `UpdateChrome()` is a no-op while `IsInMoveState` is true (during title-bar drag or native move/resize modal loop).

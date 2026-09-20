@@ -117,6 +117,8 @@ public sealed class LiveWallpaperManager
     public void SetWallpaper(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+            Serilog.Log.Information("Live wallpaper changing to {Path}", path);
         _settings.UserSettings.LiveWallpaperPath = path;
         _settings.UserSettings.LiveWallpaperEnabled = true;
         _settings.UserSettings.LiveWallpaperPlaying = true;
@@ -134,6 +136,8 @@ public sealed class LiveWallpaperManager
 
     public void SetPlaying(bool playing)
     {
+        if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+            Serilog.Log.Information("Live wallpaper playing set to {Playing}", playing);
         _settings.UserSettings.LiveWallpaperPlaying = playing;
         _settings.Save();
         if (ShouldShow)
@@ -155,6 +159,8 @@ public sealed class LiveWallpaperManager
 
     public void SetEnabled(bool enabled)
     {
+        if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+            Serilog.Log.Information("Live wallpaper enabled set to {Enabled}", enabled);
         _settings.UserSettings.LiveWallpaperEnabled = enabled;
         _settings.Save();
         if (enabled)
@@ -179,6 +185,8 @@ public sealed class LiveWallpaperManager
 
     public void Remove()
     {
+        if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+            Serilog.Log.Information("Live wallpaper removed");
         _settings.UserSettings.LiveWallpaperPath = null;
         _settings.Save();
         //
