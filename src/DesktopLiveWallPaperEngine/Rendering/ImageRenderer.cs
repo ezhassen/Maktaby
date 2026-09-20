@@ -148,7 +148,11 @@ public sealed class ImageRenderer : IWallpaperRenderer
         {
             if (_preload is null) return;
             var entry = await _preload.AcquireAsync(path).ConfigureAwait(false);
-            if (entry is null) return; // too big / unreadable / changed: keep disk streaming
+            if (entry is null)
+            {
+                Serilog.Log.Debug($"GIF preload unavailable for {path} (over cap, unreadable, or changed) — streaming frames from disk");
+                return;
+            }
             try { _preload.Release(entry); } catch { }
             bool current;
             lock (_sync)
@@ -158,10 +162,17 @@ public sealed class ImageRenderer : IWallpaperRenderer
                     && _animated is not null;
             }
 
-            if (!current) return;
-            try { Load(path); } catch { }
+            if (!current)
+            {
+                Serilog.Log.Debug($"GIF preload swap skipped for {path} (superseded by a newer load or tearing down)");
+                return;
+            }
+            try { Load(path); } catch (Exception ex) { Serilog.Log.Debug($"GIF preload re-load failed for {path} ({ex.Message})"); }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Serilog.Log.Debug(ex, $"GIF preload upgrade failed for {path}");
+        }
     }
 
     /// <summary>Drops a not-yet-committed lease/stream pair (no fields touched).</summary>

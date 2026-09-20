@@ -141,10 +141,28 @@ public sealed class VideoRenderer : IWallpaperRenderer
     {
         try
         {
-            if (_preload is null) return;
-            if (!StreamContentTypes.TryGetValue(Path.GetExtension(path), out var contentType)) return;
-            var entry = await _preload.AcquireAsync(path).ConfigureAwait(false);
-            if (entry is null) return; // too big / unreadable / changed: keep streaming from disk
+            if (_preload is null)
+            {
+                Serilog.Log.Debug($"Video preload skipped (no cache) for {path}");
+                return;
+            }
+            if (!StreamContentTypes.TryGetValue(Path.GetExtension(path), out var contentType))
+            {
+                Serilog.Log.Debug($"Video preload skipped by design for {path} (extension not preloaded; streaming from disk)");
+                return;
+            }
+            // Explicit hit check first so the log answers "is the cache working?": AcquireAsync
+            // hides hit-vs-fill, which previously made that unanswerable. TryGet already
+            // refcounts; the miss branch fills through AcquireAsync (exactly one ref either way,
+            // released on every abort path below as before).
+            var entry = _preload.TryGet(path);
+            bool hit = entry is not null;
+            entry ??= await _preload.AcquireAsync(path).ConfigureAwait(false);
+            if (entry is null)
+            {
+                Serilog.Log.Warning($"Video preload unavailable for {path} (over the {(_preload.MaxBytes / 1024 / 1024)} MB cap, unreadable, or changed on disk) — looping playback will keep streaming from disk");
+                return;
+            }
             var stream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
             try
             {
@@ -153,12 +171,18 @@ public sealed class VideoRenderer : IWallpaperRenderer
                     writer.WriteBytes(entry.Bytes);
                     await writer.StoreAsync().AsTask().ConfigureAwait(false);
                     await writer.FlushAsync().AsTask().ConfigureAwait(false);
+                    // Detach BEFORE the using disposes the writer: disposing a DataWriter
+                    // closes its underlying stream, so without this every swap died at the
+                    // Seek below with ObjectDisposedException (swallowed by the catch) and
+                    // playback never left disk — i.e. preloading never worked.
+                    writer.DetachStream();
                 }
 
                 stream.Seek(0);
             }
-            catch
+            catch (Exception ex)
             {
+                Serilog.Log.Warning($"Video preload fill failed for {path} ({ex.Message}); keeping disk stream");
                 try { stream.Dispose(); } catch { }
                 _preload.Release(entry);
                 return;
@@ -171,6 +195,7 @@ public sealed class VideoRenderer : IWallpaperRenderer
                     || generation != Volatile.Read(ref _loadGeneration)
                     || !string.Equals(_path, path, StringComparison.OrdinalIgnoreCase))
                 {
+                    Serilog.Log.Debug($"Video preload swap skipped for {path} (superseded by a newer load or tearing down)");
                     try { stream.Dispose(); } catch { }
                     _preload.Release(entry);
                     return;
@@ -193,9 +218,10 @@ public sealed class VideoRenderer : IWallpaperRenderer
                 {
                     _player.Source = mem;
                 }
-                catch
+                catch (Exception ex)
                 {
                     // Roll back: the file source stays live, the memory objects die here.
+                    Serilog.Log.Debug($"Video preload swap failed for {path} ({ex.Message}); keeping disk stream");
                     try { mem.Dispose(); } catch { }
                     try { stream.Dispose(); } catch { }
                     _preload.Release(entry);
@@ -212,10 +238,13 @@ public sealed class VideoRenderer : IWallpaperRenderer
                     try { _player.Play(); } catch { }
                 }
 
-                Serilog.Log.Information($"Video preloaded into memory ({entry.Length / 1024 / 1024} MB shared): {path}");
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Serilog.Log.Information($"Video preload cache {(hit ? "HIT" : "MISS + filled")} ({entry.Length / 1024 / 1024} MB shared): {path}");
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, $"Video preload upgrade failed for {path}; keeping disk stream");
+        }
     }
 
     /// <summary>Drops the preloaded lease and its stream. Caller holds <see cref="_sync"/>.</summary>

@@ -4,6 +4,7 @@ using DesktopLiveWallPaperEngine.Desktop;
 using DesktopLiveWallPaperEngine.Interop;
 using DesktopLiveWallPaperEngine.Rendering;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text;
 using WindowsNative;
 using WindowsNative.Desktop;
@@ -67,6 +68,40 @@ public sealed class Engine : IDisposable
     private System.Threading.Timer? _settleTimer;
     private int _settleGen;
     private static readonly TimeSpan SettleDelay = TimeSpan.FromSeconds(2.5);
+
+    /// <summary>Post-resume settle: after hibernate/sleep the display driver and the shell
+    /// need longer than a hot-plug to converge (mode handshake, layer parent resize), so a
+    /// resume-armed trailing pass waits longer before judging the topology.</summary>
+    private static readonly TimeSpan ResumeSettleDelay = TimeSpan.FromSeconds(10);
+
+    /// <summary>Native video-memory stranding, measured 2026-09-20 from a 2.3 GB dump + ETL:
+    /// destroying an active frame-server MediaPlayer orphans ~32 MB of Intel GPU driver video
+    /// memory per monitor (d3d9 → igd9trinity64 → dxgkrnl write-combined private mappings with
+    /// no managed owner left behind — managed teardown is complete, threads are reaped). Only
+    /// a driver reset reclaims them, so every full pipeline destroy has a permanent ~32 MB /
+    /// monitor cost. The fields below implement the two consequences: (a) notification storms
+    /// must never destroy pipelines more than once, and (b) after a resume, one debounced
+    /// recycle is allowed when native memory is actually elevated — never blindly.</summary>
+    private const long BytesPerStrandedPool = 32L * 1024 * 1024;
+
+    /// <summary>Absolute private-bytes level that justifies a post-resume recycle. Normal
+    /// steady state for two 1080p video wallpapers is a few hundred MB; 1–3 GB is the
+    /// reported post-hibernation blowup.</summary>
+    private const long RecyclePrivateBytesThreshold = 900L * 1024 * 1024;
+
+    /// <summary>Growth since the resume baseline that justifies a post-resume recycle even
+    /// below the absolute threshold (fast post-resume stranding: ~22 pools / 107 s measured).</summary>
+    private const long RecycleGrowthBytesThreshold = 350L * 1024 * 1024;
+
+    /// <summary>Post-resume recycles are once per resume plus a cooldown — a recycle that did
+    /// not help must not loop the desktop forever.</summary>
+    private static readonly TimeSpan RecycleCooldown = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan ResumeRecycleWindow = TimeSpan.FromMinutes(15);
+
+    private DateTime _lastResumeUtc = DateTime.MinValue;
+    private long _resumeBaselinePrivateBytes;
+    private bool _resumeRecycled;
+    private DateTime _lastRecycleUtc = DateTime.MinValue;
 
     private string StaticDir => Path.Combine(_appDataDir, "static");
     private string OriginalWallpaperFile => Path.Combine(_appDataDir, "original-wallpaper.txt");
@@ -511,7 +546,11 @@ public sealed class Engine : IDisposable
         UpdatePauseSupervision();
     }
 
-    /// <summary>Full rebuild: display change, explorer restart, or layer destruction.</summary>
+    /// <summary>Full rebuild for genuine loss only (layer destruction, GPU device loss):
+    /// every pipeline destroy strands ~32 MB/monitor of driver video memory permanently, so
+    /// transient notifications (display change, explorer restart, resume, unlock) go through
+    /// <see cref="OnTopologyMightHaveChanged"/> + the settled pass instead and only reach
+    /// here when the topology actually disagrees.</summary>
     /// <summary>Playback failed twice on a file. Before this, an undecodable codec produced a
     /// log line and a black desktop with nothing shown to the user — one of the two worst first
     /// impressions the product can make, and the one a stranger from a download link is most
@@ -647,6 +686,9 @@ public sealed class Engine : IDisposable
         finally
         {
             _reapplying = false;
+            // Fresh pipelines from here: re-baseline native memory so the post-resume
+            // recycle evaluation measures new growth, not pre-existing strands.
+            _resumeBaselinePrivateBytes = CurrentPrivateBytes();
             // After the replacements are installed and rooted — never concurrently with the
             // rebuild above. The forced full GC is stop-the-world: firing it before the rebuild
             // suspended the very thread constructing the new pipeline, and overlapping storms
@@ -657,11 +699,15 @@ public sealed class Engine : IDisposable
     }
 
     /// <summary>Arms the settled-topology trailing pass (callers: the display-change / explorer-
-    /// restart handlers, and <see cref="Enable"/> for the symmetric attach-too-early race at
+    /// restart / resume handlers, and <see cref="Enable"/> for the symmetric attach-too-early race at
     /// startup). Re-armed by every notification, so a storm collapses into one trailing pass;
     /// each firing runs only for the latest generation. Thread-safe: handlers run on the main
     /// thread, the firing lands on the pool.</summary>
-    private void ScheduleSettledReapply()
+    private void ScheduleSettledReapply() => ScheduleSettledReapply(SettleDelay);
+
+    /// <summary>Same as <see cref="ScheduleSettledReapply()"/> with an explicit delay, for
+    /// sources that need longer convergence (post-resume driver/shell handshake).</summary>
+    private void ScheduleSettledReapply(TimeSpan delay)
     {
         System.Threading.Timer? old;
         int gen;
@@ -670,7 +716,7 @@ public sealed class Engine : IDisposable
             _settleGen++;
             gen = _settleGen;
             old = _settleTimer;
-            _settleTimer = new System.Threading.Timer(_ => SettledReapplyFired(gen), null, SettleDelay, Timeout.InfiniteTimeSpan);
+            _settleTimer = new System.Threading.Timer(_ => SettledReapplyFired(gen), null, delay, Timeout.InfiniteTimeSpan);
         }
         try { old?.Dispose(); } catch { }
     }
@@ -692,10 +738,117 @@ public sealed class Engine : IDisposable
             }
             // Converged already (the common storm case) — verifying costs one enumeration
             // and a few rect compares, while a blind rebuild would flash every monitor.
-            if (TopologyMatchesWindows()) return;
-            Serilog.Log.Information("Settled topology disagrees with live windows — re-applying");
-            ReapplyAll();
+            if (!TopologyMatchesWindows())
+            {
+                Serilog.Log.Information("Settled topology disagrees with live windows — re-applying");
+                ReapplyAll();
+                return;
+            }
+            // Converged, but a resume may have left the video pipelines in the degraded
+            // stranding state (GPU surfaces orphaned per minute with no topology change).
+            // One bounded recycle then, and only when native memory is actually elevated.
+            EvaluatePostResumeRecycle();
         });
+    }
+
+    /// <summary>Cheap storm response for display-change / explorer-restart notifications: re-probe
+    /// the layer, re-assert surviving windows against it, and let the settled trailing pass do
+    /// the only rebuild — and only when the topology actually disagrees.
+    ///
+    /// Previously every such notification ran an immediate full <see cref="ReapplyAll"/>,
+    /// destroying both video pipelines; a post-hibernate storm (display-change + taskbar-created
+    /// + unlock within seconds) therefore paid several ~32 MB/monitor permanent driver-memory
+    /// strands per resume (measured 2026-09-20: 1–3 GB after hibernation).</summary>
+    private void OnTopologyMightHaveChanged()
+    {
+        if (!IsEnabled) return;
+        try { _host?.EnsureLayer(); }
+        catch (Exception ex) { Serilog.Log.Warning($"Layer re-probe failed: {ex.Message}"); }
+        ReassertAllPlacements();
+        ScheduleSettledReapply();
+    }
+
+    /// <summary>Re-asserts every live window against the current layer geometry without
+    /// rebuilding anything. Windows that died with the old shell are left for the settled
+    /// pass (its <see cref="TopologyMatchesWindows"/> check rebuilds on dead handles).</summary>
+    private void ReassertAllPlacements()
+    {
+        var host = _host;
+        if (host is null) return;
+        foreach (var entry in _windows.ToArray())
+        {
+            try
+            {
+                var window = entry.Value;
+                if (window.Hwnd == IntPtr.Zero || !User32.IsWindow(window.Hwnd)) continue;
+                host.ReassertPlacement(window.Hwnd, window.Monitor.Bounds);
+            }
+            catch (Exception ex) { Serilog.Log.Warning($"Placement re-assert failed on {entry.Key}: {ex.Message}"); }
+        }
+    }
+
+    /// <summary>Power-resume entry point (PBT_APMRESUMEAUTOMATIC): records the resume for the
+    /// recycle evaluation, re-validates the layer, and arms a long-settled trailing pass.
+    /// Playback keeps running through the storm — pausing/resuming or rebuilding pipelines
+    /// here is exactly what orphaned driver surfaces at ~6 MB/s in measurement.</summary>
+    private void OnResumedFromSleep()
+    {
+        _lastResumeUtc = DateTime.UtcNow;
+        _resumeRecycled = false;
+        _resumeBaselinePrivateBytes = CurrentPrivateBytes();
+        try { _host?.ValidateLayer(); }
+        catch (Exception ex) { Serilog.Log.Warning($"Resume layer validation failed: {ex.Message}"); }
+        ScheduleSettledReapply(ResumeSettleDelay);
+        Serilog.Log.Information(
+            "Resumed from sleep — layer validated, settled pass armed (private bytes baseline {BaselineMb} MB)",
+            _resumeBaselinePrivateBytes / 1024 / 1024);
+    }
+
+    /// <summary>Session-unlock entry point: converge through the settled pass, without
+    /// shortening a pending post-resume settle (the driver/shell handshake needs the long
+    /// delay; an early verdict would see transient disagreement and rebuild for nothing).</summary>
+    private void OnSessionUnlocked()
+    {
+        if (DateTime.UtcNow - _lastResumeUtc > TimeSpan.FromMinutes(1))
+            ScheduleSettledReapply();
+    }
+
+    /// <summary>Single bounded post-resume recycle: when a recent resume was followed by
+    /// genuinely elevated native memory, the video pipelines are already in the degraded
+    /// stranding state — one full Disable/Enable drops them (and their stuck driver pools)
+    /// instead of stranding hundreds of MB more. Gated to once per resume plus a cooldown,
+    /// and skipped entirely when memory is healthy, so a clean resume costs nothing.</summary>
+    private void EvaluatePostResumeRecycle()
+    {
+        if (!IsEnabled || _resumeRecycled) return;
+        if (DateTime.UtcNow - _lastResumeUtc > ResumeRecycleWindow) return;
+        if (DateTime.UtcNow - _lastRecycleUtc < RecycleCooldown) return;
+        long current = CurrentPrivateBytes();
+        if (current <= 0) return;
+        long growth = current - _resumeBaselinePrivateBytes;
+        if (current < RecyclePrivateBytesThreshold && growth < RecycleGrowthBytesThreshold) return;
+        _resumeRecycled = true;
+        _lastRecycleUtc = DateTime.UtcNow;
+        Serilog.Log.Warning(
+            "Post-resume native memory elevated ({CurrentMb} MB, +{GrowthMb} MB since resume) — " +
+            "recycling video pipelines once to drop degraded decoder pools (~{PoolMb} MB stranded per pool)",
+            current / 1024 / 1024, growth / 1024 / 1024, BytesPerStrandedPool / 1024 / 1024);
+        try
+        {
+            Disable();
+            EnsureEnabled();
+        }
+        catch (Exception ex) { Serilog.Log.Error("Post-resume recycle failed", ex); }
+    }
+
+    private static long CurrentPrivateBytes()
+    {
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            return process.PrivateMemorySize64;
+        }
+        catch { return -1; }
     }
 
     /// <summary>True when every OS monitor has exactly one live window and each sits exactly
@@ -1024,7 +1177,10 @@ public sealed class Engine : IDisposable
             if (msg == _engine._taskbarCreatedMessage)
             {
                 Serilog.Log.Warning("Explorer restarted (TaskbarCreated) — re-attaching");
-                _engine.RunOnSessionAction(_engine.ReapplyAll);
+                // Cheap re-glue now; the settled pass rebuilds only on real disagreement.
+                // An immediate full re-apply here used to destroy both video pipelines per
+                // notification (~32 MB/monitor of permanently stranded driver memory each).
+                _engine.RunOnSessionAction(_engine.OnTopologyMightHaveChanged);
                 _engine.ScheduleSettledReapply();
                 return IntPtr.Zero;
             }
@@ -1034,10 +1190,11 @@ public sealed class Engine : IDisposable
                     User32.PostQuitMessage(0);
                     return IntPtr.Zero;
                 case WM_DISPLAYCHANGE:
-                    Serilog.Log.Information("Display change — re-applying");
-                    _engine.RunOnSessionAction(_engine.ReapplyAll);
+                    Serilog.Log.Information("Display change — re-attaching, settled pass will converge");
                     // The notification can precede the settled topology (new monitor not yet
-                    // enumerable, layer parent not yet resized): the trailing pass converges it.
+                    // enumerable, layer parent not yet resized): re-glue cheaply now, rebuild
+                    // (if needed at all) in the trailing pass.
+                    _engine.RunOnSessionAction(_engine.OnTopologyMightHaveChanged);
                     _engine.ScheduleSettledReapply();
                     return IntPtr.Zero;
                 case WM_WTSSESSION_CHANGE:
@@ -1048,12 +1205,15 @@ public sealed class Engine : IDisposable
                         {
                             playback.SessionLocked = false;
                             _engine._host?.ValidateLayer();
+                            // Unlock after hibernate lands in the middle of the resume storm;
+                            // converge (and recycle if degraded) through the settled pass.
+                            _engine.OnSessionUnlocked();
                         }
                     }
                     return IntPtr.Zero;
                 case WM_POWERBROADCAST when (int)wParam == PBT_APMRESUMEAUTOMATIC:
                     Serilog.Log.Information("Resumed from sleep — refreshing and validating layer");
-                    _engine._host?.ValidateLayer();
+                    _engine.OnResumedFromSleep();
                     return IntPtr.Zero;
                 case WM_POWERBROADCAST when (int)wParam == PBT_POWERSETTINGCHANGE:
                     _engine.OnPowerSettingChanged(lParam);
