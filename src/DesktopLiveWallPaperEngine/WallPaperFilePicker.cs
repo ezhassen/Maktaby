@@ -10,9 +10,9 @@ public static class WallpaperFilePicker
     {
         // Single source of truth: exactly what the engine can render.
         // Images -> ImageRenderer, videos -> VideoRenderer (MediaPlayer), web -> WebviewRender.
-        string images = string.Join(";", Engine.ImageExtensions.Select(e => "*" + e));
+        string images = string.Join(";", WallpaperPath.ImageExtensions.Select(e => "*" + e));
         string videos = string.Join(";", CodecSupport.VideoExtensions.Select(e => "*" + e));
-        string web = string.Join(";", Engine.WebExtensions.Select(e => "*" + e));
+        string web = string.Join(";", WallpaperPath.WebExtensions.Select(e => "*" + e));
         string all = images + ";" + videos + ";" + web;
         return
             "Wallpapers\0" + all + "\0" +

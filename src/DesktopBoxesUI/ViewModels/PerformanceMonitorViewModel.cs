@@ -504,10 +504,21 @@ namespace DesktopBoxesUI.ViewModels
                 long preloadedTotal = 0;
                 try { preloadedTotal = lw.GetPreloadTotalBytes(); } catch { }
                 string preloadedText = preloadedTotal > 0 ? $", preloaded {preloadedTotal / 1024 / 1024} MB" : "";
-                LiveWallpaperSummary = !lw.IsEnabled ? "Disabled"
+                var baseSummary = !lw.IsEnabled ? "Disabled"
                     : !lw.HasWallpaper ? "Enabled, no file"
                     : !lw.EngineIsLive ? $"Enabled, engine down ({states.Count} windows)"
                     : $"{states.Count} monitor(s), {playing} playing, {paused} paused{preloadedText}";
+
+                // Append MediaPlayer pool stats when available
+                try
+                {
+                    var stats = DesktopLiveWallPaperEngine.Rendering.VideoRenderer.GetPoolStats();
+                    LiveWallpaperSummary = $"{baseSummary} · MPPool: created={stats.Created}, pool={stats.PoolSize}, inuse={stats.Rented}, rentals={stats.Rentals}, returns={stats.Returns}, max={stats.MaxPool}";
+                }
+                catch
+                {
+                    LiveWallpaperSummary = baseSummary;
+                }
             }
             catch { }
         }

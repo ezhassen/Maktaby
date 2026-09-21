@@ -17,17 +17,6 @@ namespace DesktopLiveWallPaperEngine;
 /// clock widget, pause monitor, tray UI, config persistence.</summary>
 public sealed class Engine : IDisposable
 {
-    public static readonly IReadOnlySet<string> ImageExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        { ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff" };
-
-    /// <summary>Entry-point extensions for HTML wallpapers (WebviewRender). A folder whose
-    /// index.html is used also counts — see <see cref="IsWebPath"/>.</summary>
-    public static readonly IReadOnlySet<string> WebExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        { ".html", ".htm", ".css", ".js" };
-
-    public static bool IsWebPath(string path) =>
-        Directory.Exists(path) || WebExtensions.Contains(Path.GetExtension(path));
-
     private readonly EngineConfig _config;
     private readonly string _appDataDir;
     private DesktopWallpaperLayerHost? _host;
@@ -440,7 +429,9 @@ public sealed class Engine : IDisposable
         // top, and the wallpaper looks stuck on the old image/video with no errors.
         // (Video/image renderers create their own replacement surface in the constructor,
         // so their handoff stays smooth without this.)
-        if (IsWebPath(path))
+        var kind = WallpaperPath.GetRenderTypeFromPath(path);
+        bool isWeb = kind == WallpaperKind.Web;
+        if (isWeb)
             host.ClearContent();
 
         // When the first frame is captured, set it as the OS static wallpaper so a
@@ -465,24 +456,36 @@ public sealed class Engine : IDisposable
             }
         });
 
-        IWallpaperRenderer renderer;
-        if (ImageExtensions.Contains(Path.GetExtension(path)))
+        IWallpaperRenderer? renderer;
+        switch (kind)
         {
-            renderer = new ImageRenderer(host, monitor.Bounds.Width, monitor.Bounds.Height, _config.Fit, staticPath, onStatic, _preload);
-        }
-        else if (IsWebPath(path))
-        {
-            renderer = new WebViewRenderer(host, window.Hwnd, monitor.Bounds.Width, monitor.Bounds.Height,
-                _appDataDir, _config.MuteVideo, staticPath, onStatic);
-        }
-        else
-        {
-            var video = new VideoRenderer(host, monitor.Bounds.Width, monitor.Bounds.Height, _config.Fit,
-                _config.MuteVideo, _config.Volume, staticPath, onStatic, _preload);
-            video.PlaybackFailed += OnPlaybackFailed;
-            renderer = video;
+            case WallpaperKind.Image:
+                renderer = new ImageRenderer(host, monitor.Bounds.Width, monitor.Bounds.Height, _config.Fit, staticPath, onStatic, _preload);
+                break;
+            case WallpaperKind.Web:
+                renderer = new WebViewRenderer(host, window.Hwnd, monitor.Bounds.Width, monitor.Bounds.Height,
+                    _appDataDir, _config.MuteVideo, staticPath, onStatic);
+                break;
+            case WallpaperKind.Video:
+                var video = new VideoRenderer(host, monitor.Bounds.Width, monitor.Bounds.Height, _config.Fit,
+                    _config.MuteVideo, _config.Volume, monitor.Device, staticPath, onStatic, _preload);
+                video.PlaybackFailed += OnPlaybackFailed;
+                renderer = video;
+                break;
+            default:
+                // Unsupported (None): skip it and fall through to the OS wallpaper — never
+                // attempt playback on a path no renderer claims.
+                if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Warning))
+                    Serilog.Log.Warning("Unsupported wallpaper path, skipping: {Path}", path);
+                window.ClearRenderer();
+                // Like a switch to a non-GPU renderer: don't pin the target/visual (and the
+                // shared device reference) on a window that owns no surface anymore. No-op
+                // while widget overlays still need the device.
+                host.ReleaseDeviceIfUnused();
+                return;
         }
         window.SetRenderer(renderer);
+
         try
         {
             renderer.Load(path);
@@ -494,6 +497,17 @@ public sealed class Engine : IDisposable
             // catch in the caller logs; the monitor falls through to the OS wallpaper.
             window.ClearRenderer();
             throw;
+        }
+        finally
+        {
+            // Leaving video playback (image/web/unsupported): the outgoing video renderer (if
+            // any) was just disposed above and returned its player, so idle pooled players can
+            // now actually be dropped instead of pinned for a session that never reuses them.
+            // Finally (not just after SetRenderer) so it also runs when Load throws; skipped
+            // for video since the replacement rents from the pool in Load. Players still
+            // rented by other monitors are left alone.
+            if (kind != WallpaperKind.Video)
+                VideoRenderer.ClearPool();
         }
 
         // Enforce the current pause state on the fresh renderer: pause events fire on
@@ -695,6 +709,8 @@ public sealed class Engine : IDisposable
             // (explorer restart + display change) piled up one stall each. Single-flight now
             // collapses those into one trailing pass on a pool thread.
             VideoRenderer.ScheduleReclaimMediaPipeline();
+            // Trim affinity mappings for monitors that are no longer present to avoid stale mappings.
+            try { VideoRenderer.TrimPoolAffinities(MonitorTracker.Enumerate().Select(m => m.Device).ToList()); } catch { }
         }
     }
 

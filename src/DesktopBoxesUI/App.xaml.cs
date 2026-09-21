@@ -388,7 +388,7 @@ public partial class App : Application
         tray.LiveWallpaperChangeRequested += (_, _) =>
         {
             // Filter comes from the engine itself (WallPaperFilePicker builds it from
-            // Engine.ImageExtensions + CodecSupport.VideoExtensions), so it never drifts
+            // WallpaperPath.ImageExtensions + CodecSupport.VideoExtensions), so it never drifts
             // from what the renderers can actually play. No owner HWND here (tray menu),
             // so the parameterless overload passes IntPtr.Zero — never a process handle.
             var newFile = DesktopLiveWallPaperEngine.WallpaperFilePicker.PickMedia();
