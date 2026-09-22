@@ -142,8 +142,15 @@ namespace DesktopBoxesUI.Views
             _vm.Refresh();
         }
 
-        private void SuspendIdle_Click(object sender, RoutedEventArgs e)
+        // Header click toggles the same flag the chevron ToggleButton binds to. Clicks on the
+        // ToggleButton itself never reach here: ButtonBase marks MouseLeftButtonUp handled when
+        // it raises Click, so there is no double-toggle.
+        private void WebView2Header_Toggle(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
+            try { _vm.IsWebView2Expanded = !_vm.IsWebView2Expanded; } catch { }
+        }
+
+        private void SuspendIdle_Click(object sender, RoutedEventArgs e)        {
             foreach (var win in Application.Current.Windows.OfType<Views.Containers.WebWidgetWindow>())
             {
                 try

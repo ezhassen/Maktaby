@@ -184,4 +184,7 @@ public static class Win32Constants
     // Keyboard
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const byte VK_ESCAPE = 0x1B;
+
+    // Toolhelp32 process snapshot
+    public const uint TH32CS_SNAPPROCESS = 0x00000002;
 }

@@ -337,3 +337,20 @@ public enum SHCNE : int
     RENAMEFOLDER = 0x0008,
     UPDATEITEM = 0x00002000,
 }
+
+/// <summary>Toolhelp32 process snapshot entry (Process32FirstW/NextW). Only the PID,
+/// parent PID and exe name are consumed; the rest keeps the layout blittable.</summary>
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+public struct PROCESSENTRY32W
+{
+    public uint Size;
+    public uint Usage;
+    public uint ProcessID;
+    public IntPtr DefaultHeapID;
+    public uint ModuleID;
+    public uint Threads;
+    public uint ParentProcessID;
+    public int PriClassBase;
+    public uint Flags;
+    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)] public string ExeFile;
+}

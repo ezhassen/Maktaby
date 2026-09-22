@@ -87,6 +87,78 @@ internal static class Win32Apis
         return false;
     }
 
+    /// <summary>Snapshot of pid → parent-pid for every live process (Toolhelp32). Used to
+    /// attribute msedgewebview2 renderer/GPU/utility children — which are grandchildren of
+    /// our process (children of the browser PID) — back to our app. Empty on failure.</summary>
+    public static Dictionary<int, int> GetProcessParentMap()
+    {
+        var map = new Dictionary<int, int>();
+        IntPtr snap = IntPtr.Zero;
+        try
+        {
+            snap = Kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snap == IntPtr.Zero || snap == new IntPtr(-1))
+                return map;
+            var entry = new PROCESSENTRY32W { Size = (uint)Marshal.SizeOf<PROCESSENTRY32W>() };
+            if (!Kernel32.Process32FirstW(snap, ref entry))
+                return map;
+            do
+            {
+                map[(int)entry.ProcessID] = (int)entry.ParentProcessID;
+                entry.Size = (uint)Marshal.SizeOf<PROCESSENTRY32W>();
+            } while (Kernel32.Process32NextW(snap, ref entry));
+        }
+        catch { }
+        finally
+        {
+            try { if (snap != IntPtr.Zero && snap != new IntPtr(-1)) Kernel32.CloseHandle(snap); } catch { }
+        }
+        return map;
+    }
+
+    /// <summary>Exe file name (e.g. "msedgewebview2.exe") for a pid via a Toolhelp snapshot.
+    /// Empty when the process is gone or cannot be read.</summary>
+    public static string GetProcessExeName(int pid)
+    {
+        IntPtr snap = IntPtr.Zero;
+        try
+        {
+            snap = Kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snap == IntPtr.Zero || snap == new IntPtr(-1))
+                return string.Empty;
+            var entry = new PROCESSENTRY32W { Size = (uint)Marshal.SizeOf<PROCESSENTRY32W>() };
+            if (!Kernel32.Process32FirstW(snap, ref entry))
+                return string.Empty;
+            do
+            {
+                if ((int)entry.ProcessID == pid)
+                    return entry.ExeFile ?? string.Empty;
+                entry.Size = (uint)Marshal.SizeOf<PROCESSENTRY32W>();
+            } while (Kernel32.Process32NextW(snap, ref entry));
+        }
+        catch { }
+        finally
+        {
+            try { if (snap != IntPtr.Zero && snap != new IntPtr(-1)) Kernel32.CloseHandle(snap); } catch { }
+        }
+        return string.Empty;
+    }
+
+    /// <summary>True when <paramref name="pid"/> is <paramref name="rootPid"/> or descends
+    /// from it through the snapshot <paramref name="parentMap"/> (browser → renderer chains).</summary>
+    public static bool IsDescendantOf(int pid, int rootPid, Dictionary<int, int> parentMap)
+    {
+        int cur = pid;
+        for (int i = 0; i < 64; i++)
+        {
+            if (cur == rootPid) return true;
+            if (!parentMap.TryGetValue(cur, out int parent) || parent == 0 || parent == cur)
+                return false;
+            cur = parent;
+        }
+        return false;
+    }
+
     /// <summary>Gets the current cursor position in physical screen pixels (works during a drag operation,
     /// unlike <see cref="Mouse.GetPosition"/> which is suppressed by the drag-drop capture).</summary>
     public static bool GetCursorPos(out POINT pt) => User32.GetCursorPos(out pt);

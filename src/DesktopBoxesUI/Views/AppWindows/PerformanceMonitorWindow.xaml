@@ -5,7 +5,7 @@
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Performance Monitor"
     Width="760"
-    Height="660"
+    Height="800"
     MinWidth="640"
     MinHeight="480"
     ExtendsContentIntoTitleBar="True"
@@ -14,6 +14,7 @@
     WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
@@ -34,8 +35,8 @@
         <!--  Summary  -->
         <Border
             Grid.Row="1"
-            Margin="12,8,12,8"
-            Padding="12"
+            Margin="12,6,12,6"
+            Padding="8"
             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
@@ -50,12 +51,14 @@
                     <TextBlock
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="TOTAL PROCESS" />
+                        Text="APP PROCESS (main)"
+                        ToolTip="Working set — same metric as Task Manager's Processes-tab Memory column." />
                     <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
                         <TextBlock
                             FontSize="13"
                             FontWeight="SemiBold"
-                            Text="{Binding TotalMemoryMB, StringFormat={}{0} MB}" />
+                            Text="{Binding TotalMemoryMB, StringFormat={}{0} MB}"
+                            ToolTip="Working set (resident RAM), matches Task Manager." />
                         <TextBlock
                             Margin="8,0,0,0"
                             VerticalAlignment="Bottom"
@@ -77,7 +80,14 @@
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding WebView2ProcessCount, StringFormat={}WebView2: {0} processes}" />
+                        Text="{Binding TotalPrivateMB, StringFormat={}Private (commit): {0} MB}"
+                        ToolTip="Private bytes (committed virtual). Always higher than working set — not what Task Manager shows." />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        Text="{Binding GroupMemoryMB, StringFormat={}Group total: {0} MB}"
+                        ToolTip="Main + WebView2 working sets — matches Task Manager's collapsed group row." />
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center">
                     <TextBlock
@@ -98,7 +108,13 @@
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="shared msedgewebview2" />
+                        Text="{Binding WebView2ProcessCount, StringFormat={}{0} processes}" />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        Text="{Binding GroupCpu, StringFormat={}Group CPU: {0:0.0}%}"
+                        ToolTip="Main + WebView2 CPU — matches Task Manager's collapsed group row." />
                 </StackPanel>
                 <StackPanel
                     Grid.Column="2"
@@ -144,10 +160,120 @@
             </Grid>
         </Border>
 
-        <!--  Per-window list  -->
+        <!--  WebView2 per-process breakdown (own row; collapses to zero height when empty)  -->
         <Border
             Grid.Row="2"
-            Margin="12,0,12,12"
+            Margin="12,0,12,4"
+            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="8">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Visibility" Value="Visible" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding HasWebView2Processes}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <Border.Resources>
+                <BooleanToVisibilityConverter x:Key="BoolToVis" />
+            </Border.Resources>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Border
+                    Grid.Row="0"
+                    Padding="8,2"
+                    Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                    CornerRadius="8,8,0,0"
+                    Cursor="Hand"
+                    MouseLeftButtonUp="WebView2Header_Toggle"
+                    ToolTip="Click to collapse / expand">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ToggleButton
+                            Grid.Column="0"
+                            VerticalAlignment="Center"
+                            IsChecked="{Binding IsWebView2Expanded, Mode=TwoWay}"
+                            Style="{StaticResource ToggleButtonCollapsable}"
+                            ToolTip="Collapse / expand" />
+                        <TextBlock
+                            Grid.Column="1"
+                            Margin="4,0,0,0"
+                            VerticalAlignment="Center"
+                            FontWeight="SemiBold"
+                            Text="WebView2 processes" />
+                        <TextBlock
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="working set per msedgewebview2.exe · Browser = top-level, Child = renderer/GPU/utility" />
+                    </Grid>
+                </Border>
+                <DataGrid
+                    Grid.Row="1"
+                    MaxHeight="120"
+                    Margin="4"
+                    AutoGenerateColumns="False"
+                    CanUserAddRows="False"
+                    CanUserDeleteRows="False"
+                    CanUserReorderColumns="False"
+                    CanUserResizeColumns="True"
+                    ColumnHeaderHeight="24"
+                    FontSize="11"
+                    GridLinesVisibility="Horizontal"
+                    HeadersVisibility="Column"
+                    IsReadOnly="True"
+                    ItemsSource="{Binding WebView2Processes}"
+                    RowHeaderWidth="0"
+                    RowHeight="22"
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                    Visibility="{Binding IsWebView2Expanded, Converter={StaticResource BoolToVis}}">
+                    <DataGrid.CellStyle>
+                        <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                            <Setter Property="Padding" Value="4,1" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                    </DataGrid.CellStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn
+                            Width="80"
+                            Binding="{Binding Pid}"
+                            Header="PID" />
+                        <DataGridTextColumn
+                            Width="90"
+                            Binding="{Binding Kind}"
+                            Header="Type" />
+                        <DataGridTextColumn
+                            Width="*"
+                            Binding="{Binding MemoryMB, StringFormat={}{0} MB}"
+                            Header="Memory" />
+                        <DataGridTextColumn
+                            Width="*"
+                            Binding="{Binding Cpu, StringFormat={}{0:0.0}%}"
+                            Header="CPU" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <!--  Per-window list  -->
+        <Border
+            Grid.Row="3"
+            Margin="12,0,12,6"
             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
@@ -159,7 +285,7 @@
                 </Grid.RowDefinitions>
                 <Border
                     Grid.Row="0"
-                    Padding="8"
+                    Padding="8,4"
                     Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
                     CornerRadius="8,8,0,0">
                     <Grid>
@@ -173,19 +299,23 @@
                             Text="Windows / Widgets" />
                         <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                             <ui:Button
+                                Padding="8,2"
                                 Appearance="Secondary"
                                 Click="SuspendIdle_Click"
                                 Content="Suspend Idle"
+                                FontSize="11"
                                 ToolTip="Force suspend all hidden widgets" />
                             <ui:Button
                                 Margin="8,0,0,0"
+                                Padding="8,2"
                                 Appearance="Secondary"
                                 Click="ResumeAll_Click"
-                                Content="Resume All" />
+                                Content="Resume All"
+                                FontSize="11" />
                         </StackPanel>
                         <TextBlock
                             Grid.Row="1"
-                            Margin="0,4,0,0"
+                            Margin="0,2,0,0"
                             FontFamily="Consolas"
                             FontSize="10"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
@@ -197,19 +327,29 @@
                 <DataGrid
                     x:Name="WindowsGrid"
                     Grid.Row="1"
-                    Margin="8"
+                    Margin="4"
                     AutoGenerateColumns="False"
                     CanUserAddRows="False"
                     CanUserDeleteRows="False"
                     CanUserReorderColumns="False"
                     CanUserResizeColumns="True"
+                    ColumnHeaderHeight="24"
+                    FontSize="11"
                     GridLinesVisibility="Horizontal"
                     HeadersVisibility="Column"
                     IsReadOnly="True"
                     ItemsSource="{Binding Items}"
                     PreviewMouseRightButtonDown="WindowsGrid_PreviewMouseRightButtonDown"
                     RowHeaderWidth="0"
+                    RowHeight="22"
                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <DataGrid.CellStyle>
+                        <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                            <Setter Property="Padding" Value="4,1" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                    </DataGrid.CellStyle>
                     <DataGrid.ContextMenu>
                         <ContextMenu>
                             <MenuItem Click="HideSelected_Click" Header="Hide" />
@@ -242,6 +382,8 @@
                             Header="Model Bounds">
                             <DataGridTextColumn.CellStyle>
                                 <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                                    <Setter Property="Padding" Value="4,1" />
+                                    <Setter Property="VerticalContentAlignment" Value="Center" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding BoundsMismatch}" Value="True">
                                             <Setter Property="Foreground" Value="Red" />
@@ -257,6 +399,7 @@
                             Header="Applied Bounds">
                             <DataGridTextColumn.CellStyle>
                                 <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                                    <Setter Property="Padding" Value="4,1" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding BoundsMismatch}" Value="True">
                                             <Setter Property="Foreground" Value="Red" />
@@ -292,8 +435,8 @@
         </Border>
 
         <Border
-            Grid.Row="3"
-            Margin="12,0,12,12"
+            Grid.Row="4"
+            Margin="12,0,12,6"
             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
@@ -305,7 +448,7 @@
                 </Grid.RowDefinitions>
                 <Border
                     Grid.Row="0"
-                    Padding="8"
+                    Padding="8,4"
                     Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
                     CornerRadius="8,8,0,0">
                     <Grid>
@@ -326,18 +469,28 @@
                     x:Name="LiveWallpaperGrid"
                     Grid.Row="1"
                     MaxHeight="150"
-                    Margin="8"
+                    Margin="4"
                     AutoGenerateColumns="False"
                     CanUserAddRows="False"
                     CanUserDeleteRows="False"
                     CanUserReorderColumns="False"
                     CanUserResizeColumns="True"
+                    ColumnHeaderHeight="24"
+                    FontSize="11"
                     GridLinesVisibility="Horizontal"
                     HeadersVisibility="Column"
                     IsReadOnly="True"
                     ItemsSource="{Binding LiveWallpaperMonitors}"
                     RowHeaderWidth="0"
+                    RowHeight="22"
                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <DataGrid.CellStyle>
+                        <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                            <Setter Property="Padding" Value="4,1" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="VerticalAlignment" Value="Center" />
+                        </Style>
+                    </DataGrid.CellStyle>
                     <DataGrid.Columns>
                         <DataGridTextColumn
                             Width="110"
@@ -399,13 +552,13 @@
         </Border>
 
         <Border
-            Grid.Row="4"
-            Padding="12,8"
+            Grid.Row="5"
+            Padding="8,4"
             Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0">
             <TextBlock
-                FontSize="11"
+                FontSize="10"
                 Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                 Text="Idle: when Hide All / minimized / no visible widget, WebView2 is suspended via TrySuspendAsync to cut CPU. Widgets use visibility-aware JS (document.hidden check) and CSS containment. See WebWidgets style.css data-theme handling."
                 TextWrapping="Wrap" />

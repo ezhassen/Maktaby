@@ -41,6 +41,21 @@ namespace DesktopBoxesUI.ViewModels
         public System.Windows.Window? WindowRef { get; set; }
     }
 
+    public sealed class WebView2ProcessItem : ViewModelBase
+    {
+        private int _pid;
+        public int Pid { get => _pid; set => SetField(ref _pid, value); }
+
+        private string _kind = "";
+        public string Kind { get => _kind; set => SetField(ref _kind, value); }
+
+        private long _memoryMB;
+        public long MemoryMB { get => _memoryMB; set => SetField(ref _memoryMB, value); }
+
+        private double _cpu;
+        public double Cpu { get => _cpu; set => SetField(ref _cpu, value); }
+    }
+
     public sealed class LiveWallpaperMonitorItem : ViewModelBase
     {
         private string _device = "";
@@ -97,6 +112,8 @@ namespace DesktopBoxesUI.ViewModels
 
         public ObservableCollection<LiveWallpaperMonitorItem> LiveWallpaperMonitors { get; } = new();
 
+        public ObservableCollection<WebView2ProcessItem> WebView2Processes { get; } = new();
+
         private string _liveWallpaperSummary = "";
         public string LiveWallpaperSummary { get => _liveWallpaperSummary; set => SetField(ref _liveWallpaperSummary, value); }
 
@@ -105,6 +122,20 @@ namespace DesktopBoxesUI.ViewModels
 
         private long _totalMemoryMB;
         public long TotalMemoryMB { get => _totalMemoryMB; set => SetField(ref _totalMemoryMB, value); }
+
+        /// <summary>Private bytes (commit) of the main process. Task Manager's Processes-tab
+        /// Memory column shows working set, so this is always higher — shown separately so the
+        /// two numbers are never confused again.</summary>
+        private long _totalPrivateMB;
+        public long TotalPrivateMB { get => _totalPrivateMB; set => SetField(ref _totalPrivateMB, value); }
+
+        /// <summary>Main working set + WebView2 working sets: matches the collapsed group row
+        /// in Task Manager's Processes tab (which sums a group).</summary>
+        private long _groupMemoryMB;
+        public long GroupMemoryMB { get => _groupMemoryMB; set => SetField(ref _groupMemoryMB, value); }
+
+        private double _groupCpu;
+        public double GroupCpu { get => _groupCpu; set => SetField(ref _groupCpu, value); }
 
         private long _managedMemoryMB;
         public long ManagedMemoryMB { get => _managedMemoryMB; set => SetField(ref _managedMemoryMB, value); }
@@ -123,6 +154,12 @@ namespace DesktopBoxesUI.ViewModels
 
         private double _webView2Cpu;
         public double WebView2Cpu { get => _webView2Cpu; set => SetField(ref _webView2Cpu, value); }
+
+        private bool _hasWebView2Processes;
+        public bool HasWebView2Processes { get => _hasWebView2Processes; set => SetField(ref _hasWebView2Processes, value); }
+
+        private bool _isWebView2Expanded = true;
+        public bool IsWebView2Expanded { get => _isWebView2Expanded; set => SetField(ref _isWebView2Expanded, value); }
 
         private bool _isIdleMode;
         public bool IsIdleMode { get => _isIdleMode; set => SetField(ref _isIdleMode, value); }
@@ -262,8 +299,12 @@ namespace DesktopBoxesUI.ViewModels
                 _prevTime = now;
 
                 _process.Refresh();
-                // Use PrivateMemorySize to match Task Manager's "Memory (Private Working Set)" (WorkingSet includes shared pages)
-                TotalMemoryMB = _process.PrivateMemorySize64 / 1024 / 1024;
+                // Working set here: this is what Task Manager's Processes-tab Memory column
+                // shows (resident RAM). PrivateMemorySize64 is commit (private bytes) and is
+                // always higher — previously we showed commit as the headline number, which is
+                // why the monitor read ~579 MB while Task Manager showed ~243 MB.
+                TotalMemoryMB = _process.WorkingSet64 / 1024 / 1024;
+                try { TotalPrivateMB = _process.PrivateMemorySize64 / 1024 / 1024; } catch { }
                 // Managed heap split: if Total climbs while this stays flat, the growth is native
                 // (Media Foundation, COM, GDI) rather than .NET objects.
                 try { ManagedMemoryMB = System.GC.GetTotalMemory(false) / 1024 / 1024; } catch { }
@@ -290,12 +331,14 @@ namespace DesktopBoxesUI.ViewModels
                 }
                 catch { }
 
-                // WebView2: our app's widget browsers (via BrowserProcessId) PLUS the live
-                // wallpaper's browser processes (via the engine's monitor states) — previously
-                // an HTML wallpaper's msedgewebview2 processes were invisible here, showing
-                // 0 processes / 0 MB while they were actually running.
-                long wvMem = 0;
+                // WebView2: known browser PIDs (widget BrowserProcessId + live-wallpaper
+                // monitor states) PLUS a full descendant scan: every msedgewebview2.exe whose
+                // ancestor chain reaches our PID. BrowserProcessId only yields the top-level
+                // browser process — renderer/GPU/utility children would otherwise be invisible
+                // while Task Manager's group row sums them, which was the second half of the
+                // mismatch. Memory uses WorkingSet64 so the roll-up compares 1:1 with Task Manager.
                 var wvIds = new HashSet<int>();
+                var browserIds = new HashSet<int>();
                 try
                 {
                     foreach (var win in System.Windows.Application.Current.Windows.OfType<Views.Containers.WebWidgetWindow>())
@@ -306,7 +349,7 @@ namespace DesktopBoxesUI.ViewModels
                             if (field?.GetValue(win) is Controls.ContainersControls.WebWidgetControl ctrl)
                             {
                                 var pid = ctrl.BrowserProcessId;
-                                if (pid.HasValue) wvIds.Add(pid.Value);
+                                if (pid.HasValue) { wvIds.Add(pid.Value); browserIds.Add(pid.Value); }
                             }
                         }
                         catch { }
@@ -320,39 +363,89 @@ namespace DesktopBoxesUI.ViewModels
                     {
                         foreach (var s in lw.GetMonitorStates())
                         {
-                            if (s.WebProcessId != 0) wvIds.Add(unchecked((int)s.WebProcessId));
+                            if (s.WebProcessId != 0) { int pid = unchecked((int)s.WebProcessId); wvIds.Add(pid); browserIds.Add(pid); }
                         }
                     }
                 }
                 catch { }
+                Dictionary<int, int> parentMap;
+                try { parentMap = Win32.NativeMethods.Win32Apis.GetProcessParentMap(); }
+                catch { parentMap = new Dictionary<int, int>(); }
+                int ownPid = _process.Id;
+                try
+                {
+                    foreach (var p in Process.GetProcessesByName("msedgewebview2"))
+                    {
+                        try
+                        {
+                            int pid = p.Id;
+                            if (wvIds.Contains(pid)) continue;
+                            if (Win32.NativeMethods.Win32Apis.IsDescendantOf(pid, ownPid, parentMap))
+                                wvIds.Add(pid);
+                        }
+                        catch { }
+                        finally { try { p.Dispose(); } catch { } }
+                    }
+                }
+                catch { }
                 int wvCount = 0;
+                long wvMem = 0;
                 double wvCpu = 0;
                 var wvSeen = new HashSet<int>();
+                var wvRows = new Dictionary<int, (string Kind, long MemMB, double Cpu)>();
                 foreach (var pid in wvIds)
                 {
                     try
                     {
                         using var p = Process.GetProcessById(pid);
                         p.Refresh();
-                        wvMem += p.PrivateMemorySize64;
+                        long memMB = p.WorkingSet64 / 1024 / 1024;
+                        wvMem += p.WorkingSet64;
                         wvCount++;
                         var cur = p.TotalProcessorTime;
+                        double sample = 0;
                         if (_wvCpuPrev.TryGetValue(pid, out var prev))
                         {
                             double elMs = (now - prev.At).TotalMilliseconds;
-                            if (elMs > 0) wvCpu += (cur - prev.Cpu).TotalMilliseconds / elMs / _processorCount * 100.0;
+                            if (elMs > 0) sample = (cur - prev.Cpu).TotalMilliseconds / elMs / _processorCount * 100.0;
+                            sample = Math.Clamp(sample, 0, 100);
                         }
                         _wvCpuPrev[pid] = (cur, now);
                         wvSeen.Add(pid);
+                        wvCpu += sample;
+                        string kind = browserIds.Contains(pid) ? "Browser"
+                            : parentMap.TryGetValue(pid, out int ppid) && ppid == ownPid ? "Browser" : "Child";
+                        wvRows[pid] = (kind, memMB, sample);
                     }
                     catch { }
                 }
                 // Drop vanished PIDs so the table cannot grow across wallpaper/browser restarts.
                 foreach (var dead in _wvCpuPrev.Keys.Where(k => !wvSeen.Contains(k)).ToList()) _wvCpuPrev.Remove(dead);
-                // Fallback: if no BrowserProcessId yet (WebView not initialized), show 0
                 WebView2ProcessCount = wvCount;
+                HasWebView2Processes = wvCount > 0;
                 WebView2MemoryMB = wvMem / 1024 / 1024;
                 WebView2Cpu = Math.Clamp(wvCpu, 0, 100);
+                // Group roll-up: what Task Manager's collapsed group row shows.
+                GroupMemoryMB = TotalMemoryMB + WebView2MemoryMB;
+                GroupCpu = Math.Clamp(TotalCpu + WebView2Cpu, 0, 100);
+                try
+                {
+                    var stale = WebView2Processes.Where(r => !wvSeen.Contains(r.Pid)).ToList();
+                    foreach (var r in stale) WebView2Processes.Remove(r);
+                    foreach (var kv in wvRows.OrderBy(kv => kv.Key))
+                    {
+                        var existing = WebView2Processes.FirstOrDefault(r => r.Pid == kv.Key);
+                        if (existing is null)
+                            WebView2Processes.Add(new WebView2ProcessItem { Pid = kv.Key, Kind = kv.Value.Kind, MemoryMB = kv.Value.MemMB, Cpu = kv.Value.Cpu });
+                        else
+                        {
+                            existing.Kind = kv.Value.Kind;
+                            existing.MemoryMB = kv.Value.MemMB;
+                            existing.Cpu = kv.Value.Cpu;
+                        }
+                    }
+                }
+                catch { }
 
                 // Per-window items. Monitor-space rects (native pixels ÷ live monitor DPI)
                 // are the physical truth; window-space rects catch WPF-side drift. A stuck
