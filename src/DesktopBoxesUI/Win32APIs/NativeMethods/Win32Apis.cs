@@ -144,6 +144,25 @@ internal static class Win32Apis
         return string.Empty;
     }
 
+    /// <summary>Private working set (resident RAM private to the process) via
+    /// GetProcessMemoryInfo sized for EX2. False on old systems or without query rights.</summary>
+    public static bool TryGetPrivateWorkingSet(IntPtr hProcess, out ulong bytes)
+    {
+        bytes = 0;
+        try
+        {
+            uint cb = (uint)Marshal.SizeOf<PROCESS_MEMORY_COUNTERS_EX2>();
+            if (PsApi.GetProcessMemoryInfo(hProcess, out var counters, cb)
+                && counters.PrivateWorkingSetSize.ToUInt64() > 0)
+            {
+                bytes = counters.PrivateWorkingSetSize.ToUInt64();
+                return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
     /// <summary>GDI / USER handle count for a process handle (GetGuiResources). Used by
     /// diagnostics to separate handle leaks (climbing GDI) from driver-mapping / pool
     /// growth (flat GDI, climbing private bytes). Returns 0 on failure.</summary>

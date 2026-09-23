@@ -46,48 +46,52 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <TextBlock
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="APP PROCESS (main)"
-                        ToolTip="Working set — same metric as Task Manager's Processes-tab Memory column." />
+                        ToolTip="Resident RAM private to the process." />
                     <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
                         <TextBlock
-                            FontSize="13"
+                            FontSize="15"
                             FontWeight="SemiBold"
                             Text="{Binding TotalMemoryMB, StringFormat={}{0} MB}"
-                            ToolTip="Working set (resident RAM), matches Task Manager." />
+                            ToolTip="Private working set: resident RAM private to the process." />
                         <TextBlock
                             Margin="8,0,0,0"
                             VerticalAlignment="Bottom"
                             FontSize="11"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding TotalCpu, StringFormat={}{0:0.0}% CPU}" />
+                            Text="{Binding TotalCpu, StringFormat={}{0:0.0}% CPU}"
+                            ToolTip="Share of total CPU time across all cores, sampled every second." />
                     </StackPanel>
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{Binding TotalIo}" />
+                        Text="{Binding TotalIo}"
+                        ToolTip="Disk, network and device throughput: read and write bytes per second." />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding ManagedMemoryMB, StringFormat={}Managed heap: {0} MB}" />
+                        Text="{Binding ManagedMemoryMB, StringFormat={}Managed heap: {0} MB}"
+                        ToolTip=".NET managed heap. If this stays flat while the total climbs, the growth is native (media, COM, graphics) rather than .NET objects." />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        Text="{Binding WorkingSetMB, StringFormat={}Working set: {0} MB}"
+                        ToolTip="Total working set: resident RAM including shared pages (.NET/WPF/Edge DLLs shared with other processes). Higher than private working set by the shared share." />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                         Text="{Binding TotalPrivateMB, StringFormat={}Private (commit): {0} MB}"
-                        ToolTip="Private bytes (committed virtual). Always higher than working set — not what Task Manager shows." />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding GroupMemoryMB, StringFormat={}Group total: {0} MB}"
-                        ToolTip="Main + WebView2 working sets — matches Task Manager's collapsed group row." />
+                        ToolTip="Private bytes: committed virtual memory, including paged-out pages. Always the highest of the three." />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
@@ -105,37 +109,57 @@
                     <TextBlock
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="WEBVIEW2" />
+                        Text="WEBVIEW2"
+                        ToolTip="Memory and CPU of our msedgewebview2.exe processes (widgets and HTML wallpapers, including renderer and utility children)." />
                     <TextBlock
                         Margin="0,4,0,0"
-                        FontSize="13"
+                        FontSize="15"
                         FontWeight="SemiBold"
-                        Text="{Binding WebView2MemoryMB, StringFormat={}{0} MB}" />
+                        Text="{Binding WebView2MemoryMB, StringFormat={}{0} MB}"
+                        ToolTip="Summed private working sets of our msedgewebview2 processes." />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="{Binding WebView2Cpu, StringFormat={}{0:0.0}% CPU}"
+                            ToolTip="Summed CPU share across all our WebView2 processes, sampled every second." />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        Text="{Binding WebView2ProcessCount, StringFormat={}{0} processes}"
+                        ToolTip="Browser = top-level process; Child = renderer, GPU or utility process (see breakdown below)." />
+                </StackPanel>
+                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                    <TextBlock
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="GROUP"
+                        ToolTip="Main + WebView2 roll-up for the whole app group." />
+                    <TextBlock
+                        Margin="0,4,0,0"
+                        FontSize="15"
+                        FontWeight="SemiBold"
+                        Text="{Binding GroupMemoryMB, StringFormat={}{0} MB}"
+                        ToolTip="Main + WebView2 private working sets for the whole app group." />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{Binding WebView2Cpu, StringFormat={}{0:0.0}% CPU}" />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding WebView2ProcessCount, StringFormat={}{0} processes}" />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding GroupCpu, StringFormat={}Group CPU: {0:0.0}%}"
-                        ToolTip="Main + WebView2 CPU — matches Task Manager's collapsed group row." />
+                        Text="{Binding GroupCpu, StringFormat={}{0:0.0}% CPU}"
+                        ToolTip="Main + WebView2 CPU for the whole app group." />
                 </StackPanel>
                 <StackPanel
-                    Grid.Column="2"
+                    Grid.Column="3"
+                    MinWidth="80"
+                    Margin="4,20,4,4"
                     HorizontalAlignment="Right"
-                    VerticalAlignment="Center">
+                    VerticalAlignment="Top">
                     <Border
                         x:Name="IdleBadge"
                         Padding="8,4"
-                        CornerRadius="12">
+                        CornerRadius="12"
+                        ToolTip="Green Active: a container is visible or a wallpaper is playing. Amber Idle: everything hidden, suspended or paused.">
                         <Border.Style>
                             <Style TargetType="Border">
                                 <Setter Property="Background" Value="#D0F0D0" />
@@ -147,6 +171,7 @@
                             </Style>
                         </Border.Style>
                         <TextBlock
+                            HorizontalAlignment="Center"
                             FontSize="11"
                             FontWeight="SemiBold"
                             Foreground="#1A1A1A">
@@ -164,10 +189,12 @@
                     </Border>
                     <TextBlock
                         Margin="0,4,0,0"
+                        HorizontalAlignment="Center"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="Idle suspends WebView"
-                        TextAlignment="Right" />
+                        Text="App Status"
+                        TextAlignment="Right"
+                        ToolTip="Idle when every container is hidden/suspended and no wallpaper is playing." />
                 </StackPanel>
             </Grid>
         </Border>
@@ -314,16 +341,17 @@
                                 Padding="8,2"
                                 Appearance="Secondary"
                                 Click="SuspendIdle_Click"
-                                Content="Suspend Idle"
+                                Content="Suspend"
                                 FontSize="11"
-                                ToolTip="Force suspend all hidden widgets" />
+                                ToolTip="Suspend all container widgets (WebViews and native plugins)" />
                             <ui:Button
                                 Margin="8,0,0,0"
                                 Padding="8,2"
                                 Appearance="Secondary"
                                 Click="ResumeAll_Click"
-                                Content="Resume All"
-                                FontSize="11" />
+                                Content="Resume"
+                                FontSize="11"
+                                ToolTip="Resume all container widgets (WebViews and native plugins)" />
                         </StackPanel>
                         <TextBlock
                             Grid.Row="1"
@@ -377,7 +405,7 @@
                             Binding="{Binding Name}"
                             Header="Name" />
                         <DataGridTextColumn
-                            Width="80"
+                            Width="110"
                             Binding="{Binding Type}"
                             Header="Type" />
                         <DataGridTextColumn
@@ -387,7 +415,22 @@
                         <DataGridTextColumn
                             Width="80"
                             Binding="{Binding Status}"
-                            Header="Status" />
+                            Header="Status">
+                            <DataGridTextColumn.CellStyle>
+                                <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Status}" Value="Active">
+                                            <Setter Property="Foreground" Value="#6FCF97" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="Suspended">
+                                            <Setter Property="Foreground" Value="#F2C94C" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                        </DataGridTextColumn>
                         <DataGridTextColumn
                             Width="150"
                             Binding="{Binding ModelBounds}"
@@ -395,7 +438,7 @@
                             <DataGridTextColumn.CellStyle>
                                 <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                                     <Setter Property="Padding" Value="4,1" />
-                                    <Setter Property="VerticalContentAlignment" Value="Center" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding BoundsMismatch}" Value="True">
                                             <Setter Property="Foreground" Value="Red" />
@@ -412,6 +455,7 @@
                             <DataGridTextColumn.CellStyle>
                                 <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                                     <Setter Property="Padding" Value="4,1" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding BoundsMismatch}" Value="True">
                                             <Setter Property="Foreground" Value="Red" />
@@ -464,17 +508,47 @@
                     Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
                     CornerRadius="8,8,0,0">
                     <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
                         <TextBlock
+                            Grid.Column="0"
                             VerticalAlignment="Center"
                             FontWeight="SemiBold"
                             Text="Live Wallpaper" />
                         <TextBlock
+                            Grid.Column="1"
                             Margin="8,0,0,0"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center"
                             FontSize="11"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                             Text="{Binding LiveWallpaperSummary}" />
+                        <StackPanel
+                            Grid.Column="2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal">
+                            <ui:Button
+                                Padding="8,2"
+                                Appearance="Secondary"
+                                Click="WallpaperSuspend_Click"
+                                Content="Suspend"
+                                FontSize="11"
+                                IsEnabled="{Binding LiveWallpaperEnabled}"
+                                ToolTip="Pause all live wallpapers" />
+                            <ui:Button
+                                Margin="8,0,0,0"
+                                Padding="8,2"
+                                Appearance="Secondary"
+                                Click="WallpaperResume_Click"
+                                Content="Resume"
+                                FontSize="11"
+                                IsEnabled="{Binding LiveWallpaperEnabled}"
+                                ToolTip="Resume all live wallpapers" />
+                        </StackPanel>
                     </Grid>
                 </Border>
                 <DataGrid
@@ -533,7 +607,25 @@
                         <DataGridTextColumn
                             Width="110"
                             Binding="{Binding Status}"
-                            Header="Status" />
+                            Header="Status">
+                            <DataGridTextColumn.CellStyle>
+                                <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                    <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Status}" Value="Playing">
+                                            <Setter Property="Foreground" Value="#6FCF97" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="Paused">
+                                            <Setter Property="Foreground" Value="#F2C94C" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="Engine down">
+                                            <Setter Property="Foreground" Value="#EB5757" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGridTextColumn.CellStyle>
+                        </DataGridTextColumn>
                         <DataGridTextColumn
                             Width="90"
                             Binding="{Binding PauseReason}"
@@ -572,7 +664,7 @@
             <TextBlock
                 FontSize="10"
                 Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                Text="Idle: when Hide All / minimized / no visible widget, WebView2 is suspended via TrySuspendAsync to cut CPU. Widgets use visibility-aware JS (document.hidden check) and CSS containment. See WebWidgets style.css data-theme handling."
+                Text="Idle = all containers hidden/suspended and wallpapers paused: WebViews suspend, playback stops. Memory headline is private working set (resident, private); Working set adds shared pages, Commit adds paged-out."
                 TextWrapping="Wrap" />
         </Border>
     </Grid>

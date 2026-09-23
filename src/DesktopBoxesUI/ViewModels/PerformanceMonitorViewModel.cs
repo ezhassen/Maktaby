@@ -123,14 +123,19 @@ namespace DesktopBoxesUI.ViewModels
         private long _totalMemoryMB;
         public long TotalMemoryMB { get => _totalMemoryMB; set => SetField(ref _totalMemoryMB, value); }
 
-        /// <summary>Private bytes (commit) of the main process. Task Manager's Processes-tab
-        /// Memory column shows working set, so this is always higher — shown separately so the
-        /// two numbers are never confused again.</summary>
+        /// <summary>Private bytes (commit) of the main process: committed virtual memory
+        /// including paged-out pages, so always higher than resident readings — shown
+        /// separately so the numbers are never confused.</summary>
         private long _totalPrivateMB;
         public long TotalPrivateMB { get => _totalPrivateMB; set => SetField(ref _totalPrivateMB, value); }
 
-        /// <summary>Main working set + WebView2 working sets: matches the collapsed group row
-        /// in Task Manager's Processes tab (which sums a group).</summary>
+        /// <summary>Total working set (resident incl. shared pages). Reads higher than the
+        /// headline private working set by the shared share (.NET/WPF/Edge DLLs).</summary>
+        private long _workingSetMB;
+        public long WorkingSetMB { get => _workingSetMB; set => SetField(ref _workingSetMB, value); }
+
+        /// <summary>Main private working set + WebView2 private working sets: the whole
+        /// app group in one number.</summary>
         private long _groupMemoryMB;
         public long GroupMemoryMB { get => _groupMemoryMB; set => SetField(ref _groupMemoryMB, value); }
 
@@ -308,11 +313,15 @@ namespace DesktopBoxesUI.ViewModels
                 _prevTime = now;
 
                 _process.Refresh();
-                // Working set here: this is what Task Manager's Processes-tab Memory column
-                // shows (resident RAM). PrivateMemorySize64 is commit (private bytes) and is
-                // always higher — previously we showed commit as the headline number, which is
-                // why the monitor read ~579 MB while Task Manager showed ~243 MB.
-                TotalMemoryMB = _process.WorkingSet64 / 1024 / 1024;
+                // Headline = private working set (EX2): resident RAM private to the process.
+                // Total working set additionally includes shared pages (~100+ MB of
+                // .NET/WPF/Edge DLLs), and commit (private bytes) additionally includes
+                // paged-out memory — both read higher and are shown as separate lines so
+                // the three are never confused.
+                TotalMemoryMB = Win32.NativeMethods.Win32Apis.TryGetPrivateWorkingSet(_process.Handle, out ulong pws)
+                    ? (long)(pws / 1024 / 1024)
+                    : _process.WorkingSet64 / 1024 / 1024;
+                try { WorkingSetMB = _process.WorkingSet64 / 1024 / 1024; } catch { }
                 try { TotalPrivateMB = _process.PrivateMemorySize64 / 1024 / 1024; } catch { }
                 // Managed heap split: if Total climbs while this stays flat, the growth is native
                 // (Media Foundation, COM, GDI) rather than .NET objects.
@@ -348,8 +357,8 @@ namespace DesktopBoxesUI.ViewModels
                 // monitor states) PLUS a full descendant scan: every msedgewebview2.exe whose
                 // ancestor chain reaches our PID. BrowserProcessId only yields the top-level
                 // browser process — renderer/GPU/utility children would otherwise be invisible
-                // while Task Manager's group row sums them, which was the second half of the
-                // mismatch. Memory uses WorkingSet64 so the roll-up compares 1:1 with Task Manager.
+                // while the group roll-up below sums them. Memory uses private working set so
+                // the roll-up stays consistent (falls back to total working set per process).
                 var wvIds = new HashSet<int>();
                 var browserIds = new HashSet<int>();
                 try
@@ -412,8 +421,11 @@ namespace DesktopBoxesUI.ViewModels
                     {
                         using var p = Process.GetProcessById(pid);
                         p.Refresh();
-                        long memMB = p.WorkingSet64 / 1024 / 1024;
-                        wvMem += p.WorkingSet64;
+                        long ws = Win32.NativeMethods.Win32Apis.TryGetPrivateWorkingSet(p.Handle, out ulong pwv)
+                            ? (long)pwv
+                            : p.WorkingSet64;
+                        long memMB = ws / 1024 / 1024;
+                        wvMem += ws;
                         wvCount++;
                         var cur = p.TotalProcessorTime;
                         double sample = 0;
@@ -438,7 +450,7 @@ namespace DesktopBoxesUI.ViewModels
                 HasWebView2Processes = wvCount > 0;
                 WebView2MemoryMB = wvMem / 1024 / 1024;
                 WebView2Cpu = Math.Clamp(wvCpu, 0, 100);
-                // Group roll-up: what Task Manager's collapsed group row shows.
+                // Group roll-up: main + WebView2 for the whole app group.
                 GroupMemoryMB = TotalMemoryMB + WebView2MemoryMB;
                 GroupCpu = Math.Clamp(TotalCpu + WebView2Cpu, 0, 100);
                 try
@@ -488,7 +500,7 @@ namespace DesktopBoxesUI.ViewModels
                     else if (win is Views.Containers.WebWidgetWindow cww)
                     {
                         name = cww.Title ?? "Widget";
-                        type = "Web";
+                        type = "Widget (Web)";
                         var model = cww.ContainerViewModel.Bounds;
                         modelBounds = FormatBounds(model.X, model.Y, model.Width, model.Height);
                         var live = GetLiveBounds(cww);
@@ -508,7 +520,7 @@ namespace DesktopBoxesUI.ViewModels
                     else if (win is Views.Containers.NativeWidgetWindow nww)
                     {
                         name = nww.Title ?? "Widget";
-                        type = "Native";
+                        type = "Widget (Native)";
                         var model = nww.ContainerViewModel.Bounds;
                         modelBounds = FormatBounds(model.X, model.Y, model.Width, model.Height);
                         var live = GetLiveBounds(nww);
@@ -550,15 +562,17 @@ namespace DesktopBoxesUI.ViewModels
                 }
                 foreach (var r in toRemove) Items.Remove(r);
 
-                // Idle detection: if all widget windows hidden/minimized or AllBoxesHidden, we are idle
+                RefreshLiveWallpaper();
+
+                // Idle badge covers all containers AND live wallpapers: idle only when every
+                // container is hidden/suspended and no wallpaper is playing (Hide All counts).
                 var dm = App.Services?.GetService<DesktopManager>();
                 bool allHidden = dm?.AllBoxesHidden == true;
-                bool anyVisibleWidget = Items.Any(i => (i.Type == "Web" || i.Type == "Native") && i.IsVisible && !i.IsSuspended);
-                IsIdleMode = allHidden || !anyVisibleWidget;
+                bool anyActiveContainer = Items.Any(i => i.IsVisible && !i.IsSuspended);
+                bool anyWallpaperPlaying = LiveWallpaperMonitors.Any(m => m.IsPlaying);
+                IsIdleMode = allHidden || (!anyActiveContainer && !anyWallpaperPlaying);
                 try { IsAppDisabled = dm?.IsDisabled == true; } catch { }
                 try { LayoutAnchorStatus = dm?.GetLayoutAnchorStatus() ?? "DesktopManager unavailable"; } catch { }
-
-                RefreshLiveWallpaper();
             }
             catch { }
         }

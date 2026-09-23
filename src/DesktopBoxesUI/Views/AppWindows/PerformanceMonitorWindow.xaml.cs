@@ -1,4 +1,5 @@
 using DesktopBoxesUI.ViewModels;
+using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using Wpf.Ui.Controls;
 
@@ -148,6 +149,18 @@ namespace DesktopBoxesUI.Views
         private void WebView2Header_Toggle(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
             try { _vm.IsWebView2Expanded = !_vm.IsWebView2Expanded; } catch { }
+        }
+
+                private void WallpaperSuspend_Click(object sender, RoutedEventArgs e)
+        {
+            try { App.Services?.GetService<LiveWallpaperManager>()?.SetPlaying(false); } catch { }
+            _vm.Refresh();
+        }
+
+        private void WallpaperResume_Click(object sender, RoutedEventArgs e)
+        {
+            try { App.Services?.GetService<LiveWallpaperManager>()?.SetPlaying(true); } catch { }
+            _vm.Refresh();
         }
 
         private void SuspendIdle_Click(object sender, RoutedEventArgs e)        {

@@ -448,6 +448,7 @@ public partial class App : Application
         };
         tray.ExitRequested += (_, _) =>
         {
+            tray.contextMenu?.IsOpen = false;
             Shutdown();
         };
         tray.ToggleHideAllRequested += (_, _) =>

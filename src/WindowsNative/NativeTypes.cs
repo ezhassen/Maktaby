@@ -194,6 +194,30 @@ public struct MEMORY_BASIC_INFORMATION
     public uint Type;
 }
 
+/// <summary>Extended memory counters from GetProcessMemoryInfo. Size the query for
+/// EX2 (Win8+) to also receive <see cref="PrivateWorkingSetSize"/> — resident RAM private
+/// to the process (excludes shared pages).</summary>
+[StructLayout(LayoutKind.Sequential)]
+public struct PROCESS_MEMORY_COUNTERS_EX2
+{
+    public uint cb;
+    public uint PageFaultCount;
+    public UIntPtr PeakWorkingSetSize;
+    public UIntPtr WorkingSetSize;
+    public UIntPtr QuotaPeakPagedPoolUsage;
+    public UIntPtr QuotaPagedPoolUsage;
+    public UIntPtr QuotaPeakNonPagedPoolUsage;
+    public UIntPtr QuotaNonPagedPoolUsage;
+    public UIntPtr PagefileUsage;
+    public UIntPtr PeakPagefileUsage;
+    public UIntPtr PrivateUsage;
+    public UIntPtr PrivateWorkingSetSize;
+    // EX2 ends here for sizing purposes: SharedCommitUsage MUST be present so cb equals
+    // the true sizeof(EX2) (96). Without it the API succeeds but leaves
+    // PrivateWorkingSetSize zero (verified with a probe harness).
+    public ulong SharedCommitUsage;
+}
+
 /// <summary>Per-process I/O accounting from GetProcessIoCounters (all cumulative since
 /// process start; transfer counts are bytes covering disk, network and device I/O).</summary>
 [StructLayout(LayoutKind.Sequential)]
