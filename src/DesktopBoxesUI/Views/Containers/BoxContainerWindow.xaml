@@ -96,6 +96,32 @@
                 </DataTrigger>
             </Style.Triggers>
         </Style>
+
+        <!--
+            Inline title rename box: blends into the header (inherits its background so theme
+            changes follow), never grows taller than the header strip, generous padding and
+            min width so caret placement at the text edges is easy.
+        -->
+        <Style x:Key="TitleRenameBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="{Binding Background, ElementName=HeaderBorder}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="CaretBrush" Value="White" />
+            <!--  Same typeface as the title it replaces: bound, not copied, so theme/font
+              changes can never drift the two apart.  -->
+            <Setter Property="FontFamily" Value="{Binding FontFamily, ElementName=TitleText}" />
+            <Setter Property="FontSize" Value="{Binding FontSize, ElementName=TitleText}" />
+            <Setter Property="FontWeight" Value="{Binding FontWeight, ElementName=TitleText}" />
+            <Setter Property="FontStyle" Value="{Binding FontStyle, ElementName=TitleText}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="MaxHeight" Value="{Binding ActualHeight, ElementName=HeaderBorder}" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="SelectionBrush" Value="#2B88D8" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Cursor" Value="IBeam" />
+        </Style>
     </containers:WidgetWindow.Resources>
     <Border
         x:Name="RootBorder"
@@ -122,7 +148,8 @@
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Stretch"
                             Background="Transparent"
-                            MouseLeftButtonDown="TitleArea_MouseLeftButtonDown">
+                            MouseLeftButtonDown="TitleArea_MouseLeftButtonDown"
+                            MouseRightButtonDown="TitleArea_MouseRightButtonDown">
                             <Grid
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
@@ -144,7 +171,7 @@
                                 <TextBlock
                                     x:Name="TitleText"
                                     Grid.Column="1"
-                                    MinWidth="40"
+                                    MinWidth="80"
                                     MaxWidth="220"
                                     VerticalAlignment="Center"
                                     Foreground="White"
@@ -155,13 +182,16 @@
                             </Grid>
                             <TextBox
                                 x:Name="TitleEdit"
-                                MinWidth="120"
+                                MinWidth="160"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 KeyDown="TitleEdit_KeyDown"
                                 LostFocus="TitleEdit_LostFocus"
+                                MaxLength="64"
+                                Style="{StaticResource TitleRenameBoxStyle}"
                                 Text="{Binding ActiveBox.Name, UpdateSourceTrigger=PropertyChanged}"
                                 TextAlignment="Center"
+                                ToolTip="Rename the box (max 64 characters)"
                                 Visibility="Collapsed" />
                         </Grid>
                         <Button
@@ -189,6 +219,15 @@
                                         Click="MenuHide_Click"
                                         Header="Hide"
                                         Icon="{StaticResource ItemIcon_HideBoxe}" />
+                                    <MenuItem
+                                        x:Name="MenuRenameItem"
+                                        Click="MenuRename_Click"
+                                        Header="Rename"
+                                        ToolTip="Rename the active tab">
+                                        <MenuItem.Icon>
+                                            <ui:SymbolIcon Symbol="Edit24" />
+                                        </MenuItem.Icon>
+                                    </MenuItem>
                                     <Separator />
                                     <MenuItem
                                         x:Name="MenuAddTab"

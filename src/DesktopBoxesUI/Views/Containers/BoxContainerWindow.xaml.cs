@@ -54,6 +54,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     private bool _mouseOver;
     private bool _keyboardFocused;
     private bool _isRenaming;
+    private string? _renameOriginal;
 
     // Effective roll direction used for geometry/orientation. Starts at Top and follows either the
     // explicit user choice (_vm.RollDirection) or snap-based detection when _vm.RollDirection is null.
@@ -164,6 +165,10 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         // watcher while invisible; re-showing refreshes through ManageFolderWatcher if events
         // were missed. Self-subscription dies with the window — no detach needed.
         IsVisibleChanged += (_, _) => ManageFolderWatcher();
+        // Keep chrome pinned while the menu is open: opening it moves both the mouse and the
+        // keyboard focus out of the window, which would otherwise hide the chrome underneath it.
+        BoxMenu.Opened += (_, _) => UpdateChrome();
+        BoxMenu.Closed += (_, _) => UpdateChrome();
         BoxMenu.Opened += BoxMenu_Opened;
         _vm.PropertyChanged += OnContainerPropertyChanged;
     }
@@ -312,6 +317,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     /// otherwise only the title (and content) remain, giving a clean desktop look.
     /// During an OLE drag the WPF `MouseLeave` fires (capture lost) while the physical cursor
     /// is still over the window – keep chrome visible via drag state + Win32 hit-test.
+    /// An open context menu also pins the chrome: it pulls mouse and focus out of the window.
     /// </summary>
     public override void UpdateChrome()
     {
@@ -322,7 +328,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
             // WPF MouseLeave is unreliable during capture (OLE drag) – sync _mouseOver from Win32 cursor
             _mouseOver = IsCursorOverWindow();
         }
-        bool show = isBox && (_mouseOver || _keyboardFocused);
+        bool show = isBox && (_mouseOver || _keyboardFocused || BoxMenu?.IsOpen == true);
         Visibility headerButtonsVisibility = show ? Visibility.Visible : Visibility.Collapsed;
         MenuButton.Visibility = headerButtonsVisibility;
         RollButton.Visibility = headerButtonsVisibility;
@@ -722,6 +728,25 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
 
         _lastTitleClick = DateTime.UtcNow;
         _drag.BeginTitleDrag(e);
+    }
+
+    private void TitleArea_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        try
+        {
+            // Commits an in-progress rename first so the menu never opens over the editor.
+            if (_isRenaming) CommitRename();
+            BoxMenu.PlacementTarget = HeaderBorder;
+            BoxMenu.Placement = PlacementMode.MousePoint;
+            BoxMenu.IsOpen = true;
+            e.Handled = true;
+        }
+        catch { }
+    }
+
+    private void MenuRename_Click(object sender, RoutedEventArgs e)
+    {
+        try { BeginRename(); } catch { }
     }
 
     private void TitleArea_MouseMove(object sender, MouseEventArgs e)
@@ -1143,6 +1168,9 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         }
 
         _isRenaming = true;
+        // Snapshot: the box commits every keystroke (PropertyChanged), so cancel must
+        // restore rather than just hide the editor.
+        _renameOriginal = _vm.ActiveBox.Name;
         TitleEdit.Text = _vm.ActiveBox.Name;
         TitleText.Visibility = Visibility.Collapsed;
         TitleEdit.Visibility = Visibility.Visible;
@@ -1160,9 +1188,18 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         }
         else if (e.Key == Key.Escape)
         {
+            try
+            {
+                if (_vm.ActiveBox != null && _renameOriginal != null)
+                    _vm.ActiveBox.Name = _renameOriginal;
+            }
+            catch { }
+            _renameOriginal = null;
             _isRenaming = false;
             TitleEdit.Visibility = Visibility.Collapsed;
+            TitleText.GetBindingExpression(TextBlock.TextProperty)?.UpdateTarget();
             TitleText.Visibility = Visibility.Visible;
+            e.Handled = true;
         }
     }
 
@@ -1174,6 +1211,7 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         }
 
         _isRenaming = false;
+        _renameOriginal = null;
 
         if (_vm.ActiveBox != null)
         {
