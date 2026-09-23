@@ -43,6 +43,7 @@ public partial class App : Application
     private uint _taskbarCreatedMsg;
     private bool _shellRecoveryPending;
     private bool _isSecondInstanceExit;
+    private bool _isExiting;
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -137,6 +138,16 @@ public partial class App : Application
         // Stop the minimize-prevention hooks from fighting window teardown (owned chains collapsing
         // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
         Win32Apis.SystemTeardown = true;
+        _isExiting = true;
+        // Drop the shell icon before the UI thread blocks in teardown (ghost-icon prevention
+        // on every exit path; the Exit-menu path already did this — dispose is idempotent).
+        try
+        {
+            if (_trayHost != null) _trayHost.Content = null;
+            (_tray as IDisposable)?.Dispose();
+            _tray = null;
+        }
+        catch { }
         try { Services.GetRequiredService<LiveWallpaperManager>().Shutdown(); } catch { }
 
 
@@ -446,10 +457,42 @@ public partial class App : Application
             ApplyTheme(theme);
             ApplyBoxAppearance();
         };
-        tray.ExitRequested += (_, _) =>
+        tray.ExitRequested += async (_, _) =>
         {
-            tray.contextMenu?.IsOpen = false;
-            Shutdown();
+            if (_isExiting) return;
+            _isExiting = true;
+            // Disarm first: windows close inside Shutdown() and the minimize-prevention
+            // hooks would otherwise fight each hide (re-show), stalling teardown window
+            // by window. Previously this was only set in OnExit — after windows closed.
+            Win32Apis.SystemTeardown = true;
+            // Unregister the shell icon NOW (fast, never blocks): instant feedback, and no
+            // ghost icon lingers while the UI thread is buried in teardown below.
+            try { tray.contextMenu.IsOpen = false; } catch { }
+            try
+            {
+                if (ReferenceEquals(_trayHost?.Content, tray))
+                    _trayHost!.Content = null;
+                (tray as IDisposable)?.Dispose();
+                if (ReferenceEquals(_tray, tray))
+                    _tray = null;
+            }
+            catch { }
+            await Task.Delay(200);
+            // Defer the blocking teardown one dispatcher pass so the menu unpaints and
+            // releases mouse capture first: Render outranks Background, so by the time this
+            // runs the menu is visibly gone instead of frozen on screen for the whole
+            // teardown (engine dispose waits, WebView2 disposal, shell round-trips).
+            // Setting IsOpen=false alone can never work — the close needs a render pass
+            // the synchronous Shutdown() never yields.
+            try
+            {
+                await Dispatcher.BeginInvoke(new Action(Shutdown), System.Windows.Threading.DispatcherPriority.Background);
+            }
+            catch
+            {
+                // Dispatcher already draining (e.g. Exit during logoff): fall back to direct.
+                try { Shutdown(); } catch { }
+            }
         };
         tray.ToggleHideAllRequested += (_, _) =>
         {
