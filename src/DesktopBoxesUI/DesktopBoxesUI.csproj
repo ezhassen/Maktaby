@@ -43,6 +43,8 @@
 
  		<PackageReference Include="CommunityToolkit.Mvvm" />
  		<PackageReference Include="Microsoft.Web.WebView2" />
+		<!-- Code editors in WidgetDataWindow (HTML/CSS/JS highlighting). -->
+		<PackageReference Include="AvalonEdit" />
 		<!-- Runtime compile of native-widget sources; see NativeWidgetService. -->
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
  	</ItemGroup>

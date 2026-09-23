@@ -31,7 +31,8 @@ Follow it to keep the architecture clean and the build green.
 - Keep the NuGet surface small. Don't add packages without a reason. Currently allowed:
   `Microsoft.Extensions.DependencyInjection`,
   `CommunityToolkit.Mvvm`, `Wpf.Ui` (v4.3.0) and `Wpf.Ui.Tray` (v4.3.0) — the user explicitly asked for
-  them to provide the modern window chrome, view-model helpers and tray styling. Reference WPF-UI resource
+  them to provide the modern window chrome, view-model helpers and tray styling. Plus `AvalonEdit`
+  (6.3.1.120) — user-approved for HTML/CSS/JS highlighting in `WidgetDataWindow` only. Reference WPF-UI resource
   dictionaries via `ui:ThemesDictionary` / `ui:ControlsDictionary` (`App.xaml` already does); legacy pack URIs
   (`/Wpf.Ui;component/...`) are obsolete. The window type is `Wpf.Ui.Controls.FluentWindow`.
 - For WebView2 init use provided userData folder directly as the engine will create the "EBWebView" shared env folder in it
