@@ -12,7 +12,7 @@ namespace DesktopBoxesUI.Views.AppWindows;
 /// plugin exposes settings (<see cref="IWidgetSettingsProvider"/> with entries). Edits apply
 /// live to the widget; <b>Save</b> persists to disk, <b>Cancel</b> reverts to the values the
 /// window opened with, <b>Reset</b> restores declared defaults (persist on Save).</summary>
-public partial class WidgetSettingsWindow : Wpf.Ui.Controls.FluentWindow
+public partial class WidgetSettingsWindow : AppFluentWindow
 {
     private readonly NativeWidgetInfo _info;
     private readonly IWidgetSettingsProvider _provider;
@@ -28,6 +28,12 @@ public partial class WidgetSettingsWindow : Wpf.Ui.Controls.FluentWindow
         _svc = svc;
         WindowTitle = $"{(string.IsNullOrWhiteSpace(info.Manifest.Name) ? info.Slug : info.Manifest.Name)} Settings";
         InitializeComponent();
+        // This dialog titles from its own WindowTitle property (not Window.Title) and hides
+        // the min/max buttons: rebind/adjust the shared title bar accordingly.
+        TitleBar.ShowMaximize = false;
+        TitleBar.ShowMinimize = false;
+        TitleBar.SetBinding(Wpf.Ui.Controls.TitleBar.TitleProperty,
+            new System.Windows.Data.Binding(nameof(WindowTitle)) { Source = this });
         foreach (var setting in provider.Settings)
         {
             _initial[setting.Name] = setting.Value;

@@ -5,7 +5,7 @@ using Wpf.Ui.Controls;
 
 namespace DesktopBoxesUI.Views
 {
-    public partial class PerformanceMonitorWindow : FluentWindow
+    public partial class PerformanceMonitorWindow : AppWindows.AppFluentWindow
     {
         private readonly PerformanceMonitorViewModel _vm;
 

@@ -17,7 +17,7 @@ using WPFShared.Interfaces;
 
 namespace DesktopBoxesUI.Views;
 
-public partial class WidgetDataWindow : FluentWindow, IContentDialogHostProvider
+public partial class WidgetDataWindow : AppWindows.AppFluentWindow, IContentDialogHostProvider
 {
     private readonly IWebWidgetService _svc;
     private readonly IDialogService _dialogs;

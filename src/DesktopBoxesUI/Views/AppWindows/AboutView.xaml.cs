@@ -15,11 +15,14 @@ namespace DesktopBoxesUI.Views;
 /// author/copyright, and a link to the GitHub project page. The GitHub logo follows the applied
 /// app theme (dark variant on dark, light variant on light).
 /// </summary>
-public partial class AboutView : FluentWindow
+public partial class AboutView : AppWindows.AppFluentWindow
 {
     public AboutView()
     {
         InitializeComponent();
+        // Preserve this dialog's compact chrome (was set on its own TitleBar before).
+        TitleBar.Height = 26;
+        TitleBar.ShowMaximize = false;
         PopulateAssemblyInfo();
         ApplyGithubLogoTheme();
 

@@ -1,28 +1,24 @@
-<ui:FluentWindow
+<appwin:AppFluentWindow
     x:Class="DesktopBoxesUI.Views.AboutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:appwin="clr-namespace:DesktopBoxesUI.Views.AppWindows"
     Title="About"
     Width="440"
     Height="420"
-    ExtendsContentIntoTitleBar="True"
     Icon="pack://application:,,,/Assets/app.ico"
     MouseLeftButtonDown="Root_MouseLeftButtonDown"
     PreviewKeyDown="Window_PreviewKeyDown"
     ResizeMode="NoResize"
-    WindowBackdropType="Mica"
-    WindowCornerPreference="Round"
     WindowStartupLocation="CenterScreen">
 
     <Grid RowDefinitions="auto, *">
-        <ui:TitleBar
-            x:Name="TitleBar"
-            Title="About"
+        <!--  Shared title bar (AppFluentWindow): title syncs from Window.Title.  -->
+        <ContentControl
             Grid.Row="0"
-            Height="26"
-            ShowMaximize="False"
-            ShowMinimize="True" />
+            Content="{Binding TitleBar, RelativeSource={RelativeSource AncestorType={x:Type appwin:AppFluentWindow}}}"
+            Focusable="False" />
 
 
         <Grid Grid.Row="1" Margin="24,2,24,12">
@@ -109,4 +105,4 @@
         </Grid>
     </Grid>
 
-</ui:FluentWindow>
+</appwin:AppFluentWindow>

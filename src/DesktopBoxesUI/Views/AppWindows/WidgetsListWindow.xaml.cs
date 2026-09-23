@@ -19,7 +19,7 @@ public enum WidgetGalleryKind
     Native,
 }
 
-public partial class WidgetsListWindow : FluentWindow, IContentDialogHostProvider, INotifyPropertyChanged
+public partial class WidgetsListWindow : AppWindows.AppFluentWindow, IContentDialogHostProvider, INotifyPropertyChanged
 {
     private readonly IWebWidgetService _svc;
     private readonly INativeWidgetService _native;

@@ -1,16 +1,14 @@
-<ui:FluentWindow
+<appwin:AppFluentWindow
     x:Class="DesktopBoxesUI.Views.PerformanceMonitorWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:appwin="clr-namespace:DesktopBoxesUI.Views.AppWindows"
     Title="Performance Monitor"
     Width="760"
     Height="800"
     MinWidth="640"
     MinHeight="480"
-    ExtendsContentIntoTitleBar="True"
-    WindowBackdropType="Mica"
-    WindowCornerPreference="Round"
     WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
@@ -22,15 +20,11 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar
-            Title="Performance Monitor"
+        <!--  Shared title bar (AppFluentWindow): title syncs from Window.Title.  -->
+        <ContentControl
             Grid.Row="0"
-            ShowMaximize="True"
-            ShowMinimize="True">
-            <ui:TitleBar.Icon>
-                <ui:ImageIcon Source="/Assets/app.ico" />
-            </ui:TitleBar.Icon>
-        </ui:TitleBar>
+            Content="{Binding TitleBar, RelativeSource={RelativeSource AncestorType={x:Type appwin:AppFluentWindow}}}"
+            Focusable="False" />
 
         <!--  Summary  -->
         <Border
@@ -668,4 +662,4 @@
                 TextWrapping="Wrap" />
         </Border>
     </Grid>
-</ui:FluentWindow>
+</appwin:AppFluentWindow>

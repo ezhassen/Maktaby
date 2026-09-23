@@ -1,16 +1,14 @@
-<ui:FluentWindow
+<appwin:AppFluentWindow
     x:Class="DesktopBoxesUI.Views.AppWindows.WidgetSettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:appwin="clr-namespace:DesktopBoxesUI.Views.AppWindows"
     Title="Widget Settings"
     Width="380"
     Height="480"
     MinWidth="320"
     MinHeight="240"
-    ExtendsContentIntoTitleBar="True"
-    WindowBackdropType="Mica"
-    WindowCornerPreference="Round"
     WindowStartupLocation="CenterOwner">
     <Grid>
         <Grid.RowDefinitions>
@@ -19,11 +17,11 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar
-            Title="{Binding WindowTitle, RelativeSource={RelativeSource AncestorType=Window}}"
+        <!--  Shared title bar (AppFluentWindow); title rebound to WindowTitle below.  -->
+        <ContentControl
             Grid.Row="0"
-            ShowMaximize="False"
-            ShowMinimize="False" />
+            Content="{Binding TitleBar, RelativeSource={RelativeSource AncestorType={x:Type appwin:AppFluentWindow}}}"
+            Focusable="False" />
 
         <ScrollViewer
             Grid.Row="1"
@@ -60,4 +58,4 @@
             </Grid>
         </Border>
     </Grid>
-</ui:FluentWindow>
+</appwin:AppFluentWindow>

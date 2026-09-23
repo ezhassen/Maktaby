@@ -35,11 +35,15 @@ Follow it to keep the architecture clean and the build green.
   (6.3.1.120) — user-approved for HTML/CSS/JS highlighting in `WidgetDataWindow` only. Reference WPF-UI resource
   dictionaries via `ui:ThemesDictionary` / `ui:ControlsDictionary` (`App.xaml` already does); legacy pack URIs
   (`/Wpf.Ui;component/...`) are obsolete. The window type is `Wpf.Ui.Controls.FluentWindow`.
-- Every `ui:FluentWindow` in `Views/AppWindows/` must set `ExtendsContentIntoTitleBar="True"`,
-  `WindowBackdropType="Mica"` and `WindowCornerPreference="Round"` (see `PerformanceMonitorWindow`).
-  Without them an open window keeps the background/controls of the theme it was created with:
-  switching the app theme leaves the window stale (light cards/inputs in dark mode) until it is
-  closed and reopened. `LoadingWindow` is exempt (plain `Window` splash, intentionally fixed skin).
+- Every `ui:FluentWindow` in `Views/AppWindows/` must derive from `AppFluentWindow`
+  (`Views/AppWindows/AppFluentWindow.cs`), never directly from `FluentWindow`: the base sets
+  `ExtendsContentIntoTitleBar="True"`, `WindowBackdropType="Mica"`,
+  `WindowCornerPreference="Round"` plus the app icon, and provides a prebuilt `TitleBar`
+  (host it in row 0 via a `ContentControl`, tweak only `ShowMaximize`/`ShowMinimize`).
+  Without those props an open window keeps the background/controls of the theme it was created
+  with: switching the app theme leaves the window stale (light cards/inputs in dark mode)
+  until it is closed and reopened. `LoadingWindow` is exempt (plain `Window` splash,
+  intentionally fixed skin).
 - For WebView2 init use provided userData folder directly as the engine will create the "EBWebView" shared env folder in it
 - Build must stay warning-light and succeed.
 

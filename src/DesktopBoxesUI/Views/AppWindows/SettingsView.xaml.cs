@@ -24,7 +24,7 @@ namespace DesktopBoxesUI.Views;
 /// the WPF-UI application theme. The left vertical list navigates a single scrollable column of
 /// sections (Appearance / Boxes / General / Snapshot).
 /// </summary>
-public partial class SettingsView : FluentWindow, IContentDialogHostProvider
+public partial class SettingsView : AppWindows.AppFluentWindow, IContentDialogHostProvider
 {
     public SettingsView(SettingsViewModel vm)
     {

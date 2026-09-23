@@ -1,18 +1,15 @@
-<ui:FluentWindow
+<appwin:AppFluentWindow
     x:Class="DesktopBoxesUI.Views.WidgetDataWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:appwin="clr-namespace:DesktopBoxesUI.Views.AppWindows"
     xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
     Title="Widget Editor"
     Width="1100"
     Height="700"
     MinWidth="900"
     MinHeight="500"
-    ExtendsContentIntoTitleBar="True"
-    WindowBackdropType="Mica"
-    WindowCornerPreference="Round"
-    Icon="/Assets/app.ico"
     WindowStartupLocation="CenterScreen">
     <Grid>
         <Grid.RowDefinitions>
@@ -22,15 +19,11 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <ui:TitleBar
-            Title="Widget Editor"
+        <!--  Shared title bar (AppFluentWindow): title syncs from Window.Title.  -->
+        <ContentControl
             Grid.Row="0"
-            ShowMaximize="True"
-            ShowMinimize="True">
-            <ui:TitleBar.Icon>
-                <ui:ImageIcon Source="/Assets/app.ico" />
-            </ui:TitleBar.Icon>
-        </ui:TitleBar>
+            Content="{Binding TitleBar, RelativeSource={RelativeSource AncestorType={x:Type appwin:AppFluentWindow}}}"
+            Focusable="False" />
 
         <!--  Manifest fields  -->
         <Border
@@ -357,4 +350,4 @@
             Grid.Row="0"
             Grid.RowSpan="3" />
     </Grid>
-</ui:FluentWindow>
+</appwin:AppFluentWindow>
