@@ -6,10 +6,13 @@
     Title="About"
     Width="440"
     Height="420"
+    ExtendsContentIntoTitleBar="True"
     Icon="pack://application:,,,/Assets/app.ico"
     MouseLeftButtonDown="Root_MouseLeftButtonDown"
     PreviewKeyDown="Window_PreviewKeyDown"
     ResizeMode="NoResize"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
     WindowStartupLocation="CenterScreen">
 
     <Grid RowDefinitions="auto, *">
@@ -20,6 +23,7 @@
             Height="26"
             ShowMaximize="False"
             ShowMinimize="True" />
+
 
         <Grid Grid.Row="1" Margin="24,2,24,12">
             <StackPanel VerticalAlignment="Center">

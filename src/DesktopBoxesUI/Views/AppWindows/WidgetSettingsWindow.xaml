@@ -8,6 +8,9 @@
     Height="480"
     MinWidth="320"
     MinHeight="240"
+    ExtendsContentIntoTitleBar="True"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
     WindowStartupLocation="CenterOwner">
     <Grid>
         <Grid.RowDefinitions>

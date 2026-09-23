@@ -9,6 +9,9 @@
     Height="700"
     MinWidth="900"
     MinHeight="500"
+    ExtendsContentIntoTitleBar="True"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
     Icon="/Assets/app.ico"
     WindowStartupLocation="CenterScreen">
     <Grid>

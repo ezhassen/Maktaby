@@ -9,6 +9,9 @@
     Height="640"
     MinWidth="560"
     MinHeight="480"
+    ExtendsContentIntoTitleBar="True"
+    WindowBackdropType="Mica"
+    WindowCornerPreference="Round"
     Icon="pack://application:,,,/Assets/app.ico"
     WindowStartupLocation="CenterScreen">
     <ui:FluentWindow.Resources>
