@@ -2,8 +2,8 @@
     x:Class="DesktopBoxesUI.Views.PerformanceMonitorWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:appwin="clr-namespace:DesktopBoxesUI.Views.AppWindows"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Performance Monitor"
     Width="760"
     Height="800"
@@ -98,6 +98,23 @@
                             </MultiBinding>
                         </TextBlock.Text>
                     </TextBlock>
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                        Text="{Binding RenderTier}"
+                        ToolTip="WPF render tier: HW (tiers 1-2, GPU composition) vs SW fallback (tier 0 — everything rasterized through GDI: high CPU, GDI churn, GBs native). A post-resume drop to SW names the driver, not a handle leak.">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSoftwareRendering}" Value="True">
+                                        <Setter Property="Foreground" Value="#EB5757" />
+                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center">
                     <TextBlock
@@ -114,9 +131,9 @@
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding WebView2Cpu, StringFormat={}{0:0.0}% CPU}"
-                            ToolTip="Summed CPU share across all our WebView2 processes, sampled every second." />
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="{Binding WebView2Cpu, StringFormat={}{0:0.0}% CPU}"
+                        ToolTip="Summed CPU share across all our WebView2 processes, sampled every second." />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
@@ -501,28 +518,18 @@
                     Padding="8,4"
                     Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
                     CornerRadius="8,8,0,0">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
+                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="*,*">
                         <TextBlock
+                            Grid.Row="0"
                             Grid.Column="0"
                             VerticalAlignment="Center"
                             FontWeight="SemiBold"
                             Text="Live Wallpaper" />
-                        <TextBlock
+                        <StackPanel
+                            Grid.Row="0"
                             Grid.Column="1"
                             Margin="8,0,0,0"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            FontSize="11"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding LiveWallpaperSummary}" />
-                        <StackPanel
-                            Grid.Column="2"
-                            Margin="8,0,0,0"
                             VerticalAlignment="Center"
                             Orientation="Horizontal">
                             <ui:Button
@@ -543,6 +550,17 @@
                                 IsEnabled="{Binding LiveWallpaperEnabled}"
                                 ToolTip="Resume all live wallpapers" />
                         </StackPanel>
+
+                        <TextBlock
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                            Text="{Binding LiveWallpaperSummary}"
+                            TextWrapping="Wrap" />
                     </Grid>
                 </Border>
                 <DataGrid

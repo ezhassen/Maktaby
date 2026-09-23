@@ -148,6 +148,24 @@ namespace DesktopBoxesUI.ViewModels
         private uint _userHandles;
         public uint UserHandles { get => _userHandles; set => SetField(ref _userHandles, value); }
 
+        /// <summary>WPF render tier readout: HW (tiers 1-2, GPU composition) vs SW fallback
+        /// (tier 0 — everything rasterized through GDI: high CPU, GDI churn, GBs native).</summary>
+        private string _renderTier = "Render: ?";
+        public string RenderTier { get => _renderTier; set => SetField(ref _renderTier, value); }
+
+        private bool _isSoftwareRendering;
+        public bool IsSoftwareRendering { get => _isSoftwareRendering; set => SetField(ref _isSoftwareRendering, value); }
+
+        private static (string Text, bool IsSoftware) DescribeRenderTier()
+        {
+            try
+            {
+                int tier = System.Windows.Media.RenderCapability.Tier >> 16;
+                return tier > 0 ? ($"Render: HW (tier {tier})", false) : ("Render: SW fallback! (tier 0)", true);
+            }
+            catch { return ("Render: ?", false); }
+        }
+
         private double _groupCpu;
         public double GroupCpu { get => _groupCpu; set => SetField(ref _groupCpu, value); }
 
@@ -330,6 +348,9 @@ namespace DesktopBoxesUI.ViewModels
                 // from driver-mapping / pool growth. See property docs.
                 try { GdiHandles = Win32.NativeMethods.Win32Apis.GetGuiHandleCount(_process.Handle, false); } catch { }
                 try { UserHandles = Win32.NativeMethods.Win32Apis.GetGuiHandleCount(_process.Handle, true); } catch { }
+                // GPU-fallback sensor (UI thread here): a post-resume driver drop to tier 0
+                // explains sawtooth GDI in the thousands + GBs native + idle CPU with flat heap.
+                try { (RenderTier, IsSoftwareRendering) = DescribeRenderTier(); } catch { }
 
                 // I/O throughput (read + write bytes/sec across disk/network/device).
                 try

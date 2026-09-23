@@ -102,6 +102,24 @@ public partial class App : Application
         // starts collapsing our owned window chains, so teardown is not fought.
         SessionEnding += (_, _) => Win32Apis.SystemTeardown = true;
 
+        // GPU-fallback forensics: a post-resume driver degradation can drop WPF to software
+        // rendering (tier 0) — GDI churn in the thousands, GBs of native memory, idle CPU,
+        // flat managed heap. Tier changes are rare and event-driven; log them so the next
+        // post-resume blowup is attributable (see Performance Monitor "Render" line).
+        try
+        {
+            System.Windows.Media.RenderCapability.TierChanged += (_, _) =>
+            {
+                try
+                {
+                    int tier = System.Windows.Media.RenderCapability.Tier >> 16;
+                    Log.Information("WPF render tier changed to {Tier} ({Mode})", tier, tier > 0 ? "hardware" : "SOFTWARE fallback");
+                }
+                catch { }
+            };
+        }
+        catch { }
+
         // Watch the live desktop icon size ONLY while it is actually used (DefaultBoxIconSize is
         // Auto/null). With an explicit value pinned, monitoring is suspended.
         SyncDesktopIconSizeWatcher();

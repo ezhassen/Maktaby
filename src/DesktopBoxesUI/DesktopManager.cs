@@ -1317,21 +1317,21 @@ public sealed class DesktopManager
         {
             window = new WebWidgetWindow(vm)
             {
-                ShowActivated = showActivated
+                ShowActivated = false
             };
         }
         else if (vm.Type == DesktopItemContainerType.NativeWidget)
         {
             window = new NativeWidgetWindow(vm)
             {
-                ShowActivated = showActivated
+                ShowActivated = false
             };
         }
         else
         {
             window = new BoxContainerWindow(vm, _mainVm, _positioning, SaveAsyncFireAndForget)
             {
-                ShowActivated = showActivated
+                ShowActivated = false
             };
         }
 
@@ -1347,6 +1347,7 @@ public sealed class DesktopManager
         //    foregroundWindowHwnd = User32.GetForegroundWindow();
         //}
         window.Show();
+        if (showActivated) window.Activate();
         // A window created while its monitor is already covered must start suspended.
         ApplySupervisorStateToWindow(window);
 
@@ -1567,7 +1568,18 @@ public sealed class DesktopManager
                 if (!TryGetMonitorDevice(window, monitors, out var actual)) continue;
                 if (!string.Equals(actual, device, StringComparison.OrdinalIgnoreCase)) continue;
                 bool resume = reason == PauseReason.None;
-                if (window is Views.Containers.WebWidgetWindow cssWindow)
+                //Just hide it for now
+                if (resume)
+                {
+                    window.Show();
+                }
+                else
+                {
+                    window.Hide();
+                }
+
+
+                /*if (window is Views.Containers.WebWidgetWindow cssWindow)
                 {
                     var control = cssWindow.WidgetControl;
                     if (control is null) continue;
@@ -1592,7 +1604,7 @@ public sealed class DesktopManager
                         else plugin.Suspend();
                     }
                     catch { }
-                }
+                }*/
             }
             catch (Exception ex) { Serilog.Log.Error(ex, "Widget auto-pause failed for a window"); }
         }
@@ -1608,7 +1620,16 @@ public sealed class DesktopManager
         {
             if (!TryGetMonitorDevice(window, GetPauseMonitors(), out var device)) return;
             bool resume = supervisor.GetPauseReason(device) == PauseReason.None;
-            if (window is Views.Containers.WebWidgetWindow cssWindow)
+            //Just hide it for now
+            if (resume)
+            {
+                window.Show();
+            }
+            else
+            {
+                window.Hide();
+            }
+            /*if (window is Views.Containers.WebWidgetWindow cssWindow)
             {
                 var control = cssWindow.WidgetControl;
                 if (control is null) return;
@@ -1633,7 +1654,7 @@ public sealed class DesktopManager
                     else plugin.Suspend();
                 }
                 catch { }
-            }
+            }*/
         }
         catch (Exception ex) { Serilog.Log.Error(ex, "Widget initial pause state failed"); }
     }
