@@ -177,13 +177,19 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
         {
             try
             {
-                item.GetDisplayName(SHGDNF.NORMAL, out IntPtr pName);
-                string name = Marshal.PtrToStringUni(pName) ?? string.Empty;
-                Marshal.FreeCoTaskMem(pName);
+                string name = string.Empty;
+                if (item.GetDisplayName(SHGDNF.NORMAL, out IntPtr pName) == 0 && pName != IntPtr.Zero)
+                {
+                    try { name = Marshal.PtrToStringUni(pName) ?? string.Empty; }
+                    finally { Marshal.FreeCoTaskMem(pName); }
+                }
 
-                item.GetDisplayName(SHGDNF.FORPARSING, out IntPtr pPath);
-                string parse = Marshal.PtrToStringUni(pPath) ?? string.Empty;
-                Marshal.FreeCoTaskMem(pPath);
+                string parse = string.Empty;
+                if (item.GetDisplayName(SHGDNF.FORPARSING, out IntPtr pPath) == 0 && pPath != IntPtr.Zero)
+                {
+                    try { parse = Marshal.PtrToStringUni(pPath) ?? string.Empty; }
+                    finally { Marshal.FreeCoTaskMem(pPath); }
+                }
 
                 item.GetAttributes(SFGAO.FOLDER, out SFGAO attrs);
                 bool isFolder = (attrs & SFGAO.FOLDER) != 0;

@@ -32,6 +32,14 @@ public sealed class Engine : IDisposable
     private bool _reapplying;
     private string _originalWallpaper = "";
 
+    /// <summary>Rebuild forensics: every full pipeline destroy has a permanent native cost
+    /// (~32 MB/monitor driver strands), so each ReapplyAll is counted with its reason and
+    /// timestamp. Surfaced via <see cref="ReapplyInfo"/> to the Performance Monitor — a
+    /// climbing count across resumes (or after hibernate) names the multiplier.</summary>
+    private int _reapplyCount;
+    private string _lastReapplyReason = "none";
+    private DateTime _lastReapplyUtc;
+
     /// <summary>Guards <see cref="_teardownTask"/>. All public engine methods run on the
     /// main thread; only the teardown body runs on the pool, touching its snapshot.</summary>
     private readonly object _gate = new();
@@ -645,7 +653,7 @@ public sealed class Engine : IDisposable
             try
             {
                 Serilog.Log.Warning("GPU device lost — rebuilding the composition tree");
-                ReapplyAll();
+                ReapplyAll("device-lost");
             }
             finally
             {
@@ -673,21 +681,24 @@ public sealed class Engine : IDisposable
         {
             if (epoch != Volatile.Read(ref _pauseEpoch)) return;
             _deviceLoss?.Reset();
-            ReapplyAll();
+            ReapplyAll("layer-lost");
         });
     }
 
-    private void ReapplyAll()
+    private void ReapplyAll(string reason)
     {
         if (_reapplying) return;
         // A stale queued rebuild (display-change/taskbar/watch event posted before a
         // Disable) must not resurrect windows after teardown.
         if (!IsEnabled) return;
+        int n = Interlocked.Increment(ref _reapplyCount);
+        _lastReapplyReason = reason;
+        _lastReapplyUtc = DateTime.UtcNow;
         Interlocked.Increment(ref _pauseEpoch);
         _reapplying = true;
         try
         {
-            Serilog.Log.Information("Re-applying all wallpapers");
+            Serilog.Log.Information("Re-applying all wallpapers (#{Count} since start, reason: {Reason})", n, reason);
             foreach (var window in _windows.Values) window.Dispose();
             _windows.Clear();
             _host?.EnsureLayer();
@@ -757,7 +768,7 @@ public sealed class Engine : IDisposable
             if (!TopologyMatchesWindows())
             {
                 Serilog.Log.Information("Settled topology disagrees with live windows — re-applying");
-                ReapplyAll();
+                ReapplyAll("settled-disagree");
                 return;
             }
             // Converged, but a resume may have left the video pipelines in the degraded
@@ -1116,9 +1127,25 @@ public sealed class Engine : IDisposable
         bool IsLoaded, bool IsPaused, bool IsPlaying, string PauseReason,
         uint WebProcessId, long PreloadedBytes);
 
-    public IReadOnlyList<MonitorWallpaperState> GetMonitorStates()
+    /// <summary>One-line rebuild forensics for diagnostics UI: total full-pipeline
+    /// rebuilds since engine start plus the last reason/timestamp. A climbing count with
+    /// "settled-disagree"/"layer-lost" after resume names the strand multiplier.</summary>
+    public string ReapplyInfo
     {
-        var list = new List<MonitorWallpaperState>();
+        get
+        {
+            try
+            {
+                int n = Volatile.Read(ref _reapplyCount);
+                if (n == 0) return "rebuilds=0";
+                return $"rebuilds={n}, last={_lastReapplyReason} @ {_lastReapplyUtc:HH:mm:ss}Z";
+            }
+            catch { return "rebuilds=?"; }
+        }
+    }
+
+    public IReadOnlyList<MonitorWallpaperState> GetMonitorStates()
+    {        var list = new List<MonitorWallpaperState>();
         try
         {
             foreach (var entry in _windows.ToArray())

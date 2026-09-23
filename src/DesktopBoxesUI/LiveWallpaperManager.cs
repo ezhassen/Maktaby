@@ -93,6 +93,12 @@ public sealed class LiveWallpaperManager
         try { return _engine?.PreloadTotalBytes() ?? 0; } catch { return 0; }
     }
 
+    /// <summary>Engine rebuild forensics for diagnostics UI (never throws).</summary>
+    public string GetReapplyInfo()
+    {
+        try { return _engine?.ReapplyInfo ?? "rebuilds=?"; } catch { return "rebuilds=?"; }
+    }
+
     public void Initialize()
     {
         //Not needed anymore the engine handles it automatically 

@@ -55,13 +55,19 @@ public sealed class DesktopService : IDesktopService
                         {
                             try
                             {
-                                item.GetDisplayName(SHGDNF.NORMAL, out System.IntPtr pName);
-                                var name = Marshal.PtrToStringUni(pName) ?? string.Empty;
-                                Marshal.FreeCoTaskMem(pName);
+                                var name = string.Empty;
+                                if (item.GetDisplayName(SHGDNF.NORMAL, out System.IntPtr pName) == 0 && pName != System.IntPtr.Zero)
+                                {
+                                    try { name = Marshal.PtrToStringUni(pName) ?? string.Empty; }
+                                    finally { Marshal.FreeCoTaskMem(pName); }
+                                }
 
-                                item.GetDisplayName(SHGDNF.FORPARSING, out System.IntPtr pPath);
-                                var parse = Marshal.PtrToStringUni(pPath) ?? string.Empty;
-                                Marshal.FreeCoTaskMem(pPath);
+                                var parse = string.Empty;
+                                if (item.GetDisplayName(SHGDNF.FORPARSING, out System.IntPtr pPath) == 0 && pPath != System.IntPtr.Zero)
+                                {
+                                    try { parse = Marshal.PtrToStringUni(pPath) ?? string.Empty; }
+                                    finally { Marshal.FreeCoTaskMem(pPath); }
+                                }
 
                                 item.GetAttributes(SFGAO.FOLDER, out SFGAO attrs);
                                 var type = (attrs & SFGAO.FOLDER) != 0 ? BoxItemType.Folder : BoxItemType.File;

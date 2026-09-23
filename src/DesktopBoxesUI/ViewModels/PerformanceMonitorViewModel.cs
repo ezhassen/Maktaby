@@ -134,6 +134,15 @@ namespace DesktopBoxesUI.ViewModels
         private long _groupMemoryMB;
         public long GroupMemoryMB { get => _groupMemoryMB; set => SetField(ref _groupMemoryMB, value); }
 
+        /// <summary>GDI / USER handle counts (10k GDI quota per process). Climbing GDI with
+        /// flat managed heap = HBITMAP/HICON/DC leak; flat GDI with climbing private bytes =
+        /// driver mappings or pools.</summary>
+        private uint _gdiHandles;
+        public uint GdiHandles { get => _gdiHandles; set => SetField(ref _gdiHandles, value); }
+
+        private uint _userHandles;
+        public uint UserHandles { get => _userHandles; set => SetField(ref _userHandles, value); }
+
         private double _groupCpu;
         public double GroupCpu { get => _groupCpu; set => SetField(ref _groupCpu, value); }
 
@@ -308,6 +317,10 @@ namespace DesktopBoxesUI.ViewModels
                 // Managed heap split: if Total climbs while this stays flat, the growth is native
                 // (Media Foundation, COM, GDI) rather than .NET objects.
                 try { ManagedMemoryMB = System.GC.GetTotalMemory(false) / 1024 / 1024; } catch { }
+                // Handle-leak forensics (cheap GetGuiResources, 1 Hz): separates GDI leaks
+                // from driver-mapping / pool growth. See property docs.
+                try { GdiHandles = Win32.NativeMethods.Win32Apis.GetGuiHandleCount(_process.Handle, false); } catch { }
+                try { UserHandles = Win32.NativeMethods.Win32Apis.GetGuiHandleCount(_process.Handle, true); } catch { }
 
                 // I/O throughput (read + write bytes/sec across disk/network/device).
                 try
@@ -602,11 +615,15 @@ namespace DesktopBoxesUI.ViewModels
                     : !lw.EngineIsLive ? $"Enabled, engine down ({states.Count} windows)"
                     : $"{states.Count} monitor(s), {playing} playing, {paused} paused{preloadedText}";
 
-                // Append MediaPlayer pool stats when available
+                // Append MediaPlayer pool stats + rebuild forensics when available.
+                // Rebuild count climbing across resumes with settled-disagree/layer-lost names
+                // the native strand multiplier (each full destroy strands ~32 MB/monitor).
                 try
                 {
                     var stats = DesktopLiveWallPaperEngine.Rendering.VideoRenderer.GetPoolStats();
-                    LiveWallpaperSummary = $"{baseSummary} · MPPool: created={stats.Created}, pool={stats.PoolSize}, inuse={stats.Rented}, rentals={stats.Rentals}, returns={stats.Returns}, max={stats.MaxPool}";
+                    string rebuilds = "";
+                    try { rebuilds = $" · {lw.GetReapplyInfo()}"; } catch { }
+                    LiveWallpaperSummary = $"{baseSummary} · MPPool: created={stats.Created}, pool={stats.PoolSize}, inuse={stats.Rented}, rentals={stats.Rentals}, returns={stats.Returns}, max={stats.MaxPool}{rebuilds}";
                 }
                 catch
                 {

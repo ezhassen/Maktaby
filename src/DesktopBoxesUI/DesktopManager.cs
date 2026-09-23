@@ -1721,6 +1721,22 @@ public sealed class DesktopManager
         StopIconVisibilityWatch();
         _coordinator.Stop();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
+        // Debounce timers are otherwise rooted for app lifetime and keep firing into the
+        // torn-down session (rescale passes re-arm the icon-visibility hook per pass).
+        try { _rescaleDebounce?.Stop(); } catch { }
+        try { _verifyTimer?.Stop(); } catch { }
+        // The layer host (and its Explorer-scoped WinEvent hook) must not survive the
+        // disabled window: re-enable lazily recreates it via RequireWidgetLayerHost.
+        try
+        {
+            if (_widgetLayerHost != null)
+            {
+                _widgetLayerHost.LayerLost -= OnWidgetLayerLost;
+                _widgetLayerHost.Dispose();
+                _widgetLayerHost = null;
+            }
+        }
+        catch { }
 
         // Snapshot: RemoveWindow mutates the dictionary, and a single failing window must never
         // abort teardown (disable/reset) or crash the app — each close is independently guarded.

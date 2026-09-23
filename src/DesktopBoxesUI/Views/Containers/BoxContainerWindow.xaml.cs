@@ -248,6 +248,16 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
         ClampBoundsToWorkArea();
         ApplyRoll();
         UpdateLockVisuals();
+        // Loaded refires on every Hide→Show cycle without destroying the HWND: detach the
+        // previous glue first, or the layer/minimize-prevention/drag HwndSource hooks stack
+        // once per cycle with only the latest instance removable.
+        if (_layerHwnd != IntPtr.Zero)
+        {
+            try { DesktopLayer.Detach(System.Windows.Interop.HwndSource.FromHwnd(_layerHwnd), _layerHook); } catch { }
+            _layerHook = null;
+            _layerHwnd = IntPtr.Zero;
+        }
+        try { _drag.Detach(); } catch { }
         _layerHwnd = new WindowInteropHelper(this).Handle;
         _layerHook = DesktopLayer.Attach(_layerHwnd, new DesktopLayer.Options
         {

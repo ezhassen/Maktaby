@@ -378,6 +378,9 @@ public sealed class CalendarWidget : NativeWidgetControl
     protected override void OnSuspend()
     {
         try { _midnightCheck.Stop(); } catch { }
+        // A suspend mid-slide (or close) must not leave animation clocks running: a hidden
+        // window does not stop them, so they keep invalidating and re-rendering forever.
+        try { _navStoryboard?.Stop(); } catch { }
     }
 
     protected override void OnResume()
@@ -416,6 +419,7 @@ public sealed class CalendarWidget : NativeWidgetControl
         if (disposing)
         {
             try { _midnightCheck.Stop(); } catch { }
+            try { _navStoryboard?.Stop(); } catch { }
         }
         base.Dispose(disposing);
     }

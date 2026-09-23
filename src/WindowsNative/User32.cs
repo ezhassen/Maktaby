@@ -391,4 +391,11 @@ public static partial class User32
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool UnregisterPowerSettingNotification(IntPtr handle);
+
+    /// <summary>GDI (0) / USER (1) handle count for a process. The 10k-per-process GDI
+    /// quota makes this the handle-leak counterpart to private bytes: climbing GDI with
+    /// flat managed heap names an HBITMAP/HICON/DC leak; flat GDI with climbing private
+    /// bytes points at driver mappings or pools instead.</summary>
+    [DllImport("user32.dll")]
+    public static extern uint GetGuiResources(IntPtr hProcess, uint uiFlags);
 }

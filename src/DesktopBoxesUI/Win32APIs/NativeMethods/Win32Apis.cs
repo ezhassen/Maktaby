@@ -144,6 +144,15 @@ internal static class Win32Apis
         return string.Empty;
     }
 
+    /// <summary>GDI / USER handle count for a process handle (GetGuiResources). Used by
+    /// diagnostics to separate handle leaks (climbing GDI) from driver-mapping / pool
+    /// growth (flat GDI, climbing private bytes). Returns 0 on failure.</summary>
+    public static uint GetGuiHandleCount(IntPtr hProcess, bool userObjects)
+    {
+        try { return User32.GetGuiResources(hProcess, userObjects ? GR_USEROBJECTS : GR_GDIOBJECTS); }
+        catch { return 0; }
+    }
+
     /// <summary>True when <paramref name="pid"/> is <paramref name="rootPid"/> or descends
     /// from it through the snapshot <paramref name="parentMap"/> (browser → renderer chains).</summary>
     public static bool IsDescendantOf(int pid, int rootPid, Dictionary<int, int> parentMap)

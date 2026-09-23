@@ -185,6 +185,10 @@ public static class Win32Constants
     public const uint KEYEVENTF_KEYUP = 0x0002;
     public const byte VK_ESCAPE = 0x1B;
 
+    // GetGuiResources flags (handle-leak forensics)
+    public const uint GR_GDIOBJECTS = 0;
+    public const uint GR_USEROBJECTS = 1;
+
     // Toolhelp32 process snapshot
     public const uint TH32CS_SNAPPROCESS = 0x00000002;
 }

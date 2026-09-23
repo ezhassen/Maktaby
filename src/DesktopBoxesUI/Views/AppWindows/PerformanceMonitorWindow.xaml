@@ -88,6 +88,18 @@
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                         Text="{Binding GroupMemoryMB, StringFormat={}Group total: {0} MB}"
                         ToolTip="Main + WebView2 working sets — matches Task Manager's collapsed group row." />
+                    <TextBlock
+                        Margin="0,2,0,0"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                        ToolTip="GDI / USER handle counts. Climbing GDI = handle leak; flat GDI + climbing memory = driver mappings or pools.">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="GDI: {0} · USER: {1}">
+                                <Binding Path="GdiHandles" />
+                                <Binding Path="UserHandles" />
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Center">
                     <TextBlock
