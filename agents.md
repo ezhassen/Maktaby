@@ -44,6 +44,9 @@ Follow it to keep the architecture clean and the build green.
   with: switching the app theme leaves the window stale (light cards/inputs in dark mode)
   until it is closed and reopened. `LoadingWindow` is exempt (plain `Window` splash,
   intentionally fixed skin).
+- Section cards that collapse belong in `Controls/CollapsibleGroupBox`
+  (`HeaderContent` + `Content` body, `IsExpanded`, `BodyPadding`) — never hand-roll
+  another chevron/header toggle.
 - For WebView2 init use provided userData folder directly as the engine will create the "EBWebView" shared env folder in it
 - Build must stay warning-light and succeed.
 

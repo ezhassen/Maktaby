@@ -47,6 +47,7 @@ public class AppFluentWindow : FluentWindow
         TitleBar.SetBinding(TitleBar.TitleProperty, new Binding(nameof(Title)) { Source = this });
     }
 
+
     private static BitmapImage? LoadAppIcon()
     {
         try

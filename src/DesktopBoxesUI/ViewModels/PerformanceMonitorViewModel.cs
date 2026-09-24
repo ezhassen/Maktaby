@@ -193,6 +193,15 @@ namespace DesktopBoxesUI.ViewModels
         private bool _isWebView2Expanded = true;
         public bool IsWebView2Expanded { get => _isWebView2Expanded; set => SetField(ref _isWebView2Expanded, value); }
 
+        private bool _isSummaryExpanded = true;
+        public bool IsSummaryExpanded { get => _isSummaryExpanded; set => SetField(ref _isSummaryExpanded, value); }
+
+        private bool _isWindowsExpanded = true;
+        public bool IsWindowsExpanded { get => _isWindowsExpanded; set => SetField(ref _isWindowsExpanded, value); }
+
+        private bool _isLiveWallpaperExpanded = true;
+        public bool IsLiveWallpaperExpanded { get => _isLiveWallpaperExpanded; set => SetField(ref _isLiveWallpaperExpanded, value); }
+
         private bool _isIdleMode;
         public bool IsIdleMode { get => _isIdleMode; set => SetField(ref _isIdleMode, value); }
 

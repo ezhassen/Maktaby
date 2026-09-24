@@ -3,6 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:appwin="clr-namespace:DesktopBoxesUI.Views.AppWindows"
+    xmlns:controls="clr-namespace:DesktopBoxesUI.Controls"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     Title="Performance Monitor"
     Width="760"
@@ -27,20 +28,69 @@
             Focusable="False" />
 
         <!--  Summary  -->
-        <Border
+        <controls:CollapsibleGroupBox
             Grid.Row="1"
             Margin="12,6,12,6"
-            Padding="8"
-            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8">
+            BodyPadding="8"
+            IsExpanded="{Binding IsSummaryExpanded, Mode=TwoWay}">
+            <controls:CollapsibleGroupBox.HeaderContent>
+                <Grid>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="Overview" />
+                    <StackPanel
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <TextBlock
+                            Margin="0,0,8,0"
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                            Text="App Status"
+                            ToolTip="Idle when every container is hidden/suspended and no wallpaper is playing." />
+                        <Border
+                            x:Name="IdleBadge"
+                            Padding="8,4"
+                            VerticalAlignment="Center"
+                            CornerRadius="12"
+                            ToolTip="Green Active: a container is visible or a wallpaper is playing. Amber Idle: everything hidden, suspended or paused.">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="Background" Value="#D0F0D0" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsIdleMode}" Value="True">
+                                            <Setter Property="Background" Value="#FFE8A0" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <TextBlock
+                                HorizontalAlignment="Center"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="#1A1A1A">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="Active" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsIdleMode}" Value="True">
+                                                <Setter Property="Text" Value="Idle" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Border>
+                    </StackPanel>
+                </Grid>
+            </controls:CollapsibleGroupBox.HeaderContent>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0">
                     <TextBlock
@@ -160,66 +210,16 @@
                         Text="{Binding GroupCpu, StringFormat={}{0:0.0}% CPU}"
                         ToolTip="Main + WebView2 CPU for the whole app group." />
                 </StackPanel>
-                <StackPanel
-                    Grid.Column="3"
-                    MinWidth="80"
-                    Margin="4,20,4,4"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top">
-                    <Border
-                        x:Name="IdleBadge"
-                        Padding="8,4"
-                        CornerRadius="12"
-                        ToolTip="Green Active: a container is visible or a wallpaper is playing. Amber Idle: everything hidden, suspended or paused.">
-                        <Border.Style>
-                            <Style TargetType="Border">
-                                <Setter Property="Background" Value="#D0F0D0" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsIdleMode}" Value="True">
-                                        <Setter Property="Background" Value="#FFE8A0" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </Border.Style>
-                        <TextBlock
-                            HorizontalAlignment="Center"
-                            FontSize="11"
-                            FontWeight="SemiBold"
-                            Foreground="#1A1A1A">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="Active" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsIdleMode}" Value="True">
-                                            <Setter Property="Text" Value="Idle" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Border>
-                    <TextBlock
-                        Margin="0,4,0,0"
-                        HorizontalAlignment="Center"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="App Status"
-                        TextAlignment="Right"
-                        ToolTip="Idle when every container is hidden/suspended and no wallpaper is playing." />
-                </StackPanel>
             </Grid>
-        </Border>
+        </controls:CollapsibleGroupBox>
 
         <!--  WebView2 per-process breakdown (own row; collapses to zero height when empty)  -->
-        <Border
+        <controls:CollapsibleGroupBox
             Grid.Row="2"
             Margin="12,0,12,4"
-            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8">
-            <Border.Style>
-                <Style TargetType="Border">
+            IsExpanded="{Binding IsWebView2Expanded, Mode=TwoWay}">
+            <controls:CollapsibleGroupBox.Style>
+                <Style TargetType="{x:Type controls:CollapsibleGroupBox}">
                     <Setter Property="Visibility" Value="Visible" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding HasWebView2Processes}" Value="False">
@@ -227,55 +227,25 @@
                         </DataTrigger>
                     </Style.Triggers>
                 </Style>
-            </Border.Style>
-            <Border.Resources>
-                <BooleanToVisibilityConverter x:Key="BoolToVis" />
-            </Border.Resources>
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Border
-                    Grid.Row="0"
-                    Padding="8,2"
-                    Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
-                    CornerRadius="8,8,0,0"
-                    Cursor="Hand"
-                    MouseLeftButtonUp="WebView2Header_Toggle"
-                    ToolTip="Click to collapse / expand">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <ToggleButton
-                            Grid.Column="0"
-                            VerticalAlignment="Center"
-                            IsChecked="{Binding IsWebView2Expanded, Mode=TwoWay}"
-                            Style="{StaticResource ToggleButtonCollapsable}"
-                            ToolTip="Collapse / expand" />
-                        <TextBlock
-                            Grid.Column="1"
-                            Margin="4,0,0,0"
-                            VerticalAlignment="Center"
-                            FontWeight="SemiBold"
-                            Text="WebView2 processes" />
-                        <TextBlock
-                            Grid.Column="2"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center"
-                            FontSize="11"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="working set per msedgewebview2.exe · Browser = top-level, Child = renderer/GPU/utility" />
-                    </Grid>
-                </Border>
-                <DataGrid
-                    Grid.Row="1"
-                    MaxHeight="120"
-                    Margin="4"
+            </controls:CollapsibleGroupBox.Style>
+            <controls:CollapsibleGroupBox.HeaderContent>
+                <Grid>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="WebView2 processes" />
+                    <TextBlock
+                        Margin="8,0,0,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="working set per msedgewebview2.exe · Browser = top-level, Child = renderer/GPU/utility" />
+                </Grid>
+            </controls:CollapsibleGroupBox.HeaderContent>
+            <DataGrid
+                MaxHeight="120"
+                Margin="4"
                     AutoGenerateColumns="False"
                     CanUserAddRows="False"
                     CanUserDeleteRows="False"
@@ -289,8 +259,7 @@
                     ItemsSource="{Binding WebView2Processes}"
                     RowHeaderWidth="0"
                     RowHeight="22"
-                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                    Visibility="{Binding IsWebView2Expanded, Converter={StaticResource BoolToVis}}">
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <DataGrid.CellStyle>
                         <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                             <Setter Property="Padding" Value="4,1" />
@@ -317,27 +286,14 @@
                             Header="CPU" />
                     </DataGrid.Columns>
                 </DataGrid>
-            </Grid>
-        </Border>
+        </controls:CollapsibleGroupBox>
 
         <!--  Per-window list  -->
-        <Border
+        <controls:CollapsibleGroupBox
             Grid.Row="3"
             Margin="12,0,12,6"
-            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <Border
-                    Grid.Row="0"
-                    Padding="8,4"
-                    Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
-                    CornerRadius="8,8,0,0">
+            IsExpanded="{Binding IsWindowsExpanded, Mode=TwoWay}">
+            <controls:CollapsibleGroupBox.HeaderContent>
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
@@ -374,10 +330,10 @@
                             TextWrapping="Wrap"
                             ToolTip="Rescale baseline vs live primary area: if they disagree with no recent pass, scheduling (not math) is the suspect." />
                     </Grid>
-                </Border>
+            </controls:CollapsibleGroupBox.HeaderContent>
+            <Grid>
                 <DataGrid
                     x:Name="WindowsGrid"
-                    Grid.Row="1"
                     Margin="4"
                     AutoGenerateColumns="False"
                     CanUserAddRows="False"
@@ -393,7 +349,8 @@
                     PreviewMouseRightButtonDown="WindowsGrid_PreviewMouseRightButtonDown"
                     RowHeaderWidth="0"
                     RowHeight="22"
-                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                    Visibility="{Binding IsAppDisabled, Converter={StaticResource BoolInvertedToVisibilityConverter}}">
                     <DataGrid.CellStyle>
                         <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                             <Setter Property="Padding" Value="4,1" />
@@ -479,7 +436,6 @@
                     </DataGrid.Columns>
                 </DataGrid>
                 <TextBlock
-                    Grid.Row="1"
                     Margin="0,8"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
@@ -499,25 +455,13 @@
                     </TextBlock.Style>
                 </TextBlock>
             </Grid>
-        </Border>
+        </controls:CollapsibleGroupBox>
 
-        <Border
+        <controls:CollapsibleGroupBox
             Grid.Row="4"
             Margin="12,0,12,6"
-            Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
-            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="8">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Border
-                    Grid.Row="0"
-                    Padding="8,4"
-                    Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
-                    CornerRadius="8,8,0,0">
+            IsExpanded="{Binding IsLiveWallpaperExpanded, Mode=TwoWay}">
+            <controls:CollapsibleGroupBox.HeaderContent>
                     <Grid ColumnDefinitions="Auto,*" RowDefinitions="*,*">
                         <TextBlock
                             Grid.Row="0"
@@ -562,10 +506,10 @@
                             Text="{Binding LiveWallpaperSummary}"
                             TextWrapping="Wrap" />
                     </Grid>
-                </Border>
+            </controls:CollapsibleGroupBox.HeaderContent>
+            <Grid>
                 <DataGrid
                     x:Name="LiveWallpaperGrid"
-                    Grid.Row="1"
                     MaxHeight="150"
                     Margin="4"
                     AutoGenerateColumns="False"
@@ -581,7 +525,8 @@
                     ItemsSource="{Binding LiveWallpaperMonitors}"
                     RowHeaderWidth="0"
                     RowHeight="22"
-                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                    Visibility="{Binding IsLiveWallpaperDisabled, Converter={StaticResource BoolInvertedToVisibilityConverter}}">
                     <DataGrid.CellStyle>
                         <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                             <Setter Property="Padding" Value="4,1" />
@@ -645,7 +590,6 @@
                     </DataGrid.Columns>
                 </DataGrid>
                 <TextBlock
-                    Grid.Row="1"
                     Margin="0,8"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
@@ -665,7 +609,7 @@
                     </TextBlock.Style>
                 </TextBlock>
             </Grid>
-        </Border>
+        </controls:CollapsibleGroupBox>
 
         <Border
             Grid.Row="5"

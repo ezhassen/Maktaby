@@ -14,32 +14,32 @@ namespace DesktopBoxesUI.Views
             InitializeComponent();
             _vm = new PerformanceMonitorViewModel();
             DataContext = _vm;
-            _vm.PropertyChanged += OnViewModelPropertyChanged;
+            //_vm.PropertyChanged += OnViewModelPropertyChanged;
             Closed += (_, _) =>
             {
-                try { _vm.PropertyChanged -= OnViewModelPropertyChanged; } catch { }
+                //try { _vm.PropertyChanged -= OnViewModelPropertyChanged; } catch { }
                 _vm.Dispose();
             };
         }
 
-        // Grids are replaced (not overlaid) by the Disabled placeholders: local Visibility
-        // values here, so the grids keep their implicit theme styling (a local Style would
-        // replace it — WPF-UI defines no keyed DataGrid style to base on).
-        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-        {
-            try
-            {
-                if (e.PropertyName == nameof(PerformanceMonitorViewModel.IsAppDisabled))
-                {
-                    WindowsGrid.Visibility = _vm.IsAppDisabled ? Visibility.Collapsed : Visibility.Visible;
-                }
-                else if (e.PropertyName == nameof(PerformanceMonitorViewModel.IsLiveWallpaperDisabled))
-                {
-                    LiveWallpaperGrid.Visibility = _vm.IsLiveWallpaperDisabled ? Visibility.Collapsed : Visibility.Visible;
-                }
-            }
-            catch { }
-        }
+        //// Grids are replaced (not overlaid) by the Disabled placeholders: local Visibility
+        //// values here, so the grids keep their implicit theme styling (a local Style would
+        //// replace it — WPF-UI defines no keyed DataGrid style to base on).
+        //private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        //{
+        //    try
+        //    {
+        //        if (e.PropertyName == nameof(PerformanceMonitorViewModel.IsAppDisabled))
+        //        {
+        //            WindowsGrid.Visibility = _vm.IsAppDisabled ? Visibility.Collapsed : Visibility.Visible;
+        //        }
+        //        else if (e.PropertyName == nameof(PerformanceMonitorViewModel.IsLiveWallpaperDisabled))
+        //        {
+        //            LiveWallpaperGrid.Visibility = _vm.IsLiveWallpaperDisabled ? Visibility.Collapsed : Visibility.Visible;
+        //        }
+        //    }
+        //    catch { }
+        //}
 
         private void WindowsGrid_PreviewMouseRightButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
         {
@@ -89,7 +89,7 @@ namespace DesktopBoxesUI.Views
                     {
                         if (item.WindowRef.WindowState == WindowState.Minimized) item.WindowRef.WindowState = WindowState.Normal;
                         item.WindowRef.Show();
-                        item.WindowRef.Activate();
+                        //item.WindowRef.Activate();
                     }
                 }
                 catch { }
@@ -143,15 +143,7 @@ namespace DesktopBoxesUI.Views
             _vm.Refresh();
         }
 
-        // Header click toggles the same flag the chevron ToggleButton binds to. Clicks on the
-        // ToggleButton itself never reach here: ButtonBase marks MouseLeftButtonUp handled when
-        // it raises Click, so there is no double-toggle.
-        private void WebView2Header_Toggle(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            try { _vm.IsWebView2Expanded = !_vm.IsWebView2Expanded; } catch { }
-        }
-
-                private void WallpaperSuspend_Click(object sender, RoutedEventArgs e)
+        private void WallpaperSuspend_Click(object sender, RoutedEventArgs e)
         {
             try { App.Services?.GetService<LiveWallpaperManager>()?.SetPlaying(false); } catch { }
             _vm.Refresh();
@@ -163,7 +155,8 @@ namespace DesktopBoxesUI.Views
             _vm.Refresh();
         }
 
-        private void SuspendIdle_Click(object sender, RoutedEventArgs e)        {
+        private void SuspendIdle_Click(object sender, RoutedEventArgs e)
+        {
             foreach (var win in Application.Current.Windows.OfType<Views.Containers.WebWidgetWindow>())
             {
                 try
