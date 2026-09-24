@@ -348,9 +348,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     private bool IsCursorOverWindow()
     {
         if (!Win32Apis.GetCursorPos(out var pt)) return false;
-        var hwnd = new WindowInteropHelper(this).Handle;
-        if (hwnd == IntPtr.Zero) return false;
-        if (!Win32Apis.GetWindowRect(hwnd, out var rect)) return false;
+        if (_layerHwnd == IntPtr.Zero) return false;
+        if (!Win32Apis.GetWindowRect(_layerHwnd, out var rect)) return false;
         return pt.X >= rect.Left && pt.X <= rect.Right && pt.Y >= rect.Top && pt.Y <= rect.Bottom;
     }
 
@@ -504,7 +503,33 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     }
 
     /// <summary>Collapses the chrome when a mouse button is pressed on a window outside this application
-    /// (the bare desktop, another app) — a desktop-glued window may not register that as a focus loss.</summary>
+    /// (the bare desktop, another app) — a desktop-glued window may not register that as a focus loss.</summary>    /// <summary>Box suspend = hide: folder watchers already suspend while invisible
+    /// (ManageFolderWatcher) and reload on show, so hiding is the honest idle state.
+    /// Hide goes through AllowHide like HideAllBoxes so MinimizePreventionHook never re-shows it.</summary>
+    public override bool IsSuspended => !IsVisible;
+
+    public override void Suspend()
+    {
+        if (!IsVisible) return;
+        try
+        {
+            if (_layerHwnd != IntPtr.Zero) Win32Apis.AllowHide(_layerHwnd);
+            Hide();
+        }
+        catch { }
+    }
+
+    public override void Resume()
+    {
+        if (IsVisible) return;
+        try
+        {
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+            Show();
+        }
+        catch { }
+    }
+
     private void OnGlobalMouseDown(object? sender, IntPtr hwnd)
     {
         if (!IsLoaded || hwnd == IntPtr.Zero)
@@ -2194,8 +2219,8 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     /// <summary>Raises this window above its sibling containers so its drop highlight is visible during a drag.</summary>
     internal void BringToFrontForDrag()
     {
-        var hwnd = new WindowInteropHelper(this).Handle;
-        _zOrder.SetZOrder(hwnd, ZOrderTarget.Top);
+        if (_layerHwnd != IntPtr.Zero) return;
+        _zOrder.SetZOrder(_layerHwnd, ZOrderTarget.Top);
     }
 
     /// <summary>Reveals the tab strip while the cursor is over this container during a drag, even when it is

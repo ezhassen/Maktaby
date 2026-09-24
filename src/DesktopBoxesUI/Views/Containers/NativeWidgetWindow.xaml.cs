@@ -584,6 +584,18 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         else if (WindowState != WindowState.Minimized) _plugin?.Resume();
     }
 
+    public override bool IsSuspended => Widget?.IsSuspended ?? true;
+
+    public override void Suspend()
+    {
+        try { Widget?.Suspend(); } catch { }
+    }
+
+    public override void Resume()
+    {
+        try { Widget?.Resume(); } catch { }
+    }
+
     private void OnStateChanged(object? sender, EventArgs e)
     {
         if (WindowState == WindowState.Minimized) _plugin?.Suspend();

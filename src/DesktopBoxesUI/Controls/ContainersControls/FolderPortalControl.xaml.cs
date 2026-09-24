@@ -20,7 +20,7 @@ using System.Windows.Media;
 
 namespace DesktopBoxesUI.Controls.ContainersControls;
 
-public partial class FolderPortalControl : UserControl
+public partial class FolderPortalControl : WidgetControlBase
 {
     private BoxViewModel? Box => DataContext as BoxViewModel;
     private int _anchorIndex = -1;
@@ -31,8 +31,7 @@ public partial class FolderPortalControl : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
+        // Loaded/Unloaded/visibility lifecycle comes from WidgetControlBase.
         IsKeyboardFocusWithinChanged += Control_IsKeyboardFocusWithinChanged;
     }
 
@@ -84,22 +83,10 @@ public partial class FolderPortalControl : UserControl
 
     private bool _detailsHandlersHooked;
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+    protected override void InitializeCtrlsCore()
     {
-        UpdateView();
-        // Ensure resizing cannot be blocked by style/asset defaults - force at runtime
-        DetailsGrid.CanUserResizeColumns = true;
-        foreach (var col in DetailsGrid.Columns)
-            col.CanUserResize = true;
-        // The folder VM outlives this control (tab switches re-parent it): (re)attach
-        // idempotently — Loaded refires on hide/show without a DataContext change.
-        if (Box is BoxViewModel loadedVm)
-        {
-            loadedVm.PropertyChanged -= OnBoxPropertyChanged;
-            loadedVm.PropertyChanged += OnBoxPropertyChanged;
-        }
-        // Loaded refires on hide/show cycles: hook the handled-events-too handlers once,
-        // otherwise every reload stacks another duplicate invocation.
+        // One-time work: hook the handled-events-too handlers once, otherwise every
+        // reload would stack another duplicate invocation.
         if (_detailsHandlersHooked) return;
         _detailsHandlersHooked = true;
         // DataGridRow events are often marked handled by DataGrid's internal selection logic.
@@ -121,6 +108,67 @@ public partial class FolderPortalControl : UserControl
         DetailsGrid.AddHandler(UIElement.GotKeyboardFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
         DetailsGrid.AddHandler(Keyboard.GotKeyboardFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
         DetailsGrid.AddHandler(FrameworkElement.ContextMenuOpeningEvent, new ContextMenuEventHandler(DetailsGrid_OnContextMenuOpening), true);
+    }
+
+    protected override void OnReloadedCore()
+    {
+        UpdateView();
+        // Ensure resizing cannot be blocked by style/asset defaults - force at runtime
+        DetailsGrid.CanUserResizeColumns = true;
+        foreach (var col in DetailsGrid.Columns)
+            col.CanUserResize = true;
+        // The folder VM outlives this control (tab switches re-parent it): (re)attach
+        // idempotently — Loaded refires on hide/show without a DataContext change.
+        if (Box is BoxViewModel loadedVm)
+        {
+            loadedVm.PropertyChanged -= OnBoxPropertyChanged;
+            loadedVm.PropertyChanged += OnBoxPropertyChanged;
+        }
+    }
+
+    protected override void OnUnloadedCore()
+    {
+        if (_renameService.IsEditing) _renameService.Dismiss();
+        // Detach from the long-lived folder VM so it can't pin this unloaded control
+        // (re-attached in OnReloadedCore / OnDataContextChanged).
+        if (Box is BoxViewModel vm)
+        {
+            vm.PropertyChanged -= OnBoxPropertyChanged;
+        }
+    }
+
+    public override bool IsSuspended { get; protected set; }
+
+    protected override bool SuspendCore()
+    {
+        // Rename dismissal also runs in OnUnloadedCore on Hide; repeated guarded here
+        // since visibility can flip without an unload seam (order-independent).
+        try { if (_renameService.IsEditing) _renameService.Dismiss(); } catch { }
+        return true;
+    }
+
+    protected override bool ResumeCore()
+    {
+        // Reconcile what changed while suspended; the VM no-ops when already loaded.
+        try { UpdateView(); } catch { }
+        try
+        {
+            var box = Box;
+            if (box != null && box.IsFolderPortal) _ = box.EnsureFolderLoadedAsync();
+        }
+        catch { }
+        return true;
+    }
+
+    protected override void ApplyTheme()
+    {
+        // No theme-aware visuals in this control today (base subscription is harmless).
+    }
+
+    protected override void CleanupForShutdownCore()
+    {
+        // Nothing to dispose: VM watchers belong to BoxViewModel (window-managed),
+        // handlers detach in OnUnloadedCore / base Unloaded.
     }
 
     private void DetailsGrid_OnPreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -236,17 +284,6 @@ public partial class FolderPortalControl : UserControl
         var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
         if (row == null) return;
         ItemBorder_ContextMenuOpening(row, e);
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        if (_renameService.IsEditing) _renameService.Dismiss();
-        // Detach from the long-lived folder VM so it can't pin this unloaded control
-        // (re-attached in OnLoaded / OnDataContextChanged).
-        if (Box is BoxViewModel vm)
-        {
-            vm.PropertyChanged -= OnBoxPropertyChanged;
-        }
     }
 
     public void UpdateView()

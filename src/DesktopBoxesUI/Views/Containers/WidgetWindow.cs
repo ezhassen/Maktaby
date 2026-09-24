@@ -1,3 +1,4 @@
+using DesktopBoxesUI.Controls.ContainersControls;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.ViewModels;
@@ -19,6 +20,7 @@ public abstract class WidgetWindow : Window
 {
 
     public abstract ContainerViewModel ContainerViewModel { get; }
+    //public abstract WidgetControlBase WidgetControlBase { get; protected set; }
 
     public abstract void UpdateChrome();
 
@@ -59,6 +61,13 @@ public abstract class WidgetWindow : Window
         UpdateChrome();
     }
 
+    public abstract bool IsSuspended { get; }
+    public abstract void Suspend();
+    public abstract void Resume();
+
+    /// <summary>
+    /// Is this window being closed?
+    /// </summary>
     public bool IsClosing { get; set; }
     public bool IsClosed { get; set; }
     protected override void OnClosing(CancelEventArgs e)

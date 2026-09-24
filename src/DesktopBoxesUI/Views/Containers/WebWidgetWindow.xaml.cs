@@ -172,6 +172,18 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
         _hwndSource = null;
     }
 
+    public override bool IsSuspended => _widgetControl?.IsSuspended ?? true;
+
+    public override void Suspend()
+    {
+        try { _widgetControl?.Suspend(); } catch { }
+    }
+
+    public override void Resume()
+    {
+        try { _widgetControl?.Resume(); } catch { }
+    }
+
 
     public void ShowWidgetMenu()
     {

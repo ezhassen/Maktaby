@@ -26,7 +26,7 @@ namespace DesktopBoxesUI.Controls.ContainersControls;
 /// single/double-click preference. The cross-box move and persistence are coordinated through the
 /// shared <see cref="MainViewModel"/> and the <see cref="RequestSave"/> callback.
 /// </summary>
-public partial class BoxControl : UserControl
+public partial class BoxControl : WidgetControlBase
 {
     private Point _dragStart;
     private bool _dragging;
@@ -82,8 +82,44 @@ public partial class BoxControl : UserControl
         InitializeComponent();
         // Tab switches re-assign DataContext (UpdateBody) — re-resolve the icon size with it.
         DataContextChanged += (_, _) => RefreshIconSize();
+        // Drag timer + visibility lifecycle come from WidgetControlBase (Suspend/Unloaded stop it).
+    }
+
+    public override bool IsSuspended { get; protected set; }
+
+    protected override void InitializeCtrlsCore()
+    {
+        // Nothing one-time: drag timer is created lazily on first drag-over.
+    }
+
+    protected override void OnUnloadedCore()
+    {
         // Torn down mid-drag (tab switch/close while hovering): never leave the scroll timer running.
-        Unloaded += (_, _) => StopDragAutoScroll();
+        StopDragAutoScroll();
+    }
+
+    protected override bool SuspendCore()
+    {
+        // A hidden control cannot be drag-scrolled; stop the timer (idempotent).
+        StopDragAutoScroll();
+        return true;
+    }
+
+    protected override bool ResumeCore()
+    {
+        // Nothing to restart: scrolling resumes on the next drag-over.
+        return true;
+    }
+
+    protected override void ApplyTheme()
+    {
+        // No theme-aware visuals in this control today (base subscription is harmless).
+    }
+
+    protected override void CleanupForShutdownCore()
+    {
+        // Nothing to dispose beyond the drag timer (stopped in Suspend/Unloaded).
+        StopDragAutoScroll();
     }
 
     /// <summary>The Box whose items are rendered by this control.</summary>

@@ -1,6 +1,7 @@
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Core.Services;
+using DesktopBoxesUI.Views.Containers;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
@@ -14,16 +15,13 @@ using WPFShared.Helpers;
 
 namespace DesktopBoxesUI.Controls.ContainersControls;
 
-public partial class WebWidgetControl : UserControl
+public partial class WebWidgetControl : WidgetControlBase
 {
     private readonly IWebWidgetService _widgetService;
-    private bool _isInitialized;
     private WebWidgetManifest? _currentManifest;
     private string? _pendingHtml;
     private Task? _initTask;
     private static Task<CoreWebView2Environment>? s_envTask;
-    private Window? _ownerWindow;
-    private bool _isWindowClosing;
 
     public event EventHandler? WidgetMouseEnter;
     public event EventHandler? WidgetMouseLeave;
@@ -36,82 +34,32 @@ public partial class WebWidgetControl : UserControl
         // Resolve service without DI for design-time safety
         _widgetService = DesktopBoxesUI.App.Services?.GetService(typeof(IWebWidgetService)) as IWebWidgetService
                          ?? new Core.Services.WebWidgetService();
-        Loaded += OnLoaded;
-        Unloaded += OnUnloaded;
+        // Loaded/Unloaded/visibility/theme lifecycle comes from WidgetControlBase.
+        // Unloaded also fires on Hide — the WebView stays alive across it (old behavior);
+        // disposal runs only via CleanupForShutdownCore on owner-window close paths.
     }
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    protected override void InitializeCtrlsCore()
     {
-        // Loaded can refire without an Unloaded seam (re-parenting): detach first so neither
-        // the visibility nor the theme subscription can stack duplicates.
-        try { IsVisibleChanged -= OnIsVisibleChanged; } catch { }
-        try { IsVisibleChanged += OnIsVisibleChanged; } catch { }
-        if (_isInitialized)
+        _ = EnsureThenNavigateAsync();
+    }
+
+    private async Task EnsureThenNavigateAsync()
+    {
+        try { await EnsureWebViewAsync(); } catch { }
+        // OnLoaded order parity: a navigation queued before init completed drains after it.
+        try
         {
-            SubscribeTheme();
-            // Apply idle state based on current visibility
-            if (!IsVisible) Suspend(); else Resume();
-            return;
+            if (!string.IsNullOrEmpty(_pendingHtml))
+            {
+                NavigateToHtml(_pendingHtml);
+                _pendingHtml = null;
+            }
         }
-        SubscribeTheme();
-        await EnsureWebViewAsync();
-        if (!IsVisible) Suspend();
-        if (!string.IsNullOrEmpty(_pendingHtml))
-        {
-            NavigateToHtml(_pendingHtml);
-            _pendingHtml = null;
-        }
-        _ownerWindow = Window.GetWindow(this);
-        _ownerWindow.Closing += OnWindowClosing;
-
+        catch { }
     }
 
-    private void OnWindowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
-    {
-        _isWindowClosing = !e.Cancel;
-    }
-
-    private void OnUnloaded(object sender, RoutedEventArgs e)
-    {
-        if (_ownerWindow != null)
-        {
-            _ownerWindow.Closing -= OnWindowClosing;
-            _ownerWindow = null;
-        }
-        UnsubscribeTheme();
-        try { IsVisibleChanged -= OnIsVisibleChanged; } catch { }
-        // Keep WebView alive for performance; disposal is handled by parent window's OnClosed
-        // to avoid CoreWebView2Controller.IsVisible race during shutdown
-    }
-
-    private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
-    {
-        if (_isWindowClosing) return;
-        if (!IsVisible) Suspend();
-        else Resume();
-    }
-
-    private bool _themeSubscribed;
-
-    private void SubscribeTheme()
-    {
-        if (_themeSubscribed) return;
-        try { ApplicationThemeManager.Changed += OnAppThemeChanged; _themeSubscribed = true; } catch { }
-    }
-
-    private void UnsubscribeTheme()
-    {
-        try { ApplicationThemeManager.Changed -= OnAppThemeChanged; } catch { }
-        _themeSubscribed = false;
-    }
-
-    private void OnAppThemeChanged(ApplicationTheme current, System.Windows.Media.Color systemAccent)
-    {
-        if (!ShouldSwitchTheme()) return;
-        try { Dispatcher.BeginInvoke(() => ApplyThemeToWebView()); } catch { }
-    }
-
-    private bool ShouldSwitchTheme()
+    protected override bool ShouldSwitchTheme()
     {
         if (_currentManifest == null) return false;
         if (_currentManifest.CanSwitchTheme == true) return true;
@@ -162,7 +110,9 @@ public partial class WebWidgetControl : UserControl
         try { WebView.CoreWebView2.ExecuteScriptAsync($"document.documentElement.setAttribute('data-theme','{theme}')"); } catch { }
     }
 
-    public bool IsSuspended { get; private set; }
+    protected override void ApplyTheme() => ApplyThemeToWebView();
+
+    public override bool IsSuspended { get; protected set; }
 
     public int? BrowserProcessId
     {
@@ -177,17 +127,22 @@ public partial class WebWidgetControl : UserControl
         }
     }
 
-    public async void Suspend()
+    protected override bool SuspendCore()
     {
-        if (IsSuspended || _isWindowClosing || !IsLoaded) return;
-        // Don't perform teardown if we're being detached
-        if (this.IsBeingDetached()) return;
+        // Base already guards IsSuspended/closing/loaded/detach.
         if (WebView?.CoreWebView2 == null)
         {
-            IsSuspended = true;
             try { WebView?.CoreWebView2?.ExecuteScriptAsync("window.__suspended=true; window.dispatchEvent(new Event('suspend'));"); } catch { }
-            return;
+            return true;
         }
+        // Async completion reports the real outcome (parity with the old async Suspend):
+        // false now, true on success via the continuation below.
+        _ = SuspendAsync();
+        return false;
+    }
+
+    private async Task SuspendAsync()
+    {
         try
         {
             // TrySuspendAsync available from WebView2 1.0.1245+
@@ -202,29 +157,25 @@ public partial class WebWidgetControl : UserControl
         }
     }
 
-    public void Resume()
+    protected override bool ResumeCore()
     {
-        if (!IsSuspended) return;
-
-        if (_isWindowClosing || !IsLoaded) return;
-        // Don't perform teardown if we're being detached
-        if (this.IsBeingDetached()) return;
+        // Base already guards !IsSuspended/closing/loaded/detach.
         try
         {
             WebView?.CoreWebView2?.Resume();
         }
         catch { }
         try { WebView?.CoreWebView2?.ExecuteScriptAsync("window.__suspended=false; window.dispatchEvent(new Event('resume')); document.hidden=false;"); } catch { }
-        IsSuspended = false;
         // Re-apply theme after resume (WebView may have been frozen)
         ApplyThemeToWebView();
+        return true;
     }
 
-    public void RefreshTheme() => ApplyThemeToWebView();
-
-    public void CleanupForShutdown()
+    protected override void CleanupForShutdownCore()
     {
-        try { UnsubscribeTheme(); } catch { }
+        // Base already unsubscribed the theme and reset init state. WebView teardown only:
+        // never on Unloaded (Hide fires it too) — the owner window calls CleanupForShutdown
+        // explicitly on close paths.
         try { _initTask = null; } catch { }
         try
         {
