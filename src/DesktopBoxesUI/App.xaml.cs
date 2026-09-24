@@ -321,21 +321,31 @@ public partial class App : Application
 
     private void BuildTrayAndMenuItems(IServiceProvider services)
     {
-        // WPF-UI's NotifyIcon must live inside a visual tree, so host it in a hidden, always-on window.
-        // The window is never shown visibly (Visibility=Hidden) but stays loaded for the app's lifetime.
+        // WPF-UI's NotifyIcon must live inside a visual tree, so host it in an always-on
+        // window that stays loaded for the app's lifetime. It must never minimize: a 0x0
+        // minimized window with no taskbar button cannot go to the taskbar, so the shell
+        // parks it as a tiny floating window (bottom-left on startup). Normal state far
+        // off-screen instead: Show() still fires Loaded for the icon, nothing can paint.
         _trayHost = new Window
         {
             Width = 0,
             Height = 0,
-            WindowState = WindowState.Minimized,
+            Left = -10000,
+            Top = -10000,
+            WindowState = WindowState.Normal,
             WindowStyle = WindowStyle.None,
             ShowInTaskbar = false,
+            ShowActivated = false,
             // No AllowsTransparency: this host is never visibly shown, and a layered
             // redirect for an invisible 0x0 window is pure DWM overhead.
-            Visibility = Visibility.Hidden,
+            Visibility = Visibility.Visible,
         };
 
         ReplaceTrayIcon(services);
+        // Hide once loaded: a hidden host appears nowhere (screen, Alt+Tab, Task View)
+        // while the shell icon, context menu and TaskbarCreated hook — independent HWNDs —
+        // keep working. Attached before Show so the event cannot be missed.
+        _trayHost.Loaded += TrayHost_HideOnce;
         _trayHost.Show();
 
         // Double-clicking empty desktop area toggles the same hide-all state (icon double-clicks still open).
@@ -348,6 +358,19 @@ public partial class App : Application
         {
             HwndSource.FromHwnd(new WindowInteropHelper(_trayHost).Handle)?.AddHook(TrayHostHook);
         }
+    }
+
+    private void TrayHost_HideOnce(object? sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_trayHost != null)
+            {
+                _trayHost.Loaded -= TrayHost_HideOnce;
+                _trayHost.Visibility = Visibility.Hidden;
+            }
+        }
+        catch { }
     }
 
     private IntPtr TrayHostHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
