@@ -42,8 +42,9 @@ Follow it to keep the architecture clean and the build green.
   (host it in row 0 via a `ContentControl`, tweak only `ShowMaximize`/`ShowMinimize`).
   Without those props an open window keeps the background/controls of the theme it was created
   with: switching the app theme leaves the window stale (light cards/inputs in dark mode)
-  until it is closed and reopened. `LoadingWindow` is exempt (plain `Window` splash,
-  intentionally fixed skin).
+  until it is closed and reopened. `LoadingDialog` (global modal loading splash,
+  `WPFServices/LoadingDialogService` + `Views/AppWindows/LoadingDialog.xaml`) is exempt
+  (plain `Window`, intentionally fixed skin, primary screen only).
 - Section cards that collapse belong in `Controls/CollapsibleGroupBox`
   (`HeaderContent` + `Content` body, `IsExpanded`, `BodyPadding`) — never hand-roll
   another chevron/header toggle.

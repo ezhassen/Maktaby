@@ -47,6 +47,20 @@ public partial class TrayIconUI
 
     private void ContextMenu_Opened(object sender, RoutedEventArgs e)
     {
+        // A global loading dialog blocks everything, including the tray menu (Exit included:
+        // quitting mid-task would abandon the loading pipeline).
+        try
+        {
+            if (App.Services.GetRequiredService<ILoadingDialogService>().IsBusy)
+            {
+                foreach (var item in contextMenu.Items)
+                {
+                    if (item is MenuItem mItem) mItem.IsEnabled = false;
+                }
+                return;
+            }
+        }
+        catch { }
 #if DEBUG
         menuTest.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowTestButton ? Visibility.Visible : Visibility.Collapsed;
 #else

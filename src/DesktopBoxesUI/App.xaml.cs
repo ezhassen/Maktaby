@@ -136,10 +136,28 @@ public partial class App : Application
             });
         };
 
-        // The splash runs initialization itself once it is first shown (see LoadingWindow),
-        // so the Box windows are created under a fully-rendered WPF context.
-        var loading = new LoadingWindow(Services.GetRequiredService<DesktopManager>());
-        loading.Show();
+        // The global loading dialog drives initialization itself once first shown (it pumps
+        // a nested message loop, so the Box windows are created under a fully-rendered WPF context).
+        var loading = Services.GetRequiredService<ILoadingDialogService>();
+        loading.StateChanged += (_, _) =>
+        {
+            // A loading dialog blocks all input, including the tray menu: if it opened mid-click,
+            // dismiss it — ContextMenu_Opened disables every item while busy.
+            try { if (loading.IsBusy && _tray != null) _tray.contextMenu.IsOpen = false; } catch { }
+        };
+        await loading.ShowAsync(async report =>
+        {
+            report("Loading Desktop Boxes…");
+            // Let the splash paint and the dispatcher settle before the Shell enumeration /
+            // Box creation work begins.
+            await Task.Delay(800);
+            var manager = Services.GetRequiredService<DesktopManager>();
+            await manager.InitializeAsync();
+
+            // Standalone live wallpaper (own windows, own lifecycle — independent from DesktopManager).
+            try { Services.GetRequiredService<LiveWallpaperManager>().Initialize(); } catch { }
+            return null;
+        }, pausePlayback: false);
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -256,6 +274,7 @@ public partial class App : Application
         services.AddSingleton<MainViewModel>();
         services.AddTransient<SettingsViewModel>();
         services.AddSingleton<IDialogService, DialogService>();
+        services.AddSingleton<ILoadingDialogService, LoadingDialogService>();
         services.AddSingleton<IWebWidgetService, WebWidgetService>();
         services.AddSingleton<INativeWidgetService, NativeWidgetService>();
         services.AddSingleton<INativeWidgetSettingsService, NativeWidgetSettingsService>();
@@ -630,6 +649,8 @@ public partial class App : Application
 
     private void OnDesktopDoubleClick(object? sender, EventArgs e)
     {
+        // A loading dialog owns all input: ignore the hide-all toggle while busy.
+        try { if (Services.GetRequiredService<ILoadingDialogService>().IsBusy) return; } catch { }
         Services.GetRequiredService<DesktopManager>().ToggleHideAllBoxes();
     }
 

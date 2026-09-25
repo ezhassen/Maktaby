@@ -163,6 +163,21 @@ public sealed class LiveWallpaperManager
         }
     }
 
+    /// <summary>Transient playback pause for the global loading dialog: unlike
+    /// <see cref="SetPlaying"/> it never touches persisted settings, and it never builds the
+    /// engine — pre-init there is simply nothing playing yet.</summary>
+    public void SetTransientPaused(bool paused)
+    {
+        try
+        {
+            var eng = _engine;
+            if (eng is null || !ShouldShow) return;
+            if (paused) eng.PlayPause();
+            else eng.PlayStart();
+        }
+        catch { }
+    }
+
     public void SetEnabled(bool enabled)
     {
         if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
