@@ -155,7 +155,7 @@ public partial class App : Application
             await manager.InitializeAsync();
 
             // Standalone live wallpaper (own windows, own lifecycle — independent from DesktopManager).
-            try { Services.GetRequiredService<LiveWallpaperManager>().Initialize(); } catch { }
+            try { await Services.GetRequiredService<LiveWallpaperManager>().InitializeAsync(); } catch { }
             return null;
         }, pausePlayback: false);
     }
@@ -446,17 +446,17 @@ public partial class App : Application
         tray.NewBoxFolderPortalRequested += (_, _) => Services.GetRequiredService<DesktopManager>().NewFolderPortal();
         tray.NewWidgetRequested += (_, _) => ShowWidgetsList(selectMode: true);
         tray.ManageWidgetsRequested += (_, _) => ShowWidgetsList(selectMode: false);
-        tray.LiveWallpaperToggleEnable += (_, _) =>
+        tray.LiveWallpaperToggleEnable += async (_, _) =>
         {
             var lw = Services.GetRequiredService<LiveWallpaperManager>();
-            lw.SetEnabled(!lw.IsEnabled);
+            try { await lw.SetEnabledAsync(!lw.IsEnabled); } catch { }
         };
-        tray.LiveWallpaperTogglePlayPause += (_, _) =>
+        tray.LiveWallpaperTogglePlayPause += async (_, _) =>
         {
             var lw = Services.GetRequiredService<LiveWallpaperManager>();
-            lw.SetPlaying(!lw.IsPlaying);
+            try { await lw.SetPlayingAsync(!lw.IsPlaying); } catch { }
         };
-        tray.LiveWallpaperChangeRequested += (_, _) =>
+        tray.LiveWallpaperChangeRequested += async (_, _) =>
         {
             // Filter comes from the engine itself (WallPaperFilePicker builds it from
             // WallpaperPath.ImageExtensions + CodecSupport.VideoExtensions), so it never drifts
@@ -464,9 +464,12 @@ public partial class App : Application
             // so the parameterless overload passes IntPtr.Zero — never a process handle.
             var newFile = DesktopLiveWallPaperEngine.WallpaperFilePicker.PickMedia();
             if (string.IsNullOrEmpty(newFile) || !File.Exists(newFile)) return;
-            Services.GetRequiredService<LiveWallpaperManager>().SetWallpaper(newFile);
+            try { await Services.GetRequiredService<LiveWallpaperManager>().SetWallpaperAsync(newFile); } catch { }
         };
-        tray.LiveWallpaperRemoveRequested += (_, _) => Services.GetRequiredService<LiveWallpaperManager>().Remove();
+        tray.LiveWallpaperRemoveRequested += async (_, _) =>
+        {
+            try { await Services.GetRequiredService<LiveWallpaperManager>().RemoveAsync(); } catch { }
+        };
         tray.ResetRequested += async (_, _) =>
         {
             var confirmed = await Services.GetRequiredService<IDialogService>().ShowConfirmAsync(

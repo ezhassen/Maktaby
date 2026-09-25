@@ -40,10 +40,32 @@ public sealed class Engine : IDisposable
     private string _lastReapplyReason = "none";
     private DateTime _lastReapplyUtc;
 
-    /// <summary>Guards <see cref="_teardownTask"/>. All public engine methods run on the
-    /// main thread; only the teardown body runs on the pool, touching its snapshot.</summary>
+    /// <summary>Teardown handoff + posted-action serialization: <see cref="DisableCore"/>
+    /// takes the snapshot under this lock, the engine-thread loop holds it around each posted
+    /// action (same-thread re-entrant; cores only take it for short handoffs, never across
+    /// waits), and <see cref="Dispose"/> excludes in-flight actions the same way. Only the
+    /// teardown body runs on the pool, touching its snapshot — its completion handoff is
+    /// lock-free (Interlocked) so an Enable waiting on it cannot deadlock against an action
+    /// holding this lock.</summary>
     private readonly object _gate = new();
     private Task? _teardownTask;
+
+    /// <summary>Dedicated engine thread ("LiveWallpaperEngine", STA + GetMessage pump — the same
+    /// pattern as WebViewRenderer's WebWallpaperUI thread): every mutating engine body runs here
+    /// instead of the UI thread, so Enable / re-apply / wallpaper switches never stall the app.
+    /// Public entry points post through <see cref="PostExclusiveAsync"/> and await completion;
+    /// window messages (TaskbarCreated, display/power/session) arrive here too, since the message
+    /// window is created on this thread. Pure reads (GetMonitorStates, Diagnostics, ReapplyInfo,
+    /// PreloadTotalBytes) stay callable from any thread.</summary>
+    private Thread? _engineThread;
+    private EngineWakeWindow? _wakeWindow;
+    private IntPtr _wakeHwnd;
+    private readonly ManualResetEventSlim _wakeReady = new(false);
+    private readonly ConcurrentQueue<Action> _engineActions = new();
+    private readonly object _threadStartGate = new();
+    private int _activeOps;
+    private volatile bool _threadStop;
+    private volatile bool _disposed;
 
     /// <summary>Bumped on Disable/ReapplyAll: transitions computed by an in-flight poll
     /// before the bump name windows that no longer exist, and must not land on the
@@ -115,6 +137,11 @@ public sealed class Engine : IDisposable
 
     public bool IsEnabled { get; private set; }
 
+    /// <summary>True while an exclusive engine operation is queued or running on the engine
+    /// thread. Posted operations serialize there anyway — this is for callers to observe
+    /// (and for <see cref="LiveWallpaperManager"/>-level gating).</summary>
+    public bool IsBusy => Volatile.Read(ref _activeOps) != 0 || !_engineActions.IsEmpty;
+
     /// <summary>Shared in-memory media store (videos + animated GIFs under the cap).</summary>
     public PreloadedMediaCache PreloadCache => _preload;
     private readonly PreloadedMediaCache _preload;
@@ -132,11 +159,17 @@ public sealed class Engine : IDisposable
     }
 
     /// <summary>
-    /// Start/Enable the engine. Waits (bounded) for a previous background teardown:
-    /// it owns the original-wallpaper files this method re-reads, and its windows
-    /// must be gone before new ones attach.
+    /// Start/Enable the engine. UI-thread safe: the body runs exclusively on the engine thread,
+    /// so the bounded wait for a previous background teardown no longer freezes the app.
     /// </summary>
-    public void Enable()
+    public Task EnableAsync() => PostExclusiveAsync(EnableCore);
+
+    /// <summary>
+    /// Start/Enable the engine core (engine thread only). Waits (bounded) for a previous
+    /// background teardown: it owns the original-wallpaper files this method re-reads, and its
+    /// windows must be gone before new ones attach.
+    /// </summary>
+    private void EnableCore()
     {
         // Re-entrancy guard: a second Enable over a live session would orphan the message
         // window, power registrations, layer host, GPU device and hook thread it replaces.
@@ -244,19 +277,29 @@ public sealed class Engine : IDisposable
             _playback = null;
         }
     }
-    public void EnsureEnabled()
+    /// <summary>Ensures the engine is enabled (engine-thread serialized, UI-thread safe).</summary>
+    public Task EnsureEnabledAsync() => PostExclusiveAsync(EnsureEnabledCore);
+
+    private void EnsureEnabledCore()
     {
-        if (!IsEnabled) Enable();
+        if (!IsEnabled) EnableCore();
     }
 
     /// <summary>
-    /// Stop/Disable the engine. Returns fast: the playback monitor stops and the field
+    /// Stop/Disable the engine. UI-thread safe: returns when the snapshot is taken on the
+    /// engine thread while MF pipeline teardown, D3D release and the SetWallpaper restore run
+    /// on the pool (previously the whole call blocked the UI thread).
+    /// </summary>
+    public Task DisableAsync() => PostExclusiveAsync(DisableCore);
+
+    /// <summary>
+    /// Stop/Disable the engine core. Returns fast: the playback monitor stops and the field
     /// snapshot is taken synchronously, while MF pipeline teardown, D3D release and the
     /// SetWallpaper restore run on the thread pool. Previously all of that blocked the
     /// calling (UI) thread — MF topology teardown and the shell wallpaper broadcast are
     /// the stalls users felt as a hang.
     /// </summary>
-    public void Disable()
+    private void DisableCore()
     {
         TeardownSnapshot? snapshot = null;
         lock (_gate)
@@ -307,7 +350,9 @@ public sealed class Engine : IDisposable
             {
                 try { snapshot.Run(); }
                 catch (Exception ex) { Serilog.Log.Error("Background teardown failed", ex); }
-                finally { lock (_gate) { if (ReferenceEquals(_teardownTask, task)) _teardownTask = null; } }
+                // Lock-free handoff (clears only if still current): an EnableCore waiting on
+                // this task must not block on _gate while holding it around its own action.
+                finally { Interlocked.CompareExchange(ref _teardownTask, null, task); }
             });
             _teardownTask = task;
         }
@@ -348,6 +393,8 @@ public sealed class Engine : IDisposable
 
     //public bool IsPlayStarted { get; private set; } = true;
 
+    /// <summary>Resume playback. Stays synchronous by design: it only flips a flag and posts
+    /// a session-scoped action to the engine thread — nothing here ever blocks.</summary>
     public void PlayStart()
     {
         _userPaused = false;
@@ -367,6 +414,8 @@ public sealed class Engine : IDisposable
         _playback?.Resume();
     }
 
+    /// <summary>Pause playback. Stays synchronous by design: supervisor suspend + a posted
+    /// session-scoped action — nothing here ever blocks.</summary>
     public void PlayPause()
     {
         _userPaused = true;
@@ -543,7 +592,10 @@ public sealed class Engine : IDisposable
         Serilog.Log.Information($"Wallpaper applied on {monitor.Device} {monitor.Bounds}: {path}");
     }
 
-    public void ApplyUserSelection(string path, string monitorDevice = "*")
+    public Task ApplyUserSelectionAsync(string path, string monitorDevice = "*")
+        => PostExclusiveAsync(() => ApplyUserSelectionCore(path, monitorDevice));
+
+    private void ApplyUserSelectionCore(string path, string monitorDevice = "*")
     {
         bool anyApplied = false;
         foreach (var monitor in MonitorTracker.Enumerate())
@@ -874,8 +926,8 @@ public sealed class Engine : IDisposable
             current / 1024 / 1024, growth / 1024 / 1024, BytesPerStrandedPool / 1024 / 1024);
         try
         {
-            Disable();
-            EnsureEnabled();
+            DisableCore();
+            EnsureEnabledCore();
         }
         catch (Exception ex) { Serilog.Log.Error("Post-resume recycle failed", ex); }
     }
@@ -1003,6 +1055,117 @@ public sealed class Engine : IDisposable
         }
     }
 
+    // ---- engine thread ----------------------------------------------------------------------
+
+    /// <summary>Starts the engine thread on first use (bounded wait for its wake window).</summary>
+    private void EnsureEngineThread()
+    {
+        lock (_threadStartGate)
+        {
+            if (_engineThread is not null || _disposed) return;
+            var thread = new Thread(EngineThreadMain) { IsBackground = true, Name = "LiveWallpaperEngine" };
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            _engineThread = thread;
+        }
+        if (!_wakeReady.Wait(TimeSpan.FromSeconds(10)))
+            throw new InvalidOperationException("Live-wallpaper engine thread did not start.");
+    }
+
+    private void EngineThreadMain()
+    {
+        try
+        {
+            _wakeWindow = new EngineWakeWindow(this);
+            _wakeHwnd = _wakeWindow.Hwnd;
+            _wakeReady.Set();
+            while (User32.GetMessageW(out var msg, IntPtr.Zero, 0, 0) > 0)
+            {
+                User32.TranslateMessage(ref msg);
+                User32.DispatchMessageW(ref msg);
+            }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error("Live-wallpaper engine thread failed", ex);
+            _wakeReady.Set();
+        }
+    }
+
+    private void WakeEngineThread()
+    {
+        var hwnd = Volatile.Read(ref _wakeHwnd);
+        if (hwnd != IntPtr.Zero)
+            User32.PostMessageW(hwnd, MessageWindow.RunActionsMessage, IntPtr.Zero, IntPtr.Zero);
+    }
+
+    /// <summary>Runs <paramref name="body"/> exclusively on the engine thread and completes when
+    /// it does. Posted actions drain FIFO under <see cref="_gate"/> (so <see cref="Dispose"/>
+    /// excludes in-flight work); the pump keeps dispatching window messages between actions.
+    /// Throws <see cref="ObjectDisposedException"/> after <see cref="Dispose"/>.</summary>
+    private Task PostExclusiveAsync(Action body)
+    {
+        EnsureEngineThread();
+        if (_disposed) throw new ObjectDisposedException(nameof(Engine));
+        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _engineActions.Enqueue(() =>
+        {
+            Interlocked.Exchange(ref _activeOps, 1);
+            try
+            {
+                lock (_gate)
+                {
+                    if (_disposed) throw new ObjectDisposedException(nameof(Engine));
+                    body();
+                }
+                tcs.TrySetResult();
+            }
+            catch (Exception ex) { tcs.TrySetException(ex); }
+            finally { Volatile.Write(ref _activeOps, 0); }
+        });
+        WakeEngineThread();
+        return tcs.Task;
+    }
+
+    private void DrainEngineActions()
+    {
+        while (_engineActions.TryDequeue(out var action))
+        {
+            try { action(); }
+            catch (Exception ex) { Serilog.Log.Error("Engine action failed", ex); }
+        }
+    }
+
+    /// <summary>Persistent wake target for the engine thread (exists from thread start, unlike
+    /// the session-scoped message window): every posted engine/session action wakes the pump
+    /// through here, and shutdown quits it.</summary>
+    private sealed class EngineWakeWindow : Win32Window
+    {
+        private readonly Engine _engine;
+
+        public EngineWakeWindow(Engine engine)
+        {
+            _engine = engine;
+            CreateWindow("DLWEngineWake", 0, 0, 0, 0, 0, 0, IntPtr.Zero);
+        }
+
+        protected override IntPtr HandleMessage(uint msg, IntPtr wParam, IntPtr lParam)
+        {
+            if (msg == MessageWindow.RunActionsMessage)
+            {
+                if (_engine._threadStop)
+                {
+                    User32.PostQuitMessage(0);
+                    return IntPtr.Zero;
+                }
+                _engine.DrainEngineActions();
+                _engine.DrainMainThreadActions();
+                return IntPtr.Zero;
+            }
+            return base.HandleMessage(msg, wParam, lParam);
+        }
+    }
+
     private void SaveOriginalWallpaper()
     {
         try
@@ -1074,12 +1237,15 @@ public sealed class Engine : IDisposable
     //public void SaveConfig() => ConfigStore.Save(_config);
 
     /// <summary>Fit mode (or similar) changed: persist and swap renderers in place —
-    /// windows and hosts are reused, so there is no flicker.</summary>
-    public void RefreshWallpapers()
+    /// windows and hosts are reused, so there is no flicker. Engine-thread serialized,
+    /// UI-thread safe.</summary>
+    public Task RefreshWallpapersAsync() => PostExclusiveAsync(RefreshWallpapersCore);
+
+    private void RefreshWallpapersCore()
     {
         if (!IsEnabled)
         {
-            this.Enable();
+            EnableCore();
         }
         else
         {
@@ -1102,7 +1268,11 @@ public sealed class Engine : IDisposable
         }
     }
 
-    public void ApplyAudioSettings()
+    /// <summary>Pushes mute/volume into the live renderers. Engine-thread serialized
+    /// (WebView2 mute marshals to its own STA thread internally; MediaPlayer is agile).</summary>
+    public Task ApplyAudioSettingsAsync() => PostExclusiveAsync(ApplyAudioSettingsCore);
+
+    private void ApplyAudioSettingsCore()
     {
         //ConfigStore.Save(_config);
         foreach (var window in _windows.Values)
@@ -1280,12 +1450,14 @@ public sealed class Engine : IDisposable
 
 
 
-    /// <summary>Synchronous-looking shutdown: launches the background teardown, then
-    /// waits for it bounded so the original wallpaper is actually restored before the
-    /// process exits. The OS reclaims anything still in flight past the cap.</summary>
+    /// <summary>Synchronous-looking shutdown: disables the session, stops the engine thread,
+    /// then launches the background teardown and waits for it bounded so the original wallpaper
+    /// is actually restored before the process exits. The OS reclaims anything still in flight
+    /// past the cap. Stays synchronous by request (app-exit path).</summary>
     public void Dispose()
     {
-        Disable();
+        _disposed = true;
+        DisableCore();
         // Retire the settled-topology timer: pending firings observe the bumped generation
         // (plus !IsEnabled) and return without posting.
         System.Threading.Timer? settle;
@@ -1296,6 +1468,7 @@ public sealed class Engine : IDisposable
             _settleGen++;
         }
         try { settle?.Dispose(); } catch { }
+        StopEngineThread();
         Task? teardown;
         lock (_gate) teardown = _teardownTask;
         if (teardown is not null && !teardown.IsCompleted)
@@ -1303,5 +1476,22 @@ public sealed class Engine : IDisposable
             try { teardown.Wait(TimeSpan.FromSeconds(8)); }
             catch (Exception ex) { Serilog.Log.Warning($"Teardown wait failed: {ex.Message}"); }
         }
+    }
+
+    /// <summary>Signals the engine-thread pump to exit and joins it bounded. The thread is a
+    /// background thread, so the process exit reclaims it even past the cap.</summary>
+    private void StopEngineThread()
+    {
+        Thread? thread;
+        lock (_threadStartGate) thread = _engineThread;
+        if (thread is null) return;
+        _threadStop = true;
+        try { WakeEngineThread(); } catch { }
+        try
+        {
+            if (!thread.Join(TimeSpan.FromSeconds(3)))
+                Serilog.Log.Warning("Engine thread did not exit within 3 s — leaving it backgrounded");
+        }
+        catch (Exception ex) { Serilog.Log.Warning($"Engine thread join failed: {ex.Message}"); }
     }
 }

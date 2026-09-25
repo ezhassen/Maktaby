@@ -143,15 +143,25 @@ namespace DesktopBoxesUI.Views
             _vm.Refresh();
         }
 
-        private void WallpaperSuspend_Click(object sender, RoutedEventArgs e)
+        private async void WallpaperSuspend_Click(object sender, RoutedEventArgs e)
         {
-            try { App.Services?.GetService<LiveWallpaperManager>()?.SetPlaying(false); } catch { }
+            try
+            {
+                var lw = App.Services?.GetService<LiveWallpaperManager>();
+                if (lw != null) await lw.SetPlayingAsync(false);
+            }
+            catch { }
             _vm.Refresh();
         }
 
-        private void WallpaperResume_Click(object sender, RoutedEventArgs e)
+        private async void WallpaperResume_Click(object sender, RoutedEventArgs e)
         {
-            try { App.Services?.GetService<LiveWallpaperManager>()?.SetPlaying(true); } catch { }
+            try
+            {
+                var lw = App.Services?.GetService<LiveWallpaperManager>();
+                if (lw != null) await lw.SetPlayingAsync(true);
+            }
+            catch { }
             _vm.Refresh();
         }
 

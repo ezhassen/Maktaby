@@ -451,6 +451,6 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         // Start/suspend the live desktop icon-size watcher to match the new setting.
         App.SyncDesktopIconSizeWatcher();
         // Push the preload cap to a running engine (no rebuild needed).
-        try { App.Services.GetRequiredService<LiveWallpaperManager>().ApplyPreloadCap(); } catch { }
+        try { _ = App.Services.GetRequiredService<LiveWallpaperManager>().ApplyPreloadCapAsync(); } catch { }
     }
 }

@@ -25,11 +25,28 @@ public sealed class LiveWallpaperManager
 
     private Engine? _engine;
 
+    /// <summary>Serializes mutating operations (init / enable / wallpaper / play-state changes):
+    /// while one is in flight the rest wait instead of overlapping engine sessions. Reads
+    /// (properties, GetMonitorStates, preload/reapply forensics) and the transient loading-dialog
+    /// pause bypass it by design.</summary>
+    private readonly SemaphoreSlim _gate = new(1, 1);
+
     //private bool _Engine_IsEnabled;
 
     public LiveWallpaperManager(ISettingsService settings)
     {
         _settings = settings;
+    }
+
+    /// <summary>True while a mutating operation is in flight — no other gated method runs
+    /// until it clears.</summary>
+    public bool IsBusy => _gate.CurrentCount == 0;
+
+    private async Task RunExclusiveAsync(Func<Task> op)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try { await op().ConfigureAwait(false); }
+        finally { _gate.Release(); }
     }
 
     public bool IsEnabled => _settings.UserSettings.LiveWallpaperEnabled;
@@ -74,6 +91,8 @@ public sealed class LiveWallpaperManager
 
     void DoWithEngine(Action<Engine> action)
     {
+        // Retained for the (commented-out) layout-debounce sketch below; all live paths post
+        // through the Async entry points instead.
         var eng = GetEngine();
         if (eng is not null) action(eng);
     }
@@ -82,9 +101,13 @@ public sealed class LiveWallpaperManager
 
     /// <summary>Applies the preload cap (settings change): live-updates a running engine,
     /// otherwise stored for the next <see cref="GetEngine"/> build.</summary>
-    public void ApplyPreloadCap()
+    public Task ApplyPreloadCapAsync()
     {
-        try { _engine?.SetPreloadCap(PreloadCapBytes(_settings.UserSettings.LiveWallpaperPreloadMaxMB)); } catch { }
+        return RunExclusiveAsync(() =>
+        {
+            try { _engine?.SetPreloadCap(PreloadCapBytes(_settings.UserSettings.LiveWallpaperPreloadMaxMB)); } catch { }
+            return Task.CompletedTask;
+        });
     }
 
     /// <summary>Total preloaded bytes currently pinned (shared across monitors).</summary>
@@ -99,30 +122,30 @@ public sealed class LiveWallpaperManager
         try { return _engine?.ReapplyInfo ?? "rebuilds=?"; } catch { return "rebuilds=?"; }
     }
 
-    public void Initialize()
+    public Task InitializeAsync()
     {
-        //Not needed anymore the engine handles it automatically 
+        //Not needed anymore the engine handles it automatically
 
         /*SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
         SystemEvents.DisplaySettingsChanged += OnDisplaySettingsChanged;
         SystemEvents.SessionSwitch -= OnSessionSwitch;
         SystemEvents.SessionSwitch += OnSessionSwitch;*/
-        if (ShouldShow)
+        return RunExclusiveAsync(async () =>
         {
-            DoWithEngine(eng =>
+            if (!ShouldShow) return;
+            var eng = GetEngine();
+            if (eng is null) return;
+            await eng.EnableAsync().ConfigureAwait(false);
+            if (!_settings.UserSettings.LiveWallpaperPlaying)
             {
-                eng.Enable();
-                if (!_settings.UserSettings.LiveWallpaperPlaying)
-                {
-                    eng.PlayPause();
-                }
-            });
-        }
+                eng.PlayPause();
+            }
+        });
     }
 
-    public void SetWallpaper(string path)
+    public Task SetWallpaperAsync(string path)
     {
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return Task.CompletedTask;
         if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
             Serilog.Log.Information("Live wallpaper changing to {Path}", path);
         _settings.UserSettings.LiveWallpaperPath = path;
@@ -130,42 +153,44 @@ public sealed class LiveWallpaperManager
         _settings.UserSettings.LiveWallpaperPlaying = true;
         _settings.Save();
         //
-        if (ShouldShow)
+        return RunExclusiveAsync(async () =>
         {
-            DoWithEngine(eng =>
-            {
-                eng.Config.Assign("*", path);
-                eng.RefreshWallpapers();
-            });
-        }
+            if (!ShouldShow) return;
+            var eng = GetEngine();
+            if (eng is null) return;
+            eng.Config.Assign("*", path);
+            await eng.RefreshWallpapersAsync().ConfigureAwait(false);
+        });
     }
 
-    public void SetPlaying(bool playing)
+    public Task SetPlayingAsync(bool playing)
     {
         if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
             Serilog.Log.Information("Live wallpaper playing set to {Playing}", playing);
         _settings.UserSettings.LiveWallpaperPlaying = playing;
         _settings.Save();
-        if (ShouldShow)
+        return RunExclusiveAsync(async () =>
         {
-            DoWithEngine(eng =>
+            if (!ShouldShow) return;
+            var eng = GetEngine();
+            if (eng is null) return;
+            await eng.EnsureEnabledAsync().ConfigureAwait(false);
+            if (playing)
             {
-                eng.EnsureEnabled();
-                if (playing)
-                {
-                    eng.PlayStart();
-                }
-                else
-                {
-                    eng.PlayPause();
-                }
-            });
-        }
+                eng.PlayStart();
+            }
+            else
+            {
+                eng.PlayPause();
+            }
+        });
     }
 
     /// <summary>Transient playback pause for the global loading dialog: unlike
-    /// <see cref="SetPlaying"/> it never touches persisted settings, and it never builds the
-    /// engine — pre-init there is simply nothing playing yet.</summary>
+    /// <see cref="SetPlayingAsync"/> it never touches persisted settings, never builds the
+    /// engine, and bypasses the <see cref="IsBusy"/> gate by design (a loading dialog must
+    /// pause immediately even while another operation is in flight — the engine calls are
+    /// non-blocking posts).</summary>
     public void SetTransientPaused(bool paused)
     {
         try
@@ -178,44 +203,47 @@ public sealed class LiveWallpaperManager
         catch { }
     }
 
-    public void SetEnabled(bool enabled)
+    public Task SetEnabledAsync(bool enabled)
     {
         if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
             Serilog.Log.Information("Live wallpaper enabled set to {Enabled}", enabled);
         _settings.UserSettings.LiveWallpaperEnabled = enabled;
         _settings.Save();
-        if (enabled)
+        return RunExclusiveAsync(async () =>
         {
-            if (ShouldShow)
+            if (enabled)
             {
-                DoWithEngine(eng =>
+                if (!ShouldShow) return;
+                var eng = GetEngine();
+                if (eng is null) return;
+                await eng.EnsureEnabledAsync().ConfigureAwait(false);
+                if (!_settings.UserSettings.LiveWallpaperPlaying)
                 {
-                    eng.EnsureEnabled();
-                    if (!_settings.UserSettings.LiveWallpaperPlaying)
-                    {
-                        eng.PlayPause();
-                    }
-                });
+                    eng.PlayPause();
+                }
             }
-        }
-        else
-        {
-            _engine?.Disable();
-        }
+            else
+            {
+                var eng = _engine;
+                if (eng is not null) await eng.DisableAsync().ConfigureAwait(false);
+            }
+        });
     }
 
-    public void Remove()
+    public Task RemoveAsync()
     {
         if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
             Serilog.Log.Information("Live wallpaper removed");
         _settings.UserSettings.LiveWallpaperPath = null;
         _settings.Save();
         //
-        if (_engine is not null)
+        return RunExclusiveAsync(async () =>
         {
-            _engine.Config.Assign("*", string.Empty);
-            _engine.Disable();
-        }
+            var eng = _engine;
+            if (eng is null) return;
+            eng.Config.Assign("*", string.Empty);
+            await eng.DisableAsync().ConfigureAwait(false);
+        });
     }
 
     public void RecoverAfterShellRestart()
@@ -268,6 +296,8 @@ public sealed class LiveWallpaperManager
          {
              DoWithEngine(eng =>
              {
+                 // Sketch only (see DoWithEngine note): the live equivalent is
+                 // await eng.EnsureEnabledAsync(); await eng.RefreshWallpapersAsync();
                  eng.EnsureEnabled();
                  eng.RefreshWallpapers();
                  if (!_settings.UserSettings.LiveWallpaperPlaying)
