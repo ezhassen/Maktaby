@@ -21,6 +21,28 @@ public partial class WidgetSettingsWindow : AppFluentWindow
 
     public string WindowTitle { get; }
 
+    /// <summary>Parameterless for the VS/Blend designer: sample settings of every kind
+    /// rendered through the real row builder.</summary>
+    public WidgetSettingsWindow()
+        : this(
+            new NativeWidgetInfo("analog-clock", NativeWidgetSource.App, "", new NativeWidgetManifest { Name = "Analog Clock" }, null, null),
+            new DesignSettingsProvider(),
+            null!)
+    {
+    }
+
+    private sealed class DesignSettingsProvider : IWidgetSettingsProvider
+    {
+        public IReadOnlyList<WidgetSetting> Settings { get; } = new List<WidgetSetting>
+        {
+            new("title", "Title", "Header text shown on the widget.", WidgetSettingKind.String, () => { }, "Analog Clock"),
+            new("size", "Size", "Face diameter in pixels.", WidgetSettingKind.Number, () => { }, 300.0),
+            new("showSeconds", "Show seconds", "Sweep the second hand.", WidgetSettingKind.Boolean, () => { }, true),
+            new("handStyle", "Hand style", "Which hands to draw.", WidgetSettingKind.ListOfStrings, () => { }, "smooth",
+                new Dictionary<string, string> { ["hide"] = "Hide", ["smooth"] = "Smooth sweep", ["step"] = "Step once per second" }),
+        };
+    }
+
     public WidgetSettingsWindow(NativeWidgetInfo info, IWidgetSettingsProvider provider, INativeWidgetSettingsService svc)
     {
         _info = info;

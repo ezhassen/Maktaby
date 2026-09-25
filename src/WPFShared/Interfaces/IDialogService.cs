@@ -4,15 +4,6 @@ using Wpf.Ui.Controls;
 namespace WPFShared.Interfaces;
 
 /// <summary>
-/// A window that can host WPF-UI content dialogs. The <see cref="IDialogService"/> renders dialogs
-/// on the active window implementing this interface.
-/// </summary>
-public interface IContentDialogHostProvider
-{
-    ContentDialogHost DialogHost { get; }
-}
-
-/// <summary>
 /// Configurable options for a content dialog shown through <see cref="IDialogService"/>.
 /// </summary>
 public sealed record DialogOptions

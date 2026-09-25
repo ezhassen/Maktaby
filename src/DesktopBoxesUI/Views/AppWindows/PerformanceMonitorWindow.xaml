@@ -4,13 +4,18 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:appwin="clr-namespace:DesktopBoxesUI.Views.AppWindows"
     xmlns:controls="clr-namespace:DesktopBoxesUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
     Title="Performance Monitor"
     Width="760"
     Height="800"
     MinWidth="640"
     MinHeight="480"
-    WindowStartupLocation="CenterScreen">
+    d:DataContext="{Binding Source={x:Static appwin:DesignTimeData.SamplePerformance}}"
+    WindowStartupLocation="CenterScreen"
+    mc:Ignorable="d">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -219,7 +224,11 @@
             Margin="12,0,12,4"
             IsExpanded="{Binding IsWebView2Expanded, Mode=TwoWay}">
             <controls:CollapsibleGroupBox.Style>
-                <Style TargetType="{x:Type controls:CollapsibleGroupBox}">
+                <!--
+                    BasedOn the implicit card style: a local Style without it would replace
+                    the card template entirely (blank, zero-height section).
+                -->
+                <Style BasedOn="{StaticResource {x:Type controls:CollapsibleGroupBox}}" TargetType="{x:Type controls:CollapsibleGroupBox}">
                     <Setter Property="Visibility" Value="Visible" />
                     <Style.Triggers>
                         <DataTrigger Binding="{Binding HasWebView2Processes}" Value="False">
@@ -246,46 +255,46 @@
             <DataGrid
                 MaxHeight="120"
                 Margin="4"
-                    AutoGenerateColumns="False"
-                    CanUserAddRows="False"
-                    CanUserDeleteRows="False"
-                    CanUserReorderColumns="False"
-                    CanUserResizeColumns="True"
-                    ColumnHeaderHeight="24"
-                    FontSize="11"
-                    GridLinesVisibility="Horizontal"
-                    HeadersVisibility="Column"
-                    IsReadOnly="True"
-                    ItemsSource="{Binding WebView2Processes}"
-                    RowHeaderWidth="0"
-                    RowHeight="22"
-                    ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-                    <DataGrid.CellStyle>
-                        <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
-                            <Setter Property="Padding" Value="4,1" />
-                            <Setter Property="VerticalContentAlignment" Value="Center" />
-                            <Setter Property="VerticalAlignment" Value="Center" />
-                        </Style>
-                    </DataGrid.CellStyle>
-                    <DataGrid.Columns>
-                        <DataGridTextColumn
-                            Width="80"
-                            Binding="{Binding Pid}"
-                            Header="PID" />
-                        <DataGridTextColumn
-                            Width="90"
-                            Binding="{Binding Kind}"
-                            Header="Type" />
-                        <DataGridTextColumn
-                            Width="*"
-                            Binding="{Binding MemoryMB, StringFormat={}{0} MB}"
-                            Header="Memory" />
-                        <DataGridTextColumn
-                            Width="*"
-                            Binding="{Binding Cpu, StringFormat={}{0:0.0}%}"
-                            Header="CPU" />
-                    </DataGrid.Columns>
-                </DataGrid>
+                AutoGenerateColumns="False"
+                CanUserAddRows="False"
+                CanUserDeleteRows="False"
+                CanUserReorderColumns="False"
+                CanUserResizeColumns="True"
+                ColumnHeaderHeight="24"
+                FontSize="11"
+                GridLinesVisibility="Horizontal"
+                HeadersVisibility="Column"
+                IsReadOnly="True"
+                ItemsSource="{Binding WebView2Processes}"
+                RowHeaderWidth="0"
+                RowHeight="22"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <DataGrid.CellStyle>
+                    <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
+                        <Setter Property="Padding" Value="4,1" />
+                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+                </DataGrid.CellStyle>
+                <DataGrid.Columns>
+                    <DataGridTextColumn
+                        Width="80"
+                        Binding="{Binding Pid}"
+                        Header="PID" />
+                    <DataGridTextColumn
+                        Width="90"
+                        Binding="{Binding Kind}"
+                        Header="Type" />
+                    <DataGridTextColumn
+                        Width="*"
+                        Binding="{Binding MemoryMB, StringFormat={}{0} MB}"
+                        Header="Memory" />
+                    <DataGridTextColumn
+                        Width="*"
+                        Binding="{Binding Cpu, StringFormat={}{0:0.0}%}"
+                        Header="CPU" />
+                </DataGrid.Columns>
+            </DataGrid>
         </controls:CollapsibleGroupBox>
 
         <!--  Per-window list  -->
@@ -294,42 +303,42 @@
             Margin="12,0,12,6"
             IsExpanded="{Binding IsWindowsExpanded, Mode=TwoWay}">
             <controls:CollapsibleGroupBox.HeaderContent>
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="Auto" />
-                        </Grid.RowDefinitions>
-                        <TextBlock
-                            VerticalAlignment="Center"
-                            FontWeight="SemiBold"
-                            Text="Windows / Widgets" />
-                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
-                            <ui:Button
-                                Padding="8,2"
-                                Appearance="Secondary"
-                                Click="SuspendIdle_Click"
-                                Content="Suspend"
-                                FontSize="11"
-                                ToolTip="Suspend all container widgets (WebViews and native plugins)" />
-                            <ui:Button
-                                Margin="8,0,0,0"
-                                Padding="8,2"
-                                Appearance="Secondary"
-                                Click="ResumeAll_Click"
-                                Content="Resume"
-                                FontSize="11"
-                                ToolTip="Resume all container widgets (WebViews and native plugins)" />
-                        </StackPanel>
-                        <TextBlock
-                            Grid.Row="1"
-                            Margin="0,2,0,0"
-                            FontFamily="Consolas"
-                            FontSize="10"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding LayoutAnchorStatus}"
-                            TextWrapping="Wrap"
-                            ToolTip="Rescale baseline vs live primary area: if they disagree with no recent pass, scheduling (not math) is the suspect." />
-                    </Grid>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="Windows / Widgets" />
+                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                        <ui:Button
+                            Padding="8,2"
+                            Appearance="Secondary"
+                            Click="SuspendIdle_Click"
+                            Content="Suspend"
+                            FontSize="11"
+                            ToolTip="Suspend all container widgets (WebViews and native plugins)" />
+                        <ui:Button
+                            Margin="8,0,0,0"
+                            Padding="8,2"
+                            Appearance="Secondary"
+                            Click="ResumeAll_Click"
+                            Content="Resume"
+                            FontSize="11"
+                            ToolTip="Resume all container widgets (WebViews and native plugins)" />
+                    </StackPanel>
+                    <TextBlock
+                        Grid.Row="1"
+                        Margin="0,2,0,0"
+                        FontFamily="Consolas"
+                        FontSize="10"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="{Binding LayoutAnchorStatus}"
+                        TextWrapping="Wrap"
+                        ToolTip="Rescale baseline vs live primary area: if they disagree with no recent pass, scheduling (not math) is the suspect." />
+                </Grid>
             </controls:CollapsibleGroupBox.HeaderContent>
             <Grid>
                 <DataGrid
@@ -462,50 +471,50 @@
             Margin="12,0,12,6"
             IsExpanded="{Binding IsLiveWallpaperExpanded, Mode=TwoWay}">
             <controls:CollapsibleGroupBox.HeaderContent>
-                    <Grid ColumnDefinitions="Auto,*" RowDefinitions="*,*">
-                        <TextBlock
-                            Grid.Row="0"
-                            Grid.Column="0"
-                            VerticalAlignment="Center"
-                            FontWeight="SemiBold"
-                            Text="Live Wallpaper" />
-                        <StackPanel
-                            Grid.Row="0"
-                            Grid.Column="1"
-                            Margin="8,0,0,0"
-                            HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal">
-                            <ui:Button
-                                Padding="8,2"
-                                Appearance="Secondary"
-                                Click="WallpaperSuspend_Click"
-                                Content="Suspend"
-                                FontSize="11"
-                                IsEnabled="{Binding LiveWallpaperEnabled}"
-                                ToolTip="Pause all live wallpapers" />
-                            <ui:Button
-                                Margin="8,0,0,0"
-                                Padding="8,2"
-                                Appearance="Secondary"
-                                Click="WallpaperResume_Click"
-                                Content="Resume"
-                                FontSize="11"
-                                IsEnabled="{Binding LiveWallpaperEnabled}"
-                                ToolTip="Resume all live wallpapers" />
-                        </StackPanel>
-
-                        <TextBlock
-                            Grid.Row="1"
-                            Grid.Column="0"
-                            Grid.ColumnSpan="2"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center"
+                <Grid ColumnDefinitions="Auto,*" RowDefinitions="*,*">
+                    <TextBlock
+                        Grid.Row="0"
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Text="Live Wallpaper" />
+                    <StackPanel
+                        Grid.Row="0"
+                        Grid.Column="1"
+                        Margin="8,0,0,0"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal">
+                        <ui:Button
+                            Padding="8,2"
+                            Appearance="Secondary"
+                            Click="WallpaperSuspend_Click"
+                            Content="Suspend"
                             FontSize="11"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding LiveWallpaperSummary}"
-                            TextWrapping="Wrap" />
-                    </Grid>
+                            IsEnabled="{Binding LiveWallpaperEnabled}"
+                            ToolTip="Pause all live wallpapers" />
+                        <ui:Button
+                            Margin="8,0,0,0"
+                            Padding="8,2"
+                            Appearance="Secondary"
+                            Click="WallpaperResume_Click"
+                            Content="Resume"
+                            FontSize="11"
+                            IsEnabled="{Binding LiveWallpaperEnabled}"
+                            ToolTip="Resume all live wallpapers" />
+                    </StackPanel>
+
+                    <TextBlock
+                        Grid.Row="1"
+                        Grid.Column="0"
+                        Grid.ColumnSpan="2"
+                        Margin="8,0,0,0"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                        Text="{Binding LiveWallpaperSummary}"
+                        TextWrapping="Wrap" />
+                </Grid>
             </controls:CollapsibleGroupBox.HeaderContent>
             <Grid>
                 <DataGrid

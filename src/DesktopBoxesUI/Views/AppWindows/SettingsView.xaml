@@ -5,11 +5,16 @@
     xmlns:conv="clr-namespace:DesktopBoxesUI.Converters"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:appwin="clr-namespace:DesktopBoxesUI.Views.AppWindows"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:vm="clr-namespace:DesktopBoxesUI.ViewModels"
     Title="Settings"
     Width="720"
     Height="640"
     MinWidth="560"
     MinHeight="480"
+    d:DataContext="{Binding Source={x:Static appwin:DesignTimeData.SampleSettings}}"
+    mc:Ignorable="d"
     WindowStartupLocation="CenterScreen">
     <appwin:AppFluentWindow.Resources>
         <conv:HexToBrushConverter x:Key="HexToBrush" />

@@ -29,7 +29,7 @@ namespace DesktopBoxesUI.Views.Containers;
 /// <see cref="WindowDragController"/>.
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
-public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvider
+public partial class BoxContainerWindow : WidgetWindow
 {
     public override ContainerViewModel ContainerViewModel => _vm;
     private readonly ContainerViewModel _vm;
@@ -46,9 +46,6 @@ public partial class BoxContainerWindow : WidgetWindow, IContentDialogHostProvid
     private readonly IZOrderService _zOrder = App.Services.GetRequiredService<IZOrderService>();
     private readonly uint _currentProcessId = (uint)System.Environment.ProcessId;
     private readonly IDialogService _dialogs = App.Services!.GetRequiredService<IDialogService>();
-
-    // The global dialog service renders WPF-UI content dialogs on this host.
-    public Wpf.Ui.Controls.ContentDialogHost DialogHost => RootContentDialogHost;
 
     // Chrome (header buttons, tab strip, scrollbar) is shown only when the container is hovered or focused.
     private bool _mouseOver;

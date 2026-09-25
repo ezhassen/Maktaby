@@ -1,6 +1,7 @@
 using DesktopBoxes.WidgetSdk;
 using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
+using DesktopBoxesUI.Helpers;
 using Microsoft.Extensions.DependencyInjection;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -19,7 +20,7 @@ public enum WidgetGalleryKind
     Native,
 }
 
-public partial class WidgetsListWindow : AppWindows.AppFluentWindow, IContentDialogHostProvider, INotifyPropertyChanged
+public partial class WidgetsListWindow : AppWindows.AppFluentWindow, INotifyPropertyChanged
 {
     private readonly IWebWidgetService _svc;
     private readonly INativeWidgetService _native;
@@ -67,18 +68,38 @@ public partial class WidgetsListWindow : AppWindows.AppFluentWindow, IContentDia
         try { CloseButton.IsEnabled = !IsWorking; } catch { }
     }
 
-    // The global dialog service renders WPF-UI content dialogs on this host.
-    public ContentDialogHost DialogHost => RootContentDialogHost;
-    public WidgetsListWindow(bool selectMode = false, WidgetGalleryKind? selectKind = null)
+    public WidgetsListWindow() : this(false)
+    {
+
+    }
+    public WidgetsListWindow(bool selectMode, WidgetGalleryKind? selectKind = null)
     {
         InitializeComponent();
         IsSelectMode = selectMode;
         SelectKind = selectKind;
+        // Designer: services don't exist — sample gallery rows so cards/thumbnails layout renders.
+        if (HelperUI.IsInDesignMode)
+        {
+            _svc = null!;
+            _native = null!;
+            _dialogs = null!;
+            //DataContext = this;
+            LoadDesignData();
+            return;
+        }
         _svc = App.Services.GetRequiredService<IWebWidgetService>();
         _native = App.Services.GetRequiredService<INativeWidgetService>();
         _dialogs = App.Services.GetRequiredService<IDialogService>();
-        DataContext = this;
+        //DataContext = this;
         Loaded += (_, _) => Refresh();
+    }
+
+    /// <summary>Design-time sample gallery rows (Blend/VS designer only).</summary>
+    private void LoadDesignData()
+    {
+        var items = AppWindows.DesignTimeData.SampleGallery;
+        WidgetsItems.ItemsSource = items;
+        CountText.Text = $"{System.Linq.Enumerable.Count(items)} widgets";
     }
 
     private async void Refresh()
@@ -251,8 +272,27 @@ public partial class WidgetsListWindow : AppWindows.AppFluentWindow, IContentDia
                 return;
             }
             var w = new WidgetDataWindow(vm.Slug, isNew: false);
-            if (w.ShowDialog() == true) await RefreshThumbnail(vm, force: true);
+            if (w.ShowDialog() == true) ReloadThumbnailFromFile(vm);
         }
+    }
+
+    /// <summary>Points the item back at the thumbnail.png that saving just regenerated, so the
+    /// cached bitmap does a single re-decode from file. Render-regenerating here would redo
+    /// the exact render the save overlay already did.</summary>
+    private void ReloadThumbnailFromFile(WidgetGalleryItem vm)
+    {
+        try
+        {
+            string? path = null;
+            if (vm.Kind == WidgetGalleryKind.Native && vm.NativeInfo != null)
+                path = _native.TryGetWidget(vm.NativeInfo.Slug, vm.NativeInfo.Source)?.ThumbnailPath;
+            else if (vm.SourceInfo != null)
+                path = _svc.TryGetWidget(vm.SourceInfo.Slug, vm.SourceInfo.Source)?.ThumbnailPath;
+            if (!string.IsNullOrEmpty(path) && System.IO.File.Exists(path))
+                vm.ThumbnailPath = path; // same-path re-set drops the bitmap cache → re-decode
+            // Absent file: leave the item as-is; the next full Refresh regenerates only when missing.
+        }
+        catch { }
     }
 
     private async void Delete_Click(object sender, RoutedEventArgs e)

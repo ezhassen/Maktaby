@@ -24,9 +24,9 @@ namespace DesktopBoxesUI.Views;
 /// the WPF-UI application theme. The left vertical list navigates a single scrollable column of
 /// sections (Appearance / Boxes / General / Snapshot).
 /// </summary>
-public partial class SettingsView : AppWindows.AppFluentWindow, IContentDialogHostProvider
+public partial class SettingsView : AppWindows.AppFluentWindow
 {
-    public SettingsView(SettingsViewModel vm)
+    public SettingsView(SettingsViewModel? vm)
     {
         InitializeComponent();
         DataContext = vm;
@@ -36,10 +36,19 @@ public partial class SettingsView : AppWindows.AppFluentWindow, IContentDialogHo
 
         // Keep the preview in sync with every edit (the VM raises PropertyChanged per field).
         // Slider drags fire dozens per second: coalesce to one update per dispatcher pass.
-        vm.PropertyChanged += (_, _) => RequestPreviewUpdate();
+        if (vm != null) vm.PropertyChanged += (_, _) => RequestPreviewUpdate();
         UpdatePreview();
 
         Closed += (_, _) => (DataContext as IDisposable)?.Dispose();
+    }
+
+    /// <summary>Parameterless for the VS/Blend designer: a real VM over faked services with
+    /// sample containers. Falls back to an empty shell (never a red error screen) if faking fails.</summary>
+    public SettingsView() : this(AppWindows.DesignTimeData.SampleSettings)
+    {
+        // Visible signal when the factory returned null: "no data" becomes diagnosable
+        // instead of a mystery (see Debug output for the captured exception).
+        if (DataContext is null) Title += " (no design data)";
     }
 
     private bool _previewUpdatePending;
@@ -66,7 +75,8 @@ public partial class SettingsView : AppWindows.AppFluentWindow, IContentDialogHo
     // The global dialog service renders WPF-UI content dialogs on this host.
     public ContentDialogHost DialogHost => RootContentDialogHost;
 
-    private readonly IDialogService _dialogs = App.Services!.GetRequiredService<IDialogService>();
+    private IDialogService? _dialogs;
+    private IDialogService Dialogs => _dialogs ??= App.Services.GetRequiredService<IDialogService>();
 
     private static readonly string[] _sectionNames =
         { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionWebWidgets", "SectionContainers", "SectionLiveWallpaper", "SectionGeneral", "SectionSnapshot" };
@@ -503,10 +513,10 @@ public partial class SettingsView : AppWindows.AppFluentWindow, IContentDialogHo
     private static DesktopManager? Manager => App.Services?.GetRequiredService<DesktopManager>();
 
     private Task ShowMessageAsync(string content, string title)
-        => _dialogs.ShowMessageAsync(content, new DialogOptions { Title = title });
+        => Dialogs.ShowMessageAsync(content, new DialogOptions { Title = title });
 
     private Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info)
-        => _dialogs.ShowConfirmAsync(content, new DialogOptions
+        => Dialogs.ShowConfirmAsync(content, new DialogOptions
         {
             Title = title,
             PrimaryButtonText = confirmText,

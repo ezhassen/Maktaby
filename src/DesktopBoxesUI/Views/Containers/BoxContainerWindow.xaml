@@ -106,8 +106,10 @@
             <Setter Property="Background" Value="{Binding Background, ElementName=HeaderBorder}" />
             <Setter Property="Foreground" Value="White" />
             <Setter Property="CaretBrush" Value="White" />
-            <!--  Same typeface as the title it replaces: bound, not copied, so theme/font
-              changes can never drift the two apart.  -->
+            <!--
+                Same typeface as the title it replaces: bound, not copied, so theme/font
+                changes can never drift the two apart.
+            -->
             <Setter Property="FontFamily" Value="{Binding FontFamily, ElementName=TitleText}" />
             <Setter Property="FontSize" Value="{Binding FontSize, ElementName=TitleText}" />
             <Setter Property="FontWeight" Value="{Binding FontWeight, ElementName=TitleText}" />
@@ -138,9 +140,11 @@
                     CornerRadius="8,8,0,0"
                     DockPanel.Dock="Top">
                     <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto, auto">
-                        <!--  Title layer first (bottom z-order): spans the full header width so the
-                          title stays centered whether or not the side buttons are visible. Buttons
-                          declare later (top z) so they remain clickable above it.  -->
+                        <!--
+                            Title layer first (bottom z-order): spans the full header width so the
+                            title stays centered whether or not the side buttons are visible. Buttons
+                            declare later (top z) so they remain clickable above it.
+                        -->
                         <Grid
                             x:Name="TitleArea"
                             Grid.Column="0"
@@ -477,11 +481,12 @@
                     </Grid>
                 </Border>
 
-                <!--  Body host: children (BoxControl / FolderPortalControl / custom placeholder)
-                  are built on demand in code-behind — only the active kind ever exists here.  -->
+                <!--
+                    Body host: children (BoxControl / FolderPortalControl / custom placeholder)
+                    are built on demand in code-behind — only the active kind ever exists here.
+                -->
                 <Grid x:Name="BodyContent" />
             </DockPanel>
-            <ui:ContentDialogHost x:Name="RootContentDialogHost" />
         </Grid>
     </Border>
 </containers:WidgetWindow>

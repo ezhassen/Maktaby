@@ -188,6 +188,7 @@ public partial class WebWidgetControl : WidgetControlBase
                     if (WebView.CoreWebView2 != null)
                     {
                         WebView.CoreWebView2.WebMessageReceived -= OnWebMessage;
+                        WebView.CoreWebView2.ProcessFailed -= OnProcessFailed;
                         WebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
                     }
                 }
@@ -275,8 +276,9 @@ public partial class WebWidgetControl : WidgetControlBase
             //    this.PreviewMouseUp += (ss, ee) => { WidgetClicked?.Invoke(this, EventArgs.Empty); };
             //}
             WebView.CoreWebView2.WebMessageReceived += OnWebMessage;
+            WebView.CoreWebView2.ProcessFailed += OnProcessFailed;
             WebView.NavigationCompleted += OnWebViewNavigationCompleted;
-            const string domBridge = """(() => { let inside = false; function sendEnter() { if (!inside) { inside = true; try{chrome.webview.postMessage("enter");}catch(e){} } } function sendLeave() { if (inside) { inside = false; try{chrome.webview.postMessage("leave");}catch(e){} } } window.addEventListener("pointerenter", sendEnter); window.addEventListener("pointerleave", sendLeave); window.addEventListener("mouseenter", sendEnter); window.addEventListener("mouseleave", sendLeave); window.addEventListener("mousemove", () => { if (!inside) sendEnter(); }, { passive: true }); window.addEventListener("click", () => { try{chrome.webview.postMessage("click");}catch(e){} }); window.addEventListener("mousedown", (e) => { if (e.button !== 0) return; if (e.target.closest('button, a, input, select, textarea, [data-no-drag]')) return; try{chrome.webview.postMessage("mousedown");}catch(e){} }, { capture: true }); })();""";
+            const string domBridge = """(() => { let inside = false; function sendEnter() { if (!inside) { inside = true; try{chrome.webview.postMessage("enter");}catch(e){} } } function sendLeave() { if (inside) { inside = false; try{chrome.webview.postMessage("leave");}catch(e){} } } window.addEventListener("pointerenter", sendEnter); window.addEventListener("pointerleave", sendLeave); window.addEventListener("mouseenter", sendEnter); window.addEventListener("mouseleave", sendLeave); window.addEventListener("mousemove", () => { if (!inside) sendEnter(); }, { passive: true }); window.addEventListener("click", () => { try{chrome.webview.postMessage("click");}catch(e){} }); window.addEventListener("mousedown", (e) => { if (e.button !== 0) return; if (e.target.closest('button, a, input, select, textarea, [data-no-drag]')) return; try{chrome.webview.postMessage("mousedown");}catch(e){} }, { capture: true }); window.addEventListener("error", (e) => { try{chrome.webview.postMessage("jserror:" + (e && e.message ? e.message : "Script error"));}catch(_){} }); window.addEventListener("unhandledrejection", (e) => { try{ var r = e ? e.reason : null; chrome.webview.postMessage("jserror:" + (r && r.message ? r.message : String(r))); }catch(_){} }); })();""";
             try
             {
                 await WebView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(domBridge);
@@ -315,14 +317,76 @@ public partial class WebWidgetControl : WidgetControlBase
             else if (msg == "leave") WidgetMouseLeave?.Invoke(this, EventArgs.Empty);
             else if (msg == "click") WidgetClicked?.Invoke(this, EventArgs.Empty);
             else if (msg == "mousedown") WidgetMouseDown?.Invoke(this, EventArgs.Empty);
+            else if (msg != null && msg.StartsWith("jserror:", StringComparison.Ordinal))
+            {
+                // Uncaught script errors / unhandled rejections (first per load is the cause).
+                if (_firstJsError is null) _firstJsError = msg.Substring("jserror:".Length);
+                _jsErrorCount++;
+            }
         }
         catch { }
     }
 
     private void OnWebViewNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        _navCompleted = true;
+        _navSucceeded = e.IsSuccess;
+        _navError = e.IsSuccess ? "" : e.WebErrorStatus.ToString();
+        try { _loadTcs?.TrySetResult(e.IsSuccess); } catch { }
         ApplyThemeToWebView();
     }
+
+    private void OnProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs e)
+    {
+        string desc = "crashed";
+        try { desc = $"{e.ProcessFailedKind} ({e.Reason})"; } catch { }
+        _processFailed = desc;
+        // A dead renderer never completes navigation — release save-gate waiters now.
+        try { _loadTcs?.TrySetResult(false); } catch { }
+    }
+
+    /// <summary>Awaits the in-flight preview navigation (false on timeout). A null
+    /// CoreWebView2 (no runtime yet) reports loaded — nothing can be verified, and save
+    /// gating must never brick saving on such machines.</summary>
+    public async System.Threading.Tasks.Task<bool> WaitForCurrentLoadAsync(TimeSpan timeout)
+    {
+        try
+        {
+            if (WebView?.CoreWebView2 == null) return true;
+            var tcs = _loadTcs;
+            if (tcs is null) return true;
+            if (tcs.Task.IsCompleted) return await tcs.Task;
+            var winner = await System.Threading.Tasks.Task.WhenAny(tcs.Task, System.Threading.Tasks.Task.Delay(timeout));
+            return winner == tcs.Task && await tcs.Task;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>Render-health issues since the last navigation (empty = clean). Only hard
+    /// failures gate saving: failed load, dead renderer, uncaught JS exceptions. Deliberate
+    /// console.error calls and malformed-but-renderable markup are not failures.</summary>
+    public IReadOnlyList<string> GetRenderIssues()
+    {
+        var issues = new List<string>();
+        try
+        {
+            if (WebView?.CoreWebView2 == null) return issues; // cannot verify — never block
+            if (!_navCompleted) issues.Add("Preview has not finished loading yet.");
+            else if (!_navSucceeded) issues.Add($"Preview failed to load ({_navError}).");
+            if (_processFailed != null) issues.Add($"Preview renderer failed ({_processFailed}).");
+            if (_jsErrorCount > 0) issues.Add($"JavaScript error{(_jsErrorCount > 1 ? $" (x{_jsErrorCount})" : "")}: {(_firstJsError ?? "unknown")}.");
+        }
+        catch { }
+        return issues;
+    }
+
+    private bool _navCompleted;
+    private bool _navSucceeded;
+    private string _navError = "";
+    private string? _processFailed;
+    private string? _firstJsError;
+    private int _jsErrorCount;
+    private System.Threading.Tasks.TaskCompletionSource<bool>? _loadTcs;
 
     private void OnWebResourceRequested(object? sender, CoreWebView2WebResourceRequestedEventArgs e)
     {
@@ -441,14 +505,32 @@ public partial class WebWidgetControl : WidgetControlBase
     {
         try
         {
+            // New generation: supersede any waiter on the previous navigation, clear issues.
+            ResetLoadState();
             PlaceholderText.Visibility = Visibility.Collapsed;
             ErrorBar.IsOpen = false;
             WebView.NavigateToString(html);
         }
         catch (Exception ex)
         {
+            _navCompleted = true;
+            _navSucceeded = false;
+            _navError = "navigate-failed";
+            try { _loadTcs?.TrySetResult(false); } catch { }
             ShowPlaceholder(ex.Message);
         }
+    }
+
+    private void ResetLoadState()
+    {
+        _navCompleted = false;
+        _navSucceeded = false;
+        _navError = "";
+        _processFailed = null;
+        _firstJsError = null;
+        _jsErrorCount = 0;
+        var old = System.Threading.Interlocked.Exchange(ref _loadTcs, new System.Threading.Tasks.TaskCompletionSource<bool>(System.Threading.Tasks.TaskCreationOptions.RunContinuationsAsynchronously));
+        try { old?.TrySetResult(false); } catch { }
     }
 
     private void ShowPlaceholder(string msg)

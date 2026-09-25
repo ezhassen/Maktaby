@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -37,10 +38,28 @@ public static class HelperUI
     {
         get
         {
-            if (!_IsInDesignMode.HasValue) _IsInDesignMode = DesignerProperties.GetIsInDesignMode(new DependencyObject());
+            // DesignerProperties on a detached object misses when nothing attached it to the
+            // design surface yet (e.g. inside a window ctor) — and the result is cached for the
+            // process. The process-name fallback covers every VS/Blend/Rider designer host so
+            // one missed DP read can never silence all design data for the session.
+            if (!_IsInDesignMode.HasValue)
+                _IsInDesignMode = DesignerProperties.GetIsInDesignMode(new DependencyObject()) || IsDesignerProcess();
             return _IsInDesignMode.Value;
         }
         //set { _Instance = value; }
+    }
+
+    private static bool IsDesignerProcess()
+    {
+        try
+        {
+            string name = Process.GetCurrentProcess().ProcessName;
+            return name.Contains("XDesProc", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Blend", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("devenv", StringComparison.OrdinalIgnoreCase)
+                || name.Contains("Rider", StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
     }
 
     //ResourceAccessor

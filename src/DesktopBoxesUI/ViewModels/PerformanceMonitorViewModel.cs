@@ -94,7 +94,7 @@ namespace DesktopBoxesUI.ViewModels
 
     public sealed class PerformanceMonitorViewModel : ViewModelBase, IDisposable
     {
-        private readonly DispatcherTimer _timer;
+        private readonly DispatcherTimer? _timer;
         private readonly Process _process = Process.GetCurrentProcess();
         private TimeSpan _prevTotalProcessorTime;
         private DateTime _prevTime;
@@ -216,6 +216,13 @@ namespace DesktopBoxesUI.ViewModels
 
         public PerformanceMonitorViewModel()
         {
+            // Designer: no timers, no live windows/services — representative sample rows so
+            // the grids, badges and summary shape render in Blend/VS.
+            if (IsInDesignMode)
+            {
+                LoadDesignData();
+                return;
+            }
             _prevTotalProcessorTime = _process.TotalProcessorTime;
             _prevTime = DateTime.UtcNow;
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -225,6 +232,42 @@ namespace DesktopBoxesUI.ViewModels
         }
 
         private void OnTimerTick(object? sender, EventArgs e) => Refresh();
+
+        /// <summary>Design-time sample content (Blend/VS designer only): mirrors a live
+        /// session shape — 4 boxes, 2 widgets, 2 paused wallpapers, 2 WebView2 processes.</summary>
+        private void LoadDesignData()
+        {
+            TotalMemoryMB = 437;
+            TotalCpu = 0.5;
+            TotalIo = "R 0 B/s · W 0.1 MB/s";
+            ManagedMemoryMB = 63;
+            WorkingSetMB = 593;
+            TotalPrivateMB = 632;
+            GroupMemoryMB = 533;
+            GroupCpu = 1.7;
+            GdiHandles = 237;
+            UserHandles = 128;
+            RenderTier = "Render: HW (tier 2)";
+            IsSoftwareRendering = false;
+            WebView2ProcessCount = 2;
+            WebView2MemoryMB = 96;
+            WebView2Cpu = 1.2;
+            HasWebView2Processes = true;
+            WebView2Processes.Add(new WebView2ProcessItem { Pid = 1234, Kind = "Browser", MemoryMB = 61, Cpu = 0.8 });
+            WebView2Processes.Add(new WebView2ProcessItem { Pid = 5678, Kind = "Child", MemoryMB = 35, Cpu = 0.4 });
+            Items.Add(new PerformanceItem { Name = "Programs", Type = "Box", IsVisible = true, IsSuspended = false, Status = "Active", ModelBounds = "(1050,0 486x310)", AppliedBounds = "(1050,0 486x310)" });
+            Items.Add(new PerformanceItem { Name = "This PC", Type = "Box", IsVisible = true, IsSuspended = false, Status = "Active", ModelBounds = "(2,0 258x188)", AppliedBounds = "(2,0 258x188)" });
+            Items.Add(new PerformanceItem { Name = "Media", Type = "Box", IsVisible = true, IsSuspended = false, Status = "Active", ModelBounds = "(268,0 336x188)", AppliedBounds = "(268,0 336x188)" });
+            Items.Add(new PerformanceItem { Name = "Clock", Type = "Widget (Web)", IsVisible = true, IsSuspended = false, Status = "Active", ModelBounds = "(278,211 312x354)", AppliedBounds = "(278,211 312x354)" });
+            Items.Add(new PerformanceItem { Name = "Calendar", Type = "Widget (Native)", IsVisible = false, IsSuspended = true, Status = "Suspended", ModelBounds = "(0,588 352x228)", AppliedBounds = "(0,588 352x228)" });
+            LiveWallpaperEnabled = true;
+            IsLiveWallpaperDisabled = false;
+            LiveWallpaperMonitors.Add(new LiveWallpaperMonitorItem { Device = "\\\\.\\DISPLAY1", Bounds = "(0,0)-(1920,1080)", File = "earth.mp4", Renderer = "Video", IsLoaded = true, IsPaused = true, WebProcess = "-", Preloaded = "20 MB", Status = "Paused", PauseReason = "Fullscreen" });
+            LiveWallpaperMonitors.Add(new LiveWallpaperMonitorItem { Device = "\\\\.\\DISPLAY5", Bounds = "(-1920,-126)-(0,1074)", File = "earth.mp4", Renderer = "Video", IsLoaded = true, IsPaused = true, WebProcess = "-", Preloaded = "20 MB", Status = "Paused", PauseReason = "Fullscreen" });
+            LiveWallpaperSummary = "2 monitor(s), 0 playing, 2 paused, preloaded 20 MB · MPPool: created=2, pool=0, inuse=2, rentals=2, returns=0, max=2 · rebuilds=1, last=settled-disagree @ 06:38:01Z";
+            LayoutAnchorStatus = "baseline=(0,0 1536x816) live=(0,0 1536x816) @120dpi | sample data";
+            IsIdleMode = false;
+        }
 
         private static string FormatBounds(double x, double y, double width, double height)
             => $"({x:0},{y:0} {width:0}x{height:0})";
@@ -681,8 +724,8 @@ namespace DesktopBoxesUI.ViewModels
         {
             // The old code detached a freshly allocated lambda here, which never matched the
             // subscription — the 1 Hz refresh kept running after the window closed.
-            try { _timer.Stop(); } catch { }
-            try { _timer.Tick -= OnTimerTick; } catch { }
+            try { _timer?.Stop(); } catch { }
+            try { _timer?.Tick -= OnTimerTick; } catch { }
             try { _process.Dispose(); } catch { }
         }
     }
