@@ -183,7 +183,7 @@ public sealed class DesktopManager
             EnsureDesktopZOrder();
         }
 
-        _ = StreamRemainingContainersAsync();
+        _ = StreamRemainingContainersAsync(onFinishAction: StartWidgetAutoPause);
 
         await ReconcileItemsAsync();
 
@@ -194,7 +194,7 @@ public sealed class DesktopManager
         //
         _coordinator.Start();
         if (GlobalFeaturesSwitches.UseGlobalMouseHookInsteadOfCustomSurface == true) _mouseMonitor.Start();
-        StartWidgetAutoPause();
+        //StartWidgetAutoPause();
         SystemEvents.SessionSwitch -= OnSessionSwitch;
         SystemEvents.SessionSwitch += OnSessionSwitch;
     }
@@ -1455,7 +1455,7 @@ public sealed class DesktopManager
     /// synchronously). Creation is spread across dispatcher turns so the UI stays responsive and the splash
     /// can close — the containers stream in after startup instead of blocking it.
     /// </summary>
-    private async Task StreamRemainingContainersAsync()
+    private async Task StreamRemainingContainersAsync(Action? onFinishAction = null)
     {
         try
         {
@@ -1479,6 +1479,10 @@ public sealed class DesktopManager
         catch
         {
             // Best-effort background streaming; a window failure must never break startup.
+        }
+        finally
+        {
+            onFinishAction?.Invoke();
         }
     }
 

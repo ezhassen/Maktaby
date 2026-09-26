@@ -36,8 +36,8 @@ public sealed record PauseMonitor(string Device, RECT Bounds, RECT WorkArea);
 /// The decision considers every visible top-level window, not just the foreground one: a
 /// monitor pauses when ANY qualifying window covers it, so an unfocused fullscreen app keeps
 /// its monitor paused (foreground-only checks wrongly resumed it the moment focus moved to
-/// the other screen). Minimized, cloaked, shell and own-process windows are excluded from
-/// the capture. One transient-noise hold remains (no polling involved): a lone exclusive-D3D
+/// the other screen). Minimized, cloaked, shell, own-process and non-occluding-overlay
+/// windows are excluded from the capture. One transient-noise hold remains (no polling involved): a lone exclusive-D3D
 /// flag flip with the window list otherwise identical is held as transition noise.
 /// Evaluation is skipped entirely while <see cref="Suspend"/>ed (user-paused), and
 /// <see cref="Resume"/> re-evaluates immediately, preserving the old no-spurious-resume contract.
@@ -429,8 +429,8 @@ public sealed class PlaybackSupervisor : IDisposable
     private static readonly uint OwnPid = (uint)Environment.ProcessId;
 
     /// <summary>Every visible, non-minimized, non-cloaked top-level window outside our own
-    /// process and the shell. Runs synchronously on the caller's thread (awareness pinned by
-    /// Reevaluate, for life by the hook thread).</summary>
+    /// process, the shell, and non-occluding overlays. Runs synchronously on the caller's
+    /// thread (awareness pinned by Reevaluate, for life by the hook thread).</summary>
     private List<TopWindowInfo> CaptureTopWindows()
     {
         var list = new List<TopWindowInfo>(64);
@@ -448,6 +448,10 @@ public sealed class PlaybackSupervisor : IDisposable
                 if (User32.GetClassNameW(hwnd, sb, sb.Capacity) == 0) return true;
                 string cls = sb.ToString();
                 if (PauseDecision.IsShellOrOwnWindow(cls, _extraExcluded)) return true;
+                // Fullscreen click-through or fully-transparent overlays (cursor overlays,
+                // watermarks, crosshairs) never occlude what is beneath them: pausing the
+                // wallpaper and hiding widgets for an invisible window is wrong.
+                if (IsNonOccludingOverlay(hwnd)) return true;
                 // Suspended Store apps keep stale fullscreen rects while invisible.
                 if (IsCloaked(hwnd)) return true;
                 list.Add(new TopWindowInfo(hwnd, cls, rect, User32.IsZoomed(hwnd), User32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)));
@@ -465,6 +469,26 @@ public sealed class PlaybackSupervisor : IDisposable
     {
         try { return DwmApi.DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0; }
         catch { return false; }
+    }
+
+    /// <summary>True for top-level windows that cannot hide content: click-through
+    /// (<c>WS_EX_TRANSPARENT</c>, never takes mouse input — the standard fullscreen cursor /
+    /// watermark / crosshair overlay shape) or layered with zero alpha (paints nothing).
+    /// An opaque click-through window is pathological; the common case this excludes is an
+    /// invisible overlay permanently "covering" a monitor.</summary>
+    private static bool IsNonOccludingOverlay(IntPtr hwnd)
+    {
+        try
+        {
+            int ex = User32.GetWindowLong(hwnd, GWL_EXSTYLE);
+            if ((ex & (int)WS_EX_TRANSPARENT) != 0) return true;
+            if ((ex & (int)WS_EX_LAYERED) != 0 &&
+                User32.GetLayeredWindowAttributes(hwnd, out _, out byte alpha, out _) &&
+                alpha == 0)
+                return true;
+        }
+        catch { }
+        return false;
     }
 
     private static IntPtr MonitorHandle(in RECT bounds)

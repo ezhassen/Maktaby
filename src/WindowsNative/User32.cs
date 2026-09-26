@@ -233,6 +233,10 @@ public static partial class User32
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetLayeredWindowAttributes(IntPtr hwnd, out uint pcrKey, out byte pbAlpha, out uint pdwFlags);
+
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
