@@ -1521,16 +1521,20 @@ public sealed class DesktopManager
     {
         try { _widgetPause?.Dispose(); } catch { }
         _widgetPause = new PlaybackSupervisor(
-            () => new PausePolicy
-            {
-                OnFullscreen = _settingsService.UserSettings.PauseWidgetsOnFullscreen,
-                OnBatterySaver = _settingsService.UserSettings.PauseWidgetsOnBatterySaver,
-                OnRemoteSession = _settingsService.UserSettings.PauseWidgetsOnRemoteSession,
-            },
+            () => GetPauseConfig().ToPolicy(),
             GetPauseMonitors,
             extraExcludedWindowClasses: null);
         _widgetPause.PauseStateChanged += OnWidgetPauseChanged;
     }
+
+    /// <summary>Widget auto-pause triggers from user settings (shared PauseConfig shape —
+    /// same as the live-wallpaper engine's persisted config).</summary>
+    private PauseConfig GetPauseConfig() => new()
+    {
+        OnFullscreen = _settingsService.UserSettings.PauseWidgetsOnFullscreen,
+        OnBatterySaver = _settingsService.UserSettings.PauseWidgetsOnBatterySaver,
+        OnRemoteSession = _settingsService.UserSettings.PauseWidgetsOnRemoteSession,
+    };
 
     private void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
     {

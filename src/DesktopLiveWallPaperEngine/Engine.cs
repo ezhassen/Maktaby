@@ -233,12 +233,7 @@ public sealed class Engine : IDisposable
         if (_playback is not null) return;
         var playback = new PlaybackSupervisor(
             // The supervisor reads a shared PausePolicy; map the persisted config each time.
-            () => new PausePolicy
-            {
-                OnFullscreen = _config.Pause.OnFullscreen,
-                OnBatterySaver = _config.Pause.OnBatterySaver,
-                OnRemoteSession = _config.Pause.OnRemoteSession,
-            },
+            () => _config.Pause.ToPolicy(),
             () => MonitorTracker.Enumerate()
                 .Select(m => new PauseMonitor(m.Device, m.Bounds, m.WorkArea))
                 .ToList(),

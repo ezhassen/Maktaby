@@ -12,11 +12,10 @@ public sealed class WallpaperAssignment
     public string Path { get; set; } = "";
 }
 
-public sealed class PauseConfig
+public sealed class PauseConfig : WindowsNative.Playback.PauseConfig
 {
-    public bool OnFullscreen { get; set; } = true;
-    public bool OnBatterySaver { get; set; } = true;
-    public bool OnRemoteSession { get; set; } = true;
+    // Shared shape (WindowsNative.Playback.PauseConfig) so both hosts map through ToPolicy:
+    // same JSON, no persistence change.
 }
 
 public sealed class EngineConfig

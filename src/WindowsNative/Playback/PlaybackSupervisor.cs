@@ -312,17 +312,19 @@ public sealed class PlaybackSupervisor : IDisposable
         if (_disposed || _suspended) return;
 
         // This runs on the hook thread, the engine thread, or a Win32 notification thread —
-        // any of which may carry a different DPI context. The foreground rect captured here
+        // any of which may carry a different DPI context. The window rects captured here
         // must be in the same physical pixels as the monitor bounds.
         var awareness = User32.GetThreadDpiAwarenessContext();
         if (User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == IntPtr.Zero)
             User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
         List<(string Device, PauseReason Reason, string By)> current;
-        string inputDesc = "";
+        SystemFlags flags;
+        IReadOnlyList<TopWindowInfo>? windows = null;
         try
         {
-            var windows = CaptureTopWindows();
-            var flags = new SystemFlags(
+            // Cheap inputs first: the system flags are a handful of syscalls, while the
+            // window capture walks every top-level window.
+            flags = new SystemFlags(
                 _sessionLocked,
                 User32.GetSystemMetrics(SM_REMOTESESSION) != 0,
                 IsBatterySaverOn(),
@@ -334,51 +336,50 @@ public sealed class PlaybackSupervisor : IDisposable
             foreach (var monitor in _monitors())
                 monitors.Add((monitor.Device, monitor.Bounds, monitor.WorkArea, MonitorHandle(monitor.Bounds)));
 
-            // Foreground identity is log-only now: coverage considers every captured window.
-            var fgHwnd = User32.GetForegroundWindow();
-            string fgDesc = "none";
-            if (fgHwnd != IntPtr.Zero)
+            // Fast path: a globally-forced reason (or every trigger off) needs no window
+            // capture at all. The QUNS hold-cache is dropped so the next full evaluation
+            // after a forced interval always applies fresh instead of holding stale state.
+            var forced = PauseDecision.ForcedReason(flags, policy);
+            if (forced is not null)
             {
-                foreach (var w in windows)
-                {
-                    if (w.Hwnd == fgHwnd) { fgDesc = w.ClassName; break; }
-                }
-                if (fgDesc == "none")
-                {
-                    var sb = new StringBuilder(64);
-                    fgDesc = User32.GetClassNameW(fgHwnd, sb, sb.Capacity) > 0 ? sb.ToString() + " (excluded)" : "unknown";
-                }
+                lock (_gate) { _lastInputs = null; }
+                current = [];
+                foreach (var (device, _, _, _) in monitors)
+                    current.Add((device, forced.Value, "-"));
             }
-            inputDesc = $"fg=0x{fgHwnd:X} {fgDesc} wins={windows.Count} | quns={flags.D3DFullscreen} batt={flags.BatterySaver} rem={flags.RemoteSession} lock={flags.SessionLocked} disp={flags.DisplayOff}";
-
-            var inputs = new LastInputs(windows, flags.SessionLocked, flags.RemoteSession, flags.BatterySaver, flags.DisplayOff, flags.D3DFullscreen);
-            lock (_gate)
+            else
             {
-                // Lone QUNS flip (window-for-window identical): hold, touch nothing.
-                if (_lastInputs is not null && _lastInputs.SameExceptQuns(inputs))
-                    return;
-                _lastInputs = inputs;
-                _lastRects.Clear();
-                foreach (var w in windows) _lastRects[w.Hwnd] = w.WindowRect;
-            }
-
-            current = [];
-            foreach (var (device, bounds, workArea, handle) in monitors)
-            {
-                var reason = PauseDecision.EvaluateForMonitor(windows, bounds, workArea, handle, flags, policy, _extraExcluded);
-                string by = "-";
-                if (reason == PauseReason.Fullscreen)
+                var captured = CaptureTopWindows();
+                windows = captured;
+                var inputs = new LastInputs(captured, flags.SessionLocked, flags.RemoteSession, flags.BatterySaver, flags.DisplayOff, flags.D3DFullscreen);
+                lock (_gate)
                 {
-                    foreach (var w in windows)
+                    // Lone QUNS flip (window-for-window identical): hold, touch nothing.
+                    if (_lastInputs is not null && _lastInputs.SameExceptQuns(inputs))
+                        return;
+                    _lastInputs = inputs;
+                    _lastRects.Clear();
+                    foreach (var w in captured) _lastRects[w.Hwnd] = w.WindowRect;
+                }
+
+                current = [];
+                foreach (var (device, bounds, workArea, handle) in monitors)
+                {
+                    var reason = PauseDecision.EvaluateForMonitor(captured, bounds, workArea, handle, flags, policy, _extraExcluded);
+                    string by = "-";
+                    if (reason == PauseReason.Fullscreen)
                     {
-                        if (PauseDecision.CoversMonitor(w.WindowRect, bounds, workArea, w.IsZoomed, w.MonitorHandle, handle))
+                        foreach (var w in captured)
                         {
-                            by = w.ClassName;
-                            break;
+                            if (PauseDecision.CoversMonitor(w.WindowRect, bounds, workArea, w.IsZoomed, w.MonitorHandle, handle))
+                            {
+                                by = w.ClassName;
+                                break;
+                            }
                         }
                     }
+                    current.Add((device, reason, by));
                 }
-                current.Add((device, reason, by));
             }
         }
         catch (Exception ex)
@@ -418,12 +419,45 @@ public sealed class PlaybackSupervisor : IDisposable
             }
         }
 
+        if (transitions.Count == 0) return;
+        // Foreground identity is log-only: resolve it last, and only when something
+        // actually transitioned — never on the hot path.
+        string inputDesc = DescribeInputs(windows, flags);
         foreach (var (device, reason, by) in transitions)
         {
             Serilog.Log.Information("Pause transition: {device} -> {reason} by={by} ({inputDesc})", device, reason, by, inputDesc);
             try { PauseStateChanged?.Invoke(device, reason); }
             catch (Exception ex) { Serilog.Log.Error("Pause transition handler failed", ex); }
         }
+    }
+
+    /// <summary>Log-only input summary (foreground window, capture size, flags). Runs after the
+    /// decision, and only when a transition actually fired.</summary>
+    private static string DescribeInputs(IReadOnlyList<TopWindowInfo>? windows, SystemFlags flags)
+    {
+        var fgHwnd = User32.GetForegroundWindow();
+        string fgDesc = "none";
+        if (fgHwnd != IntPtr.Zero)
+        {
+            if (windows is not null)
+            {
+                foreach (var w in windows)
+                {
+                    if (w.Hwnd == fgHwnd) { fgDesc = w.ClassName; break; }
+                }
+            }
+            if (fgDesc == "none")
+            {
+                // No capture in the forced path (windows null): report the plain class with
+                // no exclusion claim. With a capture, absence from the list means excluded.
+                var sb = new StringBuilder(64);
+                if (User32.GetClassNameW(fgHwnd, sb, sb.Capacity) > 0)
+                    fgDesc = windows is null ? sb.ToString() : sb.ToString() + " (excluded)";
+                else fgDesc = "unknown";
+            }
+        }
+        string wins = windows is null ? "skipped" : windows.Count.ToString();
+        return $"fg=0x{fgHwnd:X} {fgDesc} wins={wins} | quns={flags.D3DFullscreen} batt={flags.BatterySaver} rem={flags.RemoteSession} lock={flags.SessionLocked} disp={flags.DisplayOff}";
     }
 
     private static readonly uint OwnPid = (uint)Environment.ProcessId;

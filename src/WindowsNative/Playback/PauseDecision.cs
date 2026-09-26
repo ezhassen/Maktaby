@@ -23,6 +23,24 @@ public sealed class PausePolicy
     public bool OnRemoteSession { get; set; } = true;
 }
 
+/// <summary>Config-file shape for pause triggers (everything on by default). Each host
+/// persists it its own way (engine: EngineConfig.Pause; desktop: UserSettings) and maps it
+/// through <see cref="ToPolicy"/> at evaluation time, so the decision never depends on
+/// either. Unsealed so the engine can subclass it for its persisted config (same JSON).</summary>
+public class PauseConfig
+{
+    public bool OnFullscreen { get; set; } = true;
+    public bool OnBatterySaver { get; set; } = true;
+    public bool OnRemoteSession { get; set; } = true;
+
+    public PausePolicy ToPolicy() => new()
+    {
+        OnFullscreen = OnFullscreen,
+        OnBatterySaver = OnBatterySaver,
+        OnRemoteSession = OnRemoteSession,
+    };
+}
+
 /// <summary>Pure pause policy — no Win32 calls, fully unit-testable.</summary>
 public static class PauseDecision
 {
@@ -64,6 +82,20 @@ public static class PauseDecision
         if (foreground is not null && !IsShellOrOwnWindow(foreground.ClassName, extraExcludedClasses))
             windows.Add(new TopWindowInfo(IntPtr.Zero, foreground.ClassName, foreground.WindowRect, foreground.IsZoomed, foreground.MonitorHandle));
         return EvaluateForMonitor(windows, monitorBounds, monitorWorkArea, monitorHandle, flags, policy, extraExcludedClasses);
+    }
+
+    /// <summary>Globally-forced reason when a system state outranks every window (or
+    /// <see cref="PauseReason.None"/> when the policy has every trigger off): the caller can
+    /// apply it to all monitors without capturing windows. Null when a covering window could
+    /// still matter — the caller must run the full evaluation then.</summary>
+    public static PauseReason? ForcedReason(SystemFlags flags, PausePolicy policy)
+    {
+        if (flags.DisplayOff) return PauseReason.DisplayOff;
+        if (flags.SessionLocked) return PauseReason.SessionLocked;
+        if (policy.OnRemoteSession && flags.RemoteSession) return PauseReason.RemoteSession;
+        if (policy.OnBatterySaver && flags.BatterySaver) return PauseReason.BatterySaver;
+        if (!policy.OnFullscreen) return PauseReason.None;
+        return null;
     }
 
     /// <summary>A monitor pauses when ANY qualifying top-level window covers it — a fullscreen app
