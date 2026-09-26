@@ -422,10 +422,11 @@ public sealed class PlaybackSupervisor : IDisposable
         if (transitions.Count == 0) return;
         // Foreground identity is log-only: resolve it last, and only when something
         // actually transitioned — never on the hot path.
-        string inputDesc = DescribeInputs(windows, flags);
+        var canLogInfo = Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information);
+        string inputDesc = canLogInfo ? string.Empty : DescribeInputs(windows, flags);
         foreach (var (device, reason, by) in transitions)
         {
-            Serilog.Log.Information("Pause transition: {device} -> {reason} by={by} ({inputDesc})", device, reason, by, inputDesc);
+            if (canLogInfo) Serilog.Log.Information("Pause transition: {device} -> {reason} by={by} ({inputDesc})", device, reason, by, inputDesc);
             try { PauseStateChanged?.Invoke(device, reason); }
             catch (Exception ex) { Serilog.Log.Error("Pause transition handler failed", ex); }
         }

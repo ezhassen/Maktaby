@@ -14,12 +14,48 @@ namespace DesktopBoxesUI.Views
             InitializeComponent();
             _vm = new PerformanceMonitorViewModel();
             DataContext = _vm;
-            //_vm.PropertyChanged += OnViewModelPropertyChanged;
+            _vm.PropertyChanged += OnViewModelPropertyChanged;
+            SyncWindowsRow();
             Closed += (_, _) =>
             {
-                //try { _vm.PropertyChanged -= OnViewModelPropertyChanged; } catch { }
+                try { _vm.PropertyChanged -= OnViewModelPropertyChanged; } catch { }
                 _vm.Dispose();
             };
+        }
+
+        /// <summary>Keeps the Windows section's grid row behaving in both states, with the
+        /// footer pinned to the window bottom in both: star-sized with a floor while expanded
+        /// (fills leftover space, grid scrolls internally; spacer stays Auto/zero), Auto with
+        /// no floor while collapsed (sections below snap up under the header; the spacer row
+        /// takes the star and absorbs the leftover space above the footer).</summary>
+        private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            try
+            {
+                if (e.PropertyName == nameof(PerformanceMonitorViewModel.IsWindowsExpanded))
+                    SyncWindowsRow();
+            }
+            catch { }
+        }
+
+        private void SyncWindowsRow()
+        {
+            try
+            {
+                if (_vm.IsWindowsExpanded)
+                {
+                    WindowsRow.Height = new GridLength(1, GridUnitType.Star);
+                    WindowsRow.MinHeight = 140;
+                    BottomSpacerRow.Height = GridLength.Auto;
+                }
+                else
+                {
+                    WindowsRow.Height = GridLength.Auto;
+                    WindowsRow.MinHeight = 0;
+                    BottomSpacerRow.Height = new GridLength(1, GridUnitType.Star);
+                }
+            }
+            catch { }
         }
 
         //// Grids are replaced (not overlaid) by the Disabled placeholders: local Visibility

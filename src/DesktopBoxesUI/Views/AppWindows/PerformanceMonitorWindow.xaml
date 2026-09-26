@@ -21,8 +21,18 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
+            <!--
+                Star so the Windows grid fills leftover space and scrolls internally, with a
+                floor so short windows squeeze other sections instead of collapsing the grid
+                to zero. Code-behind flips this to Auto/MinHeight 0 while the Windows section
+                is collapsed — a star row would otherwise hold the empty space and pin the
+                sections below instead of letting them snap up under the header. The spacer
+                below takes over the star in that state so the footer stays pinned to the
+                window bottom in both states.
+            -->
+            <RowDefinition x:Name="WindowsRow" Height="*" MinHeight="140" />
             <RowDefinition Height="Auto" />
+            <RowDefinition x:Name="BottomSpacerRow" Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -359,6 +369,7 @@
                     RowHeaderWidth="0"
                     RowHeight="22"
                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto"
                     Visibility="{Binding IsAppDisabled, Converter={StaticResource BoolInvertedToVisibilityConverter}}">
                     <DataGrid.CellStyle>
                         <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
@@ -621,8 +632,9 @@
         </controls:CollapsibleGroupBox>
 
         <Border
-            Grid.Row="5"
+            Grid.Row="6"
             Padding="8,4"
+            VerticalAlignment="Bottom"
             Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
             BorderThickness="0,1,0,0">

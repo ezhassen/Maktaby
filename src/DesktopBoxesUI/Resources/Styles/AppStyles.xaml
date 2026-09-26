@@ -508,7 +508,16 @@
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
-                                <RowDefinition Height="Auto" />
+                                <!--
+                                    Star (not Auto): children like DataGrid report their full
+                                    content height as DesiredSize and never clamp it — an Auto
+                                    body row would arrange them at that height (spilling past
+                                    the card with no scrollbar), while star arranges them in
+                                    the card's actual height so their internal scroller engages.
+                                    Under an infinite outer constraint star behaves as Auto,
+                                    so shrink-wrapping sections are unaffected.
+                                -->
+                                <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <Border
                                 x:Name="PART_HeaderBorder"
