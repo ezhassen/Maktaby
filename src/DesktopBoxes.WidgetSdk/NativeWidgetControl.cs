@@ -53,6 +53,30 @@ public class NativeWidgetControl : UserControl, INativeWidget, IWidgetSettingsPr
     protected WidgetSetting? FindSetting(string name) =>
         _settings.Find(s => s.Name == name);
 
+    /// <summary>Reads a declared setting's current value as <typeparamref name="T"/> (same
+    /// shorthand as <c>FindSetting(name)?.GetBoolean() == true</c>, without the null dance).
+    /// Returns <paramref name="defaultValue"/> when the setting is absent (e.g. read before
+    /// its <see cref="DefineSetting"/> call) or the value cannot convert; never throws.
+    /// Conversions use the invariant culture; enums parse from their string form
+    /// (handy for <see cref="WidgetSettingKind.ListOfStrings"/> keys).</summary>
+    protected T GetSettingsValue<T>(string name, T defaultValue)
+    {
+        try
+        {
+            var value = FindSetting(name)?.Value;
+            if (value is null) return defaultValue;
+            if (value is T typed) return typed;
+            var target = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+            if (target.IsEnum && value is string s && System.Enum.TryParse(target, s, true, out var parsed))
+                return (T)parsed;
+            return (T)System.Convert.ChangeType(value, target, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        catch
+        {
+            return defaultValue;
+        }
+    }
+
     public void Suspend()
     {
         if (IsSuspended) return;
