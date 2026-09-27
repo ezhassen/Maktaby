@@ -77,7 +77,11 @@ public static class Logging
             .MinimumLevel.ControlledBy(_LevelSwitch)
             .Enrich.FromLogContext()
             .Enrich.WithExceptionDetails()
-            .WriteTo.File(Path.Combine(LogsFolder, fileName), shared: true, rollingInterval: rollingInterval)
+            // Size-capped chunks (DesktopBoxes20260927_001.log, …): a fault storm can no
+            // longer grow one file without bound, and evidence survives — only chunks past
+            // the retention count are deleted, oldest first.
+            .WriteTo.File(Path.Combine(LogsFolder, fileName), shared: true, rollingInterval: rollingInterval,
+                fileSizeLimitBytes: 32L * 1024 * 1024, rollOnFileSizeLimit: true, retainedFileCountLimit: 90)
 #if DEBUG
             .WriteTo.Console()
 #endif

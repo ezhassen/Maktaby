@@ -14,6 +14,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using WindowsNative;
 using Wpf.Ui.Appearance;
+using WPFShared.Helpers;
 using static WindowsNative.Win32Constants;
 
 namespace DesktopBoxesUI.Views.Containers;
@@ -580,6 +581,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
     private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
+        if (!IsLoaded || IsClosing || IsClosed || this.IsBeingDetached()) return;
         if (!IsVisible) _plugin?.Suspend();
         else if (WindowState != WindowState.Minimized) _plugin?.Resume();
     }
@@ -598,6 +600,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
     private void OnStateChanged(object? sender, EventArgs e)
     {
+        if (!IsLoaded || IsClosing || IsClosed || this.IsBeingDetached()) return;
         if (WindowState == WindowState.Minimized) _plugin?.Suspend();
         else if (IsVisible) _plugin?.Resume();
     }

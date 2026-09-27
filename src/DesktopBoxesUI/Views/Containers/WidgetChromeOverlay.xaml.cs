@@ -102,6 +102,7 @@ public partial class WidgetChromeOverlay : Window
         PreviewMouseMove += Header_MouseMove;
         PreviewMouseLeftButtonUp += Header_MouseUp;
         HeaderBorder.MouseRightButtonDown += (ss, ee) => { if (!IsDragging && !IsResizing) _ownerWidget.ShowWidgetMenu(); };
+        HeaderBorder.MouseEnter += (_, _) => _ownerWidget.SetHover(true);
         MouseEnter += (_, _) => _ownerWidget.SetHover(true);
         MouseLeave += (_, _) => _ownerWidget.SetHover(false);
     }
@@ -154,12 +155,19 @@ public partial class WidgetChromeOverlay : Window
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         SyncFromOwner();
+        // Loaded refires on every Hide→Show cycle and this overlay shows/hides on every
+        // hover: detach first so owner/overlay handlers never stack (each cycle would add
+        // 5 more and fan every move/size event out N times).
+        _ownerWidget.Window.LocationChanged -= OwnerPosChanged;
+        _ownerWidget.Window.SizeChanged -= OwnerPosChanged;
+        _ownerWidget.Window.Closed -= OwnerClosed;
+        LocationChanged -= OverlayPosChanged;
+        SizeChanged -= OverlayPosChanged;
         _ownerWidget.Window.LocationChanged += OwnerPosChanged;
         _ownerWidget.Window.SizeChanged += OwnerPosChanged;
         _ownerWidget.Window.Closed += OwnerClosed;
         LocationChanged += OverlayPosChanged;
         SizeChanged += OverlayPosChanged;
-        HeaderBorder.MouseEnter += (_, _) => _ownerWidget.SetHover(true);
     }
 
     private void OnClosed(object? sender, EventArgs e)

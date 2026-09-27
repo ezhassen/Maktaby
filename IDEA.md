@@ -1,0 +1,1 @@
+Desktop Boxes - organize desktop into resizable boxes that pin files, folders and app shortcuts above the Windows desktop. also Has a LiveWallPaper engine that shows behind desktop icons. High Perfomance and low memory usage and extendable using NativeWidgets SDK or Custom user WebWidgets

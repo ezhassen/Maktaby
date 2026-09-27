@@ -66,6 +66,34 @@ public partial class App : Application
             LogError = (ex, msg) => Logging.Log.Error(ex, msg),
             LogFatal = (ex, msg) => Logging.Log.Fatal(ex, msg),
             LogWarning = (msg) => Logging.Log.Warning(msg),
+            // OutOfMemory (usually the composition channel starving on native exhaustion):
+            // stop the two native-memory burners (video decode + widget rendering) so the
+            // fault storm can't feed itself. Allocation-light and fully guarded — under OOM
+            // every allocation is suspect. The app stays suspended after Continue (tray can
+            // resume playback/widgets); resuming blindly would re-trigger the storm.
+            SuspendApp = static ex =>
+            {
+                if (!IsOutOfMemory(ex)) return;
+                try
+                {
+                    Services.GetService<LiveWallpaperManager>()?.SetTransientPaused(true);
+                }
+                catch { }
+                try
+                {
+                    var app = Application.Current;
+                    if (app is null) return;
+                    foreach (var w in app.Windows.OfType<Views.Containers.WebWidgetWindow>())
+                    {
+                        try { w.WidgetControl?.Suspend(); } catch { }
+                    }
+                    foreach (var w in app.Windows.OfType<Views.Containers.NativeWidgetWindow>())
+                    {
+                        try { w.Widget?.Suspend(); } catch { }
+                    }
+                }
+                catch { }
+            },
         });
 #endif
         //
@@ -106,6 +134,9 @@ public partial class App : Application
         // rendering (tier 0) — GDI churn in the thousands, GBs of native memory, idle CPU,
         // flat managed heap. Tier changes are rare and event-driven; log them so the next
         // post-resume blowup is attributable (see Performance Monitor "Render" line).
+        // Tier 0 also auto-pauses playback + widgets (software rasterization of live content
+        // is the likely burner and pointless eye candy); recovery resumes only what this
+        // paused, never user/supervisor-paused content.
         try
         {
             System.Windows.Media.RenderCapability.TierChanged += (_, _) =>
@@ -114,6 +145,7 @@ public partial class App : Application
                 {
                     int tier = System.Windows.Media.RenderCapability.Tier >> 16;
                     Log.Information("WPF render tier changed to {Tier} ({Mode})", tier, tier > 0 ? "hardware" : "SOFTWARE fallback");
+                    try { Dispatcher.BeginInvoke(new Action(() => OnRenderTierChanged(tier))); } catch { }
                 }
                 catch { }
             };
@@ -158,6 +190,154 @@ public partial class App : Application
             try { await Services.GetRequiredService<LiveWallpaperManager>().InitializeAsync(); } catch { }
             return null;
         }, pausePlayback: false);
+
+        //TODO: TMP StartHealthSnapshots, just comment when not needed
+        StartHealthSnapshots();
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _healthTimer;
+
+    private bool _tierPauseActive;
+    private bool _tierWasWallpaperPlaying;
+    private readonly List<Views.Containers.WidgetWindow> _tierSuspendedWidgets = new();
+
+    /// <summary>Render-tier fallback response (UI thread): tier 0 pauses playback and widgets,
+    /// recovery resumes only what this paused. Fully guarded — tier events can arrive during
+    /// teardown, and every call here must survive a dying process.</summary>
+    private void OnRenderTierChanged(int tier)
+    {
+        try
+        {
+            if (_isExiting || Services is null) return;
+            if (tier == 0 && !_tierPauseActive)
+            {
+                _tierPauseActive = true;
+                _tierWasWallpaperPlaying = false;
+                try
+                {
+                    var lw = Services.GetService<LiveWallpaperManager>();
+                    _tierWasWallpaperPlaying = lw?.IsPlaying == true;
+                    if (_tierWasWallpaperPlaying) lw!.SetTransientPaused(true);
+                }
+                catch { }
+                _tierSuspendedWidgets.Clear();
+                try
+                {
+                    var wins = Application.Current?.Windows;
+                    if (wins is not null)
+                    {
+                        foreach (var w in wins)
+                        {
+                            if (w is not Views.Containers.WebWidgetWindow
+                                && w is not Views.Containers.NativeWidgetWindow) continue;
+                            try
+                            {
+                                var ww = (Views.Containers.WidgetWindow)w;
+                                if (!ww.IsSuspended)
+                                {
+                                    ww.Suspend();
+                                    _tierSuspendedWidgets.Add(ww);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+                Log.Information("Render tier 0: paused live wallpaper + {Widgets} widgets until hardware recovers", _tierSuspendedWidgets.Count);
+            }
+            else if (tier > 0 && _tierPauseActive)
+            {
+                _tierPauseActive = false;
+                try
+                {
+                    foreach (var w in _tierSuspendedWidgets)
+                    {
+                        try { w.Resume(); } catch { }
+                    }
+                }
+                catch { }
+                finally
+                {
+                    _tierSuspendedWidgets.Clear();
+                }
+                try
+                {
+                    if (_tierWasWallpaperPlaying)
+                        Services.GetService<LiveWallpaperManager>()?.SetTransientPaused(false);
+                }
+                catch { }
+                finally
+                {
+                    _tierWasWallpaperPlaying = false;
+                }
+                Log.Information("Render tier recovered to {Tier}: resumed tier-paused playback + widgets", tier);
+            }
+        }
+        catch { }
+    }
+    /// <summary>Black-box forensics: one guarded line a minute (private bytes, managed heap,
+    /// GDI/USER handles, render tier, wallpaper state, engine rebuilds, window counts) so the
+    /// next native-memory incident is attributable from the log alone — no UI needed, since
+    /// an OOMing process can no longer open windows.</summary>
+    private void StartHealthSnapshots()
+    {
+        try
+        {
+            WriteHealthSnapshot();
+            _healthTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(1)
+            };
+            _healthTimer.Tick += (_, _) => WriteHealthSnapshot();
+            _healthTimer.Start();
+        }
+        catch { }
+    }
+
+    private static void WriteHealthSnapshot()
+    {
+        try
+        {
+            long privMB = -1, managedMB = -1;
+            try { using var p = System.Diagnostics.Process.GetCurrentProcess(); privMB = p.PrivateMemorySize64 / 1024 / 1024; } catch { }
+            try { managedMB = System.GC.GetTotalMemory(false) / 1024 / 1024; } catch { }
+            uint gdi = 0, user = 0;
+            try
+            {
+                using var p = System.Diagnostics.Process.GetCurrentProcess();
+                gdi = Win32Apis.GetGuiHandleCount(p.Handle, false);
+                user = Win32Apis.GetGuiHandleCount(p.Handle, true);
+            }
+            catch { }
+            int tier = -1;
+            try { tier = System.Windows.Media.RenderCapability.Tier >> 16; } catch { }
+            string reapply = "?";
+            bool playing = false, live = false;
+            try
+            {
+                var lw = Services.GetService<LiveWallpaperManager>();
+                if (lw is not null) { reapply = lw.GetReapplyInfo(); playing = lw.IsPlaying; live = lw.EngineIsLive; }
+            }
+            catch { }
+            int boxes = 0, widgets = 0;
+            try
+            {
+                var wins = Application.Current?.Windows;
+                if (wins is not null)
+                {
+                    foreach (var w in wins)
+                    {
+                        if (w is BoxContainerWindow) boxes++;
+                        else if (w is Views.Containers.WebWidgetWindow || w is Views.Containers.NativeWidgetWindow) widgets++;
+                    }
+                }
+            }
+            catch { }
+            Log.Information("Health: private={PrivMB}MB managed={ManagedMB}MB gdi={Gdi} user={User} tier={Tier} wallpaper={Playing}/{Live} reapply={Reapply} boxes={Boxes} widgets={Widgets}",
+                privMB, managedMB, gdi, user, tier, playing, live, reapply, boxes, widgets);
+        }
+        catch { }
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -210,6 +390,17 @@ public partial class App : Application
         Helpers.ApplicationSingleInstance.Release();
         base.OnExit(e);
     }
+    /// <summary>True when <paramref name="ex"/> or any inner exception is an
+    /// <see cref="OutOfMemoryException"/> (managed or composition-channel starvation).</summary>
+    private static bool IsOutOfMemory(Exception? ex)
+    {
+        for (var e = ex; e is not null; e = e.InnerException)
+        {
+            if (e is OutOfMemoryException) return true;
+        }
+        return false;
+    }
+
     private static bool IsIgnorableWebViewShutdownException(Exception? ex)
     {
         if (ex == null) return false;

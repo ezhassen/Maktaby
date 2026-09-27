@@ -508,6 +508,17 @@ public partial class SettingsView : AppWindows.AppFluentWindow
         Close();
     }
 
+    private void ViewLogs_Click(object sender, RoutedEventArgs e)
+    {
+        // Modeless + single instance: keep Settings open while browsing logs.
+        foreach (var w in Application.Current.Windows.OfType<Views.LogViewerWindow>())
+        {
+            w.Activate();
+            return;
+        }
+        new Views.LogViewerWindow().Show();
+    }
+
     #region Snapshot actions
 
     private static DesktopManager? Manager => App.Services?.GetRequiredService<DesktopManager>();

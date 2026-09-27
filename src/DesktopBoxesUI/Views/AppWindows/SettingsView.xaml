@@ -539,11 +539,22 @@
                                     FontSize="11"
                                     Foreground="#999999"
                                     Text="Applied on Save. Verbose/Debug help diagnosing issues; Warning and above stay quiet." />
-                                <ComboBox
-                                    Width="200"
-                                    HorizontalAlignment="Left"
-                                    ItemsSource="{Binding LogLevelOptions}"
-                                    SelectedItem="{Binding SelectedLogLevelOption, UpdateSourceTrigger=PropertyChanged}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <ComboBox
+                                        Width="200"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Center"
+                                        ItemsSource="{Binding LogLevelOptions}"
+                                        SelectedItem="{Binding SelectedLogLevelOption, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ui:Button
+                                        Margin="8,0,0,0"
+                                        Padding="8,2"
+                                        VerticalAlignment="Center"
+                                        Appearance="Secondary"
+                                        Click="ViewLogs_Click"
+                                        Content="View logs"
+                                        ToolTip="Open the log viewer (one file per day)" />
+                                </StackPanel>
                             </StackPanel>
                         </StackPanel>
                     </GroupBox>
