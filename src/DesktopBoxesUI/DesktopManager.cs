@@ -180,13 +180,11 @@ public sealed class DesktopManager
         // This defers window creation only — item drag/drop logic is untouched.
         if (_mainVm.Containers.Count > 0)
         {
-            AddWindow(_mainVm.Containers[0], showActivated: false);//focusWorkaround: true
+            AddWindow(_mainVm.Containers[0], showActivated: false, updateWidgetAutoPause: false);//focusWorkaround: true
             EnsureDesktopZOrder();
         }
 
-        _ = StreamRemainingContainersAsync(onFinishAction: UpdateWidgetAutoPause);
-
-        await ReconcileItemsAsync();
+        _ = StreamRemainingContainersAsync(onFinishAction: ReconcileItemsAsync);
 
         _appliedResolution = GetPrimaryWorkAreaDip();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
@@ -1245,11 +1243,17 @@ public sealed class DesktopManager
             return;
         }
 
+        // Both loops run with the per-call update off and re-evaluate once at the end: a single
+        // CollectionChanged event can carry several items (a bulk repopulate), and resolving the
+        // supervision condition per item would repeat the monitor enumeration for each one.
+        bool membershipChanged = false;
+
         if (e.NewItems != null)
         {
             foreach (ContainerViewModel vm in e.NewItems)
             {
-                AddWindow(vm, showActivated: true);
+                AddWindow(vm, showActivated: true, updateWidgetAutoPause: false);
+                membershipChanged = true;
             }
         }
 
@@ -1257,9 +1261,12 @@ public sealed class DesktopManager
         {
             foreach (ContainerViewModel vm in e.OldItems)
             {
-                RemoveWindow(vm.Id);
+                RemoveWindow(vm.Id, updateWidgetAutoPause: false);
+                membershipChanged = true;
             }
         }
+
+        if (membershipChanged) UpdateWidgetAutoPause();
     }
 
     public bool IsDesktopWindow(Window wind, bool checkSurfaceToo = true)
@@ -1301,7 +1308,7 @@ public sealed class DesktopManager
         return false;
     }
 
-    private void AddWindow(ContainerViewModel vm, bool showActivated = true)//, bool focusWorkaround = false
+    private void AddWindow(ContainerViewModel vm, bool showActivated = true, bool updateWidgetAutoPause = true)//, bool focusWorkaround = false
     {
         if (_windows.ContainsKey(vm.Id))
         {
@@ -1340,7 +1347,7 @@ public sealed class DesktopManager
         // A Box joined the screen: re-check the shared supervision condition. Done here and
         // in RemoveWindow (rather than in Show/HideContainer alone) so every path that changes
         // window membership is covered, including the restore/stream paths.
-        UpdateWidgetAutoPause();
+        if (updateWidgetAutoPause) UpdateWidgetAutoPause();
         // Per-window DPI changes never raise DisplaySettingsChanged — observe them directly so
         // DPI-only switches (same resolution, different scale) also funnel into the rescale path.
         //window.DpiChanged += OnWindowDpiChanged;//not needed
@@ -1460,7 +1467,14 @@ public sealed class DesktopManager
     /// synchronously). Creation is spread across dispatcher turns so the UI stays responsive and the splash
     /// can close — the containers stream in after startup instead of blocking it.
     /// </summary>
-    private async Task StreamRemainingContainersAsync(Action? onFinishAction = null)
+    /// <param name="onFinishAction">Runs after every container window is streamed and
+    /// <see cref="UpdateWidgetAutoPause"/> has run. Typed <see cref="Func{TResult}"/> of Task,
+    /// not Action, so it is genuinely awaited: an Action would make an async lambda an
+    /// <c>async void</c>, and an exception from it would escape this method's catch and be
+    /// rethrown on the dispatcher — crashing into the global handler mid-startup instead of
+    /// being contained here. Reconciliation must also observe the fully streamed set, which
+    /// is why it runs here rather than before the stream.</param>
+    private async Task StreamRemainingContainersAsync(Func<Task>? onFinishAction = null)
     {
         try
         {
@@ -1470,7 +1484,7 @@ public sealed class DesktopManager
             var rest = _mainVm.Containers.Skip(1).ToList();
             foreach (var vm in rest)
             {
-                AddWindow(vm, showActivated: false);
+                AddWindow(vm, showActivated: false, updateWidgetAutoPause: false);
                 await Task.Yield();
             }
 
@@ -1487,11 +1501,16 @@ public sealed class DesktopManager
         }
         finally
         {
-            onFinishAction?.Invoke();
+            UpdateWidgetAutoPause();
+            if (onFinishAction is not null)
+            {
+                try { await onFinishAction(); }
+                catch (Exception ex) { Serilog.Log.Error(ex, "Post-stream reconciliation failed"); }
+            }
         }
     }
 
-    private void RemoveWindow(System.Guid id)
+    private void RemoveWindow(System.Guid id, bool updateWidgetAutoPause = true)
     {
         if (_windows.TryGetValue(id, out var window))
         {
@@ -1513,7 +1532,7 @@ public sealed class DesktopManager
             _windows.Remove(id);
             // A Box left the screen: the last one out releases the shared hook thread unless
             // the live wallpaper is still keeping it alive.
-            UpdateWidgetAutoPause();
+            if (updateWidgetAutoPause) UpdateWidgetAutoPause();
         }
     }
     #endregion
@@ -1755,7 +1774,7 @@ public sealed class DesktopManager
 
     public async Task ResetAsync()
     {
-        CloseAll();
+        CloseAll(updateWidgetAutoPause: false);
         //
         foreach (var container in _containers.GetContainers().ToList())
         {
@@ -1783,7 +1802,7 @@ public sealed class DesktopManager
         //await SaveAsync();
     }
 
-    public void CloseAll()
+    public void CloseAll(bool updateWidgetAutoPause = true)
     {
         try { _widgetPause?.Dispose(); } catch { }
         _widgetPause = null;
@@ -1814,10 +1833,9 @@ public sealed class DesktopManager
         {
             //Win32Apis.AllowHide(new WindowInteropHelper(window).Handle);
             //window.Close();
-            try { RemoveWindow(id); }
+            try { RemoveWindow(id, updateWidgetAutoPause: false); }
             catch (Exception ex) { Serilog.Log.Error(ex, "CloseAll: failed to close window {Id}", id); }
         }
-
         _windows.Clear();
         if (_surface is not null)
         {
@@ -1828,6 +1846,7 @@ public sealed class DesktopManager
 
         // Clear the published handle so nothing can target a dead window.
         Win32Apis.DesktopSurfaceHandle = IntPtr.Zero;
+        if (updateWidgetAutoPause) UpdateWidgetAutoPause();
     }
 
     /// <summary>Registers every box from every container into <see cref="IBoxService"/> so the rule
@@ -2045,7 +2064,7 @@ public sealed class DesktopManager
             return;
         }
 
-        CloseAll();
+        CloseAll(updateWidgetAutoPause: false);
         foreach (var container in _containers.GetContainers().ToList())
         {
             _containers.RemoveContainer(container.Id);
@@ -2148,7 +2167,7 @@ public sealed class DesktopManager
             if (snapshot is not null)
             {
                 // Prepare to re-init: close windows and clear state first
-                CloseAll();
+                CloseAll(updateWidgetAutoPause: false);
                 foreach (var container in _containers.GetContainers().ToList())
                 {
                     _containers.RemoveContainer(container.Id);

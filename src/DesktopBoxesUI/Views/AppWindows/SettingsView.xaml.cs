@@ -1,3 +1,4 @@
+using DesktopBoxesUI.Core.Interfaces;
 using DesktopBoxesUI.Core.Models;
 using DesktopBoxesUI.Helpers;
 using DesktopBoxesUI.ViewModels;
@@ -522,6 +523,7 @@ public partial class SettingsView : AppWindows.AppFluentWindow
     #region Snapshot actions
 
     private static DesktopManager? Manager => App.Services?.GetRequiredService<DesktopManager>();
+    private static ILoadingDialogService Loading => App.Services.GetRequiredService<ILoadingDialogService>();
 
     private Task ShowMessageAsync(string content, string title)
         => Dialogs.ShowMessageAsync(content, new DialogOptions { Title = title });
@@ -589,7 +591,19 @@ public partial class SettingsView : AppWindows.AppFluentWindow
 
         try
         {
-            await manager.RestoreAsync(dlg.FileName);
+            // A restore tears down and rebuilds every box and widget, so run it behind the
+            // global loading dialog — it blocks input for the whole rebuild, which is exactly
+            // what this operation needs. pausePlayback: false keeps live wallpapers playing:
+            // the restore only re-creates the Box windows, and pausing the desktop underneath
+            // for a settings action is an unrequested side effect.
+            await Loading.ShowAsync(
+                async report =>
+                {
+                    report("Restoring snapshot…");
+                    await manager.RestoreAsync(dlg.FileName);
+                    return null;
+                },
+                pausePlayback: false);
             await ShowMessageAsync("Restore completed.", "Restore");
         }
         catch (Exception ex)

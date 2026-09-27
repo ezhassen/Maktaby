@@ -221,6 +221,23 @@ WinEvent was delivered twice and every evaluation walked all top-level windows t
   visible in the model). The widget side is driven from `AddWindow`/`RemoveWindow` (every
   membership-changing path), not only from Show/HideContainer, and reads the **model's**
   `IsVisible` rather than `Window.IsVisible` so it never races Show/Close ordering.
+- **Batched window changes must opt out per call and re-evaluate once at the end.**
+  `AddWindow`/`RemoveWindow`/`CloseAll` all take `bool updateWidgetAutoPause = true`. A loop
+  over N containers must pass `updateWidgetAutoPause: false` on every call and let the
+  batch's single trailing `UpdateWidgetAutoPause()` do the work — otherwise a 50-box startup
+  re-resolves the monitor/supervision condition 50 times instead of once. The defaults stay
+  `true` so unbatched callers cannot silently forget. Current batched sites:
+  `StreamRemainingContainersAsync` (startup streaming), `CloseAll` inside `ResetAsync`,
+  `RestoreAsync` and `RestoreBundleAsync` — all three of the latter re-enter `InitializeAsync`,
+  which re-evaluates via the stream's `finally`. Note `CloseAll` disposes `_widgetPause`
+  unconditionally before its own trailing update, so a batch always detaches; the trailing
+  update only re-subscribes if Boxes remain. A forgotten flag shows up as a **stale ref-count**
+  (a hook thread that never appears, or never goes away) — no crash, so it can sit unnoticed
+  until someone reads the `"Pause supervision: ..."` log lines.
+- Anything scheduled as a callback that runs async work must be typed `Func<Task>`, not
+  `Action` — an `Action` turns an async lambda into `async void`, whose exceptions escape the
+  surrounding `try/catch`/`finally` and land on the dispatcher. `StreamRemainingContainersAsync`
+  is typed this way for exactly that reason.
 
 ## VirtualizingIconPanel
 
