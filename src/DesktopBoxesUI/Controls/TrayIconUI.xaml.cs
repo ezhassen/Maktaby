@@ -45,22 +45,30 @@ public partial class TrayIconUI
         contextMenu.Opened += ContextMenu_Opened;
     }
 
+    /// <summary>Suppresses or restores the tray context menu, for as long as a global loading
+    /// dialog owns input (Exit included: quitting mid-task would abandon the loading pipeline).
+    ///
+    /// Suppression happens at the source — right-click simply no longer opens the menu —
+    /// because there is no cancellable pre-open hook to cancel: WPF's <see cref="ContextMenu"/>
+    /// exposes only <c>Opened</c>/<c>Closed</c>, both of which run after the menu is already on
+    /// screen, and Wpf.Ui's <c>NotifyIcon</c> has no pre-open event either. Cancelling in
+    /// <c>Opened</c> (or clearing the items) would leave a dead menu flashing on screen, which
+    /// is worse than no menu at all.
+    ///
+    /// Driven by <see cref="ILoadingDialogService.StateChanged"/> from <see cref="App"/>, which
+    /// also re-applies it whenever the tray icon is rebuilt, so a tray created while a dialog is
+    /// already up comes up suppressed.</summary>
+    public void SetMenuSuppressed(bool suppressed)
+    {
+        AppTrayIcon.MenuOnRightClick = !suppressed;
+        // A click that landed just before the dialog appeared can still have the menu open.
+        if (suppressed && contextMenu.IsOpen) contextMenu.IsOpen = false;
+    }
+
     private void ContextMenu_Opened(object sender, RoutedEventArgs e)
     {
-        // A global loading dialog blocks everything, including the tray menu (Exit included:
-        // quitting mid-task would abandon the loading pipeline).
-        try
-        {
-            if (App.Services.GetRequiredService<ILoadingDialogService>().IsBusy)
-            {
-                foreach (var item in contextMenu.Items)
-                {
-                    if (item is MenuItem mItem) mItem.IsEnabled = false;
-                }
-                return;
-            }
-        }
-        catch { }
+        // No busy gate here: SetMenuSuppressed keeps the menu from opening at all while a
+        // loading dialog is up, so reaching this point means the app is idle.
 #if DEBUG
         menuTest.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowTestButton ? Visibility.Visible : Visibility.Collapsed;
 #else

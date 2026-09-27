@@ -173,9 +173,20 @@ public partial class App : Application
         var loading = Services.GetRequiredService<ILoadingDialogService>();
         loading.StateChanged += (_, _) =>
         {
-            // A loading dialog blocks all input, including the tray menu: if it opened mid-click,
-            // dismiss it — ContextMenu_Opened disables every item while busy.
-            try { if (loading.IsBusy && _tray != null) _tray.contextMenu.IsOpen = false; } catch { }
+            // A loading dialog blocks all input, including the tray menu: the menu is not shown
+            // at all while one is up (SetMenuSuppressed also closes one that was already open
+            // when the dialog appeared). Read _tray per event, not captured, so this keeps
+            // working across the tray icon being rebuilt on an Explorer restart.
+            try
+            {
+                bool busy = loading.IsBusy;
+                _tray?.SetMenuSuppressed(busy);
+                // Loading dialogs are rare (startup and explicit user actions), so this cannot
+                // spam — and it is the only way to explain "the tray menu did not open".
+                Serilog.Log.Information("Loading dialog {State}: tray context menu {Menu}",
+                    busy ? "shown" : "dismissed", busy ? "suppressed" : "available");
+            }
+            catch { }
         };
         await loading.ShowAsync(async report =>
         {
@@ -868,6 +879,11 @@ public partial class App : Application
 
         _trayHost!.Content = tray;
         _tray = tray;
+
+        // Apply the current loading-dialog state. A tray rebuilt mid-dialog (Explorer restart,
+        // DPI layout pass) must come up already suppressed; StateChanged only fires on a change,
+        // so it would otherwise leave this fresh icon's menu openable until the next toggle.
+        try { tray.SetMenuSuppressed(Services.GetRequiredService<ILoadingDialogService>().IsBusy); } catch { }
     }
 
     private System.Windows.Threading.DispatcherTimer? _trayRefreshDebounce;

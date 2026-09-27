@@ -14,11 +14,12 @@ namespace DesktopBoxesUI.WPFServices;
 /// <summary>
 /// Global loading dialog: a single application-modal <see cref="LoadingDialog"/> on the primary
 /// screen. Modality blocks all same-thread windows (boxes, widgets, surface, settings); the tray
-/// menu is disabled separately via <see cref="IsBusy"/> (see <c>TrayIconUI</c> + <c>App</c>, which
-/// also dismiss an already-open menu on <see cref="StateChanged"/>). Callers can opt into pausing
-/// live-wallpaper playback and suspending widget windows for the dialog's lifetime (off by default);
-/// resume then covers only windows the service suspended itself — widgets already suspended
-/// (auto-pause, hidden) are left alone.
+/// menu is suppressed separately via <see cref="IsBusy"/> — it is not opened at all while a
+/// dialog is up, and one already open is dismissed (<c>App</c> drives this from
+/// <see cref="StateChanged"/> via <c>TrayIconUI.SetMenuSuppressed</c>, and re-applies it when the
+/// tray icon is rebuilt). Callers can opt into pausing live-wallpaper playback and suspending
+/// widget windows for the dialog's lifetime (off by default); resume then covers only windows the
+/// service suspended itself — widgets already suspended (auto-pause, hidden) are left alone.
 /// </summary>
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class LoadingDialogService : ILoadingDialogService
