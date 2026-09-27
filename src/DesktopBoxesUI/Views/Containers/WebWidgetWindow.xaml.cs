@@ -35,6 +35,9 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private WidgetChromeOverlay? _chromeOverlay;
     private readonly DesktopManager _desktopManager;
     private bool ShowChromeOnHover = false;
+    /// <summary>Shared tier-0 fallback (freeze the chrome overlay; drop caches if the content
+    /// ever has any). See <see cref="Helpers.SoftwareRenderingFallback"/>.</summary>
+    private readonly Helpers.SoftwareRenderingFallback _softwareFallback = new();
     //private bool MoveWindowByWidgetMouseDown = false;
 
     public WebWidgetWindow(ContainerViewModel vm)
@@ -184,6 +187,30 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
         try { _widgetControl?.Resume(); } catch { }
     }
 
+    /// <summary>The hosted WebView control (null before load / after shutdown teardown).
+    /// This is the content visual the tier-0 fallback and the render census act on — not
+    /// <c>Window.Content</c>, which is host chrome that is never dropped.</summary>
+    internal FrameworkElement? WidgetVisual => WidgetHost?.Content as FrameworkElement;
+
+    /// <summary>
+    /// Tier 0 freezes the chrome overlay, and recovery hands it back.
+    /// <para>
+    /// The overlay is the whole story here. <see cref="WebWidgetControl.Suspend()"/> already
+    /// does the right thing with the expensive part — it calls <c>TrySuspendAsync</c>, so the
+    /// WebView2 browser process genuinely stops rendering — and the WPF-side content has no
+    /// <c>CacheMode</c> to strand. What is left is the overlay: a second top-level WPF window
+    /// whose render surface it re-acquires on every Show/Hide and every <c>SyncFromOwner</c>,
+    /// all of which a resume's DPI remap triggers across 2 windows per widget. The cache drop
+    /// is still routed through the shared helper so a future control with a <c>CacheMode</c>
+    /// is covered without touching this file again.
+    /// </para></summary>
+    public override void OnRenderTierChanged(bool software)
+    {
+        if (IsClosing || IsClosed) return;
+        try { _softwareFallback.Apply(WidgetVisual, _chromeOverlay, software, UpdateChrome); }
+        catch { }
+    }
+
 
     public void ShowWidgetMenu()
     {
@@ -284,6 +311,10 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
         //if (_drag is null) return;
         //if (_drag.IsDragging || WindowDragController.IsNativeSizing) return;
         if (_chromeOverlay!.IsDragging || _chromeOverlay.IsResizing) return;
+        // Tier 0: the overlay is frozen hidden. Every early-out below must respect that —
+        // otherwise the next hover/activation event re-shows it and we are back to
+        // re-acquiring a render surface per widget while the driver is degraded.
+        if (_softwareFallback.IsFrozen) return;
         // Keep chrome visible while user is interacting with it (mouse down gap before
         // WM_ENTERSIZEMOVE/WM_NCLBUTTONDOWN sets IsDragging). Without this, the
         // WM_ACTIVATE transient during NOACTIVATE caption click would hide it.
@@ -499,7 +530,9 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
             try { _widgetControl.WidgetClicked -= OnWidgetClicked; } catch { }
             //try { _widgetControl.WidgetMouseDown -= OnWidgetMouseDown; } catch { }
             try { _widgetControl.CleanupForShutdown(); } catch { }
+            // Any dropped cache mode belonged to the WebView visual that is going away.
             try { WidgetHost.Content = null; } catch { }
+            _softwareFallback.ForgetCaches();
             _widgetControl = null;
         }
     }

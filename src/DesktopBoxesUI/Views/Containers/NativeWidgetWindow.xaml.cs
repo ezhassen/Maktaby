@@ -46,20 +46,18 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private bool ShowChromeOnHover = false;
 
     // ---- render-tier (tier 0 / software rasterization) state ----
-    /// <summary>Cached render-target bitmaps dropped for tier 0, kept so recovery can
-    /// hand each element its original mode back. Cleared on recovery, on plugin swap and
-    /// on close, so a dropped mode can never outlive the visual it belonged to.</summary>
-    private readonly List<(UIElement Element, System.Windows.Media.CacheMode Mode)> _droppedCaches = new();
-    /// <summary>True while the chrome overlay is frozen for tier 0 (hidden, not synced).</summary>
-    private bool _chromeFrozenForSoftware;
+    /// <summary>Shared tier-0 fallback: drops the plugin visual tree's cached render-target
+    /// bitmaps and freezes the chrome overlay, restoring both on recovery. See
+    /// <see cref="Helpers.SoftwareRenderingFallback"/> for why each matters.</summary>
+    private readonly Helpers.SoftwareRenderingFallback _softwareFallback = new();
 
     /// <summary>Live plugin instance, if one is attached (used by auto-pause/diagnostics).</summary>
     internal INativeWidget? Widget => _plugin;
     /// <summary>Live chrome overlay, if one has been created (used by layout diagnostics).</summary>
     internal WidgetChromeOverlay? ChromeOverlay => _chromeOverlay;
-    /// <summary>The plugin's visual tree, or null when nothing is attached. Exposed for the
-    /// render-tier census, which must count the plugin's own cache/effect usage rather than
-    /// the host chrome around it.</summary>
+    /// <summary>The plugin's visual tree, or null when nothing is attached. This — not
+    /// <c>Window.Content</c> — is what the tier-0 fallback and the render census act on: the
+    /// host chrome around it is never dropped, so counting it would bury the signal.</summary>
     internal System.Windows.FrameworkElement? PluginVisual => WidgetHost?.Content as System.Windows.FrameworkElement;
 
     public NativeWidgetWindow(ContainerViewModel vm)
@@ -238,7 +236,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         // A dropped cache mode belongs to the visual that owned it. Forget the record with
         // the plugin so a later recovery never writes a CacheMode into a detached visual
         // (which would resurrect it and pin its collectible ALC).
-        _droppedCaches.Clear();
+        _softwareFallback.ForgetCaches();
         var plugin = Interlocked.Exchange(ref _plugin, null);
         if (plugin is null) return;
         try
@@ -410,7 +408,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         // Tier 0: the overlay is frozen hidden. Every early-out below must respect that —
         // otherwise the next hover/activation event re-shows it and we are back to
         // re-acquiring a render surface per widget while the driver is degraded.
-        if (_chromeFrozenForSoftware) return;
+        if (_softwareFallback.IsFrozen) return;
         // Keep chrome visible while user is interacting with it (mouse down gap before
         // WM_ENTERSIZEMOVE/WM_NCLBUTTONDOWN sets IsDragging).
         if (_chromeOverlay.IsVisible && System.Windows.Input.Mouse.LeftButton == System.Windows.Input.MouseButtonState.Pressed) return;
@@ -620,102 +618,17 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
 
     /// <summary>
     /// Tier 0 releases the rendering resources the plugin's visual tree holds, and
-    /// recovery hands them back.
-    /// <para>
-    /// Suspending a plugin only stops its timers and animations — the visual tree stays
-    /// live and keeps being rasterized. At tier 0 that rasterization goes through GDI,
-    /// and a <see cref="BitmapCache"/> (and every <see cref="System.Windows.Media.Effects.Effect"/>)
-    /// owns a cached intermediate surface that a tier flip underneath it can strand
-    /// permanently — the same class of leak already seen in the wallpaper engine's
-    /// frame-server paths, where only a driver reset reclaims the memory. Dropping
-    /// <c>CacheMode</c> is the only lever a widget host has on that.
-    /// </para>
-    /// <para>
-    /// The chrome overlay is frozen rather than torn down: it is a second top-level
-    /// WPF window with its own render surface, and it re-acquires that surface on every
-    /// Show/Hide. A resume triggers DPI remapping on both owner and overlay, so leaving
-    /// it live means a re-allocation storm per widget across <c>2 × widget_count</c>
-    /// HWNDs precisely when the driver is already degraded.
-    /// </para></summary>
+    /// recovery hands them back. The reasoning lives in
+    /// <see cref="Helpers.SoftwareRenderingFallback"/> — the short version: suspending a
+    /// plugin only stops its timers and animations, leaving the visual tree live and still
+    /// being GDI-rasterized at tier 0, and the chrome overlay re-acquires its render surface
+    /// on every Show/Hide and every owner sync that a resume's DPI remap triggers.
+    /// </summary>
     public override void OnRenderTierChanged(bool software)
     {
         if (IsClosing || IsClosed) return;
-        try
-        {
-            if (software)
-            {
-                DropCachedBitmaps();
-                FreezeChromeForSoftware();
-            }
-            else
-            {
-                RestoreCachedBitmaps();
-                UnfreezeChromeForSoftware();
-            }
-        }
+        try { _softwareFallback.Apply(PluginVisual, _chromeOverlay, software, UpdateChrome); }
         catch { }
-    }
-
-    /// <summary>Walks the plugin's visual tree and clears every non-null
-    /// <c>CacheMode</c>, remembering it for recovery. Clears any previous drop first so
-    /// repeated tier-0 events do not overwrite the saved modes with nulls.</summary>
-    private void DropCachedBitmaps()
-    {
-        RestoreCachedBitmaps();
-        if (PluginVisual is not FrameworkElement root) return;
-        Helpers.WidgetRenderCensus.Walk(root, new Helpers.WidgetRenderCensus.Entry(), _droppedCaches);
-        for (int i = 0; i < _droppedCaches.Count; i++)
-        {
-            var (element, _) = _droppedCaches[i];
-            try { element.CacheMode = null; } catch { }
-        }
-    }
-
-    /// <summary>Hands each still-live element its original cache mode back. Elements
-    /// belonging to a swapped-out or unloaded plugin are skipped (and forgotten) rather
-    /// than written to — mutating a detached visual keeps it (and its plugin's collectible
-    /// ALC) alive.</summary>
-    private void RestoreCachedBitmaps()
-    {
-        for (int i = 0; i < _droppedCaches.Count; i++)
-        {
-            var (element, mode) = _droppedCaches[i];
-            try
-            {
-                if (mode is not null && PresentationSource.FromVisual(element) is not null)
-                    element.CacheMode = mode;
-            }
-            catch { }
-        }
-        _droppedCaches.Clear();
-    }
-
-    private void FreezeChromeForSoftware()
-    {
-        if (_chromeFrozenForSoftware) return;
-        _chromeFrozenForSoftware = true;
-        var overlay = _chromeOverlay;
-        if (overlay is null) return;
-        try
-        {
-            // Hide directly rather than via UpdateChrome: this is a forced state, not a
-            // hover/activation decision, and UpdateChrome would immediately re-show it.
-            if (overlay.IsVisible) overlay.Hide();
-            // Also stop owner-driven syncing. A resume DPI-remaps this window, and each
-            // LocationChanged -> SyncFromOwner re-acquires its render surface.
-            overlay.SyncSuppressed = true;
-        }
-        catch { }
-    }
-
-    private void UnfreezeChromeForSoftware()
-    {
-        if (!_chromeFrozenForSoftware) return;
-        _chromeFrozenForSoftware = false;
-        try { if (_chromeOverlay is not null) _chromeOverlay.SyncSuppressed = false; } catch { }
-        // Re-evaluate chrome normally: it re-shows only if the widget is hovered/active.
-        // This also re-syncs the overlay to the owner's post-resume geometry.
-        try { UpdateChrome(); } catch { }
     }
 
     private void OnStateChanged(object? sender, EventArgs e)

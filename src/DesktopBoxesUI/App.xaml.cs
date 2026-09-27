@@ -191,7 +191,7 @@ public partial class App : Application
             return null;
         }, pausePlayback: false);
 
-        //StartHealthSnapshots, when logging 
+        //StartHealthSnapshots, when logging
         if (GlobalFeaturesSwitches.EnableHealthSnapshots) StartHealthSnapshots();
     }
 
@@ -251,8 +251,8 @@ public partial class App : Application
                     }
                 }
                 catch { }
-                if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Render tier 0: paused live wallpaper + {Widgets} widgets until hardware recovers | census BEFORE drop: {Census}",
-                     _tierSuspendedWidgets.Count, censusBefore);
+                if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Render tier 0: paused live wallpaper + {Widgets} widgets until hardware recovers | {Memory} | census BEFORE drop: {Census}",
+                     _tierSuspendedWidgets.Count, MemoryFragment(), censusBefore);
             }
             else if (tier > 0 && _tierPauseActive)
             {
@@ -298,8 +298,8 @@ public partial class App : Application
                 {
                     _tierWasWallpaperPlaying = false;
                 }
-                if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Render tier recovered to {Tier}: resumed tier-paused playback + widgets | census AFTER restore: {Census}",
-                    tier, BuildWidgetCensus());
+                if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Render tier recovered to {Tier}: resumed tier-paused playback + widgets | {Memory} | census AFTER restore: {Census}",
+                    tier, MemoryFragment(), BuildWidgetCensus());
             }
         }
         catch { }
@@ -339,7 +339,7 @@ public partial class App : Application
                         else if (w is Views.Containers.WebWidgetWindow ww2)
                         {
                             var title = string.IsNullOrWhiteSpace(ww2.Title) ? "web" : ww2.Title;
-                            var content = ww2.Content as System.Windows.FrameworkElement;
+                            var content = ww2.WidgetVisual;
                             if (content is not null) roots.Add((title, content));
                         }
                     }
@@ -371,21 +371,38 @@ public partial class App : Application
         catch { }
     }
 
+    /// <summary>Memory counters, formatted as a log fragment. Split out of
+    /// <see cref="WriteHealthSnapshot"/> so the render-tier transition lines can carry the same
+    /// numbers ungated: the periodic health line is behind
+    /// <see cref="GlobalFeaturesSwitches.EnableHealthSnapshots"/> (deliberately off in release —
+    /// it's an investigation tool, not a production feature), but the tier transition is the one
+    /// correlation point for a native-memory incident and must report private bytes whether or not
+    /// anything else is switched on. A private-bytes climb visible only on the gated line would
+    /// leave a released build with no evidence at all.
+    /// <para>
+    /// Cheap by construction: a couple of P/Invocations and two reads, and only on tier
+    /// transitions and (when enabled) once a minute. Never call it from a per-frame path.
+    /// </para></summary>
+    private static string MemoryFragment()
+    {
+        long privMB = -1, managedMB = -1;
+        uint gdi = 0, user = 0;
+        try { using var p = System.Diagnostics.Process.GetCurrentProcess(); privMB = p.PrivateMemorySize64 / 1024 / 1024; } catch { }
+        try { managedMB = System.GC.GetTotalMemory(false) / 1024 / 1024; } catch { }
+        try
+        {
+            using var p = System.Diagnostics.Process.GetCurrentProcess();
+            gdi = Win32Apis.GetGuiHandleCount(p.Handle, false);
+            user = Win32Apis.GetGuiHandleCount(p.Handle, true);
+        }
+        catch { }
+        return $"private={privMB}MB managed={managedMB}MB gdi={gdi} user={user}";
+    }
+
     private static void WriteHealthSnapshot()
     {
         try
         {
-            long privMB = -1, managedMB = -1;
-            try { using var p = System.Diagnostics.Process.GetCurrentProcess(); privMB = p.PrivateMemorySize64 / 1024 / 1024; } catch { }
-            try { managedMB = System.GC.GetTotalMemory(false) / 1024 / 1024; } catch { }
-            uint gdi = 0, user = 0;
-            try
-            {
-                using var p = System.Diagnostics.Process.GetCurrentProcess();
-                gdi = Win32Apis.GetGuiHandleCount(p.Handle, false);
-                user = Win32Apis.GetGuiHandleCount(p.Handle, true);
-            }
-            catch { }
             int tier = -1;
             try { tier = System.Windows.Media.RenderCapability.Tier >> 16; } catch { }
             string reapply = "?";
@@ -410,8 +427,8 @@ public partial class App : Application
                 }
             }
             catch { }
-            if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Health: private={PrivMB}MB managed={ManagedMB}MB gdi={Gdi} user={User} tier={Tier} wallpaper={Playing}/{Live} reapply={Reapply} boxes={Boxes} widgets={Widgets} | {Census}",
-                privMB, managedMB, gdi, user, tier, playing, live, reapply, boxes, widgets, BuildWidgetCensus());
+            if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Health: {Memory} tier={Tier} wallpaper={Playing}/{Live} reapply={Reapply} boxes={Boxes} widgets={Widgets} | {Census}",
+                MemoryFragment(), tier, playing, live, reapply, boxes, widgets, BuildWidgetCensus());
         }
         catch { }
     }
