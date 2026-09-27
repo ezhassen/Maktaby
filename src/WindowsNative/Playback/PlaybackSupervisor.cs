@@ -64,6 +64,33 @@ public sealed class PlaybackSupervisor : IDisposable
     /// out-of-context callback, and a collected delegate there fail-fasts the process.</summary>
     private static readonly ConcurrentDictionary<WinEventProc, byte> HookRoots = new();
 
+    /// <summary>Class name per top-level HWND. A window's class is fixed for the window's
+    /// lifetime, so this is resolved once per HWND instead of once per window per evaluation
+    /// (a cross-process <c>GetClassNameW</c> plus a <c>StringBuilder</c> allocation each, on
+    /// every capture). Concurrent because a full capture and a trailing debounce can overlap:
+    /// the direct-call entry points (Resume/SessionLocked/DisplayOff/Invalidate) bypass the
+    /// evaluation gate, so two captures really can run at once. Concurrent + best-effort
+    /// pruning is safe here because this is pure memoization — a lost entry costs one
+    /// recomputation, never a wrong answer.</summary>
+    private readonly ConcurrentDictionary<IntPtr, string> _classNames = new();
+
+    /// <summary>Reused <c>StringBuilder</c> for class-name reads, so a capture allocates no
+    /// per-window garbage. Per-thread: a capture can run on the hook thread, the timer pool or
+    /// a Win32 notification thread, and must not share a buffer across them.</summary>
+    [ThreadStatic] private static StringBuilder? _classNameBuffer;
+
+    /// <summary>Reused so a capture allocates no delegate per call. Rooted for the
+    /// supervisor's lifetime, which is what <c>EnumWindows</c> requires of a live callback.</summary>
+    private readonly EnumWindowsProc _enumWindowsProc;
+
+    /// <summary>List the in-flight <see cref="OnEnumWindow"/> callback appends to. Per-thread
+    /// because captures really can overlap: the direct-call entry points (Resume /
+    /// SessionLocked / DisplayOff / Invalidate) bypass the evaluation gate, so one capture can
+    /// run on the hook thread while another runs on the timer pool. A shared field would let
+    /// one capture's windows land in the other's list. <c>EnumWindows</c> itself is
+    /// single-threaded and synchronous, so thread-local is exactly the right scope.</summary>
+    [ThreadStatic] private static List<TopWindowInfo>? _capturing;
+
     /// <summary>Last known rect per top-level window, for coalescing LOCATIONCHANGE storms.
     /// Rebuilt from every full capture; any window's geometry can now flip some monitor's
     /// coverage, not just the foreground window's.</summary>
@@ -84,6 +111,9 @@ public sealed class PlaybackSupervisor : IDisposable
     /// is idle — no ticking, no polling — outside storms. Disposed with the supervisor.</summary>
     private readonly Timer _locationDebounce;
     private long _lastEvalMs;
+    /// <summary>Whether the trailing edge is currently armed. Guarded by <see cref="_gate"/>;
+    /// lets a storm re-arm the timer once instead of once per event.</summary>
+    private bool _debounceArmed;
 
     /// <summary>Inputs of the last applied evaluation. QUNS (exclusive-D3D-fullscreen) has no
     /// owning event and flaps during mode transitions; a flip unaccompanied by any other input
@@ -133,6 +163,7 @@ public sealed class PlaybackSupervisor : IDisposable
         _extraExcluded = extraExcludedWindowClasses;
         _winEventProc = OnWinEvent;
         HookRoots.TryAdd(_winEventProc, 0);
+        _enumWindowsProc = OnEnumWindow;
         _locationDebounce = new Timer(_ => LocationDebounced(), null, Timeout.Infinite, Timeout.Infinite);
         _hookThread = new Thread(HookThreadMain) { IsBackground = true, Name = "PlaybackEvents" };
         _hookThread.Start();
@@ -205,7 +236,9 @@ public sealed class PlaybackSupervisor : IDisposable
 
         while (User32.GetMessageW(out var msg, IntPtr.Zero, 0, 0) > 0)
         {
-            User32.TranslateMessage(ref msg);
+            // No TranslateMessage: this thread only pumps WinEvent callbacks, which arrive
+            // already posted and never need WM_CHAR synthesis. Calling it would post extra
+            // messages for any WM_KEYDOWN/WM_CHAR that ever crossed this queue.
             User32.DispatchMessageW(ref msg);
         }
 
@@ -281,15 +314,29 @@ public sealed class PlaybackSupervisor : IDisposable
             if (_disposed || _suspended) return;
             if (now - _lastEvalMs < EvalMinIntervalMs)
             {
-                try { _locationDebounce.Change(EvalMinIntervalMs, Timeout.Infinite); }
-                catch (ObjectDisposedException) { }
+                // Re-arm only on the transition into "armed". A storm delivers events far
+                // faster than the interval, and re-arming an already-armed single-shot timer
+                // is pure overhead — a timer-queue operation per event, which at drag rates
+                // costs more than the evaluation it is protecting. The fixed deadline from
+                // the first throttled event is also the better semantic: it evaluates the
+                // settled state at most one interval after motion began.
+                if (!_debounceArmed)
+                {
+                    _debounceArmed = true;
+                    try { _locationDebounce.Change(EvalMinIntervalMs, Timeout.Infinite); }
+                    catch (ObjectDisposedException) { }
+                }
                 return;
             }
             _lastEvalMs = now;
             // A leading evaluation already observes the latest inputs, so a previously armed
             // trailing edge would only re-evaluate identical state — disarm it.
-            try { _locationDebounce.Change(Timeout.Infinite, Timeout.Infinite); }
-            catch (ObjectDisposedException) { }
+            if (_debounceArmed)
+            {
+                _debounceArmed = false;
+                try { _locationDebounce.Change(Timeout.Infinite, Timeout.Infinite); }
+                catch (ObjectDisposedException) { }
+            }
         }
         Reevaluate();
     }
@@ -303,6 +350,7 @@ public sealed class PlaybackSupervisor : IDisposable
         {
             if (_disposed || _suspended) return;
             _lastEvalMs = Environment.TickCount64;
+            _debounceArmed = false;
         }
         Reevaluate();
     }
@@ -468,36 +516,60 @@ public sealed class PlaybackSupervisor : IDisposable
     /// thread (awareness pinned by Reevaluate, for life by the hook thread).</summary>
     private List<TopWindowInfo> CaptureTopWindows()
     {
-        var list = new List<TopWindowInfo>(64);
-        EnumWindowsProc callback = (hwnd, _) =>
-        {
-            try
-            {
-                if (!User32.IsWindowVisible(hwnd) || User32.IsIconic(hwnd)) return true;
-                // Never pause for our own windows: interacting with
-                // the app itself must not count as covering the content.
-                User32.GetWindowThreadProcessId(hwnd, out uint pid);
-                if (pid == OwnPid) return true;
-                if (!User32.GetWindowRect(hwnd, out var rect) || rect.Right <= rect.Left || rect.Bottom <= rect.Top) return true;
-                var sb = new StringBuilder(64);
-                if (User32.GetClassNameW(hwnd, sb, sb.Capacity) == 0) return true;
-                string cls = sb.ToString();
-                if (PauseDecision.IsShellOrOwnWindow(cls, _extraExcluded)) return true;
-                // Fullscreen click-through or fully-transparent overlays (cursor overlays,
-                // watermarks, crosshairs) never occlude what is beneath them: pausing the
-                // wallpaper and hiding widgets for an invisible window is wrong.
-                if (IsNonOccludingOverlay(hwnd)) return true;
-                // Suspended Store apps keep stale fullscreen rects while invisible.
-                if (IsCloaked(hwnd)) return true;
-                list.Add(new TopWindowInfo(hwnd, cls, rect, User32.IsZoomed(hwnd), User32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)));
-            }
-            catch { }
-            return true;
-        };
-        try { User32.EnumWindows(callback, IntPtr.Zero); }
+        _capturing = new List<TopWindowInfo>(64);
+        List<TopWindowInfo>? list = _capturing;
+        try { User32.EnumWindows(_enumWindowsProc, IntPtr.Zero); }
         catch { }
-        GC.KeepAlive(callback);
+        finally { _capturing = null; }
+        // Prune the class-name memo to exactly what this capture saw. Without this, a
+        // destroyed window's HWND could be recycled by a new window of a different class and
+        // serve the stale name. A capture has just enumerated every live top-level window,
+        // so "live" is precisely the set we are about to hand back.
+        if (_classNames.Count > list.Count)
+        {
+            var live = new HashSet<IntPtr>(list.Count);
+            foreach (var w in list) live.Add(w.Hwnd);
+            foreach (var hwnd in _classNames.Keys)
+            {
+                if (!live.Contains(hwnd)) _classNames.TryRemove(hwnd, out _);
+            }
+        }
         return list;
+    }
+
+    private bool OnEnumWindow(IntPtr hwnd, IntPtr _)
+    {
+        // The callback is a field-held method (not a closure over a local) so a capture
+        // allocates nothing; the list it fills therefore has to travel through a field.
+        var list = _capturing;
+        if (list is null) return true; // no capture in flight (stale callback)
+        try
+        {
+            if (!User32.IsWindowVisible(hwnd) || User32.IsIconic(hwnd)) return true;
+            // Never pause for our own windows: interacting with
+            // the app itself must not count as covering the content.
+            User32.GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == OwnPid) return true;
+            if (!User32.GetWindowRect(hwnd, out var rect) || rect.Right <= rect.Left || rect.Bottom <= rect.Top) return true;
+            if (!_classNames.TryGetValue(hwnd, out string? cls))
+            {
+                var sb = _classNameBuffer ??= new StringBuilder(64);
+                sb.Clear();
+                if (User32.GetClassNameW(hwnd, sb, sb.Capacity) == 0) return true;
+                cls = sb.ToString();
+                _classNames[hwnd] = cls;
+            }
+            if (PauseDecision.IsShellOrOwnWindow(cls, _extraExcluded)) return true;
+            // Fullscreen click-through or fully-transparent overlays (cursor overlays,
+            // watermarks, crosshairs) never occlude what is beneath them: pausing the
+            // wallpaper and hiding widgets for an invisible window is wrong.
+            if (IsNonOccludingOverlay(hwnd)) return true;
+            // Suspended Store apps keep stale fullscreen rects while invisible.
+            if (IsCloaked(hwnd)) return true;
+            list.Add(new TopWindowInfo(hwnd, cls, rect, User32.IsZoomed(hwnd), User32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)));
+        }
+        catch { }
+        return true;
     }
 
     private static bool IsCloaked(IntPtr hwnd)
@@ -552,6 +624,8 @@ public sealed class PlaybackSupervisor : IDisposable
             _suspended = true;
             // Stop the trailing edge first: an in-flight callback still early-outs on _disposed.
             try { _locationDebounce.Dispose(); } catch { }
+            // Every cached class name is a string this supervisor rooted; drop them with it.
+            try { _classNames.Clear(); } catch { }
             try
             {
                 uint threadId = _hookThreadId;
