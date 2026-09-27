@@ -44,14 +44,20 @@ public sealed record PauseMonitor(string Device, RECT Bounds, RECT WorkArea);
 /// Transitions fire on the hook/notification thread; the host marshals them as before.</summary>
 public sealed class PlaybackSupervisor : IDisposable
 {
-    private readonly Func<PausePolicy> _policy;
-    private readonly Func<IReadOnlyList<PauseMonitor>> _monitors;
-    private readonly IReadOnlySet<string>? _extraExcluded;
-    private readonly Dictionary<string, PauseReason> _state = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Current subscribers. Replaced (never mutated in place) under
+    /// <see cref="_gate"/> by <see cref="AddSubscriber"/>/<see cref="RemoveSubscriber"/>; an
+    /// evaluation reads it once into a local and works from that snapshot. Per-subscriber
+    /// applied state lives on the <see cref="PauseSubscription"/> itself, so a host that
+    /// joins or leaves never disturbs the state of the hosts already attached.</summary>
+    private PauseSubscription[] _subscribers;
+    /// <summary>Union of every subscriber's <c>extraExcludedWindowClasses</c>, applied once
+    /// during the capture. Correct because an exclusion can only ever remove a window from
+    /// consideration, and each host's own windows are already excluded by PID — so no host can
+    /// lose coverage because another host excluded a class. Written only under
+    /// <see cref="_gate"/>; read into a local at the start of an evaluation.</summary>
+    private IReadOnlySet<string>? _extraExcluded;
     private readonly Lock _gate = new();
     private volatile bool _suspended;
-    private volatile bool _sessionLocked;
-    private volatile bool _displayOff;
     private bool _disposed;
 
     private readonly Thread? _hookThread;
@@ -118,49 +124,82 @@ public sealed class PlaybackSupervisor : IDisposable
     /// <summary>Inputs of the last applied evaluation. QUNS (exclusive-D3D-fullscreen) has no
     /// owning event and flaps during mode transitions; a flip unaccompanied by any other input
     /// change is held, not applied — genuine entries always move/focus windows too.</summary>
-    private sealed record LastInputs(IReadOnlyList<TopWindowInfo> Windows,
+    internal sealed record LastInputs(IReadOnlyList<TopWindowInfo> Windows,
         bool Locked, bool Remote, bool Battery, bool DisplayOff, bool Quns)
     {
         public bool SameExceptQuns(LastInputs other) =>
             Locked == other.Locked && Remote == other.Remote && Battery == other.Battery &&
             DisplayOff == other.DisplayOff && Windows.SequenceEqual(other.Windows);
     }
-    private LastInputs? _lastInputs;
 
-    /// <summary>(monitorDevice, reason) — reason None means resume. Fires on the hook or
-    /// notification thread that triggered the evaluation.</summary>
-    public event Action<string, PauseReason>? PauseStateChanged;
-
-    /// <summary>Set from session-change notifications; assigning re-evaluates immediately
-    /// (unless suspended — the pending state is then picked up by <see cref="Resume"/>).</summary>
-    public bool SessionLocked
+    /// <summary>Adds a host. The supervisor is NOT rebuilt for this: a rebuild would re-install
+    /// the hooks and start every existing subscriber from empty state, re-firing transitions
+    /// they had already reported. Instead the list is mutated in place, so a host joining or
+    /// leaving costs one re-evaluation and nothing else. Evaluates immediately so the new host
+    /// applies any condition that is already true (it missed the previous transitions).</summary>
+    internal void AddSubscriber(PauseSubscription subscription)
     {
-        get => _sessionLocked;
-        set { _sessionLocked = value; Reevaluate(); }
+        lock (_gate)
+        {
+            if (_disposed) return;
+            for (int i = 0; i < _subscribers.Length; i++)
+            {
+                if (ReferenceEquals(_subscribers[i], subscription)) return;
+            }
+            var next = new PauseSubscription[_subscribers.Length + 1];
+            Array.Copy(_subscribers, next, _subscribers.Length);
+            next[^1] = subscription;
+            _subscribers = next;
+            RebuildExclusions();
+        }
+        Reevaluate();
     }
 
-    /// <summary>Set from console-display-state notifications; assigning re-evaluates immediately
-    /// (unless suspended — the pending state is then picked up by <see cref="Resume"/>).</summary>
-    public bool DisplayOff
+    /// <summary>Removes a host. Only disposes the supervisor when the caller decides to (the
+    /// shared owner does that, when the last host leaves) — disposing here would tear down the
+    /// hooks while other subscribers are still attached.</summary>
+    internal void RemoveSubscriber(PauseSubscription subscription)
     {
-        get => _displayOff;
-        set { _displayOff = value; Reevaluate(); }
+        lock (_gate)
+        {
+            if (_disposed) return;
+            int at = Array.IndexOf(_subscribers, subscription);
+            if (at < 0) return;
+            if (_subscribers.Length == 1) return; // owner disposes; never leave zero here
+            var next = new PauseSubscription[_subscribers.Length - 1];
+            Array.Copy(_subscribers, next, at);
+            Array.Copy(_subscribers, at + 1, next, at, _subscribers.Length - at - 1);
+            _subscribers = next;
+            RebuildExclusions();
+        }
     }
 
-    /// <param name="policy">Live policy snapshot, read fresh on every evaluation.</param>
-    /// <param name="monitors">Live monitor snapshot (device, bounds, work area).</param>
-    /// <param name="extraExcludedWindowClasses">Host-owned window classes that must never
-    /// pause a monitor — e.g. the live-wallpaper surface for the wallpaper engine, Box
-    /// windows for the desktop app — on top of the shell classes
-    /// <see cref="PauseDecision"/> always ignores. Pass only the host's own classes.</param>
-    public PlaybackSupervisor(
-        Func<PausePolicy> policy,
-        Func<IReadOnlyList<PauseMonitor>> monitors,
-        IReadOnlySet<string>? extraExcludedWindowClasses = null)
+    /// <summary>Recomputes the union of every subscriber's extra exclusions. An exclusion can
+    /// only ever remove a window from consideration, and each host's own windows are already
+    /// excluded by PID, so no host can lose coverage because another host excluded a class.</summary>
+    private void RebuildExclusions()
     {
-        _policy = policy;
-        _monitors = monitors;
-        _extraExcluded = extraExcludedWindowClasses;
+        HashSet<string>? union = null;
+        foreach (var sub in _subscribers)
+        {
+            var extra = sub.ExtraExcludedWindowClasses;
+            if (extra is null || extra.Count == 0) continue;
+            union ??= new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            union.UnionWith(extra);
+        }
+        _extraExcluded = union;
+    }
+
+    /// <param name="subscribers">Hosts to evaluate. At least one; the shared
+    /// <see cref="PauseSupervision"/> only constructs a supervisor while at least one host is
+    /// attached. Each keeps its own policy, monitor list, excluded classes and applied state —
+    /// only the window capture and the system-flag read are shared.</summary>
+    public PlaybackSupervisor(IReadOnlyList<PauseSubscription> subscribers)
+    {
+        if (subscribers is null) throw new ArgumentNullException(nameof(subscribers));
+        if (subscribers.Count == 0) throw new ArgumentException("A supervisor needs at least one subscriber.", nameof(subscribers));
+        _subscribers = subscribers.ToArray();
+        lock (_gate) { RebuildExclusions(); }
         _winEventProc = OnWinEvent;
         HookRoots.TryAdd(_winEventProc, 0);
         _enumWindowsProc = OnEnumWindow;
@@ -173,37 +212,41 @@ public sealed class PlaybackSupervisor : IDisposable
         Reevaluate();
     }
 
-    /// <summary>Last evaluated pause reason for a monitor (None when unknown). Thread-safe:
-    /// diagnostics UI reads this off-thread while hook/notification threads write it.</summary>
-    public PauseReason GetPauseReason(string monitorDevice)
+    /// <summary>Last evaluated pause reason for one subscriber's monitor (None when unknown).
+    /// Thread-safe: diagnostics read this off-thread while hook/notification threads write it.</summary>
+    internal PauseReason GetPauseReason(string subscriberName, string monitorDevice)
     {
+        var sub = FindSubscriber(subscriberName);
+        if (sub is null) return PauseReason.None;
         lock (_gate)
         {
-            return _state.TryGetValue(monitorDevice, out var reason) ? reason : PauseReason.None;
+            return sub.State.TryGetValue(monitorDevice, out var reason) ? reason : PauseReason.None;
         }
     }
 
-    /// <summary>Forget cached per-monitor state and re-fire transitions — call after creating a
-    /// renderer while a pause condition may already hold.</summary>
-    public void Invalidate()
+    private PauseSubscription? FindSubscriber(string name)
     {
-        lock (_gate) { _state.Clear(); _lastInputs = null; }
+        foreach (var s in _subscribers)
+        {
+            if (string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase)) return s;
+        }
+        return null;
+    }
+
+    /// <summary>Forget one subscriber's cached per-monitor state and re-fire its transitions —
+    /// call after creating content while a pause condition may already hold. Other subscribers
+    /// keep their state (they were not invalidated by this host's content change).</summary>
+    internal void Invalidate(PauseSubscription subscription)
+    {
+        if (FindSubscriber(subscription.Name) is null) return;
+        lock (_gate) { subscription.State.Clear(); subscription.LastInputs = null; }
         Reevaluate();
     }
 
-    /// <summary>Stops evaluation (idempotent, thread-safe). Hooks stay installed; their
-    /// callbacks become no-ops, which costs nothing measurable at WinEvent rates.</summary>
-    public void Suspend() => _suspended = true;
-
-    /// <summary>Clears the suspension and evaluates immediately (idempotent, thread-safe).
-    /// Caches are dropped so the post-suspend world is observed fresh rather than held.</summary>
-    public void Resume()
-    {
-        if (_disposed) return;
-        lock (_gate) { _state.Clear(); _lastInputs = null; }
-        _suspended = false;
-        Reevaluate();
-    }
+    /// <summary>Re-evaluate now, bypassing the storm throttle. For a pushed notification, which
+    /// is rare and must apply at once. Distinct from the private throttled
+    /// <see cref="RequestEvaluate"/> used by the WinEvent path.</summary>
+    internal void EvaluateNow() => Reevaluate();
 
     private void HookThreadMain()
     {
@@ -357,7 +400,27 @@ public sealed class PlaybackSupervisor : IDisposable
 
     private void Reevaluate()
     {
-        if (_disposed || _suspended) return;
+        // Snapshot the subscriber list and the exclusion union once: both can change
+        // underneath us if a host joins or leaves while this evaluation is running.
+        PauseSubscription[] subscribers;
+        IReadOnlySet<string>? extraExcluded;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            subscribers = _subscribers;
+            extraExcluded = _extraExcluded;
+        }
+        if (subscribers.Length == 0) return;
+
+        // A subscriber that user-paused stops contributing, but the others keep running. If
+        // that leaves nobody (e.g. the engine is user-paused and there is no desktop app),
+        // skip the whole evaluation — including the window capture, which is the expensive part.
+        bool anyActive = false;
+        foreach (var s in subscribers)
+        {
+            if (!s.IsSuspended) { anyActive = true; break; }
+        }
+        if (!anyActive) return;
 
         // This runs on the hook thread, the engine thread, or a Win32 notification thread —
         // any of which may carry a different DPI context. The window rects captured here
@@ -365,68 +428,112 @@ public sealed class PlaybackSupervisor : IDisposable
         var awareness = User32.GetThreadDpiAwarenessContext();
         if (User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == IntPtr.Zero)
             User32.SetThreadDpiAwarenessContext(User32.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
-        List<(string Device, PauseReason Reason, string By)> current;
-        SystemFlags flags;
-        IReadOnlyList<TopWindowInfo>? windows = null;
+
+        // Shared across subscribers: read once, capture at most once.
+        var sharedRemote = User32.GetSystemMetrics(SM_REMOTESESSION) != 0;
+        var sharedBattery = IsBatterySaverOn();
+        var sharedQuns = IsD3DFullscreen();
+        List<TopWindowInfo>? captured = null;
+        List<(PauseSubscription Sub, string Device, PauseReason Reason, string By)> transitions = [];
+        List<(PauseSubscription Sub, IReadOnlyList<TopWindowInfo>? Windows, SystemFlags Flags)> pendingLogs = [];
         try
         {
-            // Cheap inputs first: the system flags are a handful of syscalls, while the
-            // window capture walks every top-level window.
-            flags = new SystemFlags(
-                _sessionLocked,
-                User32.GetSystemMetrics(SM_REMOTESESSION) != 0,
-                IsBatterySaverOn(),
-                IsD3DFullscreen(),
-                _displayOff);
-            var policy = _policy();
-
-            var monitors = new List<(string Device, RECT Bounds, RECT WorkArea, IntPtr Handle)>();
-            foreach (var monitor in _monitors())
-                monitors.Add((monitor.Device, monitor.Bounds, monitor.WorkArea, MonitorHandle(monitor.Bounds)));
-
-            // Fast path: a globally-forced reason (or every trigger off) needs no window
-            // capture at all. The QUNS hold-cache is dropped so the next full evaluation
-            // after a forced interval always applies fresh instead of holding stale state.
-            var forced = PauseDecision.ForcedReason(flags, policy);
-            if (forced is not null)
+            foreach (var sub in subscribers)
             {
-                lock (_gate) { _lastInputs = null; }
-                current = [];
-                foreach (var (device, _, _, _) in monitors)
-                    current.Add((device, forced.Value, "-"));
-            }
-            else
-            {
-                var captured = CaptureTopWindows();
-                windows = captured;
-                var inputs = new LastInputs(captured, flags.SessionLocked, flags.RemoteSession, flags.BatterySaver, flags.DisplayOff, flags.D3DFullscreen);
-                lock (_gate)
+                if (sub.IsSuspended) continue;
+
+                // Per subscriber: session lock and display state are pushed by that host's own
+                // notifications, so a host with no supervisor at the moment cannot drop one.
+                var flags = new SystemFlags(sub.SessionLocked, sharedRemote, sharedBattery, sharedQuns, sub.DisplayOff);
+                var policy = sub.Policy();
+
+                var monitors = new List<(string Device, RECT Bounds, RECT WorkArea, IntPtr Handle)>();
+                foreach (var monitor in sub.Monitors())
+                    monitors.Add((monitor.Device, monitor.Bounds, monitor.WorkArea, MonitorHandle(monitor.Bounds)));
+
+                // Fast path: a globally-forced reason (or every trigger off) needs no window
+                // capture at all. The QUNS hold-cache is dropped so the next full evaluation
+                // after a forced interval always applies fresh instead of holding stale state.
+                var forced = PauseDecision.ForcedReason(flags, policy);
+                List<(string Device, PauseReason Reason, string By)> current;
+                if (forced is not null)
                 {
-                    // Lone QUNS flip (window-for-window identical): hold, touch nothing.
-                    if (_lastInputs is not null && _lastInputs.SameExceptQuns(inputs))
-                        return;
-                    _lastInputs = inputs;
-                    _lastRects.Clear();
-                    foreach (var w in captured) _lastRects[w.Hwnd] = w.WindowRect;
+                    lock (_gate) { sub.LastInputs = null; }
+                    current = [];
+                    foreach (var (device, _, _, _) in monitors)
+                        current.Add((device, forced.Value, "-"));
+                    pendingLogs.Add((sub, null, flags));
                 }
-
-                current = [];
-                foreach (var (device, bounds, workArea, handle) in monitors)
+                else
                 {
-                    var reason = PauseDecision.EvaluateForMonitor(captured, bounds, workArea, handle, flags, policy, _extraExcluded);
-                    string by = "-";
-                    if (reason == PauseReason.Fullscreen)
+                    // The capture is the expensive part and is identical for every subscriber;
+                    // take it at most once per evaluation.
+                    captured ??= CaptureTopWindows();
+                    var inputs = new LastInputs(captured, flags.SessionLocked, flags.RemoteSession, flags.BatterySaver, flags.DisplayOff, flags.D3DFullscreen);
+                    bool hold;
+                    lock (_gate)
                     {
-                        foreach (var w in captured)
+                        // Lone QUNS flip (window-for-window identical): hold this subscriber,
+                        // touch nothing. Per subscriber, not global: a flip counts as "lone"
+                        // only relative to what that subscriber actually observed.
+                        hold = sub.LastInputs is not null && sub.LastInputs.SameExceptQuns(inputs);
+                        if (!hold) sub.LastInputs = inputs;
+                    }
+                    if (hold) continue;
+
+                    current = [];
+                    foreach (var (device, bounds, workArea, handle) in monitors)
+                    {
+                        var reason = PauseDecision.EvaluateForMonitor(captured, bounds, workArea, handle, flags, policy, extraExcluded);
+                        string by = "-";
+                        if (reason == PauseReason.Fullscreen)
                         {
-                            if (PauseDecision.CoversMonitor(w.WindowRect, bounds, workArea, w.IsZoomed, w.MonitorHandle, handle))
+                            foreach (var w in captured)
                             {
-                                by = w.ClassName;
-                                break;
+                                if (PauseDecision.CoversMonitor(w.WindowRect, bounds, workArea, w.IsZoomed, w.MonitorHandle, handle))
+                                {
+                                    by = w.ClassName;
+                                    break;
+                                }
                             }
                         }
+                        current.Add((device, reason, by));
                     }
-                    current.Add((device, reason, by));
+                    pendingLogs.Add((sub, captured, flags));
+                }
+
+                lock (_gate)
+                {
+                    if (_disposed) break;
+                    foreach (var (device, reason, by) in current)
+                    {
+                        if (!sub.State.TryGetValue(device, out var previous) || previous != reason)
+                        {
+                            sub.State[device] = reason;
+                            transitions.Add((sub, device, reason, by));
+                        }
+                    }
+                    // Drop unplugged monitors so stale entries cannot misfire on reconnect.
+                    foreach (var device in sub.State.Keys.ToArray())
+                    {
+                        bool gone = true;
+                        foreach (var (d, _, _) in current)
+                        {
+                            if (string.Equals(d, device, StringComparison.OrdinalIgnoreCase)) { gone = false; break; }
+                        }
+                        if (gone) sub.State.Remove(device);
+                    }
+                }
+            }
+
+            // The rect cache tracks coalescing for the next event storm, so it follows the
+            // capture rather than any one subscriber's decision path.
+            if (captured is not null)
+            {
+                lock (_gate)
+                {
+                    _lastRects.Clear();
+                    foreach (var w in captured) _lastRects[w.Hwnd] = w.WindowRect;
                 }
             }
         }
@@ -441,41 +548,28 @@ public sealed class PlaybackSupervisor : IDisposable
                 User32.SetThreadDpiAwarenessContext(awareness);
         }
 
-        List<(string Device, PauseReason Reason, string By)> transitions = [];
-        lock (_gate)
-        {
-            // A Suspend landing mid-evaluation must still win: applying transitions now would
-            // resume content behind the user's manual pause.
-            if (_disposed || _suspended) return;
-            foreach (var (device, reason, by) in current)
-            {
-                if (!_state.TryGetValue(device, out var previous) || previous != reason)
-                {
-                    _state[device] = reason;
-                    transitions.Add((device, reason, by));
-                }
-            }
-            // Drop unplugged monitors so stale entries cannot misfire on reconnect.
-            foreach (var device in _state.Keys.ToArray())
-            {
-                bool gone = true;
-                foreach (var (d, _, _) in current)
-                {
-                    if (string.Equals(d, device, StringComparison.OrdinalIgnoreCase)) { gone = false; break; }
-                }
-                if (gone) _state.Remove(device);
-            }
-        }
-
         if (transitions.Count == 0) return;
-        // Foreground identity is log-only: resolve it last, and only when something
-        // actually transitioned — never on the hot path.
-        var canLogInfo = Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information);
-        string inputDesc = canLogInfo ? string.Empty : DescribeInputs(windows, flags);
-        foreach (var (device, reason, by) in transitions)
+        // A Suspend landing mid-evaluation must still win: applying transitions now would
+        // resume content behind the user's manual pause.
+        foreach (var (sub, device, reason, by) in transitions)
         {
-            if (canLogInfo) Serilog.Log.Information("Pause transition: {device} -> {reason} by={by} ({inputDesc})", device, reason, by, inputDesc);
-            try { PauseStateChanged?.Invoke(device, reason); }
+            if (sub.IsSuspended || _disposed) continue;
+            // Foreground identity is log-only: resolve it last, and only when something
+            // actually transitioned — never on the hot path.
+            var canLogInfo = Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information);
+            string inputDesc = string.Empty;
+            if (canLogInfo)
+            {
+                foreach (var (s, windows, flags) in pendingLogs)
+                {
+                    if (!ReferenceEquals(s, sub)) continue;
+                    inputDesc = DescribeInputs(windows, flags);
+                    break;
+                }
+            }
+            Serilog.Log.Information("Pause transition [{Host}]: {device} -> {reason} by={by} ({inputDesc})",
+                sub.Name, device, reason, by, inputDesc);
+            try { sub.OnTransition(device, reason); }
             catch (Exception ex) { Serilog.Log.Error("Pause transition handler failed", ex); }
         }
     }
@@ -652,7 +746,6 @@ public sealed class PlaybackSupervisor : IDisposable
             }
             _hooks.Clear();
             HookRoots.TryRemove(_winEventProc, out _);
-            PauseStateChanged = null;
         }
         if (first)
         {

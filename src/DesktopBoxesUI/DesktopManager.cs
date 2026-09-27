@@ -50,10 +50,11 @@ public sealed class DesktopManager
     private readonly IDispatcher _dispatcher;
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
-    /// <summary>Fullscreen/system auto-pause for widget WebViews (shared engine with live
-    /// wallpapers). Created in <see cref="InitializeAsync"/>, torn down in
-    /// <see cref="CloseAll"/>; transitions marshal to the UI thread.</summary>
-    private PlaybackSupervisor? _widgetPause;
+    /// <summary>Widget half of the shared pause supervision. Created in
+    /// <see cref="InitializeAsync"/> (and whenever a Box comes on screen), torn down in
+    /// <see cref="CloseAll"/> and whenever nothing can pause; transitions marshal to the UI
+    /// thread.</summary>
+    private PauseSubscription? _widgetPause;
     private DesktopSurface? _surface;
     /// <summary>Owns the above-icons widget layer (probe/attach/watch) on the custom-surface
     /// feature path. The surface window is the layer window; boxes/widgets are owned by it.</summary>
@@ -183,7 +184,7 @@ public sealed class DesktopManager
             EnsureDesktopZOrder();
         }
 
-        _ = StreamRemainingContainersAsync(onFinishAction: StartWidgetAutoPause);
+        _ = StreamRemainingContainersAsync(onFinishAction: UpdateWidgetAutoPause);
 
         await ReconcileItemsAsync();
 
@@ -1336,6 +1337,10 @@ public sealed class DesktopManager
         }
 
         _windows[vm.Id] = window;
+        // A Box joined the screen: re-check the shared supervision condition. Done here and
+        // in RemoveWindow (rather than in Show/HideContainer alone) so every path that changes
+        // window membership is covered, including the restore/stream paths.
+        UpdateWidgetAutoPause();
         // Per-window DPI changes never raise DisplaySettingsChanged — observe them directly so
         // DPI-only switches (same resolution, different scale) also funnel into the rescale path.
         //window.DpiChanged += OnWindowDpiChanged;//not needed
@@ -1506,6 +1511,9 @@ public sealed class DesktopManager
             //window.Close();
             window.CloseWindowEx(handle);
             _windows.Remove(id);
+            // A Box left the screen: the last one out releases the shared hook thread unless
+            // the live wallpaper is still keeping it alive.
+            UpdateWidgetAutoPause();
         }
     }
     #endregion
@@ -1513,18 +1521,51 @@ public sealed class DesktopManager
 
     #region Widget auto-pause
 
-    /// <summary>Starts per-monitor fullscreen/system auto-suspend for widget WebViews on the
-    /// shared <see cref="PlaybackSupervisor"/> engine (same as live wallpapers). No class
-    /// exclusions: every own window is in-process (already excluded by PID) and shell
-    /// windows are excluded by default.</summary>
-    private void StartWidgetAutoPause()
+    /// <summary>Per-monitor fullscreen/system auto-suspend for widget WebViews, subscribed to the
+    /// shared pause supervision (the same one live wallpapers use). No class exclusions: every
+    /// own window is in-process (already excluded by PID) and shell windows are excluded by
+    /// default.
+    ///
+    /// Idempotent, and driven by whether there is anything that can actually pause — the
+    /// condition is "the desktop app is enabled AND at least one Box is on screen". With no
+    /// subscriber left on either host the shared hook thread is released entirely, so
+    /// "wallpaper off + containers off" really does cost nothing.</summary>
+    private void UpdateWidgetAutoPause()
     {
-        try { _widgetPause?.Dispose(); } catch { }
-        _widgetPause = new PlaybackSupervisor(
-            () => GetPauseConfig().ToPolicy(),
-            GetPauseMonitors,
-            extraExcludedWindowClasses: null);
-        _widgetPause.PauseStateChanged += OnWidgetPauseChanged;
+        bool needed = !IsDisabled && HasPauseableContainer();
+        if (needed)
+        {
+            if (_widgetPause is not null) return;
+            try
+            {
+                _widgetPause = PauseSupervision.Shared.Subscribe(new PauseSubscription(
+                    "widgets",
+                    () => GetPauseConfig().ToPolicy(),
+                    GetPauseMonitors,
+                    OnWidgetPauseChanged,
+                    extraExcludedWindowClasses: null));
+            }
+            catch (Exception ex) { Serilog.Log.Warning(ex, "Widget auto-pause subscribe failed"); }
+        }
+        else if (_widgetPause is not null)
+        {
+            try { _widgetPause.Dispose(); } catch { }
+            _widgetPause = null;
+        }
+    }
+
+    /// <summary>True when at least one Box is marked visible in the model. Reads the model
+    /// rather than <c>Window.IsVisible</c> on purpose: the model's flag is set before the window
+    /// is shown or torn down, so this never races the Show/Close ordering the way the window
+    /// property would. A hidden Box has no WebView left to pause and must not, on its own,
+    /// hold the shared hook thread open.</summary>
+    private bool HasPauseableContainer()
+    {
+        foreach (var container in _mainVm.Containers)
+        {
+            if (container.IsVisible) return true;
+        }
+        return false;
     }
 
     /// <summary>Widget auto-pause triggers from user settings (shared PauseConfig shape —
@@ -1876,6 +1917,9 @@ public sealed class DesktopManager
         if (vm is null) return;
         vm.IsVisible = false;
         RemoveWindow(id);
+        // The last Box leaving the screen releases the shared hook thread if the live
+        // wallpaper is not keeping it alive.
+        UpdateWidgetAutoPause();
     }
 
     /// <summary>Marks a container visible and (re)shows its window. Never saves the snapshot.</summary>
@@ -1884,6 +1928,8 @@ public sealed class DesktopManager
         var vm = _mainVm.Containers.FirstOrDefault(c => c.Id == id);
         if (vm is null) return;
         vm.IsVisible = true;
+        // The first Box coming back on screen claims the shared supervision again.
+        UpdateWidgetAutoPause();
         if (_windows.TryGetValue(id, out var existing))
         {
             try

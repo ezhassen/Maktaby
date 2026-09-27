@@ -185,6 +185,43 @@ so the toggle is reversible. This is **session-only** (not persisted).
 that draws, at the cursor, the hit-test result, z-order, and the surface's style/ex-style. Use it (and the
 `DesktopSurface`'s published `Win32Apis.DesktopSurfaceHandle`) when debugging desktop/surface layering.
 
+## Shared pause supervision (auto-pause)
+
+`WindowsNative/Playback/PauseSupervision.cs` owns **one** process-wide `PlaybackSupervisor`.
+Both hosts subscribe to it instead of each newsing their own (they used to: the engine's
+`EnsurePlayback` and `DesktopManager.StartWidgetAutoPause` each built a supervisor, so every
+WinEvent was delivered twice and every evaluation walked all top-level windows twice).
+
+- `PauseSubscription` = one host's registration: its own `Policy`/`Monitors`/
+  `ExtraExcludedWindowClasses`/`OnTransition`, plus its own `SessionLocked`, `DisplayOff`,
+  `Suspend`/`Resume`, applied `State` and QUNS `LastInputs`. Dispose to detach.
+- `PauseSupervision.Shared.Subscribe(sub)` returns the subscription; the first attach
+  constructs the supervisor, the last detach disposes it. Attach/detach logs
+  `"Pause supervision: '{Host}' attached (N active, started hooks|reused hooks)"` — that line
+  is the way to see the enable/disable condition in a log.
+- The hosts deliberately keep **separate persisted policies** (`EngineConfig.Pause` vs
+  `UserSettings.PauseWidgetsOn*`), so the merge shares the *capture*, never the policy: one
+  `EnumWindows` + one system-flag read feeds N cheap in-memory `PauseDecision` passes. Do not
+  "simplify" this into one merged policy — that silently breaks the asymmetric setting.
+- The subscriber list is mutated in place, never rebuilt. A rebuild would re-install the hook
+  set and start every attached host from empty state, re-firing transitions it already
+  reported. Per-subscriber state lives on the subscription so hosts already attached are
+  untouched when one joins or leaves.
+- Exclusion sets are unioned across subscribers: safe, because an exclusion only ever removes
+  a window from consideration and each host's own windows are already excluded by PID.
+- `Suspend` is per-subscription, not supervisor-wide. The engine's user pause must not stop
+  the widget host's supervision. If every subscriber is suspended the whole evaluation — the
+  window capture included — is skipped.
+- `extraExcludedWindowClasses` is effectively vestigial for both hosts: the engine is a
+  library inside `DesktopBoxesUI`, so its `WallpaperWindow` already dies at the `pid ==
+  OwnPid` filter, and the widget host passes `null`.
+- Enable conditions: engine attaches from `UpdatePauseSupervision` (enabled AND a renderer
+  that can pause — video/web/animated GIF); the desktop app attaches from
+  `DesktopManager.UpdateWidgetAutoPause` (not `IsDisabled` AND at least one Box marked
+  visible in the model). The widget side is driven from `AddWindow`/`RemoveWindow` (every
+  membership-changing path), not only from Show/HideContainer, and reads the **model's**
+  `IsVisible` rather than `Window.IsVisible` so it never races Show/Close ordering.
+
 ## VirtualizingIconPanel
 
 - `Controls/VirtualizingIconPanel.cs` is a custom `VirtualizingPanel` + `IScrollInfo` for the Icons view (`ItemWidth`, `ItemHeight`, `HorizontalSpacing`, `VerticalSpacing`, `CacheRows`). It was created to virtualize the wrapping icon grid but currently has unresolved layout issues (on load `MeasureOverride` returned `PositiveInfinity` → `InvalidOperationException`; icons disappearing; high CPU/memory even for small collections; `ScrollViewer` not syncing and affecting `DetailsGrid` scrolling). **Icons view currently uses the simple `WrapPanel` (`FolderPortalControl.xaml:152` `ItemsControl` + `WrapPanel`) which works reliably.** Keep `VirtualizingIconPanel.cs` (and `IconContainer` `Controls/IconContainer.xaml`) for future work — do not delete — but do not switch Icons back to it without fixing measure/scroll and verifying with `dotnet build` + manual toggle Icons/Details.

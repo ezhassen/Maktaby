@@ -28,7 +28,7 @@ public sealed class Engine : IDisposable
     private MessageWindow? _messageWindow;
     private PowerNotifications? _power;
 
-    private PlaybackSupervisor? _playback;
+    private PauseSubscription? _playback;
     private bool _reapplying;
     private string _originalWallpaper = "";
 
@@ -226,29 +226,32 @@ public sealed class Engine : IDisposable
         ScheduleSettledReapply();
     }
 
-    /// <summary>Creates the pause supervisor unless one is already live. Carries over the
-    /// user's manual pause so a supervision gap (all-static interval) cannot lose it.</summary>
+    /// <summary>Subscribes to the shared pause supervision unless we already are. Carries over
+    /// the user's manual pause so a supervision gap (all-static interval) cannot lose it —
+    /// the flag lives on the subscription, so it survives the shared supervisor being rebuilt
+    /// when the other host comes or goes.</summary>
     private void EnsurePlayback()
     {
         if (_playback is not null) return;
-        var playback = new PlaybackSupervisor(
+        var playback = PauseSupervision.Shared.Subscribe(new PauseSubscription(
+            "wallpaper",
             // The supervisor reads a shared PausePolicy; map the persisted config each time.
             () => _config.Pause.ToPolicy(),
             () => MonitorTracker.Enumerate()
                 .Select(m => new PauseMonitor(m.Device, m.Bounds, m.WorkArea))
                 .ToList(),
+            (device, reason) =>
+            {
+                var epoch = Volatile.Read(ref _pauseEpoch);
+                RunOnMainThread(() =>
+                {
+                    if (epoch != Volatile.Read(ref _pauseEpoch)) return;
+                    OnPauseStateChanged(device, reason);
+                });
+            },
             // Our own surface window must never pause a monitor — engine-only exclusion
             // (the desktop app passes its own classes instead).
-            new HashSet<string>([WallpaperWindow.ClassName], StringComparer.OrdinalIgnoreCase));
-        playback.PauseStateChanged += (device, reason) =>
-        {
-            var epoch = Volatile.Read(ref _pauseEpoch);
-            RunOnMainThread(() =>
-            {
-                if (epoch != Volatile.Read(ref _pauseEpoch)) return;
-                OnPauseStateChanged(device, reason);
-            });
-        };
+            new HashSet<string>([WallpaperWindow.ClassName], StringComparer.OrdinalIgnoreCase)));
         if (_userPaused) playback.Suspend();
         _playback = playback;
     }
@@ -268,7 +271,9 @@ public sealed class Engine : IDisposable
         if (need) EnsurePlayback();
         else if (_playback is not null)
         {
-            _playback.Dispose();
+            // Detach, which is what actually releases the shared hook thread when the desktop
+            // app has no subscriber left either.
+            try { _playback.Dispose(); } catch { }
             _playback = null;
         }
     }
