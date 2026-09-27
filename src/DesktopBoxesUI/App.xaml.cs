@@ -191,8 +191,8 @@ public partial class App : Application
             return null;
         }, pausePlayback: false);
 
-        //TODO: TMP StartHealthSnapshots, just comment when not needed
-        StartHealthSnapshots();
+        //StartHealthSnapshots, when logging 
+        if (GlobalFeaturesSwitches.EnableHealthSnapshots) StartHealthSnapshots();
     }
 
     private System.Windows.Threading.DispatcherTimer? _healthTimer;
@@ -221,6 +221,9 @@ public partial class App : Application
                 }
                 catch { }
                 _tierSuspendedWidgets.Clear();
+                // Census must be taken BEFORE the drop loop below, or it would report the
+                // post-drop state and the before/after pair in the log would be meaningless.
+                string censusBefore = BuildWidgetCensus();
                 try
                 {
                     var wins = Application.Current?.Windows;
@@ -238,13 +241,18 @@ public partial class App : Application
                                     ww.Suspend();
                                     _tierSuspendedWidgets.Add(ww);
                                 }
+                                // Releases cached render-target bitmaps and freezes the
+                                // chrome overlay — distinct from Suspend(), which only
+                                // stops the plugin's own timers/animations.
+                                ww.OnRenderTierChanged(true);
                             }
                             catch { }
                         }
                     }
                 }
                 catch { }
-                Log.Information("Render tier 0: paused live wallpaper + {Widgets} widgets until hardware recovers", _tierSuspendedWidgets.Count);
+                if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Render tier 0: paused live wallpaper + {Widgets} widgets until hardware recovers | census BEFORE drop: {Census}",
+                     _tierSuspendedWidgets.Count, censusBefore);
             }
             else if (tier > 0 && _tierPauseActive)
             {
@@ -259,8 +267,27 @@ public partial class App : Application
                 catch { }
                 finally
                 {
+                    // Drop the references either way: a window that died while tier-paused
+                    // must not be resurrected by this list, and holding it would retain its
+                    // whole visual tree plus the plugin's collectible ALC for the entire
+                    // tier-0 window.
                     _tierSuspendedWidgets.Clear();
                 }
+                try
+                {
+                    // Recovery hand-back runs even if the process is mid-teardown, so the
+                    // cache modes are never left dropped on a live widget.
+                    var wins = Application.Current?.Windows;
+                    if (wins is not null)
+                    {
+                        foreach (var w in wins)
+                        {
+                            if (w is not Views.Containers.WidgetWindow ww) continue;
+                            try { ww.OnRenderTierChanged(false); } catch { }
+                        }
+                    }
+                }
+                catch { }
                 try
                 {
                     if (_tierWasWallpaperPlaying)
@@ -271,10 +298,59 @@ public partial class App : Application
                 {
                     _tierWasWallpaperPlaying = false;
                 }
-                Log.Information("Render tier recovered to {Tier}: resumed tier-paused playback + widgets", tier);
+                if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Render tier recovered to {Tier}: resumed tier-paused playback + widgets | census AFTER restore: {Census}",
+                    tier, BuildWidgetCensus());
             }
         }
         catch { }
+    }
+
+    /// <summary>Per-widget render-resource census for the tier-transition and health log lines.
+    /// Cached render-target bitmaps and effects are the resources that strand native memory
+    /// when the tier flips underneath them, so they are the attribution signal: a native-memory
+    /// climb with the cache count pinned at 0 after a tier-0 pass rules the BitmapCache
+    /// hypothesis out and points at the window surfaces instead.
+    /// <para>
+    /// Roots are the PLUGIN visuals (<c>WidgetHost.Content</c>), not <c>Window.Content</c>: the
+    /// latter is the whole window chrome and would count host-owned elements that are never
+    /// dropped, burying the per-widget signal.
+    /// </para></summary>
+    private static string BuildWidgetCensus()
+    {
+        try
+        {
+            var roots = new List<(string, System.Windows.FrameworkElement)>();
+            var wins = Application.Current?.Windows;
+            if (wins is not null)
+            {
+                foreach (var w in wins)
+                {
+                    try
+                    {
+                        if (w is Views.Containers.NativeWidgetWindow nw)
+                        {
+                            // PluginVisual is the plugin's own visual tree — the thing whose
+                            // CacheMode we drop on tier 0. The host chrome around it is
+                            // never dropped, so counting it would bury the per-widget signal.
+                            var content = nw.PluginVisual;
+                            var title = string.IsNullOrWhiteSpace(nw.Title) ? "native" : nw.Title;
+                            if (content is not null) roots.Add((title, content));
+                        }
+                        else if (w is Views.Containers.WebWidgetWindow ww2)
+                        {
+                            var title = string.IsNullOrWhiteSpace(ww2.Title) ? "web" : ww2.Title;
+                            var content = ww2.Content as System.Windows.FrameworkElement;
+                            if (content is not null) roots.Add((title, content));
+                        }
+                    }
+                    catch { }
+                }
+            }
+            var entries = new List<Helpers.WidgetRenderCensus.Entry>();
+            Helpers.WidgetRenderCensus.WalkAll(roots, entries);
+            return Helpers.WidgetRenderCensus.Describe(entries);
+        }
+        catch (Exception ex) { return $"census failed: {ex.Message}"; }
     }
     /// <summary>Black-box forensics: one guarded line a minute (private bytes, managed heap,
     /// GDI/USER handles, render tier, wallpaper state, engine rebuilds, window counts) so the
@@ -334,8 +410,8 @@ public partial class App : Application
                 }
             }
             catch { }
-            Log.Information("Health: private={PrivMB}MB managed={ManagedMB}MB gdi={Gdi} user={User} tier={Tier} wallpaper={Playing}/{Live} reapply={Reapply} boxes={Boxes} widgets={Widgets}",
-                privMB, managedMB, gdi, user, tier, playing, live, reapply, boxes, widgets);
+            if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Health: private={PrivMB}MB managed={ManagedMB}MB gdi={Gdi} user={User} tier={Tier} wallpaper={Playing}/{Live} reapply={Reapply} boxes={Boxes} widgets={Widgets} | {Census}",
+                privMB, managedMB, gdi, user, tier, playing, live, reapply, boxes, widgets, BuildWidgetCensus());
         }
         catch { }
     }

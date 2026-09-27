@@ -231,4 +231,26 @@ that draws, at the cursor, the hit-test result, z-order, and the surface's style
   costs reads only. If private bytes keep climbing with no `Settled topology disagrees` / recycle lines in
   the log, the stranding is happening on live pipelines (driver state) — widen the recycle window, do not
   add more rebuilds.
+- **NativeWidgets post-resume native-memory climb (mitigation shipped, root cause NOT confirmed).** Hard to
+  reproduce: it needs the display driver to actually degrade to WPF render tier 0 on resume, which does not
+  happen on demand. Working hypothesis — the same stranded-native-memory class as the wallpaper-engine leak
+  above, reached through WPF/GDI rather than a frame server: a tier flip under a live `BitmapCache` (and
+  under every `Effect`, which caches an intermediate surface) can strand those surfaces permanently, and
+  `Suspend()` never touched them (it only stops plugin timers/animations — the visual tree stays live and
+  keeps being GDI-rasterized). What ships now: `WidgetWindow.OnRenderTierChanged(bool)` (override it in any
+  new widget window; it is a no-op by default), which `App.OnRenderTierChanged` calls on tier 0 and again on
+  recovery. `NativeWidgetWindow` walks the plugin's visual tree and clears every non-null `CacheMode`
+  (`Helpers/WidgetRenderCensus.Walk`, remembering each mode in `_droppedCaches` so recovery restores exactly
+  what was dropped — restore skips elements with no `PresentationSource` so a dead plugin is never resurrected
+  and its collectible ALC never pinned), and freezes the `WidgetChromeOverlay` (`_chromeFrozenForSoftware`
+  gates `UpdateChrome`; `WidgetChromeOverlay.SyncSuppressed` gates `OwnerPosChanged`/`OverlayPosChanged`, since
+  every Show/Hide and every `SyncFromOwner` re-acquires that window's render surface and a resume DPI-remaps
+  it). A surviving `Effect` count in the census is expected — only `CacheMode` is dropped.
+  **Attribution, not proof:** every tier transition and every health snapshot now appends a census
+  (`Analog Clock=cache:1,fx:1,vis:38`). Read it before widening any of this: if private bytes still climb with
+  `cache:0` persisting after a tier-0 pass, the BitmapCache hypothesis is dead and the cost is in the window
+  surfaces, not the caches. The census deliberately does **not** count `Storyboard`/`DispatcherTimer` (neither
+  is reachable from the visual tree and neither is publicly enumerable) — a leaking animation clock shows up as
+  climbing CPU with a flat census, not a climbing census. `CalendarWidget` already stops its nav storyboard in
+  `OnSuspend`; keep that in any new animated widget.
 - **WPF transparent hit-test & `WebView2CompositionControl`:** `CssWidgetControl` uses `WebView2CompositionControl` (not `WebView2`/`HwndHost`), which is a WPF-native composition control with no airspace — WPF hit-testing works over it. However, `WebView2CompositionControl.MouseEnter`/`MouseLeave` WPF events do **not** fire reliably (especially when the widget window is not active), so hover detection must **not** depend on them. Instead, all hover/click detection comes from the DOM bridge: inject `document.addEventListener('mouseenter'/'mouseleave'/'click', ()=>chrome.webview.postMessage(...))` via `AddScriptToExecuteOnDocumentCreatedAsync`, handle `WebMessageReceived` in `CssWidgetControl` (`WidgetMouseEnter/Leave/Clicked` events), and forward to `CssWidgetWindow`. `CssWidgetWindow` tracks cursor entering/leaving the widget window bounds via HWND-level `WM_MOUSEMOVE`/`WM_MOUSELEAVE` in `HwndHook` (not WPF `MouseEnter`/`MouseLeave`). `WindowDragController` hit-test already respects `ResizeMode` for non-resizable widgets. **`CssWidgetWindow` chrome:** `HeaderBorder` visibility uses split hover state (`_isWebViewHover` from DOM bridge + `_isWindowHover` from `WM_MOUSEMOVE`/`WM_MOUSELEAVE` in `HwndHook`). `ResizeBorder` (`#60FFFFFF` 1px outline) is **always visible for active resizable windows** (`_isActive && canResize`), not hover-dependent — hover-based toggling fights `WM_NCHITTEST` edge hits (`HTLEFT`/`HTRIGHT`/etc.) which cause rapid `MouseEnter`/`MouseLeave` cycles and visible flicker on inactive windows. `UpdateChrome()` is a no-op while `IsInMoveState` is true (during title-bar drag or native move/resize modal loop).

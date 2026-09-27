@@ -65,6 +65,18 @@ public abstract class WidgetWindow : Window
     public abstract void Suspend();
     public abstract void Resume();
 
+    /// <summary>Render-tier transition response. Called on the UI thread for tier 0
+    /// (<paramref name="software"/> = true) and again on recovery (false).
+    /// <para>
+    /// Distinct from <see cref="Suspend"/>: suspension only stops the widget's own
+    /// work (timers, animations), while this releases the rendering resources the
+    /// visual tree holds — cached render-target bitmaps and effect surfaces — which
+    /// are what strand native memory when the tier flips to software rasterization
+    /// mid-flight. Implementations must be idempotent: tier changes can arrive in
+    /// bursts around a resume, and a window can be closed before recovery.
+    /// </para></summary>
+    public virtual void OnRenderTierChanged(bool software) { }
+
     /// <summary>
     /// Is this window being closed?
     /// </summary>

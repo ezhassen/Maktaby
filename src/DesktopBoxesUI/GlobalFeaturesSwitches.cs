@@ -17,4 +17,5 @@ public static class GlobalFeaturesSwitches
     public static bool TrayIcon_ShowReset { get; } = false;
     public static bool TrayIcon_ShowTestButton { get; } = false;
 
+    public static bool EnableHealthSnapshots { get; } = false;
 }

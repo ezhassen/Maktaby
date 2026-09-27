@@ -41,6 +41,13 @@ public partial class WidgetChromeOverlay : Window
         }
     }
 
+    /// <summary>True while the owner has frozen this overlay (render tier 0). While set, the
+    /// overlay skips owner-driven <c>SyncFromOwner</c>: a resume DPI-remaps both windows,
+    /// and each sync re-acquires this window's render surface. The owner clears it before
+    /// re-evaluating chrome, so the overlay is in its correct place the moment it can be
+    /// shown again.</summary>
+    internal bool SyncSuppressed { get; set; }
+
     /// <summary>
     /// Re-inserts the overlay directly above its owner (no move/size/activate). Called after the
     /// owner is shown or reactivated: those operations insert the owner at the top and would
@@ -201,13 +208,13 @@ public partial class WidgetChromeOverlay : Window
 
     private void OwnerPosChanged(object? sender, EventArgs e)
     {
-        if (_isDragging || _isSyncing) return;
+        if (_isDragging || _isSyncing || SyncSuppressed) return;
         SyncFromOwner();
     }
 
     private void OverlayPosChanged(object? sender, EventArgs e)
     {
-        if (_isSyncing) return;
+        if (_isSyncing || SyncSuppressed) return;
         if (IsDragging || IsResizing)
         {
             // User is actively moving/resizing the overlay: keep the owner following live.
