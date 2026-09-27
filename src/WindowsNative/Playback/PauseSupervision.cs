@@ -185,9 +185,10 @@ public sealed class PauseSupervision
             // Mutate the live supervisor in place. Rebuilding it here would re-install the
             // hook set and start every already-attached host from empty state, re-firing
             // transitions it had already reported. Only the very first host pays a construction.
-            bool created = _supervisor is null;
-            if (created) _supervisor = new PlaybackSupervisor(_subscribers);
-            else _supervisor.AddSubscriber(subscription);
+            var supervisor = _supervisor;
+            bool created = supervisor is null;
+            if (supervisor is null) _supervisor = new PlaybackSupervisor(_subscribers);
+            else supervisor.AddSubscriber(subscription);
             Serilog.Log.Information("Pause supervision: '{Host}' attached ({Count} active, {Action})",
                 subscription.Name, _subscribers.Count, created ? "started hooks" : "reused hooks");
         }

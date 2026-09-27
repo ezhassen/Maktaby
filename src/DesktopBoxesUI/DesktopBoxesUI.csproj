@@ -11,7 +11,7 @@
 		<LangVersion>latest</LangVersion>
 		<RootNamespace>DesktopBoxesUI</RootNamespace>
 		<AssemblyName>DesktopBoxesUI</AssemblyName>
-		<Description>Desktop Boxes - organize your desktop into resizable boxes that pin files, folders and app shortcuts above the Windows desktop.</Description>
+		<Description>Boxes (for files and folders), live wallpapers and widgets for your windows desktop.</Description>
 		<AssemblyTitle>Desktop Boxes - desktop organizer</AssemblyTitle>
 		<Product>Desktop Boxes</Product>
 		<ApplicationIcon>Assets\app.ico</ApplicationIcon>

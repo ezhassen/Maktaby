@@ -49,7 +49,7 @@
                     HorizontalAlignment="Center"
                     FontSize="14"
                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                    Text="Organize your desktop into resizable boxes that pin files, folders and app shortcuts above the Windows desktop."
+                    Text="Boxes (for files and folders), live wallpapers and widgets for your windows desktop."
                     TextAlignment="Center"
                     TextWrapping="Wrap" />
 
