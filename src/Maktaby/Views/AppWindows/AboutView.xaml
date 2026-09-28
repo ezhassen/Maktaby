@@ -86,10 +86,10 @@
                     -->
                     <Hyperlink
                         FontWeight="Bold"
-                        NavigateUri="https://github.com/ezhassen/DesktopBoxes"
+                        NavigateUri="https://github.com/ezhassen/Maktaby"
                         RequestNavigate="ProjectLink_RequestNavigate"
                         TextDecorations="{x:Null}"
-                        ToolTip="https://github.com/ezhassen/DesktopBoxes">
+                        ToolTip="https://github.com/ezhassen/Maktaby">
                         <Image
                             x:Name="GithubLogo"
                             Width="64"

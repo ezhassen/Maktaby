@@ -59,7 +59,7 @@ Organize your Windows desktop into **resizable, snap-able boxes** that pin your 
 ### Build & Run
 
 ```powershell
-git clone https://github.com/ezhassen/DesktopBoxes.git
+git clone https://github.com/ezhassen/Maktaby.git
 cd Maktaby
 dotnet run --project src/Maktaby
 ```
