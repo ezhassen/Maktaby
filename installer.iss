@@ -68,7 +68,7 @@ RestartApplications=no
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}";
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked;
 Name: "runApplication"; Description: "Launch Maktaby"; GroupDescription: "Post-Installation:";
-Name: "startup"; Description: "Launch Maktaby on Windows startup"; GroupDescription: "Post-Installation:"; Flags: checked;
+Name: "startup"; Description: "Launch Maktaby on Windows startup"; GroupDescription: "Post-Installation:";
 
 [Files]
 ; Include everything from the publish folder
