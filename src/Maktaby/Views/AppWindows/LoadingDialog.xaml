@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
-    Title="Maktaby"
+    Title="Maktaby - Desktop Organizer"
     Width="340"
     Height="170"
     AllowsTransparency="True"
@@ -33,7 +33,7 @@
                 HorizontalAlignment="Center"
                 FontSize="14"
                 Foreground="#e8e8e8"
-                Text="Loading Maktaby…" />
+                Text="Loading Maktaby - Desktop Organizer…" />
             <Button
                 x:Name="CancelButton"
                 Margin="0,12,0,0"

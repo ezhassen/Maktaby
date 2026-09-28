@@ -7,7 +7,7 @@
     FocusOnLeftClick="False"
     LeftClick="AppTrayIcon_OnLeftClick"
     MenuOnRightClick="True"
-    TooltipText="Maktaby">
+    TooltipText="Maktaby - Desktop Organizer">
     <tray:NotifyIcon.Menu>
         <ContextMenu x:Name="contextMenu" HasDropShadow="False">
             <!--  Icons are centrally defined in AppStyles.xaml (ItemIcon_*) and shared app-wide.  -->

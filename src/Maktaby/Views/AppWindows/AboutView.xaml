@@ -39,6 +39,12 @@
                     Text="Maktaby" />
 
                 <TextBlock
+                    HorizontalAlignment="Center"
+                    FontSize="16"
+                    FontWeight="Bold"
+                    Text="Desktop Organizer" />
+
+                <TextBlock
                     x:Name="VersionText"
                     Margin="0,4,0,12"
                     HorizontalAlignment="Center"
