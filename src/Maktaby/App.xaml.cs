@@ -66,24 +66,13 @@ public partial class App : Application
 
         // Single-instance guard must run before any UI or persistence is touched.
         // The first instance holds the mutex for its lifetime; any secondary instance
-        // just activates the first and exits without touching OnExit save/restore.
+        // just exits silently without touching OnExit save/restore.
         if (!Helpers.ApplicationSingleInstance.TryAcquire())
         {
             _isSecondInstanceExit = true;
             // No main Window to SetForegroundWindow — Maktaby hosts WS_EX_TOOLWINDOW boxes
             // and a hidden tray host, so MainWindowHandle is always 0. Second instance just exits
             // silently; SwitchToCurrentInstance() is intentionally not called.
-            Shutdown();
-            return;
-        }
-
-        // Installer post-install flag: the app owns the HKCU Run-key write via StartupManager,
-        // but the elevated installer's post-install launch runs in the original user context.
-        // Shortcut the toggle when the flag is present so a fresh install with the startup task
-        // ticked enables autorun without waiting for the user to open Settings.
-        if (Array.IndexOf(e.Args, "--enable-startup") >= 0)
-        {
-            StartupManager.Enable();
             Shutdown();
             return;
         }

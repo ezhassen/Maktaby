@@ -67,8 +67,6 @@ RestartApplications=no
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}";
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked;
-Name: "runApplication"; Description: "Launch Maktaby"; GroupDescription: "Post-Installation:";
-Name: "startup"; Description: "Launch Maktaby on Windows startup"; GroupDescription: "Post-Installation:";
 
 [Files]
 ; Include everything from the publish folder
@@ -80,25 +78,21 @@ Name: "{autodesktop}\Maktaby"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}
 Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Maktaby"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; Tasks: quicklaunchicon
 
 [Run]
-; Reopen silently when the app WAS running before the install and the launch task is unchecked.
+; Post-install: launch the app. No Description / postinstall on purpose — a postinstall
+; [Run] entry with a Description is rendered as a checkbox on the Select Additional Tasks
+; page ("Post-Installation:" group). The checkbox lives on the Completing page instead
+; (see LaunchCheckBox in [Code]); this entry just runs the action that Check gates.
 Filename: "{app}\{#MyAppExe}"; \
     Flags: nowait runasoriginaluser; \
-    Check: ShouldAutoReopen
+    Check: ShouldLaunchApp
 
-; Post-install launch option (runs as the ORIGINAL user, not elevated admin).
-Filename: "{app}\\{#MyAppExe}"; \
-    Description: "Launch Maktaby"; \
-    Flags: nowait postinstall skipifsilent runasoriginaluser; \
-    Tasks: runApplication
-
-; Offer launch-on-startup via the app's own Settings toggle. The app owns the actual
-; HKCU Run-key write (StartupManager.Enable/Disable); the installer merely starts the app
-; with a flag so the write happens in the correct (original, non-elevated) user context
-; right after install. A running instance will pick the flag up and re-enable on next start.
-Filename: "{app}\\{#MyAppExe}"; \
-    Description: "Configure Maktaby to launch on Windows startup"; \
-    Flags: nowait postinstall skipifsilent runasoriginaluser; \
-    Tasks: startup
+; Post-install: enable Windows startup. Same no-Description trick as above, for the same
+; reason. The app owns the HKCU Run-key write via --enable-startup, running as the original
+; user (not the elevated installer), so the value lands in the correct hive.
+Filename: "{app}\{#MyAppExe}"; \
+    Parameters: "--enable-startup"; \
+    Flags: nowait runasoriginaluser; \
+    Check: ShouldConfigureStartup
 
 [UninstallRun]
 ; Make sure no running instance locks files during uninstall.
@@ -107,33 +101,12 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM ""{#MyAppExe}"" /F /T"; Flags: r
 [Code]
 var
   WasRunning: Boolean;
-
-function ReadRegStr(Key: String; Name: String): String;
-var
-  R: Integer;
-begin
-  Result := '';
-  if not RegQueryStringValue(HKEY_CURRENT_USER, Key, Name, Result) then
-    Result := '';
-end;
-
-function IsMaktabyStartupEnabled(): Boolean;
-begin
-  Result := ReadRegStr('Software\Microsoft\Windows\CurrentVersion\Run', 'Maktaby') <> '';
-end;
-
-function SetMaktabyStartup(On: Boolean): Boolean;
-var
-  ExePath: String;
-begin
-  ExePath := ExpandConstant('{app}\\{#MyAppExe}');
-  if On then
-    Result := RegWriteStringValue(HKEY_CURRENT_USER,
-      'Software\Microsoft\Windows\CurrentVersion\Run', 'Maktaby', '"' + ExePath + '"')
-  else
-    Result := RegDeleteValue(HKEY_CURRENT_USER,
-      'Software\Microsoft\Windows\CurrentVersion\Run', 'Maktaby');
-end;
+  // Checkboxes shown on the Completing wizard page, launch first. Created in
+  // InitializeWizard, which Inno Setup does NOT call for silent installs (/SILENT,
+  // /VERYSILENT) — every access here must nil-guard, or the Check function raises
+  // "Could not call proc." on the object.
+  LaunchCheckBox: TCheckBox;
+  StartupCheckBox: TCheckBox;
 
 function IsMaktabyRunning(): Boolean;
 var
@@ -149,31 +122,71 @@ begin
   Result := (ResultCode = 0);
 end;
 
-function InitializeSetup(): Boolean;
+// Own checkboxes on the Completing page rather than [Tasks] entries, so neither option
+// shows up on the Select Additional Tasks page. Launch sits above the startup option.
+procedure InitializeWizard();
+var
+  Top: Integer;
 begin
-  // Remember BEFORE anything closes the app, so it can be reopened afterwards.
-  WasRunning := IsMaktabyRunning();
-  // If the user asked for startup and the Run key is absent, write it now (elevated
-  // installer writing to HKCU is fine — it lands in the installing user's hive, which
-  // is the user who will run the app). Skip when already present so a user toggle isn't
-  // clobbered by a reinstall.
-  if WizardIsTaskSelected('startup') and not IsMaktabyStartupEnabled() then
-    SetMaktabyStartup(True);
-  Result := True;
+  Top := WizardForm.FinishedLabel.Top + WizardForm.FinishedLabel.Height + ScaleY(12);
+
+  LaunchCheckBox := TCheckBox.Create(WizardForm);
+  with LaunchCheckBox do
+  begin
+    Caption := 'Launch the app';
+    Parent := WizardForm.FinishedPage;
+    Left := WizardForm.FinishedLabel.Left;
+    Top := Top;
+    Width := WizardForm.FinishedLabel.Width;
+    Checked := True;
+  end;
+  Top := Top + ScaleY(24);
+
+  StartupCheckBox := TCheckBox.Create(WizardForm);
+  with StartupCheckBox do
+  begin
+    Caption := 'Configure Maktaby to launch on Windows startup';
+    Parent := WizardForm.FinishedPage;
+    Left := WizardForm.FinishedLabel.Left;
+    Top := Top;
+    Width := WizardForm.FinishedLabel.Width;
+    // Default on: this is the behavior most installs want, and the write is
+    // idempotent (StartupManager.Enable overwrites the same Run-key value).
+    Checked := True;
+  end;
 end;
 
-function ShouldAutoReopen(): Boolean;
+// Launch the app after install: explicit user choice, or reopening an instance that
+// was already running before the install. Unchecked in a silent install => only reopen.
+function ShouldLaunchApp(): Boolean;
 begin
-  // Reopen when it was open and the user did NOT also tick "Launch Maktaby"
-  // (otherwise the post-install entry launches it).
-  Result := WasRunning and (not WizardIsTaskSelected('runApplication'));
+  if LaunchCheckBox = nil then
+    Result := WasRunning
+  else
+    Result := LaunchCheckBox.Checked or WasRunning;
+end;
+
+// Gate the --enable-startup post-install run on our Completing-page checkbox.
+// Nil (silent install, no InitializeWizard) => leave the Run key alone.
+function ShouldConfigureStartup(): Boolean;
+begin
+  if StartupCheckBox = nil then
+    Result := False
+  else
+    Result := StartupCheckBox.Checked;
+end;
+
+function InitializeSetup(): Boolean;
+begin
+  // Remember BEFORE anything closes the app, so it can be reopened afterwards
+  // (see ShouldLaunchApp, which launches when the user ticks the box or the app was open).
+  WasRunning := IsMaktabyRunning();
+  Result := True;
 end;
 
 function InitializeUninstall(): Boolean;
 begin
-  // Clear the Run-key entry we may have written (either by the installer task above or by
-  // the app's Settings toggle). Best-effort: a manually-added value with a different path
-  // is not touched, and deleting an absent value is a no-op.
-  SetMaktabyStartup(False);
-  Result := (MsgBox('Are you sure you want to uninstall Maktaby?', mbConfirmation, MB_YESNO) = IDYES);
+  // Inno Setup shows its own uninstall confirmation prompt by default; don't duplicate it.
+  // The [UninstallRun] taskkill still runs to close any live instance before files are removed.
+  Result := True;
 end;
