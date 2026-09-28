@@ -68,6 +68,7 @@ RestartApplications=no
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}";
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked;
 Name: "runApplication"; Description: "Launch Maktaby"; GroupDescription: "Post-Installation:";
+Name: "startup"; Description: "Launch Maktaby on Windows startup"; GroupDescription: "Post-Installation:"; Flags: checked;
 
 [Files]
 ; Include everything from the publish folder
@@ -85,10 +86,19 @@ Filename: "{app}\{#MyAppExe}"; \
     Check: ShouldAutoReopen
 
 ; Post-install launch option (runs as the ORIGINAL user, not elevated admin).
-Filename: "{app}\{#MyAppExe}"; \
+Filename: "{app}\\{#MyAppExe}"; \
     Description: "Launch Maktaby"; \
     Flags: nowait postinstall skipifsilent runasoriginaluser; \
     Tasks: runApplication
+
+; Offer launch-on-startup via the app's own Settings toggle. The app owns the actual
+; HKCU Run-key write (StartupManager.Enable/Disable); the installer merely starts the app
+; with a flag so the write happens in the correct (original, non-elevated) user context
+; right after install. A running instance will pick the flag up and re-enable on next start.
+Filename: "{app}\\{#MyAppExe}"; \
+    Description: "Configure Maktaby to launch on Windows startup"; \
+    Flags: nowait postinstall skipifsilent runasoriginaluser; \
+    Tasks: startup
 
 [UninstallRun]
 ; Make sure no running instance locks files during uninstall.
@@ -97,6 +107,33 @@ Filename: "{cmd}"; Parameters: "/C taskkill /IM ""{#MyAppExe}"" /F /T"; Flags: r
 [Code]
 var
   WasRunning: Boolean;
+
+function ReadRegStr(Key: String; Name: String): String;
+var
+  R: Integer;
+begin
+  Result := '';
+  if not RegQueryStringValue(HKEY_CURRENT_USER, Key, Name, Result) then
+    Result := '';
+end;
+
+function IsMaktabyStartupEnabled(): Boolean;
+begin
+  Result := ReadRegStr('Software\Microsoft\Windows\CurrentVersion\Run', 'Maktaby') <> '';
+end;
+
+function SetMaktabyStartup(On: Boolean): Boolean;
+var
+  ExePath: String;
+begin
+  ExePath := ExpandConstant('{app}\\{#MyAppExe}');
+  if On then
+    Result := RegWriteStringValue(HKEY_CURRENT_USER,
+      'Software\Microsoft\Windows\CurrentVersion\Run', 'Maktaby', '"' + ExePath + '"')
+  else
+    Result := RegDeleteValue(HKEY_CURRENT_USER,
+      'Software\Microsoft\Windows\CurrentVersion\Run', 'Maktaby');
+end;
 
 function IsMaktabyRunning(): Boolean;
 var
@@ -116,6 +153,12 @@ function InitializeSetup(): Boolean;
 begin
   // Remember BEFORE anything closes the app, so it can be reopened afterwards.
   WasRunning := IsMaktabyRunning();
+  // If the user asked for startup and the Run key is absent, write it now (elevated
+  // installer writing to HKCU is fine — it lands in the installing user's hive, which
+  // is the user who will run the app). Skip when already present so a user toggle isn't
+  // clobbered by a reinstall.
+  if WizardIsTaskSelected('startup') and not IsMaktabyStartupEnabled() then
+    SetMaktabyStartup(True);
   Result := True;
 end;
 
@@ -128,5 +171,9 @@ end;
 
 function InitializeUninstall(): Boolean;
 begin
+  // Clear the Run-key entry we may have written (either by the installer task above or by
+  // the app's Settings toggle). Best-effort: a manually-added value with a different path
+  // is not touched, and deleting an absent value is a no-op.
+  SetMaktabyStartup(False);
   Result := (MsgBox('Are you sure you want to uninstall Maktaby?', mbConfirmation, MB_YESNO) = IDYES);
 end;

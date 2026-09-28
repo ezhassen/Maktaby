@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -7,14 +8,12 @@ using Maktaby.Native;
 namespace Maktaby.Win32APIs.Services;
 
 /// <summary>
-/// Manages "launch on Windows startup" via a shortcut in the per-user Startup folder
-/// (%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup).
+/// Manages "launch on Windows startup" via HKCU\Software\Microsoft\Windows\CurrentVersion\Run.
 ///
-/// Previously this wrote HKCU\Software\Microsoft\Windows\CurrentVersion\Run directly, and
-/// behavioral heuristics flag exactly that (an unsigned process registering autorun) — enabling
-/// the toggle tripped PDM:Trojan.Win32.Generic lockdowns. A Startup-folder shortcut is the
-/// Explorer-managed, user-visible equivalent and needs no registry writes at all — not even
-/// a legacy cleanup: any Run-key access keeps the flagged behavior signature.
+/// The Run-key value is the persistence surface used by both the app's Settings toggle and the
+/// installer (see installer.iss → [Run] entry that launches the app with --enable-startup as the
+/// original user, so the write always lands in the correct user's hive regardless of installer
+/// elevation). The installer's job is only to offer the option; the app owns the actual write.
 ///
 /// This is the system source of truth for the toggle; the user's preference is also mirrored in
 /// <see cref="Settings.AppJSettings.LaunchOnStartup"/>.
@@ -27,23 +26,30 @@ public static class StartupManager
     private const string AppName = "Maktaby";
 #endif
 
-    private static string LinkPath =>
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), AppName + ".lnk");
+    private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
 
-    /// <summary>True when our Startup shortcut exists and points at this executable.</summary>
+    /// <summary>True when our Run-key value exists and points at this executable.</summary>
     public static bool IsEnabled
     {
         get
         {
             try
             {
-                string link = LinkPath;
-                if (!File.Exists(link)) return false;
-                string? target = ResolveLinkTarget(link);
-                if (target is null) return false;
-                var exe = Process.GetCurrentProcess().MainModule?.FileName;
+                string? exe = Process.GetCurrentProcess().MainModule?.FileName;
                 if (string.IsNullOrEmpty(exe)) return false;
-                return string.Equals(target, exe, StringComparison.OrdinalIgnoreCase);
+
+                using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, false);;
+                if (key is null) return false;
+
+                object? value = key.GetValue(AppName);
+                if (value is string s)
+                {
+                    return string.Equals(
+                        s.Trim('"').Trim(),
+                        exe,
+                        StringComparison.OrdinalIgnoreCase);
+                }
+                return false;
             }
             catch (Exception ex)
             {
@@ -53,40 +59,47 @@ public static class StartupManager
         }
     }
 
-    /// <summary>Creates the Startup shortcut for the current executable.</summary>
+    /// <summary>Writes the Run-key value for the current executable.</summary>
     public static void Enable()
     {
-        var exe = Process.GetCurrentProcess().MainModule?.FileName;
-        if (string.IsNullOrEmpty(exe))
-        {
-            return;
-        }
+        string? exe = Process.GetCurrentProcess().MainModule?.FileName;
+        if (string.IsNullOrEmpty(exe)) return;
+
+        // Quote the path in case it contains spaces. The Run key treats the value as a command line.
+        string value = $"\"{exe}\"";
 
         try
         {
-            CreateLink(LinkPath, exe);
+            using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true);
+            key?.SetValue(AppName, value);
         }
         catch (Exception ex)
         {
             ex.Log_Error();
-            // Best-effort: a locked-down profile may reject the write; the toggle simply won't persist.
         }
     }
 
-    /// <summary>Removes the Startup shortcut.</summary>
+    /// <summary>Removes the Run-key value.</summary>
     public static void Disable()
     {
         try
         {
-            string link = LinkPath;
-            if (File.Exists(link)) File.Delete(link);
+            using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, true);
+            key?.DeleteValue(AppName, false);
         }
         catch (Exception ex)
         {
             ex.Log_Error();
-            // Best-effort.
         }
     }
+
+    //========================================================================
+    // OLD Shortcut-based implementation (ShellLink in Startup folder).
+    // Replaced by the registry approach above on user request.
+    //========================================================================
+    /*
+    private static string LinkPath =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), AppName + ".lnk");
 
     private static void CreateLink(string linkPath, string exe)
     {
@@ -105,7 +118,6 @@ public static class StartupManager
         }
         finally
         {
-            // Deterministic COM release (one RCW, two interface references).
             if (shellLink is not null) Marshal.ReleaseComObject(shellLink);
         }
     }
@@ -137,4 +149,5 @@ public static class StartupManager
             if (shellLink is not null) Marshal.ReleaseComObject(shellLink);
         }
     }
+    */
 }

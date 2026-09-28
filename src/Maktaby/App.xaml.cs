@@ -47,6 +47,23 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Installer post-install flag: handle startup enable/disable before the
+        // single-instance guard so the flag is honored even when another instance
+        // is already running (the running instance isn't the one that should write
+        // the registry on the user's behalf after an install).
+        if (Array.IndexOf(e.Args, "--enable-startup") >= 0)
+        {
+            StartupManager.Enable();
+            Shutdown();
+            return;
+        }
+        if (Array.IndexOf(e.Args, "--disable-startup") >= 0)
+        {
+            StartupManager.Disable();
+            Shutdown();
+            return;
+        }
+
         // Single-instance guard must run before any UI or persistence is touched.
         // The first instance holds the mutex for its lifetime; any secondary instance
         // just activates the first and exits without touching OnExit save/restore.
@@ -59,6 +76,18 @@ public partial class App : Application
             Shutdown();
             return;
         }
+
+        // Installer post-install flag: the app owns the HKCU Run-key write via StartupManager,
+        // but the elevated installer's post-install launch runs in the original user context.
+        // Shortcut the toggle when the flag is present so a fresh install with the startup task
+        // ticked enables autorun without waiting for the user to open Settings.
+        if (Array.IndexOf(e.Args, "--enable-startup") >= 0)
+        {
+            StartupManager.Enable();
+            Shutdown();
+            return;
+        }
+
 #if !DEBUG
         Maktaby.Shared.Helpers.ExceptionHandler.Register(this, new Maktaby.Shared.Helpers.ExceptionHandler.Options
         {
