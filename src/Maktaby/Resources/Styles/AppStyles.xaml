@@ -1,0 +1,566 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Maktaby.Controls"
+    xmlns:conv="clr-namespace:Maktaby.Converters"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
+
+    <!--  Shared converters and application-wide styles live here.  -->
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    <conv:BoolInvertedToVisibilityConverter x:Key="BoolInvertedToVisibilityConverter" />
+
+    <!--
+        Tray/context menu icons — app-wide reusable SymbolIcons (x:Shared=False so each
+        MenuItem gets its own instance). Toggle items expose both states.
+    -->
+    <ui:SymbolIcon
+        x:Key="ItemIcon_NewBox"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Box20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_FolderPortal"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="FolderAdd20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_NewWidget"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="PuzzlePiece20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Gallery"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="ContentViewGallery20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Reset"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="ArrowReset20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_HideAllBoxes_Hide"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="EyeOff20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Play"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Play20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Pause"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Pause20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_HideBoxe"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="EyeOff20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_HideAllBoxes_Show"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Eye20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Disable"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="PlugDisconnected20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Enable"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="PlugConnected20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Settings"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Settings20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Theme"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="PaintBrush20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_ThemeSystem"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Desktop20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_ThemeDark"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="WeatherMoon20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_ThemeLight"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="WeatherSunny20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_About"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Info20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_DebugTree"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Bug20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Test"
+        x:Shared="False"
+        FontSize="16"
+        Foreground="OrangeRed"
+        Symbol="Beaker20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Exit"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="ArrowExit20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Delete"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Delete20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Remove"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="Subtract20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Locked"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="LockClosed20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_UnLocked"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="LockOpen20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Roll_Auto"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="ArrowAutofitContent20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Roll_Up"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="PaddingTop20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Roll_Down"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="PaddingDown20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Roll_Left"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="PaddingLeft20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Roll_Right"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="PaddingRight20" />
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Size_Small"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="ResizeSmall20" />
+
+    <!--
+        Box appearance resources. These are resolved from UserSettings by BoxAppearance and
+        applied at runtime (App.ApplyBoxAppearance / BoxContainerWindow.ApplyAppearance), so
+        boxes follow the configured theme and colors. Declared here only as safe defaults.
+    -->
+
+    <!--
+        Borderless button that blends into its parent (transparent background, no border).
+        Used for the title-bar icon buttons (menu, roll).
+    -->
+    <Style x:Key="BorderlesButtonStyle" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border
+                        x:Name="PART_Background"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="4">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="PART_Background" Property="Background" Value="#24FFFFFF" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="PART_Background" Property="Background" Value="#3BFFFFFF" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        Chevron toggle for collapsible card headers (Performance Monitor WebView2 section, ...).
+        Bind IsChecked two-way to the VM expanded flag. The chevron points down when expanded
+        and rotates to point right when collapsed; hover/pressed follow the BorderlesButtonStyle
+        pattern with theme-aware fills.
+    -->
+    <Style x:Key="ToggleButtonCollapsable" TargetType="ToggleButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        <Setter Property="Padding" Value="2" />
+        <Setter Property="Width" Value="22" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border
+                        x:Name="PART_Background"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="4">
+                        <Path
+                            x:Name="PART_Chevron"
+                            Width="10"
+                            Height="6"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="M 1 1 L 5 5 L 9 1"
+                            RenderTransformOrigin="0.5,0.5"
+                            Stretch="None"
+                            Stroke="{TemplateBinding Foreground}"
+                            StrokeEndLineCap="Round"
+                            StrokeStartLineCap="Round"
+                            StrokeThickness="1.6">
+                            <Path.RenderTransform>
+                                <RotateTransform Angle="0" />
+                            </Path.RenderTransform>
+                        </Path>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="PART_Background" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="PART_Background" Property="Background" Value="{DynamicResource ControlFillColorTertiaryBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="False">
+                            <Setter TargetName="PART_Chevron" Property="RenderTransform">
+                                <Setter.Value>
+                                    <RotateTransform Angle="-90" />
+                                </Setter.Value>
+                            </Setter>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        Fixed WPF-UI menu item templates.
+        
+        The stock WPF-UI MenuItem.SubmenuHeaderTemplate applies a template-local DropShadowEffect and
+        offsets that make submenus OVERLAP their parent item instead of opening beside it whenever the
+        menu opens upward (bottom-anchored). These app-wide replacements remove the shadow, anchor the
+        submenu Popup to the RIGHT of its parent row, and ADD what the stock templates lack: a check
+        gutter so IsCheckable items (tray "Hide All Boxes", per-box "Icon Size" presets, ...) render
+        their checked state.
+    -->
+    <ControlTemplate x:Key="FixedSubmenuItemTemplate" TargetType="MenuItem">
+        <Border
+            x:Name="Border"
+            Margin="4,2,4,2"
+            Background="Transparent"
+            CornerRadius="5">
+            <Grid Margin="8,7,8,7">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!--  Modern check box: 16x16 rounded, bigger glyph, visible only when checked.  -->
+                <Grid
+                    x:Name="CheckContainer"
+                    Grid.Column="0"
+                    Width="16"
+                    Height="16"
+                    Margin="0,0,6,0"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Visibility="Collapsed">
+                    <Border
+                        x:Name="CheckBox"
+                        Background="#2B88D8"
+                        BorderBrush="#2B88D8"
+                        BorderThickness="1"
+                        CornerRadius="4" />
+                    <Path
+                        x:Name="CheckGlyph"
+                        Width="10"
+                        Height="8"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Data="M1,4.8 L4.2,7.6 L9.2,1.2"
+                        Stretch="None"
+                        Stroke="White"
+                        StrokeEndLineCap="Round"
+                        StrokeStartLineCap="Round"
+                        StrokeThickness="1.7" />
+                </Grid>
+
+                <ContentPresenter
+                    x:Name="IconPresenter"
+                    Grid.Column="1"
+                    Margin="0,0,7,0"
+                    VerticalAlignment="Center"
+                    Content="{TemplateBinding Icon}" />
+
+                <ContentPresenter
+                    x:Name="Header"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    ContentSource="Header"
+                    RecognizesAccessKey="True" />
+            </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuBarItemBackgroundSelected}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CheckContainer" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Icon" Value="{x:Null}">
+                <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="IconPresenter" Property="Margin" Value="0" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <ControlTemplate x:Key="FixedSubmenuHeaderTemplate" TargetType="MenuItem">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Border
+                x:Name="Border"
+                Grid.Row="1"
+                Margin="4,2,4,2"
+                Background="Transparent"
+                CornerRadius="5">
+                <Grid Margin="8,7,8,7">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="22" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid
+                        x:Name="CheckContainer"
+                        Grid.Column="0"
+                        Width="16"
+                        Height="16"
+                        Margin="0,0,6,0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed">
+                        <Border
+                            x:Name="CheckBox"
+                            Background="#2B88D8"
+                            BorderBrush="#2B88D8"
+                            BorderThickness="1"
+                            CornerRadius="4" />
+                        <Path
+                            x:Name="CheckGlyph"
+                            Width="10"
+                            Height="8"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Data="M1,4.8 L4.2,7.6 L9.2,1.2"
+                            Stretch="None"
+                            Stroke="White"
+                            StrokeEndLineCap="Round"
+                            StrokeStartLineCap="Round"
+                            StrokeThickness="1.7" />
+                    </Grid>
+
+                    <ContentPresenter
+                        x:Name="IconPresenter"
+                        Grid.Column="1"
+                        Margin="0,0,7,0"
+                        VerticalAlignment="Center"
+                        Content="{TemplateBinding Icon}" />
+
+                    <ContentPresenter
+                        x:Name="Header"
+                        Grid.Column="2"
+                        VerticalAlignment="Center"
+                        ContentSource="Header"
+                        RecognizesAccessKey="True" />
+
+                    <Path
+                        Grid.Column="3"
+                        Margin="10,0,0,0"
+                        VerticalAlignment="Center"
+                        Data="M0,0 L5,4 L0,8 Z"
+                        Fill="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Foreground}" />
+                </Grid>
+            </Border>
+
+            <!--  Anchored RIGHT of the parent row: fixes the bottom-open overlap bug. No DropShadowEffect.  -->
+            <Popup
+                x:Name="Popup"
+                Grid.Row="1"
+                AllowsTransparency="True"
+                Focusable="False"
+                IsOpen="{TemplateBinding IsSubmenuOpen}"
+                Placement="Right"
+                PlacementTarget="{Binding ElementName=Border}"
+                PopupAnimation="None">
+                <Border
+                    Padding="12,6,12,6"
+                    Background="{DynamicResource FlyoutBackground}"
+                    BorderBrush="{DynamicResource FlyoutBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    SnapsToDevicePixels="True">
+                    <ScrollViewer CanContentScroll="True">
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuBarItemBackgroundSelected}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CheckContainer" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="Icon" Value="{x:Null}">
+                <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="IconPresenter" Property="Margin" Value="0" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!--
+        Role-routed application of the fixed templates. Only Submenu* roles are replaced; top-level
+        roles keep the WPF-UI defaults (context menus never use them anyway).
+    -->
+    <Style TargetType="MenuItem">
+        <Style.Triggers>
+            <Trigger Property="Role" Value="SubmenuHeader">
+                <Setter Property="Template" Value="{StaticResource FixedSubmenuHeaderTemplate}" />
+            </Trigger>
+            <Trigger Property="Role" Value="SubmenuItem">
+                <Setter Property="Template" Value="{StaticResource FixedSubmenuItemTemplate}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+    <!--
+        CollapsibleGroupBox (Controls/CollapsibleGroupBox.cs): card with a clickable header
+        (chevron + HeaderContent) that collapses the Content body. Implicit so every
+        instance picks it up; Margin comes from the instance, body inset from BodyPadding.
+    -->
+    <Style TargetType="{x:Type controls:CollapsibleGroupBox}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type controls:CollapsibleGroupBox}">
+                    <Border
+                        Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <!--
+                                    Star (not Auto): children like DataGrid report their full
+                                    content height as DesiredSize and never clamp it — an Auto
+                                    body row would arrange them at that height (spilling past
+                                    the card with no scrollbar), while star arranges them in
+                                    the card's actual height so their internal scroller engages.
+                                    Under an infinite outer constraint star behaves as Auto,
+                                    so shrink-wrapping sections are unaffected.
+                                -->
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border
+                                x:Name="PART_HeaderBorder"
+                                Grid.Row="0"
+                                Padding="8,4"
+                                Background="{DynamicResource CardBackgroundFillColorSecondaryBrush}"
+                                CornerRadius="8,8,0,0"
+                                Cursor="Hand"
+                                ToolTip="Click to collapse / expand">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ToggleButton
+                                        Grid.Column="0"
+                                        VerticalAlignment="Center"
+                                        IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                        Style="{StaticResource ToggleButtonCollapsable}"
+                                        ToolTip="Collapse / expand" />
+                                    <ContentPresenter
+                                        Grid.Column="1"
+                                        Margin="4,0,0,0"
+                                        VerticalAlignment="Center"
+                                        ContentSource="Header" />
+                                </Grid>
+                            </Border>
+                            <ContentPresenter
+                                x:Name="PART_Body"
+                                Grid.Row="1"
+                                Margin="{TemplateBinding BodyPadding}"
+                                ContentSource="Content" />
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="False">
+                            <Setter TargetName="PART_HeaderBorder" Property="CornerRadius" Value="8" />
+                            <Setter TargetName="PART_Body" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

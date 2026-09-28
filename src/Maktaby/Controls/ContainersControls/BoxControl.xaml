@@ -1,0 +1,141 @@
+<local:WidgetControlBase
+    x:Class="Maktaby.Controls.ContainersControls.BoxControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="clr-namespace:Maktaby.Controls.ContainersControls"
+    xmlns:conv="clr-namespace:Maktaby.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:vm="clr-namespace:Maktaby.ViewModels"
+    d:DesignHeight="200"
+    d:DesignWidth="240"
+    AllowDrop="True"
+    DragLeave="BoxControl_DragLeave"
+    DragOver="BoxControl_DragOver"
+    Drop="BoxControl_Drop"
+    IsKeyboardFocusWithinChanged="BoxControl_IsKeyboardFocusWithinChanged"
+    MouseLeftButtonUp="BoxControl_MouseLeftButtonUp"
+    MouseMove="BoxControl_MouseMove"
+    PreviewMouseLeftButtonDown="BoxControl_PreviewMouseLeftButtonDown"
+    PreviewMouseLeftButtonUp="BoxControl_PreviewMouseLeftButtonUp"
+    mc:Ignorable="d">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <!--  Tile = resolved icon size + chrome offsets (hand-tuned at the 32px baseline: 68×64).  -->
+        <conv:AdaptiveTileSizeConverter x:Key="TileWidth" />
+        <conv:AdaptiveTileSizeConverter x:Key="TileHeight" />
+    </UserControl.Resources>
+    <Grid>
+        <ScrollViewer
+            x:Name="Scroll"
+            Background="{DynamicResource BoxBackground}"
+            BorderThickness="0"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <Grid x:Name="ItemsHost" Background="{DynamicResource BoxBackground}">
+                <ItemsControl x:Name="ItemsList" ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="vm:BoxItemViewModel">
+                            <Border
+                                x:Name="ItemBorder"
+                                Width="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
+                                Height="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
+                                Margin="2"
+                                Padding="0"
+                                ContextMenuOpening="ItemBorder_ContextMenuOpening"
+                                Cursor="Arrow"
+                                FocusVisualStyle="{x:Null}"
+                                Focusable="True"
+                                GotFocus="ItemBorder_GotFocus"
+                                KeyDown="ItemBorder_KeyDown"
+                                MouseLeftButtonDown="ItemBorder_MouseLeftButtonDown"
+                                MouseLeftButtonUp="ItemBorder_MouseLeftButtonUp"
+                                MouseMove="ItemBorder_MouseMove"
+                                MouseRightButtonUp="ItemBorder_MouseRightButtonUp"
+                                ToolTip="{Binding DisplayName}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <!--  Constant thickness: selection must never change the tile size.  -->
+                                        <Setter Property="BorderThickness" Value="1" />
+                                        <Setter Property="BorderBrush" Value="Transparent" />
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                <Setter Property="Background" Value="#407FB2FF" />
+                                                <Setter Property="BorderBrush" Value="#FF7FB2FF" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <StackPanel Orientation="Vertical">
+                                    <Image
+                                        Width="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        Height="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        Margin="0,2,0,0"
+                                        HorizontalAlignment="Center"
+                                        RenderOptions.BitmapScalingMode="HighQuality"
+                                        Source="{Binding Icon}" />
+                                    <!--  Two-line clamp keeps every tile identical; the full name is in the ToolTip.  -->
+                                    <TextBlock
+                                        MaxHeight="32"
+                                        Margin="0,4,0,0"
+                                        FontSize="11"
+                                        Foreground="{DynamicResource BoxForeground}"
+                                        Text="{Binding DisplayName}"
+                                        TextAlignment="Center"
+                                        TextTrimming="CharacterEllipsis"
+                                        TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Canvas x:Name="Overlay" IsHitTestVisible="False">
+                    <Rectangle
+                        x:Name="Marquee"
+                        Fill="#407FB2FF"
+                        IsHitTestVisible="False"
+                        Stroke="#FF7FB2FF"
+                        StrokeThickness="1"
+                        Visibility="Collapsed" />
+                </Canvas>
+            </Grid>
+        </ScrollViewer>
+        <!--
+            Copying pill: bottom-centered, fixed while scrolling; shown only while external
+            files copy in (IsCopyingFiles), hit-test off so it never blocks drops beneath it.
+        -->
+        <Border
+            Margin="0,0,0,8"
+            Padding="10,6"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Bottom"
+            Background="#CC1E1E1E"
+            BorderBrush="#FF7FB2FF"
+            BorderThickness="1"
+            CornerRadius="12"
+            IsHitTestVisible="False"
+            Visibility="{Binding IsCopyingFiles, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}">
+            <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
+                <!--  IsIndeterminate bound (not constant True): an indeterminate ring animates
+                  forever even while Collapsed, which is a permanent render loop per box.  -->
+                <ui:ProgressRing
+                    Width="16"
+                    Height="16"
+                    IsIndeterminate="{Binding IsCopyingFiles, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+                <TextBlock
+                    Margin="8,0,0,0"
+                    VerticalAlignment="Center"
+                    FontSize="11"
+                    Foreground="White"
+                    Text="{Binding CopyStatusText, RelativeSource={RelativeSource AncestorType=UserControl}}" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</local:WidgetControlBase>

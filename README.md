@@ -1,8 +1,8 @@
-# Desktop Boxes
+# Maktaby
 
 <p align="center">
   <!-- Placeholder: replace with a real banner/screenshot -->
-  <img src=".github/assets/app_icon_svg.svg" alt="Desktop Boxes — organize your desktop into resizable boxes" width="256" />
+  <img src=".github/assets/app_icon_svg.svg" alt="Maktaby — organize your desktop into resizable boxes" width="256" />
 </p>
 
 Organize your Windows desktop into **resizable, snap-able boxes** that pin your files, folders and app shortcuts above the desktop — so everything stays where you put it.
@@ -60,8 +60,8 @@ Organize your Windows desktop into **resizable, snap-able boxes** that pin your 
 
 ```powershell
 git clone https://github.com/ezhassen/DesktopBoxes.git
-cd DesktopBoxes
-dotnet run --project src/DesktopBoxesUI
+cd Maktaby
+dotnet run --project src/Maktaby
 ```
 
 ### Create the Installer
@@ -86,13 +86,13 @@ git tag -a v1.2.0-beta.1 -m "beta"
 .\build.ps1 -Action Tag -Version 1.2.0-beta.1
 ```
 
-The resulting installer is named accordingly: `Desktop Boxes 1.2.0-beta.1.exe`
+The resulting installer is named accordingly: `Maktaby 1.2.0-beta.1.exe`
 
 ## 🗂️ Project Structure
 
 ```
 src/
-├── DesktopBoxesUI/           # Main WPF application
+├── Maktaby/           # Main WPF application
 │   ├── Controls/             # Reusable controls (BoxControl, TrayIconUI)
 │   ├── Core/                 # Models, interfaces, pure .NET services
 │   ├── Converters/           # Value converters
@@ -103,7 +103,7 @@ src/
 │   ├── ViewModels/           # MVVM view models
 │   ├── Views/                # Windows (surface, settings, about, …)
 │   └── Win32APIs/            # Win32 P/Invoke (CsWin32-generated + manual)
-└── DesktopBoxes.slnx         # Solution file
+└── Maktaby.slnx         # Solution file
 build.ps1                     # Build / publish / tag orchestrator
 installer.iss                 # Inno Setup installer script
 ```

@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>$(SharedTargetFrameworWindows)</TargetFramework>
+		<TargetPlatformMinVersion>$(SharedTargetPlatformMinVersion)</TargetPlatformMinVersion>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<LangVersion>latest</LangVersion>
+		<Description>Native Win32 and shell interop for Maktaby.</Description>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+		<IsTrimmable>false</IsTrimmable>
+		<EnableAot>false</EnableAot>
+	</PropertyGroup>
+
+	<!-- Shared hand-rolled Win32 interop (no CsWin32). Logging via Serilog only; no other
+	     dependencies, so every consumer gets the same native surface without package sprawl. -->
+	<ItemGroup>
+		<PackageReference Include="Serilog" />
+	</ItemGroup>
+
+</Project>

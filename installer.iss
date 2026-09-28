@@ -1,5 +1,5 @@
-#define MyAppName "Desktop Boxes"
-#define MyAppExe "DesktopBoxesUI.exe"
+#define MyAppName "Maktaby"
+#define MyAppExe "Maktaby.exe"
 
 ; Version is provided by build.ps1 via BuildVersion.inc (written next to this script before the
 ; compile). It carries MinVer labels, e.g. '#define AppVersion "1.0.2-beta"'.
@@ -42,7 +42,7 @@ VersionInfoTextVersion={#MyAppVersion}
 ;   SignedUninstaller=yes
 ; (SignTool itself is registered with: iscc /Ssigntool="signtool sign ... $f" setup.iss,
 ; or via Tools > Configure Sign Tools in Inno Setup.)
-DefaultDirName={commonpf}\Desktop Boxes
+DefaultDirName={commonpf}\Maktaby
 DefaultGroupName={#MyAppName}
 OutputDir=..\..\..\..\Installer
 OutputBaseFilename={#MyAppName} {#MyAppVersion}
@@ -56,7 +56,7 @@ InternalCompressLevel=max
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern dynamic
-SourceDir=src\DesktopBoxesUI\bin\Publish
+SourceDir=src\Maktaby\bin\Publish
 
 ; Gracefully close a running instance before files are replaced (Windows Restart Manager sends the
 ; app a close request, which our app handles cleanly incl. a final state save), and never let the
@@ -67,16 +67,16 @@ RestartApplications=no
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}";
 Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked;
-Name: "runApplication"; Description: "Launch Desktop Boxes"; GroupDescription: "Post-Installation:";
+Name: "runApplication"; Description: "Launch Maktaby"; GroupDescription: "Post-Installation:";
 
 [Files]
 ; Include everything from the publish folder
 Source: "*.*"; Excludes: "*.pdb,*.xml,*.log, createdump.exe"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Desktop Boxes"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"
-Name: "{autodesktop}\Desktop Boxes"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Desktop Boxes"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; Tasks: quicklaunchicon
+Name: "{group}\Maktaby"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"
+Name: "{autodesktop}\Maktaby"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Maktaby"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"; Tasks: quicklaunchicon
 
 [Run]
 ; Reopen silently when the app WAS running before the install and the launch task is unchecked.
@@ -86,19 +86,19 @@ Filename: "{app}\{#MyAppExe}"; \
 
 ; Post-install launch option (runs as the ORIGINAL user, not elevated admin).
 Filename: "{app}\{#MyAppExe}"; \
-    Description: "Launch Desktop Boxes"; \
+    Description: "Launch Maktaby"; \
     Flags: nowait postinstall skipifsilent runasoriginaluser; \
     Tasks: runApplication
 
 [UninstallRun]
 ; Make sure no running instance locks files during uninstall.
-Filename: "{cmd}"; Parameters: "/C taskkill /IM ""{#MyAppExe}"" /F /T"; Flags: runhidden; RunOnceId: "CloseDesktopBoxes"
+Filename: "{cmd}"; Parameters: "/C taskkill /IM ""{#MyAppExe}"" /F /T"; Flags: runhidden; RunOnceId: "CloseMaktaby"
 
 [Code]
 var
   WasRunning: Boolean;
 
-function IsDesktopBoxesRunning(): Boolean;
+function IsMaktabyRunning(): Boolean;
 var
   ResultCode: Integer;
 begin
@@ -115,18 +115,18 @@ end;
 function InitializeSetup(): Boolean;
 begin
   // Remember BEFORE anything closes the app, so it can be reopened afterwards.
-  WasRunning := IsDesktopBoxesRunning();
+  WasRunning := IsMaktabyRunning();
   Result := True;
 end;
 
 function ShouldAutoReopen(): Boolean;
 begin
-  // Reopen when it was open and the user did NOT also tick "Launch Desktop Boxes"
+  // Reopen when it was open and the user did NOT also tick "Launch Maktaby"
   // (otherwise the post-install entry launches it).
   Result := WasRunning and (not WizardIsTaskSelected('runApplication'));
 end;
 
 function InitializeUninstall(): Boolean;
 begin
-  Result := (MsgBox('Are you sure you want to uninstall Desktop Boxes?', mbConfirmation, MB_YESNO) = IDYES);
+  Result := (MsgBox('Are you sure you want to uninstall Maktaby?', mbConfirmation, MB_YESNO) = IDYES);
 end;

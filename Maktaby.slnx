@@ -1,0 +1,24 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Folder Name="/Solution Items/">
+    <File Path="agents.md" />
+    <File Path="build.ps1" />
+    <File Path="build_publish.ps1" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Build.targets" />
+    <File Path="Directory.Packages.props" />
+    <File Path="installer.iss" />
+    <File Path="README.md" />
+  </Folder>
+  <Project Path="src/Maktaby.WidgetsCreator/Maktaby.WidgetsCreator.csproj" Id="9ce93e5f-676c-4519-8b94-5757cf251ade" />
+  <Project Path="src/Maktaby/Maktaby.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="src/Maktaby.LiveWallpaper/Maktaby.LiveWallpaper.csproj" Id="34ac74dd-ecef-4511-990e-09b07d714091" />
+  <Project Path="src/Maktaby.WidgetSdk/Maktaby.WidgetSdk.csproj" Id="7f3a2c1d-9b4e-4f5a-8c6d-1e2f3a4b5c6d" />
+  <Project Path="src/Maktaby.Native/Maktaby.Native.csproj" Id="a76d5e12-6c95-49bd-a18e-55c916af14a6" />
+  <Project Path="src/Maktaby.Shared/Maktaby.Shared.csproj" Id="8b255fd0-c0c5-4e2c-96d2-7815d83abad8" />
+</Solution>

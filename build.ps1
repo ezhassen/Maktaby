@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-    Builds, publishes and packages Desktop Boxes, and manages git-tag-driven versions.
+    Builds, publishes and packages Maktaby, and manages git-tag-driven versions.
 
 .DESCRIPTION
     Versions come from GIT TAGS via MinVer:
@@ -50,16 +50,16 @@ param(
 
 $ErrorActionPreference = "Stop"
 $solutionRoot = $PSScriptRoot
-$project = "$PSScriptRoot\src\DesktopBoxesUI\DesktopBoxesUI.csproj"
-$publishDir = "$PSScriptRoot\src\DesktopBoxesUI\bin\Publish"
-$publishedExe = Join-Path $publishDir "DesktopBoxesUI.exe"
+$project = "$PSScriptRoot\src\Maktaby\Maktaby.csproj"
+$publishDir = "$PSScriptRoot\src\Maktaby\bin\Publish"
+$publishedExe = Join-Path $publishDir "Maktaby.exe"
 $installerDir = "$PSScriptRoot\Installer"
 
 function Show-Help
 {
     Write-Host @"
 ========================================
- Desktop Boxes - build script
+ Maktaby - build script
 ========================================
 
  USAGE
@@ -101,8 +101,8 @@ if ($ShowHelp -or $Action -eq '' -or $Action -eq 'Help')
     exit 0
 }
 
-$publishDir = "$PSScriptRoot\src\DesktopBoxesUI\bin\Publish"
-$publishedExe = Join-Path $publishDir "DesktopBoxesUI.exe"
+$publishDir = "$PSScriptRoot\src\Maktaby\bin\Publish"
+$publishedExe = Join-Path $publishDir "Maktaby.exe"
 $installerDir = "$PSScriptRoot\Installer"
 
 function Get-BuiltExeVersion {
@@ -263,10 +263,10 @@ function Build-Project {
 
     Write-Host "`n✓ Build completed successfully!" -ForegroundColor Green
 
-    $outputPath = Join-Path $solutionRoot "src\DesktopBoxesUI\bin\$Config\$Framework"
+    $outputPath = Join-Path $solutionRoot "src\Maktaby\bin\$Config\$Framework"
     if (Test-Path $outputPath) {
         Write-Host "`nOutput location: $outputPath" -ForegroundColor Cyan
-        $exePath = Join-Path $outputPath "DesktopBoxesUI.exe"
+        $exePath = Join-Path $outputPath "Maktaby.exe"
         if (Test-Path $exePath) {
             $v = (Get-Item $exePath).VersionInfo
             Write-Host "Executable Version : $($v.FileVersion)" -ForegroundColor Green

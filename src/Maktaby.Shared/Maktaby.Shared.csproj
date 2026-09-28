@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<TargetFramework>$(SharedTargetFrameworWindows)</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<UseWPF>true</UseWPF>
+		<Description>Shared WPF controls and services for Maktaby.</Description>
+		<LangVersion>latest</LangVersion>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<IsTrimmable>false</IsTrimmable>
+		<EnableAot>false</EnableAot>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Serilog" />
+		<PackageReference Include="CommunityToolkit.Mvvm" />
+		<PackageReference Include="WPF-UI" />
+		<PackageReference Include="Microsoft.Web.WebView2" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <ProjectReference Include="..\Maktaby.Native\Maktaby.Native.csproj" />
+	</ItemGroup>
+</Project>

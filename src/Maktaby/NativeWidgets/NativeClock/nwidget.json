@@ -1,0 +1,10 @@
+{
+  "name": "Analog Clock",
+  "author": "Maktaby",
+  "description": "Built-in analog clock (native widget).",
+  "version": "1.0",
+  "width": 300,
+  "height": 300,
+  "resizable": true,
+  "supportsTheme": true
+}

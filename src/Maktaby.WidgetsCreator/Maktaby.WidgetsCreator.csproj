@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>$(SharedTargetFrameworWindows)</TargetFramework>
+		<TargetPlatformMinVersion>$(SharedTargetPlatformMinVersion)</TargetPlatformMinVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+		<ApplicationIcon>Assets\app.ico</ApplicationIcon>
+		<Description>Authoring tool for Maktaby web widgets.</Description>
+		<IsTrimmable>false</IsTrimmable>
+		<EnableAot>false</EnableAot>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Maktaby.Shared\Maktaby.Shared.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="WPF-UI" />
+		<PackageReference Include="Microsoft.Web.WebView2" />
+		<PackageReference Include="Serilog" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Resource Include="Assets\app.ico" />
+	</ItemGroup>
+</Project>

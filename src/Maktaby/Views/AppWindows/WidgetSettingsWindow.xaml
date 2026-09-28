@@ -1,0 +1,61 @@
+<appwin:AppFluentWindow
+    x:Class="Maktaby.Views.AppWindows.WidgetSettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:appwin="clr-namespace:Maktaby.Views.AppWindows"
+    Title="Widget Settings"
+    Width="380"
+    Height="480"
+    MinWidth="320"
+    MinHeight="240"
+    WindowStartupLocation="CenterOwner">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--  Shared title bar (AppFluentWindow); title rebound to WindowTitle below.  -->
+        <ContentControl
+            Grid.Row="0"
+            Content="{Binding TitleBar, RelativeSource={RelativeSource AncestorType={x:Type appwin:AppFluentWindow}}}"
+            Focusable="False" />
+
+        <ScrollViewer
+            Grid.Row="1"
+            Margin="16,8,16,8"
+            HorizontalScrollBarVisibility="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="SettingsHost" Orientation="Vertical" />
+        </ScrollViewer>
+
+        <Border
+            Grid.Row="2"
+            Padding="12,8"
+            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,1,0,0">
+            <Grid>
+                    <ui:Button
+                        HorizontalAlignment="Left"
+                        Appearance="Secondary"
+                        Click="Reset_Click"
+                        Content="Reset to defaults" />
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+                    <ui:Button
+                        Appearance="Secondary"
+                        Click="Cancel_Click"
+                        Content="Cancel"
+                        IsCancel="True" />
+                    <ui:Button
+                        Margin="8,0,0,0"
+                        Appearance="Primary"
+                        Click="Save_Click"
+                        Content="Save"
+                        IsDefault="True" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</appwin:AppFluentWindow>

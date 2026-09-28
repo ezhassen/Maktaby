@@ -1,4 +1,4 @@
-# DesktopBoxes — Agents Guide
+# Maktaby — Agents Guide
 
 This file describes how autonomous agents (and contributors) should work in this repository.
 Follow it to keep the architecture clean and the build green.
@@ -8,7 +8,7 @@ Follow it to keep the architecture clean and the build green.
 - **Never** use scripts to edit project files, use only the Edit Tool
 - **Never** put WPF, Win32 P/Invoke, or Shell COM code in the `Core` project folders.
   Core may only define models, interfaces, and pure-.NET service implementations.
-- **Never** scatter `DllImport` / P/Invoke declarations outside the shared `WindowsNative`
+- **Never** scatter `DllImport` / P/Invoke declarations outside the shared `Maktaby.Native`
   project. Add new native APIs there (hand-rolled `[DllImport]`, never `LibraryImport` for structs
   the source generator can't marshal, and never CsWin32 — the repo does not use it). Call them
   from `Win32APIs/Services` (UI) or directly where the engine already does, converting to Core
@@ -21,7 +21,7 @@ Follow it to keep the architecture clean and the build green.
   for `[ObservableProperty]` wherever the generator supports it (it does since 8.4):
   `[ObservableProperty] public partial string Name { get; set; }` instead of
   `[ObservableProperty] private string _name;`.
-- `DesktopBoxesUI/app.manifest` declares PerMonitorV2 DPI awareness — do not remove it, or popups
+- `Maktaby/app.manifest` declares PerMonitorV2 DPI awareness — do not remove it, or popups
   and geometry misbehave after display scale changes. Do not add a `compatibility` section to it
   either: SxS activation fails on this machine when one is present (verified by bisecting). Container rescaling
   keys off `DesktopResolution` (DIP work area) only — rescaling by the DIP ratio preserves both physical
@@ -57,10 +57,10 @@ Follow it to keep the architecture clean and the build green.
 - **Core/Interfaces** — define contracts, including platform abstractions. Use Core geometry
   types (`RectD`, `PointD`, `SizeD`) instead of WPF/Win32 coordinate types.
 - **Core/Services** — only platform-independent implementations (no IO to OS specifics).
-- **Shell/** — Windows Shell behavior. Shell COM native interop itself lives in `WindowsNative`
+- **Shell/** — Windows Shell behavior. Shell COM native interop itself lives in `Maktaby.Native`
   (`Shell32`/`ShellCom`); `Shell/` keeps only the calling services.
 - **Win32APIs/** — raw Win32 callers. `NativeMethods/Win32Apis.cs` is the UI's thin wrapper over
-  `WindowsNative`; `Services` holds the callers. All declarations live in `WindowsNative`.
+  `Maktaby.Native`; `Services` holds the callers. All declarations live in `Maktaby.Native`.
   Desktop-band glue (ownership, tool-window/minimize styles, activation and z-order pins) lives
   in `Win32APIs/Services/DesktopLayer.cs` — attach new desktop windows through
   `DesktopLayer.Attach` instead of copying the sequence.
@@ -72,7 +72,7 @@ Follow it to keep the architecture clean and the build green.
 - **Helpers/** static or sealed (shared) helper classes can have WPF types
 - **WPFServices/** Services that access WPF types directly (like ImageSource)
 - **WebWidgets/** for built in app widgets
-- **DesktopBoxes.WidgetSdk/** (`src/`) — plugin contracts only (`INativeWidget`, base control,
+- **Maktaby.WidgetSdk/** (`src/`) — plugin contracts only (`INativeWidget`, base control,
   manifest, folder-kind helper). BCL + WPF framework, no packages. Plugin authors reference
   the built DLL; never move host logic here.
 - **Core/Services/NativeWidgetService** — native widget discovery/compile/load (Roslyn +
@@ -95,15 +95,15 @@ Follow it to keep the architecture clean and the build green.
 
 ## Adding a new native API (example)
 
- 1. Declare it by hand in the shared `WindowsNative` project (`User32`/`Kernel32`/`Shell32`/… by
+ 1. Declare it by hand in the shared `Maktaby.Native` project (`User32`/`Kernel32`/`Shell32`/… by
     owning DLL; structs in `NativeTypes.cs`, constants in `Win32Constants.cs`, callbacks in
     `NativeDelegates.cs`, desktop-layer core in `Desktop/DesktopLayerHostBase.cs`). Use `[DllImport]`
     (NOT `LibraryImport` — the source generator can't marshal structs like `SHFILEINFOW`), plain
-    `IntPtr` handles, and `WindowsNative` geometry types (`RECT`, `POINT`, `SIZE`). `WindowsNative`
+    `IntPtr` handles, and `Maktaby.Native` geometry types (`RECT`, `POINT`, `SIZE`). `Maktaby.Native`
     takes no dependencies except Serilog (layer lifecycle logging only).
  2. The thin, named wrapper `Win32APIs/NativeMethods/Win32Apis.cs` re-exposes exactly the APIs
     the UI uses, so every native call in the codebase goes through `Win32Apis` and never P/Invoke
-    directly. The engine calls `WindowsNative` directly.
+    directly. The engine calls `Maktaby.Native` directly.
  3. Use `Win32Apis` from a class in `Win32APIs/Services`, converting to/from Core geometry types
     (`RectD`, `PointD`, `SizeD`). Do NOT take native addresses or use `void*` handles.
  4. Win32APIs service classes that call these APIs are marked
@@ -111,8 +111,8 @@ Follow it to keep the architecture clean and the build green.
     keep that attribute in sync when you add newer-API usage. The project suppresses CA1416 globally
     (it is a Windows-only app), but the attribute is still good documentation.
  5. Expose behavior through a Core interface; inject the implementation in `App.xaml.cs`.
- 6. Reference `WindowsNative` from the consuming `.csproj` (`DesktopBoxesUI`,
-    `DesktopLiveWallPaperEngine` and `WPFShared` already do).
+ 6. Reference `Maktaby.Native` from the consuming `.csproj` (`Maktaby`,
+    `Maktaby.LiveWallpaper` and `Maktaby.Shared` already do).
 
 ## Verifying changes
 
@@ -187,7 +187,7 @@ that draws, at the cursor, the hit-test result, z-order, and the surface's style
 
 ## Shared pause supervision (auto-pause)
 
-`WindowsNative/Playback/PauseSupervision.cs` owns **one** process-wide `PlaybackSupervisor`.
+`Maktaby.Native/Playback/PauseSupervision.cs` owns **one** process-wide `PlaybackSupervisor`.
 Both hosts subscribe to it instead of each newsing their own (they used to: the engine's
 `EnsurePlayback` and `DesktopManager.StartWidgetAutoPause` each built a supervisor, so every
 WinEvent was delivered twice and every evaluation walked all top-level windows twice).
@@ -213,7 +213,7 @@ WinEvent was delivered twice and every evaluation walked all top-level windows t
   the widget host's supervision. If every subscriber is suspended the whole evaluation — the
   window capture included — is skipped.
 - `extraExcludedWindowClasses` is effectively vestigial for both hosts: the engine is a
-  library inside `DesktopBoxesUI`, so its `WallpaperWindow` already dies at the `pid ==
+  library inside `Maktaby`, so its `WallpaperWindow` already dies at the `pid ==
   OwnPid` filter, and the widget host passes `null`.
 - Enable conditions: engine attaches from `UpdatePauseSupervision` (enabled AND a renderer
   that can pause — video/web/animated GIF); the desktop app attaches from
@@ -251,12 +251,12 @@ WinEvent was delivered twice and every evaluation walked all top-level windows t
   2. The drag crosshair / drag-image is offset on **multi-DPI** setups because `GetScreenDragPoint()`
      (around `BoxContainerWindow.xaml.cs:824`) uses `PointToScreen` instead of `GetCursorPos` combined with
      per-monitor DPI. `Shcore.GetDpiForMonitorTyped` + `User32.MonitorFromPoint` already live in
-     `WindowsNative` but are not yet wrapped in `Win32Apis`.
-- **`WindowExceptionHandler` unhandled-exception flow (lives in WPFShared):** `WPFShared.Helpers.ExceptionHandler.Register(app, options)`
+     `Maktaby.Native` but are not yet wrapped in `Win32Apis`.
+- **`WindowExceptionHandler` unhandled-exception flow (lives in Maktaby.Shared):** `Maktaby.Shared.Helpers.ExceptionHandler.Register(app, options)`
   wires `DispatcherUnhandledException` / `AppDomain` / `TaskScheduler` (returns `IDisposable` to unwire);
   `App.xaml.cs:OnStartup` calls it (`#if !DEBUG` gate) with the app-specific ignorable check and log sinks.
-  The dialog is a `Wpf.Ui.Controls.FluentWindow` (`WPFShared/Controls/WindowExceptionHandler.xaml`, no host
-  assets referenced) bound to `WindowExceptionHandlerViewModel` (`WPFShared/ViewModels`, `CommunityToolkit.Mvvm`:
+  The dialog is a `Wpf.Ui.Controls.FluentWindow` (`Maktaby.Shared/Controls/WindowExceptionHandler.xaml`, no host
+  assets referenced) bound to `WindowExceptionHandlerViewModel` (`Maktaby.Shared/ViewModels`, `CommunityToolkit.Mvvm`:
   `[ObservableProperty]`, `[RelayCommand]`).
   It offers **Continue** (keep app alive, `HasChosenContinue=true`, no shutdown) and **Exit Application**
   (`Danger`), plus **Copy details**; only **Exit Application** shuts down — closing via the X button,
@@ -268,7 +268,7 @@ WinEvent was delivered twice and every evaluation walked all top-level windows t
   write-combined private mappings, ~6 MB/s in the post-resume state). Managed teardown is complete when this
   happens (zero renderers/players/D3D wrappers left, threads reaped) — the strands are purely native and only
   a driver reset reclaims them, so **every full video-pipeline destroy has a permanent ~32 MB/monitor cost**.
-  Consequences, all in `DesktopLiveWallPaperEngine/Engine.cs` unless noted: transient notifications (display
+  Consequences, all in `Maktaby.LiveWallpaper/Engine.cs` unless noted: transient notifications (display
   change, TaskbarCreated, unlock) must NEVER run an immediate `ReapplyAll` — they go through
   `OnTopologyMightHaveChanged` (cheap re-glue) + the settled pass, which rebuilds only on real topology
   disagreement; `ReapplyAll` is reserved for genuine layer/device loss. Resume arms a 10 s settle

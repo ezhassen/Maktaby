@@ -54,7 +54,7 @@ function Show-Help
 {
     Write-Host @"
 ========================================
- Desktop Boxes - release publisher
+ Maktaby - release publisher
 ========================================
 
  USAGE
@@ -100,7 +100,7 @@ if ($ShowHelp)
     exit 0
 }
 
-$exeName = "DesktopBoxesUI.exe"
+$exeName = "Maktaby.exe"
 
 # --- 1. Clean working tree -------------------------------------------------
 $status = (Run-Git "status --porcelain") -join "`n"

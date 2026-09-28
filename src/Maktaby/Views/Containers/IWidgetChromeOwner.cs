@@ -1,0 +1,18 @@
+using Maktaby.ViewModels;
+using System.Windows;
+using System.Windows.Controls;
+
+namespace Maktaby.Views.Containers;
+
+/// <summary>What <see cref="WidgetChromeOverlay"/> needs from the window it frames.
+/// Implemented by <see cref="WebWidgetWindow"/> and <see cref="NativeWidgetWindow"/> so the
+/// overlay stays single-sourced: geometry/events flow through <see cref="Window"/>, widget
+/// behavior through the rest.</summary>
+public interface IWidgetChromeOwner
+{
+    Window Window { get; }
+    ContainerViewModel ContainerViewModel { get; }
+    MenuItem? LockMenuItem { get; }
+    void ShowWidgetMenu();
+    void SetHover(bool hover);
+}

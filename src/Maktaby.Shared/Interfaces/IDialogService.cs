@@ -1,0 +1,36 @@
+using System.Windows;
+using Wpf.Ui.Controls;
+
+namespace Maktaby.Shared.Interfaces;
+
+/// <summary>
+/// Configurable options for a content dialog shown through <see cref="IDialogService"/>.
+/// </summary>
+public sealed record DialogOptions
+{
+    public string? Title { get; init; }
+    public object? Content { get; init; }
+    public string? PrimaryButtonText { get; init; }
+    public string? SecondaryButtonText { get; init; }
+    public string? CloseButtonText { get; init; }
+    public ContentDialogButton DefaultButton { get; init; } = ContentDialogButton.Close;
+    public ControlAppearance? PrimaryButtonAppearance { get; init; }
+    public ControlAppearance? SecondaryButtonAppearance { get; init; }
+    public ControlAppearance? CloseButtonAppearance { get; init; }
+}
+
+/// <summary>
+/// Application-wide replacement for <see cref="System.Windows.MessageBox"/> that renders WPF-UI
+/// <see cref="ContentDialog"/>s on the active host window. Falls back to the native message box when
+/// no window currently provides a dialog host (e.g. a tray-only flow with no visible window).
+/// </summary>
+public interface IDialogService
+{
+    Task ShowMessageAsync(string message, DialogOptions? options = null, Window? owner = null, CancellationToken cancellationToken = default);
+    Task ShowMessageAsync(string content, string title, Window? owner = null);
+    Task<bool> ShowConfirmAsync(string message, DialogOptions? options = null, Window? owner = null, CancellationToken cancellationToken = default);
+    Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info, Window? owner = null);
+    Task<bool> ShowConfirmDangerAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger, Window? owner = null);
+    Task<bool> ShowConfirmDeleteAsync(string content, string title = "Confirm Delete", string confirmText = "Delete", ControlAppearance primaryButtonAppearance = ControlAppearance.Danger, Window? owner = null);
+    Task<ContentDialogResult> ShowAsync(DialogOptions options, Window? owner = null, CancellationToken cancellationToken = default);
+}

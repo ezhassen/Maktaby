@@ -1,0 +1,12 @@
+{
+  "Name": "Analog Clock",
+  "Author": "Maktaby",
+  "Description": "Built-in analog clock widget.",
+  "Version": "1.0.0",
+  "Width": 220,
+  "Height": 220,
+  "Resizable": true,
+  "AllowNetwork": false,
+  "CanSwitchTheme": true,
+  "Thumbnail": "thumbnail.png"
+}

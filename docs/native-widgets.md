@@ -1,7 +1,7 @@
 # Native widget plugins
 
 Native widgets are window widgets written in C# (WPF) instead of HTML/CSS/JS.
-They live side by side with web widgets in `%LocalAppData%\DesktopBoxes\UserWidgets\<slug>\`
+They live side by side with web widgets in `%LocalAppData%\Maktaby\UserWidgets\<slug>\`
 — the **folder name is the widget identity**, there is no id field. A folder containing
 `nwidget.json` belongs to the native loader, anything else to the web loader; detection
 never loads code. Built-in widgets ship next to the app in `NativeWidgets/` and appear in
@@ -54,20 +54,20 @@ How the host decides, in order: explicit `assembly` → any `*.cs` sources (comp
 ## 2. Assembly mode (single DLL)
 
 1. Create a .NET class library (`net10.0-windows`, WPF allowed).
-2. Reference `DesktopBoxes.WidgetSdk.dll` (shipped next to the app; match its version — the host reports the expected version in load errors).
+2. Reference `Maktaby.WidgetSdk.dll` (shipped next to the app; match its version — the host reports the expected version in load errors).
 3. Implement `INativeWidget` (easiest: derive `NativeWidgetControl`) with a **parameterless constructor**.
 4. Drop the DLL (+ its private dependencies) into the folder with `nwidget.json`.
 5. Gallery → Refresh → Place (user widgets ask a one-time trust consent, see §6).
 
 Private `*.dll` dependencies in the same folder resolve automatically. Framework and
 already-loaded assemblies (including WidgetSdk itself) unify with the host — do **not**
-ship your own copy of `DesktopBoxes.WidgetSdk.dll`; a version mismatch fails load with
+ship your own copy of `Maktaby.WidgetSdk.dll`; a version mismatch fails load with
 an explicit error telling you which version to reference.
 
 ## 3. Source mode (`.cs` + optional `.xaml`)
 
 Drop sources in the folder; the host compiles them **once** with Roslyn (Release) and
-caches the output under `%LocalAppData%\DesktopBoxes\NativeCache\<slug>\<sha256>\`
+caches the output under `%LocalAppData%\Maktaby\NativeCache\<slug>\<sha256>\`
 (portable PDB included, so you can attach a debugger and step through your sources).
 **Edit any source → hash changes → automatic recompile** on next load (gallery Refresh
 unloads the old assembly; open windows keep their version until closed).
@@ -78,7 +78,7 @@ Rules:
   contain type declarations (the host looks for an `INativeWidget` implementation).
   SDK-style implicit usings (`System`, `System.Linq`, `System.Windows`, …) are
   injected automatically, so sources read like a normal project file.
-- References available: the .NET + WPF framework surface and `DesktopBoxes.WidgetSdk`.
+- References available: the .NET + WPF framework surface and `Maktaby.WidgetSdk`.
   Need another library? Ship its DLL next to the sources (assembly mode) instead.
 - `*.xaml` files are embedded as manifest resources named `<slug>/<file>.xaml`.
   Load them with the SDK helper (loose XAML has no `x:Class` wiring — use `FindName`):
@@ -163,7 +163,7 @@ from the base) can implement `IWidgetSettingsProvider` directly with their own l
 | WinForms | `System.Windows.Forms.Integration.WindowsFormsHost` + any WinForms control | compile refs included; qualify ambiguous names (`System.Windows.Forms.Button` vs `System.Windows.Controls.Button` — the injected implicit usings cover the WPF side) |
 | Raw Win32 HWND | `HwndHost` subclass (`BuildWindowCore`/`DestroyWindowCore`) | works; host WPF hit-testing cannot see through airspace — raise the opt-in interaction events so chrome/activation keep working |
 | Direct3D11 | `D3DImage` (WPF) or `HwndHost` + own swapchain | stop presenting in `OnSuspend`; resume in `OnResume` |
-| SkiaSharp etc. | ship the NuGet DLLs next to your sources (`SKElement`); folder DLLs are added as compile references automatically (host-owned `DesktopBoxes.*` excluded to force type unification) | same airspace/interaction rules as HWND |
+| SkiaSharp etc. | ship the NuGet DLLs next to your sources (`SKElement`); folder DLLs are added as compile references automatically (host-owned `Maktaby.*` excluded to force type unification) | same airspace/interaction rules as HWND |
 | GTK | not supported | needs its own event loop; cannot be embedded in a WPF visual tree |
 
 HWND-backed content (WinForms, raw HWND, GPU swapchains) is subject to WPF airspace:
@@ -193,7 +193,7 @@ re-place it from the gallery to review and re-trust.
 keyed on content identity:
 
 - Placing a user widget prompts once: name, folder, and the full-trust warning.
-  Accepting records `slug → content hash` in `%AppData%\DesktopBoxes\NativeTrust.json`
+  Accepting records `slug → content hash` in `%AppData%\Maktaby\NativeTrust.json`
   (source hash, or DLL bytes; deleted with the widget).
 - Every window open re-checks the hash **before compiling or loading anything**.
   Edited content no longer matches → placeholder, no code runs, until re-placed.
@@ -205,13 +205,13 @@ keyed on content identity:
 | symptom | cause / fix |
 |---|---|
 | Folder missing from gallery | Not under `UserWidgets/`, or name starts with `.`. No `nwidget.json` means the web loader owns it. |
-| `No INativeWidget implementation found` | Reference the matching `DesktopBoxes.WidgetSdk` version; implement the interface or derive `NativeWidgetControl`; no top-level statements. |
+| `No INativeWidget implementation found` | Reference the matching `Maktaby.WidgetSdk` version; implement the interface or derive `NativeWidgetControl`; no top-level statements. |
 | `Ambiguous … types` / `Ambiguous … DLLs` | Set `type` / `assembly` in `nwidget.json`. |
 | `Compile failed: …` | First errors shown in logs + placeholder. Fix sources, gallery Refresh. |
 | Stale code after editing sources | Refresh the gallery (unloads), then close/reopen placed windows. |
 | "Untrusted plugin" placeholder | Content changed since consent (or never consented) — re-place from the gallery. |
 | Hover/click dead over HWND content | WPF can't see through airspace — raise the opt-in interaction events. |
-| Breakpoints not hit | Attach to `DesktopBoxesUI`, enable portable PDBs (already emitted); source path = your folder. |
+| Breakpoints not hit | Attach to `Maktaby`, enable portable PDBs (already emitted); source path = your folder. |
 
 ## 8. Limits (v1)
 

@@ -1,0 +1,76 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+		<TargetPlatformMinVersion>$(SharedTargetPlatformMinVersion)</TargetPlatformMinVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<!-- Windows-only desktop app: platform guard (CA1416) is unnecessary noise. -->
+		<!--<NoWarn>$(NoWarn);CA1416;NU1701</NoWarn>-->
+		<UseWPF>true</UseWPF>
+		<LangVersion>latest</LangVersion>
+		<RootNamespace>Maktaby</RootNamespace>
+		<AssemblyName>Maktaby</AssemblyName>
+		<Description>Boxes (for files and folders), live wallpapers and widgets for your windows desktop.</Description>
+		<AssemblyTitle>Maktaby - Desktop Organizer</AssemblyTitle>
+		<Product>Maktaby</Product>
+		<ApplicationIcon>Assets\app.ico</ApplicationIcon>
+		<!-- Declares PerMonitorV2 DPI awareness (see app.manifest). Do not remove: without it
+		     popups and geometry misbehave after display scale changes. -->
+		<ApplicationManifest>app.manifest</ApplicationManifest>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<EnableDefaultPageItems>true</EnableDefaultPageItems>
+		<GenerateDocumentationFile>false</GenerateDocumentationFile>
+		<!--
+      .NET 9/10 enable CET (shadow stacks) by default. The UAC elevation path used by
+      "Run as administrator" (Process.Start with Verb="runas") crashes natively
+      (ntd.dll 0xc0000409) on CET-capable CPUs when the binary is CET-marked. This is an
+      uncatchable native fault, so disable CET marking for this binary.
+    -->
+		<CETCompat>false</CETCompat>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.Configuration" />
+		<PackageReference Include="Microsoft.Extensions.Configuration.Json" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+		<PackageReference Include="Serilog" />
+		<PackageReference Include="Serilog.Exceptions" />
+		<PackageReference Include="Serilog.Sinks.Console" Condition="'$(Configuration)' == 'Debug'" />
+		<PackageReference Include="Serilog.Sinks.File" />
+		<PackageReference Include="WPF-UI" />
+		<PackageReference Include="WPF-UI.Tray" />
+
+ 		<PackageReference Include="CommunityToolkit.Mvvm" />
+ 		<PackageReference Include="Microsoft.Web.WebView2" />
+		<!-- Code editors in WidgetDataWindow (HTML/CSS/JS highlighting). -->
+		<PackageReference Include="AvalonEdit" />
+		<!-- Runtime compile of native-widget sources; see NativeWidgetService. -->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+ 	</ItemGroup>
+
+	<ItemGroup>
+		<!-- Embedded WPF resources so windows/tray can load them via pack URI (ApplicationIcon only
+         embeds app.ico into the exe header). -->
+		<Resource Include="Assets\app.ico" />
+		<Resource Include="Assets\app_image.png" />
+		<Resource Include="Assets\github_dark.png" />
+		<Resource Include="Assets\github_light.png" />
+	</ItemGroup>
+
+ 	<ItemGroup>
+ 		<Content Include="WebWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+ 		<Content Include="NativeWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+ 	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Animations\" />
+	</ItemGroup>
+
+   <ItemGroup>
+ 	  <ProjectReference Include="..\Maktaby.LiveWallpaper\Maktaby.LiveWallpaper.csproj" />
+ 	  <ProjectReference Include="..\Maktaby.WidgetSdk\Maktaby.WidgetSdk.csproj" />
+ 	  <ProjectReference Include="..\Maktaby.Native\Maktaby.Native.csproj" />
+ 	  <ProjectReference Include="..\Maktaby.Shared\Maktaby.Shared.csproj" />
+   </ItemGroup>
+</Project>
