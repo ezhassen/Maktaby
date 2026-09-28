@@ -19,7 +19,7 @@
 #define MyNumericVersion TmpVer
 
 [Setup]
-AppId={{6D63481B-105C-49A8-8C5E-52F761DD120B}
+AppId={{EAF11F66-B8AF-48F3-A785-CE0394AE912E}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher=Ezz Hassan
