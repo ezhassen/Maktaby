@@ -144,7 +144,7 @@ public sealed class ClockWidget : NativeWidgetControl
         Content = new Viewbox { Stretch = Stretch.Uniform, Child = grid };
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-        _timer.Tick += (_, _) => UpdateHands();
+        _timer.Tick += OnTimerTick;
         // Start on load, not in the ctor: a constructed-but-never-shown instance (gallery
         // preview host, background tab) must not tick. Suspend-aware so a suspended reload
         // doesn't restart behind the host's back.
@@ -286,6 +286,8 @@ public sealed class ClockWidget : NativeWidgetControl
         try { _timer.Start(); } catch { }
     }
 
+    private void OnTimerTick(object? sender, EventArgs e) => UpdateHands();
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (IsSuspended) return;
@@ -327,6 +329,14 @@ public sealed class ClockWidget : NativeWidgetControl
         if (disposing)
         {
             try { _timer.Stop(); } catch { }
+            // Unhook everything that roots this instance. Hide/show destroys + recreates the
+            // host window every toggle, so a leaked root here keeps the whole visual tree
+            // (BitmapCache, DropShadow surface) and its collectible ALC alive per cycle.
+            try { _timer.Tick -= OnTimerTick; } catch { }
+            try { Loaded -= OnLoaded; } catch { }
+            try { Unloaded -= OnUnloaded; } catch { }
+            // Drop the effect surface reference with the tree; composition released it on detach.
+            try { _face.Effect = null; } catch { }
         }
         base.Dispose(disposing);
     }

@@ -170,6 +170,25 @@ public partial class App : Application
         }
         catch { }
 
+        // Power-resume render quiesce (see _resumeSuspendedWidgets): SystemEvents surfaces
+        // the same resume broadcast the wallpaper engine converges on. Handler marshals to
+        // the UI thread; unsubscribed in OnExit.
+        try
+        {
+            _powerModeHandler = (_, e) =>
+            {
+                try
+                {
+                    if (e.Mode != Microsoft.Win32.PowerModes.Resume) return;
+                    Log.Information("Power resume broadcast received — quiescing widget render stack");
+                    try { Dispatcher.BeginInvoke(new Action(OnPowerResumeQuiesce)); } catch { }
+                }
+                catch { }
+            };
+            Microsoft.Win32.SystemEvents.PowerModeChanged += _powerModeHandler;
+        }
+        catch { }
+
         // Watch the live desktop icon size ONLY while it is actually used (DefaultBoxIconSize is
         // Auto/null). With an explicit value pinned, monitoring is suspended.
         SyncDesktopIconSizeWatcher();
@@ -229,6 +248,23 @@ public partial class App : Application
     private bool _tierPauseActive;
     private bool _tierWasWallpaperPlaying;
     private readonly List<Views.Containers.WidgetWindow> _tierSuspendedWidgets = new();
+
+    // ---- post-resume render-stack quiesce (hibernate/sleep, tier sensor blind) ----
+    // After a long hibernation the driver can report tier 2 while stranding WPF
+    // render-target memory per frame (2026-09-28: DUCE.Channel.SyncFlush OOM x23,
+    // +2.9 GB private, +2100 GDI, flat managed heap — and zero tier lines in the log,
+    // so the tier-0 pass above never engaged). The only continuously-invalidating
+    // visual is an animated native widget (NativeClock at 10 Hz): hidden, nothing
+    // invalidates and nothing leaks; re-shown, every tick allocates through the
+    // degraded channel. This pass is therefore keyed on the power-resume broadcast
+    // (the same PBT_APMRESUMEAUTOMATIC the wallpaper engine converges on), not on
+    // the tier: suspend widgets + release their render resources + force the whole
+    // composition pipeline onto software up front, then hand everything back after
+    // one settle delay. Mirrors the tier-0 pass shape (suspend only what isn't,
+    // resume only what this pass suspended) so the two compose — see RecoverPowerResume.
+    private readonly List<Views.Containers.WidgetWindow> _resumeSuspendedWidgets = new();
+    private System.Windows.Threading.DispatcherTimer? _resumeRecoverTimer;
+    private Microsoft.Win32.PowerModeChangedEventHandler? _powerModeHandler;
 
     /// <summary>Render-tier fallback response (UI thread): tier 0 pauses playback and widgets,
     /// recovery resumes only what this paused. Fully guarded — tier events can arrive during
@@ -330,6 +366,154 @@ public partial class App : Application
                 if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Render tier recovered to {Tier}: resumed tier-paused playback + widgets | {Memory} | census AFTER restore: {Census}",
                     tier, MemoryFragment(), BuildWidgetCensus());
             }
+        }
+        catch { }
+    }
+
+    /// <summary>Power-resume render-stack quiesce (UI thread). Suspends live widget windows,
+    /// releases their cached render resources, and forces the whole WPF composition pipeline
+    /// onto software rendering until <see cref="RecoverPowerResume"/> runs after the settle
+    /// delay. Skips the widget half while the tier-0 pass is active (it owns suspend/resume
+    /// then); the pipeline override is still applied, it is a no-op under tier 0.
+    /// A resume landing inside the settle window recovers the earlier pass first, so its
+    /// suspended widgets are never orphaned, then quiesces fresh.</summary>
+    private void OnPowerResumeQuiesce()
+    {
+        try
+        {
+            if (_isExiting || Services is null) return;
+            RecoverPowerResume();
+
+            // Force software NOW, before any post-resume invalidation runs: the degraded
+            // channel strands per frame, and the first frames after resume are the storm
+            // (DPI remaps, layer re-glue, overlay re-syncs).
+            try { System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.SoftwareOnly; } catch { }
+
+            if (!_tierPauseActive)
+            {
+                _resumeSuspendedWidgets.Clear();
+                // Census BEFORE the drop loop, same as the tier-0 pass.
+                string censusBefore = BuildWidgetCensus();
+                int released = 0;
+                try
+                {
+                    var wins = Application.Current?.Windows;
+                    if (wins is not null)
+                    {
+                        foreach (var w in wins)
+                        {
+                            if (w is not Views.Containers.WebWidgetWindow
+                                && w is not Views.Containers.NativeWidgetWindow) continue;
+                            try
+                            {
+                                var ww = (Views.Containers.WidgetWindow)w;
+                                if (!ww.IsSuspended)
+                                {
+                                    ww.Suspend();
+                                    _resumeSuspendedWidgets.Add(ww);
+                                }
+                                // Same release the tier-0 pass does: cached render-target
+                                // bitmaps dropped, chrome overlay frozen hidden.
+                                ww.OnRenderTierChanged(true);
+                                released++;
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+                if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Power resume: quiesced {Widgets} widgets ({Released} tier-released) on software pipeline until settle | {Memory} | census BEFORE drop: {Census}",
+                    _resumeSuspendedWidgets.Count, released, MemoryFragment(), censusBefore);
+            }
+            else if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Power resume: tier-0 pass active, it owns widget suspend — software pipeline forced only | {Memory}",
+                MemoryFragment());
+
+            // One-shot recovery, not a watchdog: a single trailing pass after the
+            // driver/shell handshake settles (same 10 s the engine converges on).
+            try { _resumeRecoverTimer?.Stop(); } catch { }
+            _resumeRecoverTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(10)
+            };
+            _resumeRecoverTimer.Tick += (_, _) => RecoverPowerResume();
+            _resumeRecoverTimer.Start();
+        }
+        catch { }
+    }
+
+    /// <summary>One-shot recovery for <see cref="OnPowerResumeQuiesce"/>: hands the pipeline
+    /// decision back to the tier (safe at any tier — Default under tier 0 is still software)
+    /// and resumes exactly the widgets this pass suspended. Idempotent.
+    /// When the tier-0 pass is active it owns the widgets: our suspended list is adopted into
+    /// its list instead of resuming behind its back (those windows were already suspended when
+    /// tier-0 arrived, so the tier pass never listed them — adopting is the only way they get
+    /// resumed on tier recovery).</summary>
+    private void RecoverPowerResume()
+    {
+        try
+        {
+            try { _resumeRecoverTimer?.Stop(); } catch { }
+            _resumeRecoverTimer = null;
+            if (_isExiting || Services is null)
+            {
+                _resumeSuspendedWidgets.Clear();
+                return;
+            }
+            try { System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.Default; } catch { }
+            if (_resumeSuspendedWidgets.Count == 0) return;
+
+            if (_tierPauseActive)
+            {
+                int adopted = 0;
+                foreach (var w in _resumeSuspendedWidgets)
+                {
+                    try
+                    {
+                        if (w.IsClosed || w.IsClosing) continue;
+                        if (!_tierSuspendedWidgets.Contains(w)) { _tierSuspendedWidgets.Add(w); adopted++; }
+                    }
+                    catch { }
+                }
+                _resumeSuspendedWidgets.Clear();
+                if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Power resume recovery: tier-0 active, adopted {Adopted} suspended widgets into tier ownership | {Memory}",
+                    adopted, MemoryFragment());
+                return;
+            }
+            try
+            {
+                foreach (var w in _resumeSuspendedWidgets)
+                {
+                    try
+                    {
+                        // Dead windows stay dead: resuming one would resurrect its visual
+                        // tree and pin its plugin's collectible ALC (same rule as tier recovery).
+                        if (!w.IsClosed && !w.IsClosing) w.Resume();
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+            finally
+            {
+                _resumeSuspendedWidgets.Clear();
+            }
+            try
+            {
+                // Recovery hand-back runs over live windows only, so dropped cache modes are
+                // never written into a torn-down plugin visual (same rule as tier recovery).
+                var wins = Application.Current?.Windows;
+                if (wins is not null)
+                {
+                    foreach (var w in wins)
+                    {
+                        if (w is not Views.Containers.WidgetWindow ww) continue;
+                        try { ww.OnRenderTierChanged(false); } catch { }
+                    }
+                }
+            }
+            catch { }
+            if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information)) Log.Information("Power resume recovery: pipeline back to tier, widgets resumed | {Memory} | census AFTER restore: {Census}",
+                MemoryFragment(), BuildWidgetCensus());
         }
         catch { }
     }
@@ -477,6 +661,18 @@ public partial class App : Application
         // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
         Win32Apis.SystemTeardown = true;
         _isExiting = true;
+        // The power-resume quiesce owns suspended widgets + a one-shot timer: stop the timer
+        // (no recovery on the way out — the process is dying) and drop the SystemEvents
+        // subscription, whose hidden window would otherwise linger past shutdown.
+        try { _resumeRecoverTimer?.Stop(); } catch { }
+        _resumeRecoverTimer = null;
+        _resumeSuspendedWidgets.Clear();
+        try
+        {
+            if (_powerModeHandler is not null) Microsoft.Win32.SystemEvents.PowerModeChanged -= _powerModeHandler;
+            _powerModeHandler = null;
+        }
+        catch { }
         // Drop the shell icon before the UI thread blocks in teardown (ghost-icon prevention
         // on every exit path; the Exit-menu path already did this — dispose is idempotent).
         try

@@ -307,6 +307,30 @@ WinEvent was delivered twice and every evaluation walked all top-level windows t
   `TrySuspendAsync` (the WebView2 browser process really stops) and the WPF side has no `CacheMode`; the
   cache drop is still routed through the shared helper so a future control with one is covered for free.
   A surviving `Effect` count in the census is expected — only `CacheMode` is dropped.
+  **2026-09-28 evidence, and why there is now a SECOND, resume-driven mitigation:** after a long
+  hibernation, re-showing a hidden NativeClock blew private bytes 849 MB → 3769 MB and GDI 229 → 2362
+  with a flat managed heap, sustained ~4.5% CPU — and the log showed `OutOfMemoryException` ×23 inside
+  `DUCE.Channel.SyncFlush` ← `HwndTarget.UpdateWindowPos` (the MIL composition channel itself starving,
+  not managed code) with **zero tier lines anywhere**: the driver reported tier 2 while stranding
+  render-target memory per frame, so the tier-0 pass above never engaged. The trigger fits the channel
+  theory exactly: the clock is the only continuously-invalidating visual (10 Hz timer) — hidden, nothing
+  invalidates and nothing leaks; re-shown, every tick allocates through the degraded channel. So
+  `App.xaml.cs` now ALSO quiesces on the power-resume broadcast (`SystemEvents.PowerModeChanged` → `Resume`,
+  the same `PBT_APMRESUMEAUTOMATIC` the engine converges on), independent of tier:
+  `OnPowerResumeQuiesce` suspends live widget windows + releases their render resources (the same
+  `Suspend()` + `OnRenderTierChanged(true)` pair) and forces `RenderOptions.ProcessRenderMode` to
+  `SoftwareOnly` up front (dropping the suspect HW render targets before the post-resume storm of DPI
+  remaps / re-glues / overlay re-syncs runs); one one-shot 10 s timer (same settle as the engine, NOT a
+  watchdog) runs `RecoverPowerResume`, which hands the pipeline back to `RenderMode.Default` (safe at any
+  tier — Default under tier 0 is still software) and resumes exactly what this pass suspended. Composition
+  with the tier pass: quiesce skips the widget half while `_tierPauseActive` (tier owns it); recovery while
+  tier-0 is active ADOPTS our suspended list into `_tierSuspendedWidgets` instead of resuming behind its
+  back (those windows were already suspended when tier-0 arrived, so the tier pass never listed them —
+  without adoption nobody would resume them); a second resume inside the settle window recovers first,
+  then quiesces fresh, so nothing is orphaned. Both passes log UNGATED `Power resume…` lines with
+  `MemoryFragment()` + census (same reasoning as the tier lines). `ClockWidget.Dispose` also unhooks
+  `Tick`/`Loaded`/`Unloaded` and clears the face `Effect`, so hide/show cycles (which destroy + recreate
+  the host window every toggle) can't pin the old tree + ALC per cycle.
   **Attribution, not proof:** every tier transition logs a census (`Analog Clock=cache:1,fx:1,vis:38`)
   AND a `private=…MB managed=…MB gdi=… user=…` fragment (`App.MemoryFragment`). Those tier lines are
   deliberately UNGATED — they fire a handful of times per driver degradation, and a native-memory
