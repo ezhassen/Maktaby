@@ -1,10 +1,12 @@
-using Maktaby.WidgetSdk;
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using Maktaby.Core.Services;
+using Maktaby.Native;
+using Maktaby.Native.Playback;
 using Maktaby.ViewModels;
 using Maktaby.Views;
 using Maktaby.Views.Containers;
+using Maktaby.WidgetSdk;
 using Maktaby.Win32.NativeMethods;
 using Maktaby.Win32APIs.Services;
 using Maktaby.WPFServices;
@@ -16,8 +18,6 @@ using System.IO.Compression;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Interop;
-using Maktaby.Native;
-using Maktaby.Native.Playback;
 using static Maktaby.Native.Win32Constants;
 
 namespace Maktaby;
@@ -1136,7 +1136,7 @@ public sealed class DesktopManager
             SelectedIndex = 0,
         };
 
-        _containers.CreateContainer(DesktopItemContainerType.BoxContainer, 60, 60, 340, 460, childContainer: boxContainer);
+        _containers.CreateContainer(DesktopItemContainerType.BoxContainer, 60, 60, 345, 460, childContainer: boxContainer);
 
         // FolderPortal for Downloads at top-right
         string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
@@ -1536,7 +1536,6 @@ public sealed class DesktopManager
         }
     }
     #endregion
-
 
     #region Widget auto-pause
 
