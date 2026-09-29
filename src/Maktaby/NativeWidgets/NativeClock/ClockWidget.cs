@@ -66,9 +66,16 @@ public sealed class ClockWidget : NativeWidgetControl
         };
         _face = new Ellipse { Fill = _faceBrush, StrokeThickness = 6, Effect = _shadow };
 
-        // Static layer (face, ticks, numerals, labels): cached as one bitmap so the 10 Hz hand
-        // updates composite over it instead of re-tessellating + re-blurring (DropShadow) the
-        // whole face every frame. Hands stay live above it.
+        // Static layer (face, ticks, numerals, labels). Deliberately NOT BitmapCache-cached:
+        // a cache allocates its surface on the render device present at creation, and after a
+        // long sleep/hibernation that device is a zombie — the cache never hits, every 10 Hz
+        // invalidation re-renders + reallocates it, and each allocation strands driver-side
+        // (2026-09-29: +2.9 GB private, +2100 GDI from this one surface; the cache-less
+        // CalendarWidget stays flat, and deleting/re-adding the clock re-leaks because the
+        // device stays dead, not the window). WPF dirty-region tracking already scopes each
+        // tick to the moved hands + composite — the face/DropShadow only re-render when
+        // actually invalidated (resize, theme change) — so the cache bought ~nothing per tick.
+        // Hands stay live above the static layer.
         var staticLayer = new Grid { Width = Size, Height = Size };
         staticLayer.Children.Add(_face);
         for (int i = 0; i < 12; i++)
@@ -88,8 +95,6 @@ public sealed class ClockWidget : NativeWidgetControl
             (cardinal ? _cardinals : _ticks).Add(tick);
             staticLayer.Children.Add(tick);
         }
-        // Cache after children are in (before first render): one bitmap composite per frame.
-        staticLayer.CacheMode = new BitmapCache { EnableClearType = false, SnapsToDevicePixels = false };
         var grid = new Grid { Width = Size, Height = Size };
         grid.Children.Add(staticLayer);
         _hourHand = Hand(9, 84);
@@ -331,7 +336,7 @@ public sealed class ClockWidget : NativeWidgetControl
             try { _timer.Stop(); } catch { }
             // Unhook everything that roots this instance. Hide/show destroys + recreates the
             // host window every toggle, so a leaked root here keeps the whole visual tree
-            // (BitmapCache, DropShadow surface) and its collectible ALC alive per cycle.
+            // (DropShadow surface) and its collectible ALC alive per cycle.
             try { _timer.Tick -= OnTimerTick; } catch { }
             try { Loaded -= OnLoaded; } catch { }
             try { Unloaded -= OnUnloaded; } catch { }

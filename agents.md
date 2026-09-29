@@ -330,8 +330,21 @@ WinEvent was delivered twice and every evaluation walked all top-level windows t
   then quiesces fresh, so nothing is orphaned. Both passes log UNGATED `Power resume…` lines with
   `MemoryFragment()` + census (same reasoning as the tier lines). `ClockWidget.Dispose` also unhooks
   `Tick`/`Loaded`/`Unloaded` and clears the face `Effect`, so hide/show cycles (which destroy + recreate
-  the host window every toggle) can't pin the old tree + ALC per cycle.
-  **Attribution, not proof:** every tier transition logs a census (`Analog Clock=cache:1,fx:1,vis:38`)
+   the host window every toggle) can't pin the old tree + ALC per cycle.
+  **Attribution, not proof:** every tier transition logs a census (per-widget `cache`/`fx`/`vis`
+  counts — the clock now reads `cache:0,fx:1`, any `cache:1` on it after this date means a cache
+  crept back in)
+  **2026-09-29 root cause found — it was the `BitmapCache`, and it is gone:** deleting the clock
+  stopped the leak, a freshly added clock re-leaked, and the cache-less `CalendarWidget` stays flat —
+  so the leak was never a stale window, it was the cache surface itself: allocated on the render device
+  present at creation, that device is a zombie after long sleep/hibernation, the cache never hits again,
+  and every 10 Hz invalidation re-renders + reallocates it with each allocation stranding driver-side.
+  `ClockWidget` no longer sets `staticLayer.CacheMode` (comment at the site explains why); per-tick cost
+  without it is just the moved hands + composite via dirty-region tracking, the face/`DropShadowEffect`
+  only re-render when actually invalidated. Census expectation for the clock is now `cache:0,fx:1`.
+  The tier-0 + resume-quiesce machinery above is RETAINED (other/future widgets may still cache, and the
+  `Effect`/overlay handling still applies) — but a clock-only native-memory climb after this date means
+  the burner moved elsewhere, not the cache.)
   AND a `private=…MB managed=…MB gdi=… user=…` fragment (`App.MemoryFragment`). Those tier lines are
   deliberately UNGATED — they fire a handful of times per driver degradation, and a native-memory
   incident that only the gated `Health:` line could evidence would leave a release build with no
