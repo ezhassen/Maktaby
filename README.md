@@ -1,10 +1,23 @@
-# Maktaby
+# Maktaby - Windows Desktop Organizer
 
 <p align="center">
-  <img src=".github/assets/app_icon_svg.svg" alt="Maktaby — organize your desktop into resizable boxes" width="256" />
+  <img src=".github/assets/app_icon_svg.svg" alt="Maktaby logo" width="128" />
 </p>
 
-Organize your Windows desktop into **resizable, snap-able boxes** that pin your files, folders and app shortcuts above the desktop — so everything stays where you put it.
+<p align="center">
+  <strong>Maktaby turns a cluttered Windows desktop into a workspace you actually keep.</strong>
+</p>
+
+Your shortcuts, folders and files are grouped into **resizable, snap-able boxes** that live *above* the desktop instead of being buried in it — so they stay exactly where you put them, and the Windows desktop itself keeps working normally underneath.
+
+On top of that it adds the two things a plain desktop organizer never has:
+
+- **Widgets** — drop an HTML/CSS/JS or a C#/WPF widget onto the desktop for clocks, calendars, weather, notes or anything else you build yourself. Write them in the built-in editor, or install native plugins.
+- **Live wallpapers** — set a video or animated GIF as the desktop background, rendered behind the Windows icons with per-monitor support.
+
+Everything runs from the system tray, persists your layout between sessions, and stays out of the way: one double-click on the empty desktop hides every box and gives you a completely clean screen.
+
+> Windows 10 (2004 / build 19041) or later, 64-bit · [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) required · **Windows-only, x64**
 
 ---
 
@@ -83,31 +96,59 @@ Organize your Windows desktop into **resizable, snap-able boxes** that pin your 
 ### Box with items and widgets
 
 <p align="center">
-  <img src=".github/assets/clock-Widget.png" alt="A box containing app shortcuts on the desktop" width="220" />
+  <img src=".github/assets/Screenshot-Dark.webp" alt="A box containing app shortcuts on the desktop" />
 </p>
+
 <p align="center">
-  <img src=".github/assets/screenshot-box.png" alt="A box containing app shortcuts on the desktop" width="480" />
+  <img src=".github/assets/Screenshot-Light.webp" alt="A box containing app shortcuts on the desktop" />
+</p>
+
+<p align="center">
+  <img src=".github/assets/screenshot-box.webp" alt="A box containing app shortcuts on the desktop" />
 </p>
 
 ### Marquee → Create New
 
 <p align="center">
-  <img src=".github/assets/screenshot-marquee.png" alt="Dragging a marquee on empty space shows the Create New Box menu" width="480" />
+  <img src=".github/assets/screenshot-marquee.webp" alt="Dragging a marquee on empty space shows the Create New Box menu" width="480" />
 </p>
 
 ### Tray menu
 
 <p align="center">
-  <img src=".github/assets/screenshot-tray.png" alt="Tray icon context menu" width="320" />
+  <img src=".github/assets/screenshot-tray.webp" alt="Tray icon context menu" width="320" />
 </p>
 
 ### Settings
 
 <p align="center">
-  <img src=".github/assets/screenshot-settings.png" alt="Settings window with Appearance tab" width="480" />
+  <img src=".github/assets/screenshot-settings.webp" alt="Settings window with Appearance tab" width="480" />
 </p>
 
-## 🚀 Getting Started
+## 📥 Installation
+
+### Prerequisites
+
+| Requirement | Details |
+| --- | --- |
+| **Operating system** | Windows 10 version 2004 (build 19041) or later, or Windows 11. The app targets `net10.0-windows10.0.19041.0`. |
+| **Architecture** | **x64 only.** The installer is published as `win-x64`; there is no x86 or ARM64 build. (For now. Open issue and tell me if you want it or build from source) |
+| **.NET Desktop Runtime** | **.NET 10 Desktop Runtime (x64)** must be installed. The official installer is *framework-dependent*, not self-contained — without it Maktaby will not start. <br>[Download .NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| **WebView2 Runtime** | **Microsoft Edge WebView2 Evergreen Runtime** is required for web widgets and HTML-based live wallpapers. It ships preinstalled on Windows 11 and on most Windows 10 machines via Edge — if you have removed Edge, install it separately: <br>[Download WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
+| **Administrator rights** | The setup installs to `%ProgramFiles%\Maktaby` and requests elevation. |
+
+### Install
+
+1. Download the latest `Maktaby <version>.exe` from the [releases page](../../releases).
+2. Run it and accept the UAC prompt.
+3. On the final page, choose whether to **launch Maktaby** and whether to **start it on Windows startup** (both are ticked by default). The installer closes a running instance before updating and reopens it afterwards.
+4. The tray icon appears on first launch — that is where the app lives. There is no main window.
+
+To uninstall, use **Settings → Apps → Installed apps → Maktaby**. Uninstallation closes any running instance, removes the files, and cleans up the Windows startup entry.
+
+> **Note** — Maktaby layers its own windows *above* the Windows desktop and wallpaper. It does not replace Explorer, and it does not modify your desktop icons, existing files, or registry entries beyond the optional startup key.
+
+## 🛠️ Building from source
 
 ### Prerequisites
 
@@ -129,49 +170,7 @@ dotnet run --project src/Maktaby
 .\build.ps1 -Action Publish
 ```
 
-## 🏷️ Versioning & Releases
-
-Versions are computed automatically from git tags via [MinVer](https://github.com/adamralph/minver):
-
-```bash
-# Tag a release
-git tag -a v1.2.0 -m "1.2.0"
-
-# Tag a beta from develop
-git tag -a v1.2.0-beta.1 -m "beta"
-
-# Or use the helper script
-.\build.ps1 -Action Tag -Version 1.2.0-beta.1
-```
-
-The resulting installer is named accordingly: `Maktaby 1.2.0-beta.1.exe`
-
-## 🗂️ Project Structure
-
-```
-src/
-├── Maktaby/               # Main WPF application
-│   ├── Controls/          # Reusable controls (BoxControl, TrayIconUI, CollapsibleGroupBox, …)
-│   ├── Core/              # Models, interfaces, pure .NET services
-│   ├── Converters/        # Value converters
-│   ├── Resources/         # Styles, brushes, theme dictionaries
-│   ├── Services/          # Application services (dialog, loading, icon images)
-│   ├── Settings/          # User settings model
-│   ├── Shell/             # Shell COM interop & services
-│   ├── ViewModels/        # MVVM view models
-│   ├── Views/             # Windows (surface, settings, about, perf monitor, log viewer, …)
-│   ├── Win32APIs/         # Win32 P/Invoke wrappers + desktop-layer services
-│   └── WPFServices/       # WPF-specific services
-├── Maktaby.LiveWallpaper/ # Live wallpaper engine (image / GIF / video renderers, playback supervision)
-├── Maktaby.Shared/        # Shared models, dialogs, exception handler (used by app + wallpaper)
-├── Maktaby.WidgetSdk/     # Native widget plugin contract (INativeWidget, manifest, settings)
-├── Maktaby.WidgetsCreator/# Web widget editor (HTML/CSS/JS + preview + manifest)
-└── Maktaby.Native/        # Raw P/Invoke declarations (Win32, Shell, UxTheme, Shcore, …)
-Maktaby.slnx
-build.ps1                 # Build / publish / tag orchestrator
-installer.iss             # Inno Setup installer script
-docs/native-widgets.md    # Native widget authoring reference
-```
+Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) first. The script publishes the app to `src/Maktaby/bin/Publish` and compiles `installer.iss` into `Installer/Maktaby <version>.exe`.
 
 ## 🤝 Contributing
 
@@ -179,3 +178,70 @@ docs/native-widgets.md    # Native widget authoring reference
 2. Create a feature branch (`git checkout -b feature/my-feature`)
 3. Commit your changes
 4. Push and open a Pull Request
+
+Contributions are accepted under the same Apache-2.0 license as the project.
+
+---
+
+## 📄 License
+
+Maktaby is open-source software licensed under the **Apache License 2.0** — you can use, modify, and redistribute it (including commercially), provided you keep the license and state any changes. It comes with **no warranty**, and the authors are not liable for any damages arising from its use.
+
+Full text: [`LICENSE.txt`](LICENSE.txt) · Official terms: [apache.org/licenses/LICENSE-2.0](https://www.apache.org/licenses/LICENSE-2.0)
+
+---
+
+## 📦 Dependencies & Credits
+
+Maktaby stands on the shoulders of some excellent open-source projects. Thank you to everyone who maintains them.
+
+### Runtime & UI
+
+| Package | Version | Used for | Project |
+| --- | --- | --- | --- |
+| [WPF-UI](https://github.com/wpf-ui/WPF-UI) · [WPF-UI.Tray](https://github.com/wpf-ui/WPF-UI) | 4.3.0 | Fluent window chrome (Mica backdrop, rounded corners), theming, and the system tray icon | `Maktaby`, `Maktaby.Shared`, `Maktaby.WidgetsCreator` |
+| [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) | 8.4.2 | MVVM source generators (`[ObservableProperty]`, `[RelayCommand]`) | `Maktaby`, `Maktaby.Shared` |
+| [AvalonEdit](https://github.com/icsharpcode/AvalonEdit) | 6.3.1.120 | HTML / CSS / JavaScript syntax highlighting in the widget editor | `Maktaby` |
+
+### Web content
+
+| Package | Version | Used for | Project |
+| --- | --- | --- | --- |
+| [Microsoft.Web.WebView2](https://github.com/MicrosoftEdge/WebView2Feedback) | 1.0.4191.47 | Chromium host for web widgets and HTML live wallpapers. Requires the [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) at runtime. | `Maktaby`, `Maktaby.Shared`, `Maktaby.LiveWallpaper` |
+
+### Graphics & rendering (live wallpaper engine)
+
+| Package | Version | Used for | Project |
+| --- | --- | --- | --- |
+| [Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows) — `Direct3D11`, `Direct2D1`, `DirectComposition` | 3.8.3 | Direct3D / Direct2D video and GIF rendering, swapchains, desktop composition layer | `Maktaby.LiveWallpaper` |
+| [System.Drawing.Common](https://github.com/dotnet/runtime) | 10.0.12 | Frame extraction and image handling for animated wallpapers | `Maktaby.LiveWallpaper` |
+| [Microsoft.Windows.Compatibility](https://github.com/dotnet/runtime) | 10.0.12 | Compatibility shims (Shell/COM interop) | `Maktaby.LiveWallpaper` |
+
+### Widget SDK
+
+| Package | Version | Used for | Project |
+| --- | --- | --- | --- |
+| [Microsoft.CodeAnalysis.CSharp (Roslyn)](https://github.com/dotnet/roslyn) | 5.9.0 | Compiles C# native-widget sources at load time, with a hashed cache | `Maktaby` |
+
+### Infrastructure
+
+| Package | Version | Used for |
+| --- | --- | --- |
+| [Microsoft.Extensions.DependencyInjection](https://github.com/dotnet/runtime) | 10.0.12 | Service registration and the composition root |
+| [Microsoft.Extensions.Configuration(.Json)](https://github.com/dotnet/runtime) | 10.0.12 | Reading the app settings file |
+| [Serilog](https://github.com/serilog/serilog) | 4.4.0 | Structured logging |
+| [Serilog.Exceptions](https://github.com/serilog/serilog-exceptions) | 8.4.0 | Rich exception detail in the log |
+| [Serilog.Sinks.File](https://github.com/serilog/serilog) | 7.0.0 | Daily rolling log files (viewable in-app) |
+| [Serilog.Sinks.Console](https://github.com/serilog/serilog) | 6.1.1 | Debug-build console output |
+
+### Build & packaging
+
+| Tool | Version | Used for |
+| --- | --- | --- |
+| [MinVer](https://github.com/adamralph/minver) | 8.0.0 | Derives the assembly version from git tags |
+| [Inno Setup](https://jrsoftware.org/isinfo.php) | 6 | Builds the setup executable from `installer.iss` |
+| [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | 10.0.x | Build toolchain (`net10.0-windows10.0.19041.0`) |
+
+> All package versions are pinned centrally in [`Directory.Packages.props`](Directory.Packages.props) — that is the single place to bump or add a dependency.
+>
+> **Native widgets run with full trust.** A native widget is arbitrary .NET code executing inside the app with your privileges, so only install widgets from folders you trust. See [`docs/native-widgets.md`](docs/native-widgets.md) for the trust model.
