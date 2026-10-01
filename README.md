@@ -5,11 +5,13 @@
 ## Maktaby - Windows Desktop Organizer
 
 [![Windows 11](https://img.shields.io/badge/Windows%2011-0078D6?logo=windows11&logoColor=white)](#-installation)
-[![Latest release](https://img.shields.io/github/v/release/ezhassen/Maktaby?sort=semver)](https://github.com/ezhassen/Maktaby/releases)
-[![License](https://img.shields.io/badge/license-Apache2.0-orange)](#-license)
-[![CI](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions)
+[![Latest release](https://img.shields.io/github/v/release/ezhassen/Maktaby?sort=semver&label=release&color=blue)](https://github.com/ezhassen/Maktaby/releases)
+[![Latest beta](https://img.shields.io/github/v/release/ezhassen/Maktaby?include_prereleases&sort=semver&label=beta&color=orange)](https://github.com/ezhassen/Maktaby/releases)
+[![License](https://img.shields.io/badge/license-Apache2.0-orange.svg)](https://github.com/ezhassen/Maktaby/blob/main/LICENSE.txt)
+[![CI](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml)
+[![Release](https://github.com/ezhassen/Maktaby/actions/workflows/release.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions/workflows/release.yml)
 
-[**⬇ Download**](https://github.com/ezhassen/Maktaby/releases) · [Features](#-features) · [Screenshots](#-screenshots) · [Installation](#-installation) · [Build from source](#️-build-from-source)
+[**⬇ Download**](https://github.com/ezhassen/Maktaby/releases/latest) · [Features](#-features) · [Screenshots](#-screenshots) · [Installation](#-installation) · [Build from source](#️-build-from-source)
  <!-- to be added [FAQ](https://github.com/ezhassen/Maktaby/blob/main/docs/FAQ.md) · [Changelog](https://github.com/ezhassen/Maktaby/blob/main/docs/CHANGELOG.md) · -->
 
 ### Maktaby turns a cluttered Windows desktop into a workspace you actually keep
