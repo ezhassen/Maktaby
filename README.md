@@ -1,12 +1,20 @@
-# Maktaby - Windows Desktop Organizer
-
-<p align="center">
+<div align="center">
+  
   <img src=".github/assets/app_icon_svg.svg" alt="Maktaby logo" width="128" />
-</p>
+  
+## Maktaby - Windows Desktop Organizer
 
-<p align="center">
-  <strong>Maktaby turns a cluttered Windows desktop into a workspace you actually keep.</strong>
-</p>
+[![Windows 11](https://img.shields.io/badge/Windows%2011-0078D6?logo=windows11&logoColor=white)](#-installation)
+[![Latest release](https://img.shields.io/github/v/release/ezhassen/Maktaby?sort=semver)](https://github.com/ezhassen/Maktaby/releases)
+[![License](https://img.shields.io/badge/license-Apache2.0-orange)](#-license)
+<!-- [![CI](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions) -->
+
+[**⬇ Download**](https://github.com/ezhassen/Maktaby/releases) · [Features](#-features) · [Screenshots](#-screenshots) · [Installation](#-installation) · [Build from source](#️-build-from-source)
+ <!-- to be added [FAQ](https://github.com/ezhassen/Maktaby/blob/main/docs/FAQ.md) · [Changelog](https://github.com/ezhassen/Maktaby/blob/main/docs/CHANGELOG.md) · -->
+
+### Maktaby turns a cluttered Windows desktop into a workspace you actually keep
+
+</div>
 
 Your shortcuts, folders and files are grouped into **resizable, snap-able boxes** that live *above* the desktop instead of being buried in it — so they stay exactly where you put them, and the Windows desktop itself keeps working normally underneath.
 
@@ -147,8 +155,9 @@ Everything runs from the system tray, persists your layout between sessions, and
 To uninstall, use **Settings → Apps → Installed apps → Maktaby**. Uninstallation closes any running instance, removes the files, and cleans up the Windows startup entry.
 
 > **Note** — Maktaby layers its own windows *above* the Windows desktop and wallpaper. It does not replace Explorer, and it does not modify your desktop icons, existing files, or registry entries beyond the optional startup key.
+---
 
-## 🛠️ Building from source
+## 🛠️ Build from source
 
 ### Prerequisites
 
