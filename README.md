@@ -7,7 +7,7 @@
 [![Windows 11](https://img.shields.io/badge/Windows%2011-0078D6?logo=windows11&logoColor=white)](#-installation)
 [![Latest release](https://img.shields.io/github/v/release/ezhassen/Maktaby?sort=semver)](https://github.com/ezhassen/Maktaby/releases)
 [![License](https://img.shields.io/badge/license-Apache2.0-orange)](#-license)
-<!-- [![CI](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions) -->
+[![CI](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions)
 
 [**⬇ Download**](https://github.com/ezhassen/Maktaby/releases) · [Features](#-features) · [Screenshots](#-screenshots) · [Installation](#-installation) · [Build from source](#️-build-from-source)
  <!-- to be added [FAQ](https://github.com/ezhassen/Maktaby/blob/main/docs/FAQ.md) · [Changelog](https://github.com/ezhassen/Maktaby/blob/main/docs/CHANGELOG.md) · -->
@@ -147,10 +147,12 @@ Everything runs from the system tray, persists your layout between sessions, and
 
 ### Install
 
-1. Download the latest `Maktaby <version>.exe` from the [releases page](../../releases).
+1. Download the latest `Maktaby-<version>-x64-setup.exe` from the [releases page](../../releases). ([Download the newest release directly](https://github.com/ezhassen/Maktaby/releases/latest/download/Maktaby-LATEST-x64-setup.exe) — substitute the version in the URL.)
 2. Run it and accept the UAC prompt.
 3. On the final page, choose whether to **launch Maktaby** and whether to **start it on Windows startup** (both are ticked by default). The installer closes a running instance before updating and reopens it afterwards.
 4. The tray icon appears on first launch — that is where the app lives. There is no main window.
+
+Each release also publishes a SHA-256 checksum on the release page.
 
 To uninstall, use **Settings → Apps → Installed apps → Maktaby**. Uninstallation closes any running instance, removes the files, and cleans up the Windows startup entry.
 
@@ -180,6 +182,12 @@ dotnet run --project src/Maktaby
 ```
 
 Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) first. The script publishes the app to `src/Maktaby/bin/Publish` and compiles `installer.iss` into `Installer/Maktaby <version>.exe`.
+
+### Releasing
+
+Releases are tag-driven: push a `v1.0.33-beta.1` tag from `develop` for a pre-release, or a `v1.0.33` tag from `main` for a stable one. GitHub Actions builds the installer and publishes the release. Automatic version numbering is available via `.\build_publish.ps1`.
+
+Full details: **[docs/releasing.md](docs/releasing.md)**.
 
 ## 🤝 Contributing
 

@@ -64,14 +64,21 @@ function Show-Help
    1. Aborts on uncommitted/untracked changes
    2. Requires branch main or develop
    3. Pushes branch head to remote (if ahead)
-   4. Tags HEAD:  -Version wins, else git-derived sequential version
-                  (develop -> '-beta', main -> plain)   ... then pushes the TAG.
+   4. Tags HEAD:  -Version wins, else the next version CONTINUES the last tag's
+                  series (stable or beta) and is flavored by branch:
+                    develop: 1.0.32-beta.1 -> 1.0.32-beta.2   (same core)
+                             1.0.32       -> 1.0.33-beta.1   (new series)
+                    main:    1.0.32-beta.5 -> 1.0.32          (promote)
+                             1.0.32       -> 1.0.33          (next patch)
+                  Then pushes the TAG.
                   If HEAD is already tagged with a matching flavor, the existing
                   tag is REUSED (nothing new is created).
    5. Runs build.ps1 -Action Publish
 
  PARAMETERS
-   -Version        <x.y.z[-pre]>   explicit tag version (default: auto)
+   -Version        <x.y.z[-pre]>   explicit tag version (default: auto).
+                                   Use this for a deliberate major/minor cut,
+                                   e.g. -Version 1.1.0
    -Configuration  <Debug|Release>
    -Runtime        <rid>
    -Framework      <tfm>
@@ -156,7 +163,20 @@ else
 }
 
 # --- 4. Resolve version + tag HEAD ------------------------------------------
-# Sequential scheme: next = nearest tag's numeric core with PATCH+1 (v1.0.0 -> 1.0.1).
+# Version scheme: the branch decides the CHANNEL, and the channel is continued
+# from whatever the last tag was — stable or beta — so a beta series converges on
+# one number instead of crawling the patch counter.
+#
+#   develop, last = 1.0.32-beta       -> 1.0.32-beta.1     (start the series)
+#   develop, last = 1.0.32-beta.1     -> 1.0.32-beta.2     (continue it)
+#   develop, last = 1.0.32-beta.9     -> 1.0.32-beta.10    (numeric, not string)
+#   develop, last = 1.0.32 (stable)   -> 1.0.33-beta.1     (next line)
+#   main,    last = 1.0.32-beta.5     -> 1.0.32            (promote the series)
+#   main,    last = 1.0.32 (stable)   -> 1.0.33            (next patch)
+#
+# A -beta line therefore never bumps the patch: 1.0.32-beta, 1.0.32-beta.1,
+# 1.0.32-beta.2 ... all target 1.0.32, which is what main then ships.
+# -Version still overrides everything, for deliberate major/minor cuts.
 #
 # REUSE RULE: when HEAD is ALREADY tagged and that tag matches the branch flavor
 # (develop => name contains 'beta'; main => plain, no prerelease), NO new tag is
@@ -179,10 +199,71 @@ function Test-TagMatchesFlavor([string]$name, [string]$br)
     return $core -notmatch '-'     # main: plain release tags only
 }
 
-function Get-BranchFlavoredVersion([string]$numeric, [string]$br)
+# Splits "v1.0.32-beta.2" into @{ Core = "1.0.32"; Pre = "beta.2" }.
+# A stable tag yields Pre = ''. Only the first '-' is the prerelease boundary, so
+# a build-metadata '+sha' suffix would stay in Pre — callers want it gone.
+function Split-Version([string]$version)
 {
-    if ($br -eq 'develop') { return "$numeric-beta" }
-    return $numeric
+    $core = $version.TrimStart('v')
+    $plus = $core.IndexOf('+')
+    if ($plus -ge 0) { $core = $core.Substring(0, $plus) }
+
+    $dash = $core.IndexOf('-')
+    if ($dash -lt 0)
+    {
+        return @{ Core = $core; Pre = '' }
+    }
+    return @{ Core = $core.Substring(0, $dash); Pre = $core.Substring($dash + 1) }
+}
+
+# PATCH+1 on the numeric core ("1.0.32" -> "1.0.33"). A pre-release label is
+# discarded first: bumping the core of "1.0.32-beta.5" must yield 1.0.33, never
+# 1.0.33-beta.5.
+function Step-Patch([string]$core)
+{
+    $parts = $core.Split('.')
+    if ($parts.Count -ge 3)
+    {
+        $parts[2] = [string]([int]$parts[2] + 1)
+    }
+    return ($parts -join '.')
+}
+
+# Next version for a branch, given the last tag's parsed form.
+#   develop: continue a beta series in place, or open a new one from a stable tag.
+#   main:    promote the beta series to its core, else patch+1 off a stable tag.
+function Get-NextVersion([string]$core, [string]$pre, [string]$br)
+{
+    $isBetaSeries = $pre -match '^beta(\.\d+)?$'
+
+    if ($br -eq 'develop')
+    {
+        # Continue an open beta series on the SAME core: 1.0.32-beta -> .1, .1 -> .2,
+        # .9 -> .10. The counter is parsed as an int so ordering never becomes
+        # lexicographic ("beta.10" must sort above "beta.9").
+        if ($isBetaSeries)
+        {
+            $n = 0
+            if ($pre -match '^beta\.(\d+)$') { $n = [int]$Matches[1] }
+            return "$core-beta.$($n + 1)"
+        }
+
+        # No open series (last tag was stable, or some other pre-release): open the
+        # next beta line. A beta series must be NEW work, so it starts on the bumped
+        # core rather than reopening a version that already shipped.
+        return "$(Step-Patch $core)-beta.1"
+    }
+
+    # main / stable.
+    if ($pre -ne '')
+    {
+        # Promote: every beta in this series was shipping towards this exact core, so
+        # the stable release IS the core (1.0.32-beta.5 -> 1.0.32). That is the whole
+        # reason the beta series holds its core still.
+        return $core
+    }
+
+    return (Step-Patch $core)
 }
 
 $createTag = $true
@@ -204,14 +285,8 @@ elseif ($tagAtHead -and (Test-TagMatchesFlavor $lastTag $branch))
 }
 elseif ($lastTag)
 {
-    $base = $lastTag.TrimStart('v') -replace '-.*$', ''
-    $parts = $base.Split('.')
-    if ($parts.Count -ge 3)
-    {
-        $parts[2] = [string]([int]$parts[2] + 1)
-    }
-    $computed = $parts -join '.'
-    $Version = Get-BranchFlavoredVersion $computed $branch
+    $parsed = Split-Version $lastTag
+    $Version = Get-NextVersion $parsed.Core $parsed.Pre $branch
 }
 else
 {

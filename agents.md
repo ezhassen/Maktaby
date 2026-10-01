@@ -122,6 +122,40 @@ After editing:
 2. `dotnet build` (fix all errors; avoid introducing warnings)
 3. If UI changed, run the app and confirm the WPF window opens and "New Box" works.
 
+CI (`.github/workflows/ci.yml`) builds `src/Maktaby/Maktaby.csproj` on every push/PR to
+`main` and `develop`, which pulls in its ProjectReference closure (LiveWallpaper, WidgetSdk,
+Native, Shared) — but NOT `Maktaby.WidgetsCreator`. Touching that project means building the
+solution locally (`dotnet build Maktaby.slnx`), or nothing will catch a break in it.
+
+## Releasing
+
+Never build or upload an installer by hand. Releases are **tag-driven** and GitHub Actions
+does the rest. `docs/releasing.md` is the full reference (versioning scheme, workflow steps,
+safeguards); the short version:
+
+```bash
+# Beta, from develop
+git tag -a v1.0.33-beta.1 -m "1.0.33-beta.1" && git push origin v1.0.33-beta.1
+
+# Stable, from main
+git tag -a v1.0.33 -m "1.0.33" && git push origin v1.0.33
+```
+
+Or let `build_publish.ps1` derive the version, tag, push and build in one step
+(`-DryRun` to preview, `-Version` to force a major/minor cut).
+
+Rules worth knowing before you tag:
+
+- **A `-beta` tag must be reachable from `develop`; a plain tag from `main`.** The workflow
+  enforces this and fails the run otherwise — a stable tag on a develop-only commit is the
+  mistake it exists to catch.
+- **Checkout must be `fetch-depth: 0`.** MinVer derives the assembly version from the nearest
+  git tag; a shallow checkout has none, so every build reports `0.0.0-alpha.0.1`.
+- **A beta series holds its core still** (`1.0.32-beta`, `1.0.32-beta.1`, … all target
+  `1.0.32`), and `main` promotes to that core. Do not bump the patch mid-series.
+- **`build.ps1` exits `0` even when `iscc` is missing** (it only warns), so a local
+  `-Action Publish` can succeed with no installer. Check `Installer/` actually has the `.exe`.
+
 ## AI working files
 
 - Keep all agent-local todos, notes, plans and scratch files under the repo-root `.ai/` directory (e.g. `.ai/todo.md`). Never scatter them across the repo.

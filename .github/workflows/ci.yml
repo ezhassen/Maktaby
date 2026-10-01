@@ -1,0 +1,64 @@
+# Fast build check on every push and pull request.
+#
+# This deliberately does NOT create an installer or a release — it only proves the
+# tree still compiles. Releases are cut from tags, see release.yml. Without this,
+# a broken develop branch is not discovered until you try to tag it.
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the in-flight run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # MinVer derives the assembly version from the nearest git tag. A shallow
+          # checkout has no tags, so without this every build reports 0.0.0-alpha.0.1.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          # Central Package Management: the versions live in Directory.Packages.props,
+          # not in a packages.lock.json, so point the cache key at that instead.
+          cache: true
+          cache-dependency-path: '**/Directory.Packages.props'
+
+      - name: Restore
+        run: dotnet restore src/Maktaby/Maktaby.csproj
+
+      # Targets the app project, not the .slnx, so the check stays fast: the
+      # ProjectReference closure (LiveWallpaper, WidgetSdk, Native, Shared) is
+      # still built, but the unrelated Maktaby.WidgetsCreator tool is skipped.
+      # release.yml publishes this same project on tags; using one project as the
+      # unit of "does the app still build" keeps CI and the release honest about
+      # the same thing. The WidgetsCreator is built by its own project reference
+      # in IDEs and is not on the app's runtime path.
+      - name: Build
+        run: dotnet build src/Maktaby/Maktaby.csproj --configuration Release --no-restore
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: '**/bin/**/*.log'
+          retention-days: 7
+          if-no-files-found: ignore

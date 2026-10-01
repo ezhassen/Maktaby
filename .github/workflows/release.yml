@@ -1,0 +1,297 @@
+# Builds the Maktaby installer and publishes it as a GitHub release.
+#
+# Releases are TAG-driven, not branch-driven. MinVer already derives the assembly
+# version from the nearest tag, so the tag is the single source of truth for both
+# the version number and the build input. Building on every push to develop would
+# produce an artifact per commit and force us to invent a version for each.
+#
+#   git tag -a v1.0.33-beta.1 -m "1.0.33-beta.1"   # on develop
+#   git push origin v1.0.33-beta.1                  # -> GitHub PRE-RELEASE
+#
+#   git tag -a v1.0.33       -m "1.0.33"          # on main
+#   git push origin v1.0.33                         # -> GitHub RELEASE
+#
+# A tag with a prerelease label ("1.0.33-beta.1") is published as a pre-release;
+# a plain tag ("1.0.33") is published as a full release. Nothing else decides the
+# channel, so the tag name is always a truthful description of what shipped.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  # Re-release an existing tag (e.g. after fixing the workflow itself).
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag to build, e.g. v1.0.33-beta.1'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# Two runs racing for the same tag would fight over the same release record.
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build installer & publish release
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Classify version
+        id: tag
+        shell: bash
+        run: |
+          tag='${{ github.event.inputs.tag || github.ref_name }}'
+          case "$tag" in
+            v*) ;;
+            *) echo "::error::Tag must start with 'v' (got '$tag')"; exit 1 ;;
+          esac
+          ver="${tag#v}"
+          # SemVer prerelease label is what makes this a pre-release; MinVer puts the
+          # same label in the assembly version, so the installer filename and the
+          # GitHub release flag can never disagree.
+          if [[ "$ver" == *-* ]]; then
+            echo "prerelease=true"  >> "$GITHUB_OUTPUT"
+            echo "channel=beta"     >> "$GITHUB_OUTPUT"
+            echo "branch=develop"   >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "channel=stable"   >> "$GITHUB_OUTPUT"
+            echo "branch=main"      >> "$GITHUB_OUTPUT"
+          fi
+          echo "tag=$tag"        >> "$GITHUB_OUTPUT"
+          echo "version=$ver"    >> "$GITHUB_OUTPUT"
+          echo "Building $tag ($ver) -> $channel channel, expected on $branch"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          # MinVer derives the assembly version from the nearest git tag. A shallow
+          # checkout has no tags, so without this every build would come out
+          # 0.0.0-alpha.0.1 and the installer would be misnamed.
+          fetch-depth: 0
+
+      - name: Enforce branch policy
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          EXPECTED_BRANCH: ${{ steps.tag.outputs.branch }}
+        run: |
+          # Turn "beta from develop, production from main" from a convention into a
+          # rule. The tagged commit must already be reachable from the expected
+          # branch, so a beta cut from a topic branch fails here instead of
+          # shipping to the wrong channel.
+          sha=$(git rev-list -n 1 "$TAG")
+          if ! git merge-base --is-ancestor "$sha" "origin/$EXPECTED_BRANCH"; then
+            echo "::error::Tag $TAG points at ${sha:0:8}, which is NOT on '$EXPECTED_BRANCH'."
+            echo "::error::Pre-release tags (vX.Y.Z-*) must be cut from 'develop';"
+            echo "::error::stable tags (vX.Y.Z) must be cut from 'main'."
+            exit 1
+          fi
+          echo "OK: $TAG (${sha:0:8}) is reachable from '$EXPECTED_BRANCH'."
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          # Central Package Management: versions live in Directory.Packages.props,
+          # not in a packages.lock.json, so point the cache key there.
+          cache: true
+          cache-dependency-path: '**/Directory.Packages.props'
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          # ISCC is preinstalled on the GitHub windows images, but the exact location
+          # is not contractual - fall back to Chocolatey rather than failing the
+          # release on a runner-image change.
+          function Find-Iscc {
+            $cmd = Get-Command iscc -ErrorAction SilentlyContinue
+            if ($cmd) { return $cmd.Source }
+            $found = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue |
+                     Select-Object -First 1
+            if ($found) { return $found.FullName }
+            return $null
+          }
+
+          $iscc = Find-Iscc
+          if (-not $iscc) {
+            Write-Host "Inno Setup not found on the image, installing via Chocolatey..."
+            choco install innosetup --yes --no-progress --limit-output
+            $iscc = Find-Iscc
+          }
+          if (-not $iscc) { throw "Inno Setup compiler (ISCC.exe) is unavailable." }
+
+          Write-Host "Using ISCC: $iscc"
+          # build.ps1 resolves the compiler with Get-Command iscc, so its directory
+          # has to be on PATH.
+          Split-Path -Parent $iscc | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Publish and build installer
+        shell: pwsh
+        run: ./build.ps1 -Action Publish -Configuration Release
+
+      - name: Collect installer
+        id: collect
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          # build.ps1 only WARNS and still exits 0 when iscc is missing, so a run
+          # that silently produced no installer must never be published as a
+          # successful release. Locate the file and fail loudly if it is absent.
+          $installer = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Recurse -File -Filter '*.exe' `
+            -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like 'Maktaby *.exe' -and $_.FullName -notlike '*\src\*' } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if (-not $installer) {
+            Write-Host "::error::No installer found under $env:GITHUB_WORKSPACE."
+            Write-Host "::error::Expected 'Maktaby <version>.exe' outside the src/ tree (see OutputDir in installer.iss)."
+            if (Get-Command iscc -ErrorAction SilentlyContinue) {
+              Write-Host "::error::iscc IS on PATH, so this is an OutputDir problem."
+            } else {
+              Write-Host "::error::iscc is NOT on PATH, so the installer step never ran."
+            }
+            exit 1
+          }
+
+          Write-Host "Found installer: $($installer.FullName) ($([math]::Round($installer.Length / 1MB, 2)) MB)"
+
+          $sizeBytes = $installer.Length
+          $sha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+
+          # Spaces in the release asset name make /releases/latest/download/ URLs
+          # need percent-encoding, so the uploaded asset uses the conventional
+          # "-x64-setup" suffix instead.
+          $assetDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
+          New-Item -ItemType Directory -Path $assetDir -Force | Out-Null
+          $assetName = "Maktaby-$env:VERSION-x64-setup.exe"
+          $assetPath = Join-Path $assetDir $assetName
+          Copy-Item -LiteralPath $installer.FullName -Destination $assetPath -Force
+
+          # Byte-identical copy under a version-less name. /releases/latest/download/
+          # resolves to the newest NON-prerelease release, so a stable "always give me
+          # the current build" URL works for the README and for winget-style scripts.
+          $stableName = 'Maktaby-latest-x64-setup.exe'
+          $stablePath = Join-Path $assetDir $stableName
+          Copy-Item -LiteralPath $installer.FullName -Destination $stablePath -Force
+
+          "asset=$assetPath"         >> $env:GITHUB_OUTPUT
+          "asset_name=$assetName"    >> $env:GITHUB_OUTPUT
+          "stable_path=$stablePath"  >> $env:GITHUB_OUTPUT
+          "size_mb=$([math]::Round($sizeBytes / 1MB, 2))" >> $env:GITHUB_OUTPUT
+          "sha256=$sha256"           >> $env:GITHUB_OUTPUT
+          Write-Host "Asset ready: $assetName ($([math]::Round($sizeBytes/1MB,2)) MB)"
+
+      - name: Normalise asset paths for bash
+        id: paths
+        shell: bash
+        env:
+          ASSET: ${{ steps.collect.outputs.asset }}
+          STABLE: ${{ steps.collect.outputs.stable_path }}
+        run: |
+          # These paths were produced by PowerShell, so they are Windows-style with
+          # backslashes. The release step consumes them in bash, where a backslash
+          # inside a quoted string is an escape character. Re-emit them with forward
+          # slashes: Git Bash on the runner resolves those identically.
+          {
+            echo "asset=${ASSET//\\//}"
+            echo "stable=${STABLE//\\//}"
+          } >> "$GITHUB_OUTPUT"
+          echo "asset=$(echo ${ASSET//\\//})"
+
+      - name: Keep the installer for this run
+        uses: actions/upload-artifact@v4
+        with:
+          name: maktaby-installer
+          path: artifacts/*.exe
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Compose release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+          SIZE_MB: ${{ steps.collect.outputs.size_mb }}
+          SHA256: ${{ steps.collect.outputs.sha256 }}
+        run: |
+          {
+            echo "### Maktaby $VERSION"
+            echo
+            if [ "$PRERELEASE" = "true" ]; then
+              echo "> **Pre-release** - built from \`develop\`. Rough edges expected; please report anything that looks broken."
+            else
+              echo "Stable release - built from \`main\`."
+            fi
+            echo
+            echo "**Download:** \`Maktaby-$VERSION-x64-setup.exe\` ($SIZE_MB MB)"
+            echo
+            echo "**SHA-256**"
+            echo
+            echo '```'
+            echo "$SHA256  Maktaby-$VERSION-x64-setup.exe"
+            echo '```'
+            echo
+            if [ "$PRERELEASE" = "false" ]; then
+              echo "A copy is also published under the version-less name \`Maktaby-latest-x64-setup.exe\`, so the download URL below always resolves to the newest stable build:"
+              echo
+              echo "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/Maktaby-latest-x64-setup.exe"
+              echo
+            fi
+            echo "**Requirements** - Windows 10 (2004, build 19041) or later or Windows 11, 64-bit. The [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) must be installed. Web widgets and HTML wallpapers additionally need the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/), which is already present on most Windows installations."
+            echo
+            echo "Run the installer and accept the UAC prompt - Maktaby lives in the system tray, there is no main window."
+            echo
+            echo "### Changes"
+            echo
+          } > NOTES.md
+
+          # Auto-generated notes (merged PRs and commits since the previous tag).
+          # Empty output is fine for the very first release, so never fail on it.
+          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
+            -f tag_name="$TAG" -q .body >> NOTES.md 2>/dev/null \
+            || echo "_No changelog entries recorded for this release._" >> NOTES.md
+
+          echo "--- notes.md ---"
+          cat NOTES.md
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+        run: |
+          # --verify-tag makes gh confirm the tag really exists in the repo before it
+          # creates the release, so a typo'd input fails instead of orphaning a
+          # release that points at nothing.
+          #
+          # The version-less alias is attached to STABLE releases only: GitHub's
+          # /releases/latest/download/ points at the newest non-prerelease, so
+          # publishing it on a beta would make the alias resolve to an older build
+          # than a user's explicitly chosen one. Pre-releases stay addressable by
+          # their version only.
+          assets=("${{ steps.paths.outputs.asset }}")
+          if [ "$PRERELEASE" = "false" ]; then
+            assets+=("${{ steps.paths.outputs.stable }}")
+          fi
+
+          gh release create "$TAG" \
+            --verify-tag \
+            --title "Maktaby $VERSION" \
+            --notes-file NOTES.md \
+            --prerelease="$PRERELEASE" \
+            "${assets[@]}"
+
+          echo "Published: https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
