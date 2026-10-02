@@ -149,7 +149,7 @@ Everything runs from the system tray, persists your layout between sessions, and
 
 ### Install
 
-1. Download the latest `Maktaby-<version>-x64-setup.exe` from the [releases page](../../releases). ([Download the newest release directly](https://github.com/ezhassen/Maktaby/releases/latest/download/Maktaby-LATEST-x64-setup.exe) — substitute the version in the URL.)
+1. Download the latest `Maktaby-<version>-x64-setup.exe` from the [releases page](../../releases).
 2. Run it and accept the UAC prompt.
 3. On the final page, choose whether to **launch Maktaby** and whether to **start it on Windows startup** (both are ticked by default). The installer closes a running instance before updating and reopens it afterwards.
 4. The tray icon appears on first launch — that is where the app lives. There is no main window.

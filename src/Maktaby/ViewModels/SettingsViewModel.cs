@@ -410,8 +410,9 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         s.LiveWallpaperPreloadMaxMB = System.Math.Clamp(_liveWallpaperPreloadMaxMB, 0, 1024);
         _liveWallpaperPreloadMaxMB = s.LiveWallpaperPreloadMaxMB;
         _settingsService.Save();
+        // ApplyTheme applies the theme and registers the system-theme watcher; the boxes are
+        // repainted by the ApplicationThemeManager.Changed handler.
         App.ApplyTheme(s.SelectedTheme);
-        App.ApplyBoxAppearance();
         // Apply the staged launch-on-startup choice only here: flipping the checkbox stages
         // the value, and Save is the single point that touches system state for it.
         if (_launchOnStartup) StartupManager.Enable();

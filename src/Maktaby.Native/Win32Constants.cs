@@ -78,6 +78,13 @@ public static class Win32Constants
     public const uint WM_POWERBROADCAST = 0x0218;
     public const uint WM_APP = 0x8000;
     public const uint WM_SETTINGCHANGE = 0x001A;
+    // Theme-related broadcasts. The light/dark ("default Windows mode") switch arrives as
+    // WM_SETTINGCHANGE with lParam "ImmersiveColorSet" — it has no SPI_* wParam — and
+    // WM_THEMECHANGED / WM_SYSCOLORCHANGE accompany accent + high-contrast changes. All
+    // three are what Wpf.Ui's own SystemThemeWatcher listens to, so the app-level theme
+    // follower watches the same set. See Helpers/SystemThemeFollower.
+    public const uint WM_THEMECHANGED = 0x031A;
+    public const uint WM_SYSCOLORCHANGE = 0x0315;
 
     public const int WTS_SESSION_LOCK = 0x7;
     public const int WTS_SESSION_UNLOCK = 0x8;

@@ -3,6 +3,8 @@ using Maktaby.Core.Interfaces;
 using Maktaby.Core.Services;
 using Maktaby.Helpers;
 using Maktaby.Settings;
+using Maktaby.Shared.Interfaces;
+using Maktaby.Shared.Services;
 using Maktaby.Shell.Services;
 using Maktaby.ViewModels;
 using Maktaby.Views;
@@ -20,8 +22,6 @@ using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Interop;
 using Wpf.Ui.Appearance;
-using Maktaby.Shared.Interfaces;
-using Maktaby.Shared.Services;
 
 namespace Maktaby;
 
@@ -125,9 +125,11 @@ public partial class App : Application
         BuildTrayAndMenuItems(Services);
 
         Services.GetRequiredService<ISettingsService>().Load();
-        ApplyTheme(Services.GetRequiredService<ISettingsService>().UserSettings.SelectedTheme);
-        ApplyBoxAppearance();
+        // Subscribe BEFORE the first ApplyTheme. ApplicationThemeManager.Changed is the single
+        // place box appearance is applied, so the handler must already be attached when the
+        // initial theme lands — otherwise the boxes come up unstyled for the whole session.
         ApplicationThemeManager.Changed += (_, _) => ApplyBoxAppearance();
+        ApplyTheme(Services.GetRequiredService<ISettingsService>().UserSettings.SelectedTheme);
         // Ensure WebWidget storage roots exist (UserWidgets + EBWebView)
         try { Services.GetRequiredService<IWebWidgetService>().EnsureUserWidgetsRoot(); } catch { }
         // Gallery previews get their own environment under the managed tree (not %TEMP%), so the
@@ -265,6 +267,18 @@ public partial class App : Application
     private readonly List<Views.Containers.WidgetWindow> _resumeSuspendedWidgets = new();
     private System.Windows.Threading.DispatcherTimer? _resumeRecoverTimer;
     private Microsoft.Win32.PowerModeChangedEventHandler? _powerModeHandler;
+
+    // System-theme watcher, live ONLY while the user theme is "System". Static because it is
+    // driven by the static ApplyTheme funnel, which every theme change passes through.
+    // Disposed in OnExit: an HwndSource hook left attached would keep this app (and its whole
+    // visual tree) rooted for the life of the message host.
+    private static Helpers.SystemThemeFollower? _systemThemeFollower;
+
+    // The hidden _trayHost window, registered as the hook's host once it exists. Null until
+    // BuildTrayAndMenuItems has shown it, which is why SyncSystemThemeFollower is a no-op
+    // until then (it re-runs on the next theme change, and ApplyTheme at startup happens
+    // after the tray host is built).
+    private static Window? _themeFollowHost;
 
     /// <summary>Render-tier fallback response (UI thread): tier 0 pauses playback and widgets,
     /// recovery resumes only what this paused. Fully guarded — tier events can arrive during
@@ -661,6 +675,11 @@ public partial class App : Application
         // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
         Win32Apis.SystemTeardown = true;
         _isExiting = true;
+        // Detach the system-theme hook here. It is an HwndSource hook on the tray host, so
+        // leaving it attached keeps this app (and its whole visual tree) rooted for the life
+        // of the message pump. Done next to the power-resume teardown for the same reason.
+        try { _systemThemeFollower?.Dispose(); } catch { }
+        _systemThemeFollower = null;
         // The power-resume quiesce owns suspended widgets + a one-shot timer: stop the timer
         // (no recovery on the way out — the process is dying) and drop the SystemEvents
         // subscription, whose hidden window would otherwise linger past shutdown.
@@ -814,8 +833,88 @@ public partial class App : Application
                 ApplicationThemeManager.Apply(ApplicationTheme.Dark);//, Wpf.Ui.Controls.WindowBackdropType.Mica
                 break;
             default:
-                ApplicationThemeManager.ApplySystemTheme();
+                // NOT ApplicationThemeManager.ApplySystemTheme(): that resolves the wrong
+                // value on Win10/11 (it reads the visual-style file, not the light/dark
+                // preference), which is why "System" used to resolve to Dark on a Light
+                // machine. See Helpers/SystemThemeReader for the full diagnosis.
+                // ReadPreferredAppTheme returns null for high contrast, where Wpf.Ui's own
+                // style-to-dictionary mapping is still correct — so it stays the fallback.
+                var systemTheme = Helpers.SystemThemeReader.ReadPreferredAppTheme();
+                if (systemTheme.HasValue)
+                {
+                    ApplicationThemeManager.Apply(systemTheme.Value);
+                }
+                else
+                {
+                    ApplicationThemeManager.ApplySystemTheme();
+                }
                 break;
+        }
+
+        // No ApplyBoxAppearance() here on purpose: ApplicationThemeManager.Changed fires on
+        // EVERY Apply(), including a redundant one that swaps in the theme already loaded
+        // (verified against Wpf.Ui 4.3.0), and that handler is what repaints the boxes. Calling
+        // both would run the full box repaint twice per theme change. The handler is
+        // subscribed in OnStartup BEFORE the first ApplyTheme, which is what makes relying on
+        // it safe for the initial theme.
+        //
+        // Keep the system-theme watcher in step with the preference, for the same "one place
+        // owns it" reason.
+        SyncSystemThemeFollower(selectedTheme);
+    }
+
+    /// <summary>Attaches the system-theme watcher only while the user theme is "System"
+    /// (<paramref name="selectedTheme"/> null/blank), and detaches it as soon as an explicit
+    /// Dark/Light is chosen. Attaching unconditionally would mean a message hook firing on
+    /// every Windows preference change for the whole session, in a setting where the answer is
+    /// always "ignore it" — the callback would only ever early-return.</summary>
+    private static void SyncSystemThemeFollower(string? selectedTheme)
+    {
+        try
+        {
+            bool follow = string.IsNullOrWhiteSpace(selectedTheme);
+
+            if (!follow)
+            {
+                _systemThemeFollower?.Dispose();
+                _systemThemeFollower = null;
+                return;
+            }
+
+            if (_systemThemeFollower is not null || _themeFollowHost is null) { return; }
+
+            var follower = new Helpers.SystemThemeFollower(OnSystemThemeChanged);
+            follower.Attach(_themeFollowHost);
+            _systemThemeFollower = follower;
+        }
+        catch (Exception ex)
+        {
+            // A failure to observe the OS theme must never break applying the theme itself.
+            Log.Warning(ex, "Could not sync the system theme follower (theme will not follow Windows)");
+        }
+    }
+
+    /// <summary>Re-applies the app theme after a Windows light/dark change. Only ever reached
+    /// while the preference is "System", because the watcher is detached otherwise — but the
+    /// setting is re-read anyway so a stale or in-flight message can never override an
+    /// explicit Dark/Light pick.</summary>
+    private static void OnSystemThemeChanged()
+    {
+        try
+        {
+            if (Services is null) { return; }
+
+            var selected = Services.GetRequiredService<ISettingsService>().UserSettings.SelectedTheme;
+            if (!string.IsNullOrWhiteSpace(selected)) { return; }
+
+            // ApplySystemTheme() is one-shot, so this is exactly the call that has to be
+            // re-run. It re-merges the Wpf.Ui resource dictionaries and raises
+            // ApplicationThemeManager.Changed, which repaints the boxes and widgets.
+            ApplyTheme(null);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to follow the system theme change");
         }
     }
 
@@ -875,6 +974,17 @@ public partial class App : Application
         // keep working. Attached before Show so the event cannot be missed.
         _trayHost.Loaded += TrayHost_HideOnce;
         _trayHost.Show();
+
+        // This hidden window lives for the whole session and already owns a message pump
+        // (the TaskbarCreated hook below), so it is the right host for the system-theme
+        // watcher — no extra native handle just to observe theme broadcasts. Show() has run,
+        // so its HWND exists.
+        //
+        // Registration only: the watcher is NOT attached from here, because this runs BEFORE
+        // ISettingsService.Load() (see OnStartup), so UserSettings.SelectedTheme is still
+        // unpopulated and would read as "System" for a user who actually picked Dark. The
+        // ApplyTheme call later in OnStartup runs after the load and attaches correctly.
+        _themeFollowHost = _trayHost;
 
         // Double-clicking empty desktop area toggles the same hide-all state (icon double-clicks still open).
         Services.GetRequiredService<IMouseMonitor>().DesktopDoubleClick += OnDesktopDoubleClick;
@@ -1026,8 +1136,9 @@ public partial class App : Application
             var settings = Services.GetRequiredService<ISettingsService>();
             settings.UserSettings.SelectedTheme = theme;
             settings.Save();
+            // ApplyTheme applies the theme and registers the system-theme watcher; the boxes
+            // are repainted by the ApplicationThemeManager.Changed handler.
             ApplyTheme(theme);
-            ApplyBoxAppearance();
         };
         tray.ExitRequested += async (_, _) =>
         {

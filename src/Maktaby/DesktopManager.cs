@@ -2191,7 +2191,7 @@ public sealed class DesktopManager
                         if (app.Dispatcher.CheckAccess())
                         {
                             App.ApplyTheme(_settingsService.UserSettings.SelectedTheme);
-                            App.ApplyBoxAppearance();
+                            //App.ApplyBoxAppearance();
                             App.SyncDesktopIconSizeWatcher();
                         }
                         else
@@ -2199,7 +2199,7 @@ public sealed class DesktopManager
                             app.Dispatcher.Invoke(() =>
                             {
                                 App.ApplyTheme(_settingsService.UserSettings.SelectedTheme);
-                                App.ApplyBoxAppearance();
+                                //App.ApplyBoxAppearance();
                                 App.SyncDesktopIconSizeWatcher();
                             });
                         }
