@@ -11,16 +11,30 @@
          - otherwise derived from git: last tag, patch+1
        and applies the branch flavor: develop -> "-beta", main -> plain.
        Creates annotated tag v<version> on HEAD and pushes the TAG.
-    5. Runs build.ps1 -Action Publish (installer is named from that tag).
+    5. Optionally runs build.ps1 -Action Publish to produce the local installer.
+       Pushing the tag already triggers the GitHub Actions release workflow, so the local
+       build is usually redundant: it is offered INTERACTIVELY after the tag is pushed, and
+       is skipped entirely when there is no console to ask on.
 
 .PARAMETER Version
     Explicit version to tag (e.g. 1.2.0 or 1.2.0-beta.2). When omitted, the next version is
     derived from git and flavored by branch (develop => beta).
 
+.PARAMETER BuildInstaller
+    Always build the installer locally; do not ask. Mutually exclusive with -SkipInstaller.
+
+.PARAMETER SkipInstaller
+    Never build the installer; tag and push only. This is the default whenever there is no
+    interactive console (CI, a pipeline, a scheduled run), so the script never hangs.
+
 .EXAMPLE
     .\build_publish.ps1                        # auto version: beta on develop / plain on main
 .EXAMPLE
     .\build_publish.ps1 -Version 1.2.0         # force an exact version
+.EXAMPLE
+    .\build_publish.ps1 -SkipInstaller         # tag+push only (same as CI's job)
+.EXAMPLE
+    .\build_publish.ps1 -BuildInstaller        # tag+push and build, without the prompt
 #>
 param(
     [Parameter(Mandatory = $false)]
@@ -39,6 +53,14 @@ param(
     [Parameter(Mandatory = $false)]
     [bool]$SelfContained = $false,
 
+    # Build the local installer without being asked.
+    [Parameter(Mandatory = $false)]
+    [switch]$BuildInstaller,
+
+    # Never build the local installer (tag + push only).
+    [Parameter(Mandatory = $false)]
+    [switch]$SkipInstaller,
+
     # Print what would happen without pushing/tagging/publishing.
     [Parameter(Mandatory = $false)]
     [switch]$DryRun,
@@ -49,6 +71,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($BuildInstaller -and $SkipInstaller)
+{
+    Write-Host "ABORT: -BuildInstaller and -SkipInstaller contradict each other." -ForegroundColor Red
+    exit 1
+}
 
 function Show-Help
 {
@@ -73,12 +101,17 @@ function Show-Help
                   Then pushes the TAG.
                   If HEAD is already tagged with a matching flavor, the existing
                   tag is REUSED (nothing new is created).
-   5. Runs build.ps1 -Action Publish
+   5. Optionally builds the installer: asks, after the tag is pushed. CI already
+                  builds and publishes it from that tag, so the answer defaults to No.
+                  -BuildInstaller forces yes, -SkipInstaller forces no, and with no
+                  console to ask on it is skipped (never blocks a pipeline).
 
  PARAMETERS
    -Version        <x.y.z[-pre]>   explicit tag version (default: auto).
                                    Use this for a deliberate major/minor cut,
                                    e.g. -Version 1.1.0
+   -BuildInstaller                 build the installer without asking
+   -SkipInstaller                  tag + push only, never ask
    -Configuration  <Debug|Release>
    -Runtime        <rid>
    -Framework      <tfm>
@@ -99,6 +132,58 @@ function Run-Git([string]$ArgsList)
     # (Deliberately does NOT return the exit code — appending it here polluted output streams,
     # which made a CLEAN tree look dirty.)
     & git @($ArgsList -split ' ') 2>&1
+}
+
+# True when there is a real console to ask on. Output redirection is the reliable signal:
+# a piped or redirected run must never block on Read-Host, which would hang CI forever.
+function Test-CanPrompt
+{
+    try
+    {
+        return [Environment]::UserInteractive -and -not [Console]::IsOutputRedirected
+    }
+    catch
+    {
+        return $false
+    }
+}
+
+# The installer build is OPTIONAL, and the default answer is "no": pushing the tag already
+# runs the GitHub Actions release workflow, which builds and publishes the installer with the
+# same version. Building it again locally only produces a duplicate that nothing consumes,
+# so the prompt is a shortcut for the cases where a local .exe is actually wanted (testing it
+# before the release goes out, or working offline).
+function Resolve-BuildInstaller([switch]$DryRun)
+{
+    if ($SkipInstaller)
+    {
+        return $false
+    }
+
+    if ($BuildInstaller)
+    {
+        return $true
+    }
+
+    if ($DryRun)
+    {
+        Write-Host "[dry-run] would ask whether to build the installer" -ForegroundColor Yellow
+        return $false
+    }
+
+    if (-not (Test-CanPrompt))
+    {
+        Write-Host "✓ Skipping the local installer build (no console to ask on)." -ForegroundColor Green
+        Write-Host "  CI builds and publishes the installer from the pushed tag." -ForegroundColor DarkGray
+        Write-Host "  Pass -BuildInstaller to build it here anyway." -ForegroundColor DarkGray
+        return $false
+    }
+
+    Write-Host ""
+    Write-Host "The tag is pushed, so GitHub Actions is building the installer for $tagName." -ForegroundColor Cyan
+    Write-Host "Build a local copy too?" -ForegroundColor Cyan
+    $answer = Read-Host "  [y/N]"
+    return $answer -match '^(y|yes)$'
 }
 
 if ($ShowHelp)
@@ -315,7 +400,14 @@ if ($DryRun)
     {
         Write-Host "[dry-run] reusing existing tag $tagName (nothing to tag)" -ForegroundColor Yellow
     }
-    Write-Host "[dry-run] would run: build.ps1 -Action Publish" -ForegroundColor Yellow
+    if ($SkipInstaller -or -not $BuildInstaller)
+    {
+        Write-Host "[dry-run] would then ask whether to build the installer (default: no)" -ForegroundColor Yellow
+    }
+    else
+    {
+        Write-Host "[dry-run] would run: build.ps1 -Action Publish" -ForegroundColor Yellow
+    }
     exit 0
 }
 
@@ -338,8 +430,17 @@ else
     Write-Host "✓ Tag $tagName already present on remote" -ForegroundColor Green
 }
 
-# --- 5. Publish --------------------------------------------------------------
-Write-Host "`nPublishing..." -ForegroundColor Cyan
+# --- 5. Optionally build the installer locally ---------------------------------
+# Asked AFTER the tag is pushed on purpose: the irreversible git work is already done, so a
+# "no" here costs nothing and the answer cannot change what was tagged.
+if (-not (Resolve-BuildInstaller -DryRun:$DryRun))
+{
+    Write-Host ""
+    Write-Host "Done. GitHub Actions is building and publishing the $tagName release." -ForegroundColor Green
+    exit 0
+}
+
+Write-Host "`nPublishing installer for $tagName ..." -ForegroundColor Cyan
 & "$PSScriptRoot\build.ps1" -Action Publish `
     -Configuration $Configuration `
     -Runtime $Runtime `
@@ -348,7 +449,15 @@ Write-Host "`nPublishing..." -ForegroundColor Cyan
 
 if ($LASTEXITCODE -ne 0)
 {
-    Abort "publish failed."
+    # Note: the tag is ALREADY pushed, so CI is building the release regardless. A local
+    # publish failure is therefore not a failed release - say so instead of implying rollback.
+    Write-Host ""
+    Write-Host "Local publish failed, but the $tagName tag is already pushed." -ForegroundColor Red
+    Write-Host "GitHub Actions is building the release anyway - check the Actions tab." -ForegroundColor Yellow
+    exit 1
 }
+
+Write-Host ""
+Write-Host "Done. Local installer built for $tagName." -ForegroundColor Green
 
 
