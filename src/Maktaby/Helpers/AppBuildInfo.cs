@@ -52,7 +52,7 @@ internal static class AppBuildInfo
     {
         get
         {
-            _isPortable ??= HasPortableBuildFlag() || !HasInstallerMarker();
+            _isPortable ??= GlobalFeaturesSwitches.SimulateUpdateAvailable ? false : HasPortableBuildFlag() || !HasInstallerMarker();
             return _isPortable.Value;
         }
     }

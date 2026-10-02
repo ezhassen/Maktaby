@@ -24,7 +24,12 @@ public interface IAppUpdateUi
     /// <summary>Interactive check only: the user asked and deserves an answer.</summary>
     void ReportUpToDate(string currentVersion);
 
-    void ReportSkipped(string? version);
+    /// <summary>Asks the user to confirm skipping <paramref name="version"/>. Returns true for
+    /// Yes and false for No — the caller must NOT record the skip until this returns true.</summary>
+    Task<bool> ReportSkipped(string version);
+
+    /// <summary>Informational only: this release is already skipped, so nothing is offered.</summary>
+    void ReportAlreadySkipped(string? version);
 
     void ReportUnavailable(string? diagnostic);
 

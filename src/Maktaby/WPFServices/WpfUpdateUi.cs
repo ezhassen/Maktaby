@@ -36,25 +36,35 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         var vm = new UpdatePromptViewModel(update, currentVersion);
         _current = vm;
 
-        var choice = UpdatePromptChoice.Later;
-        vm.ChoiceMade += c =>
+        var window = new Views.UpdatePromptView { DataContext = vm };
+        var tcs = new TaskCompletionSource<UpdatePromptChoice>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void OnChoice(UpdatePromptChoice choice)
         {
-            choice = c;
-            // "Update later" must also close the window, so the choice event is the single
-            // exit path for all three buttons.
-            if (Application.Current.Windows
-                .OfType<Views.UpdatePromptView>()
-                .FirstOrDefault() is { } open)
+            // Complete the result BEFORE closing the window, and do both from this single
+            // handler. Closing first is a race that silently discarded the user's choice:
+            // Window.Close() raises Closed synchronously, so a Closed handler would complete
+            // the task with Later before OnChoice ever ran, and the later TrySetResult would
+            // be a no-op. Every button then behaved as "Later" — Install and Skip did
+            // nothing at all.
+            if (tcs.TrySetResult(choice))
             {
-                open.Close();
+                window.Close();
             }
-        };
+        }
+
+        // Closing via the X button is "not now", not a decision. It can only win when no
+        // button was pressed, which TrySetResult above guarantees.
+        void OnClosed(object? sender, EventArgs e) => tcs.TrySetResult(UpdatePromptChoice.Later);
+
+        vm.ChoiceMade += OnChoice;
+        window.Closed += OnClosed;
 
         try
         {
-            var window = new Views.UpdatePromptView { DataContext = vm };
             window.Show();      // non-modal on purpose: it must never block the desktop
-            return await WaitForChoiceAsync(vm, window).ConfigureAwait(true);
+            return await tcs.Task.ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -63,30 +73,9 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         }
         finally
         {
-            _current = null;
-        }
-    }
-
-    private static async Task<UpdatePromptChoice> WaitForChoiceAsync(
-        UpdatePromptViewModel vm, Window window)
-    {
-        var tcs = new TaskCompletionSource<UpdatePromptChoice>(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        void OnChoice(UpdatePromptChoice choice) => tcs.TrySetResult(choice);
-        vm.ChoiceMade += OnChoice;
-
-        // Closing via the X button is "not now", not a decision.
-        void OnClosed(object? s, EventArgs e) => tcs.TrySetResult(UpdatePromptChoice.Later);
-        window.Closed += OnClosed;
-
-        try
-        {
-            return await tcs.Task.ConfigureAwait(true);
-        }
-        finally
-        {
-            window.Closed -= OnClosed;
             vm.ChoiceMade -= OnChoice;
+            window.Closed -= OnClosed;
+            _current = null;
         }
     }
 
@@ -134,14 +123,35 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         catch { }
     }
 
-    public void ReportSkipped(string? version)
+    /// <summary>Confirmation for the "Skip this version" action. Returns true for Yes.
+    /// Deliberately a question, not an acknowledgement: a skip is recorded permanently, so
+    /// "No" must leave the release on offer.</summary>
+    public Task<bool> ReportSkipped(string version)
+    {
+        if (string.IsNullOrWhiteSpace(version)) { return Task.FromResult(false); }
+
+        // DialogService.ShowAsync marshals to the UI thread itself, so awaiting this
+        // Task directly is already correct.
+        return _dialogService.ShowConfirmAsync(
+            $"Stop offering Maktaby {version}? A newer release will still be suggested.",
+            new DialogOptions
+            {
+                Title = "Skip this version",
+                PrimaryButtonText = "Yes",
+                CloseButtonText = "No",
+                PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Info,
+            });
+    }
+
+    /// <summary>Informational: the newest release is one the user already skipped.</summary>
+    public void ReportAlreadySkipped(string? version)
     {
         if (string.IsNullOrWhiteSpace(version)) { return; }
 
         try
         {
             Dispatch(() => _dialogService.ShowMessageAsync(
-                $"Maktaby {version} will not be offered again. A newer version will still be suggested.",
+                $"Maktaby {version} is already on your skip list. A newer release will still be suggested.",
                 new DialogOptions
                 {
                     Title = "Version skipped",

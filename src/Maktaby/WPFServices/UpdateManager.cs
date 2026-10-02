@@ -86,6 +86,16 @@ public sealed class UpdateManager : IDisposable
     {
         if (_disposed) { return null; }
 
+        // DEBUG ONLY, and deliberately BEFORE the portable gate: a dev build run from the repo
+        // has no uninstaller, so it is detected as portable and would otherwise refuse before
+        // ever showing the window being tested.
+        if (interactive && GlobalFeaturesSwitches.SimulateUpdateAvailable)
+        {
+            var simulated = BuildSimulatedUpdate();
+            await PromptAsync(simulated, interactive: true).ConfigureAwait(true);
+            return new UpdateCheckResult { Status = UpdateCheckStatus.UpdateAvailable, Update = simulated };
+        }
+
         if (AppBuildInfo.IsPortable)
         {
             // Reached by the tray "Check for updates…" and the Settings button, which both
@@ -120,7 +130,9 @@ public sealed class UpdateManager : IDisposable
                     break;
 
                 case UpdateCheckStatus.Skipped when interactive:
-                    _ui.ReportSkipped(result.Update?.Version);
+                    // Not a confirmation: this release is ALREADY on the skip list, so there
+                    // is nothing for the user to decide.
+                    _ui.ReportAlreadySkipped(result.Update?.Version);
                     break;
 
                 case UpdateCheckStatus.Unavailable when interactive:
@@ -164,9 +176,14 @@ public sealed class UpdateManager : IDisposable
             switch (choice)
             {
                 case UpdatePromptChoice.Skip:
-                    settings.UpdateSkippedVersion = update.Version;
-                    _settingsService.Save();
-                    _ui.ReportSkipped(update.Version);
+                    // Ask BEFORE recording. Saving first and confirming afterwards meant "No"
+                    // still left the version permanently skipped — the exact opposite of what
+                    // answering "No" means.
+                    if (await _ui.ReportSkipped(update.Version).ConfigureAwait(true))
+                    {
+                        settings.UpdateSkippedVersion = update.Version;
+                        _settingsService.Save();
+                    }
                     break;
 
                 case UpdatePromptChoice.Install:
@@ -256,6 +273,26 @@ public sealed class UpdateManager : IDisposable
             _ = CheckAsync(interactive: false);
         }
     }
+
+
+    /// <summary>
+    /// DEBUG ONLY: a stand-in release for <see cref="GlobalFeaturesSwitches.SimulateUpdateAvailable"/>.
+    /// Deliberately not fetchable — the download URL does not resolve — so choosing "Update now"
+    /// walks the real progress and failure UI without installing anything.
+    /// </summary>
+    private static UpdateInfo BuildSimulatedUpdate() => new()
+    {
+        Version = "99.0.0-simulated",
+        TagName = "v99.0.0-simulated",
+        DownloadUrl = "https://localhost.invalid/Maktaby-99.0.0-simulated-x64-setup.exe",
+        Sha256 = new string('0', 64),
+        SizeBytes = 15 * 1024 * 1024,
+        IsPreRelease = true,
+        PublishedAt = DateTimeOffset.Now,
+        ReleasePageUrl = "https://localhost.invalid/releases/simulated",
+        ReleaseNotes = "SIMULATED RELEASE — not a real download. This window is shown by the "
+                     + "SimulateUpdateAvailable debug switch so the prompt UI can be tested.",
+    };
 
     private static UpdateChannel ParseChannel(string? value) => value?.Trim().ToLowerInvariant() switch
     {
