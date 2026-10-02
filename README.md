@@ -37,71 +37,70 @@ Everything runs from the system tray, persists your layout between sessions, and
 
 | | |
 | --- | --- |
-| 📦 **Boxes** | Group shortcuts, files and folders into resizable containers that live on your desktop. |
-| 🖱️ **Drag & Drop creation** | Drop files from Explorer, the Start Menu or another Box onto empty desktop space to create a new Box automatically. |
-| 📐 **Snap & Guides** | Boxes snap to each other and to screen edges with live visual guide lines. |
-| 🔄 **Roll-up** | Roll any box into its title-bar strip (Top / Bottom / Left / Right) to reclaim space without losing content. |
-| 🏷️ **Tabs** | Multi-tab containers group many items behind a single box. |
-| 🎨 **Per-box appearance** | Override transparency, background, foreground, border color and thickness, and title-bar colors per box. Set sensible defaults globally. |
-| 📏 **Icon size** | Shortcut icon size inside boxes (16–128 px). Pin a fixed size or let it follow the Windows desktop automatically. |
-| 🖼️ **Hide desktop icons** | Toggle Windows desktop icons off/on from the tray menu for a clean look. |
+ 📦 **Boxes** | Group shortcuts, files and folders into resizable containers that live on your desktop.
+ 🖱️ **Drag & Drop creation** | Drop files from Explorer, the Start Menu or another Box onto empty desktop space to create a new Box automatically.
+ 📐 **Snap & Guides** | Boxes snap to each other and to screen edges with live visual guide lines.
+ 🔄 **Roll-up** | Roll any box into its title-bar strip (Top / Bottom / Left / Right) to reclaim space without losing content.
+ 🏷️ **Tabs** | Multi-tab containers group many items behind a single box.
+ 🎨 **Per-box appearance** | Override transparency, background, foreground, border color and thickness, and title-bar colors per box. Set sensible defaults globally.
+ 📏 **Icon size** | Shortcut icon size inside boxes (16–128 px). Pin a fixed size or let it follow the Windows desktop automatically.
+ 🖼️ **Hide desktop icons** | Toggle Windows desktop icons off/on from the tray menu for a clean look.
 
 ### Widgets
 
 | | |
 | --- | --- |
-| 🧩 **Web widgets** | Self-contained HTML / CSS / JS widgets placed from a gallery. Each widget gets its own Chromium (WebView2) instance, so they run fully client-side. |
-| 🖥️ **Native widgets** | C# (WPF) plugins compiled at load via Roslyn or dropped as a DLL. Host WPF, WinForms, raw HWND, Direct3D11 and SkiaSharp content. Built-ins ship with the app; user widgets live in `%LocalAppData%\Maktaby\UserWidgets`. |
-| ⚙️ **Widget settings** | Native plugins can declare settings (string / number / boolean / list) that the host renders as editors and persists per placed widget. |
-| 🎨 **Theme-aware widgets** | Web and native widgets can opt into dark / light theme switching. |
-| 🔒 **Trust model** | User widgets prompt once per content hash before running — full-trust .NET code, fail-closed on edit. Built-ins are implicitly trusted. |
-| 🛠️ **Widget editor** | Create / edit web widgets with HTML, CSS and JS tabs, AvalonEdit syntax highlighting, a live preview pane, network and theme checkboxes, and auto-generated manifest + thumbnail on save. |
+ 🧩 **Web widgets** | Self-contained HTML / CSS / JS widgets placed from a gallery. Each widget gets its own Chromium (WebView2) instance, so they run fully client-side.
+ 🖥️ **Native widgets** | C# (WPF) plugins compiled at load via Roslyn or dropped as a DLL. Host WPF, WinForms, raw HWND, Direct3D11 and SkiaSharp content. Built-ins ship with the app; user widgets live in `%LocalAppData%\Maktaby\UserWidgets`.
+ ⚙️ **Widget settings** | Native plugins can declare settings (string / number / boolean / list) that the host renders as editors and persists per placed widget.
+ 🎨 **Theme-aware widgets** | Web and native widgets can opt into dark / light theme switching.
+ 🔒 **Trust model** | User widgets prompt once per content hash before running — full-trust .NET code, fail-closed on edit. Built-ins are implicitly trusted.
+ 🛠️ **Widget editor** | Create / edit web widgets with HTML, CSS and JS tabs, AvalonEdit syntax highlighting, a live preview pane, network and theme checkboxes, and auto-generated manifest + thumbnail on save.
 
 ### Live Wallpaper
 
 | | |
 | --- | --- |
-| 🎬 **Live wallpaper** | Set any image, animated GIF or video as your desktop wallpaper. Renders across monitors with layout tracking. |
-| 🎞️ **Formats** | Still images, animated GIFs and video files (via the codecs the system provides). |
-| 💾 **Preload cache** | Optionally keep up to 1024 MB of video / GIF bytes in shared RAM so playback starts instant on multi-monitor setups. |
-| ⏯️ **Play / pause / change / remove** | All managed from the tray menu and the Settings → Live Wallpaper panel. |
-| 🔇 **Auto-pause** | Pauses automatically when nothing is visible (all boxes hidden / suspended) to keep idle resource use low. |
+ 🎬 **Live wallpaper** | Set any image, animated GIF or video as your desktop wallpaper. Renders across monitors with layout tracking.
+ 🎞️ **Formats** | Still images, animated GIFs and video files (via the codecs the system provides).
+ 💾 **Preload cache** | Optionally keep up to 1024 MB of video / GIF bytes in shared RAM so playback starts instant on multi-monitor setups.
+ ⏯️ **Play / pause / change / remove** | All managed from the tray menu and the Settings → Live Wallpaper panel.
+ 🔇 **Auto-pause** | Pauses automatically when nothing is visible (all boxes hidden / suspended) to keep idle resource use low.
 
 ### System integration
 
 | | |
 | --- | --- |
-| 🖥️ **System tray** | Always-on tray icon with the full app menu: new box, new folder portal, widgets, live wallpaper, settings, about, theme, hide-all, enable/disable, exit. |
-| 🚀 **Startup** | Optional launch on Windows startup, toggled from the tray. |
-| 🔄 **Shell restart recovery** | Survives Explorer restarts: re-registers the tray icon and re-glides the desktop layer automatically. |
-| 🪟 **Modern window chrome** | Wpf.Ui FluentWindow base with Mica backdrop, rounded corners, and a shared title bar on every app window. |
-| 🌓 **Theming** | Dark / Light / follow-system. App theme, widget theme and per-box overrides are independent. |
-| 🎯 **Single instance** | One running copy; a second launch exits silently. |
+ 🖥️ **System tray** | Always-on tray icon with the full app menu: new box, new folder portal, widgets, live wallpaper, settings, about, theme, hide-all, enable/disable, exit.
+ 🚀 **Startup** | Optional launch on Windows startup, toggled from the tray.
+ 🔄 **Shell restart recovery** | Survives Explorer restarts: re-registers the tray icon and re-glides the desktop layer automatically.
+ 🪟 **Modern window chrome** | Wpf.Ui FluentWindow base with Mica backdrop, rounded corners, and a shared title bar on every app window.
+ 🌓 **Theming** | Dark / Light / follow-system. App theme, widget theme and per-box overrides are independent.
+ 🔄 **In-app updates** | Checks GitHub Releases on startup, every 6 hours, or on demand from the tray, then downloads, SHA-256 verifies and installs the new build. Separate Stable and Beta channels. Portable builds skip updates.
+ 🎯 **Single instance** | One running copy; a second launch exits silently.
 
 ### Gestures & shortcuts
 
-| Gesture | Action |
+ Gesture | Action
 | --- | --- |
-| Double-click empty desktop | Toggle hide / show all boxes |
-| Ctrl + Wheel on desktop | Change icon size |
-| Right-click box header | Box menu (delete, hide, lock, roll, tabs) |
-| Alt + Enter on an item | Show properties |
-| Drag onto empty desktop | Marquee → Create New Box menu |
+ Double-click empty desktop | Toggle hide / show all boxes
+ Ctrl + Wheel on desktop | Change icon size
+ Right-click box header | Box menu (delete, hide, lock, roll, tabs)
+ Alt + Enter on an item | Show properties
+ Drag onto empty desktop | Marquee → Create New Box menu
 
 ### Tools
 
 | | |
 | --- | --- |
-| 📊 **Performance Monitor** | Live dashboard: app process memory / CPU / I/O, managed vs private bytes, GDI & USER handles, WPF render tier, WebView2 process breakdown, per-window widget status (active / suspended, bounds mismatch), and per-monitor live wallpaper state. One-click suspend / resume for widgets and wallpaper. |
-| 📋 **Log viewer** | Browse one file per day, reload, follow-tail, and open the log folder — with line numbers and syntax colouring. |
-| 🔍 **Debug desktop tree** | Diagnostic overlay that draws, at the cursor, the hit-test result, z-order and the surface window style/ex-style. |
-| 💾 **Backups & restore** | Export a `.dbe1` bundle (layout, settings, UserWidgets) and restore it later. Reset is destructive and rebuilds from scratch. |
-| 📐 **Snap overlay** | Live snap guide lines when dragging or resizing boxes. |
-| 📁 **Folder portal** | A box that opens a chosen folder in Explorer when activated. |
+ 📊 **Performance Monitor** | Live dashboard: app process memory / CPU / I/O, managed vs private bytes, GDI & USER handles, WPF render tier, WebView2 process breakdown, per-window widget status (active / suspended, bounds mismatch), and per-monitor live wallpaper state. One-click suspend / resume for widgets and wallpaper.
+ 📋 **Log viewer** | Browse one file per day, reload, follow-tail, and open the log folder — with line numbers and syntax colouring.
+ 🔍 **Debug desktop tree** | Diagnostic overlay that draws, at the cursor, the hit-test result, z-order and the surface window style/ex-style.
+ 💾 **Backups & restore** | Export a `.dbe1` bundle (layout, settings, UserWidgets) and restore it later. Reset is destructive and rebuilds from scratch.
+ 📐 **Snap overlay** | Live snap guide lines when dragging or resizing boxes.
+ 📁 **Folder portal** | A box that opens a chosen folder in Explorer when activated.
 
 ## 📸 Screenshots
-
-<!-- Placeholder screenshots — replace with actual captures -->
 
 ### Box with items and widgets
 
@@ -139,13 +138,13 @@ Everything runs from the system tray, persists your layout between sessions, and
 
 ### Prerequisites
 
-| Requirement | Details |
+ Requirement | Details
 | --- | --- |
-| **Operating system** | Windows 10 version 2004 (build 19041) or later, or Windows 11. The app targets `net10.0-windows10.0.19041.0`. |
-| **Architecture** | **x64 only.** The installer is published as `win-x64`; there is no x86 or ARM64 build. (For now. Open issue and tell me if you want it or build from source) |
-| **.NET Desktop Runtime** | **.NET 10 Desktop Runtime (x64)** must be installed. The official installer is *framework-dependent*, not self-contained — without it Maktaby will not start. <br>[Download .NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| **WebView2 Runtime** | **Microsoft Edge WebView2 Evergreen Runtime** is required for web widgets and HTML-based live wallpapers. It ships preinstalled on Windows 11 and on most Windows 10 machines via Edge — if you have removed Edge, install it separately: <br>[Download WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) |
-| **Administrator rights** | The setup installs to `%ProgramFiles%\Maktaby` and requests elevation. |
+ **Operating system** | Windows 10 version 2004 (build 19041) or later, or Windows 11. The app targets `net10.0-windows10.0.19041.0`.
+ **Architecture** | **x64 only.** The installer is published as `win-x64`; there is no x86 or ARM64 build. (For now. Open issue and tell me if you want it or build from source)
+ **.NET Desktop Runtime** | **.NET 10 Desktop Runtime (x64)** must be installed. The official installer is *framework-dependent*, not self-contained — without it Maktaby will not start. <br>[Download .NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0)
+ **WebView2 Runtime** | **Microsoft Edge WebView2 Evergreen Runtime** is required for web widgets and HTML-based live wallpapers. It ships preinstalled on Windows 11 and on most Windows 10 machines via Edge — if you have removed Edge, install it separately: <br>[Download WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
+ **Administrator rights** | The setup installs to `%ProgramFiles%\Maktaby` and requests elevation.
 
 ### Install
 
@@ -156,9 +155,12 @@ Everything runs from the system tray, persists your layout between sessions, and
 
 Each release also publishes a SHA-256 checksum on the release page.
 
+Installed copies can update themselves: **Settings → Updates**, or **Check for updates…** in the tray menu, checks GitHub Releases on demand, and the same check also runs at startup and every 6 hours. When a newer build is found you get the option to download and install it — the download is verified against the release's SHA-256 before the installer runs. The update channel (**Auto**, **Stable** or **Beta**) is in Settings → Updates; *Auto* follows the kind of build you are running. A **portable** copy — one you run straight from a folder, with no installer — does not offer updates, because there is no installation to update: replace the folder instead.
+
 To uninstall, use **Settings → Apps → Installed apps → Maktaby**. Uninstallation closes any running instance, removes the files, and cleans up the Windows startup entry.
 
 > **Note** — Maktaby layers its own windows *above* the Windows desktop and wallpaper. It does not replace Explorer, and it does not modify your desktop icons, existing files, or registry entries beyond the optional startup key.
+
 ---
 
 ## 🛠️ Build from source
@@ -187,7 +189,9 @@ Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) first. The script publ
 
 ### Releasing
 
-Releases are tag-driven: push a `v1.0.33-beta.1` tag from `develop` for a pre-release, or a `v1.0.33` tag from `main` for a stable one. GitHub Actions builds the installer and publishes the release. Automatic version numbering is available via `.\build_publish.ps1`.
+Releases are tag-driven: push a `v1.0.33-beta.1` tag from `develop` for a pre-release, or a `v1.0.33` tag from `main` for a stable one. GitHub Actions builds the installer and publishes the release.
+
+`.\build_publish.ps1` does that for you — it verifies the tree is clean, pushes the branch, works out the next version from the last tag, tags and pushes it, and then asks whether to build a local copy of the installer too (the tag push already triggers CI, so the answer defaults to no). Use `-BuildInstaller` or `-SkipInstaller` to answer up front, and `-DryRun` to print the plan without doing anything.
 
 Full details: **[docs/releasing.md](docs/releasing.md)**.
 
@@ -216,50 +220,50 @@ Maktaby stands on the shoulders of some excellent open-source projects. Thank yo
 
 ### Runtime & UI
 
-| Package | Version | Used for | Project |
+ Package | Version | Used for | Project
 | --- | --- | --- | --- |
-| [WPF-UI](https://github.com/wpf-ui/WPF-UI) · [WPF-UI.Tray](https://github.com/wpf-ui/WPF-UI) | 4.3.0 | Fluent window chrome (Mica backdrop, rounded corners), theming, and the system tray icon | `Maktaby`, `Maktaby.Shared`, `Maktaby.WidgetsCreator` |
-| [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) | 8.4.2 | MVVM source generators (`[ObservableProperty]`, `[RelayCommand]`) | `Maktaby`, `Maktaby.Shared` |
-| [AvalonEdit](https://github.com/icsharpcode/AvalonEdit) | 6.3.1.120 | HTML / CSS / JavaScript syntax highlighting in the widget editor | `Maktaby` |
+ [WPF-UI](https://github.com/wpf-ui/WPF-UI) · [WPF-UI.Tray](https://github.com/wpf-ui/WPF-UI) | 4.3.0 | Fluent window chrome (Mica backdrop, rounded corners), theming, and the system tray icon | `Maktaby`, `Maktaby.Shared`, `Maktaby.WidgetsCreator`
+ [CommunityToolkit.Mvvm](https://github.com/CommunityToolkit/dotnet) | 8.4.2 | MVVM source generators (`[ObservableProperty]`, `[RelayCommand]`) | `Maktaby`, `Maktaby.Shared`
+ [AvalonEdit](https://github.com/icsharpcode/AvalonEdit) | 6.3.1.120 | HTML / CSS / JavaScript syntax highlighting in the widget editor | `Maktaby`
 
 ### Web content
 
-| Package | Version | Used for | Project |
+ Package | Version | Used for | Project
 | --- | --- | --- | --- |
-| [Microsoft.Web.WebView2](https://github.com/MicrosoftEdge/WebView2Feedback) | 1.0.4191.47 | Chromium host for web widgets and HTML live wallpapers. Requires the [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) at runtime. | `Maktaby`, `Maktaby.Shared`, `Maktaby.LiveWallpaper` |
+ [Microsoft.Web.WebView2](https://github.com/MicrosoftEdge/WebView2Feedback) | 1.0.4258.31 | Chromium host for web widgets and HTML live wallpapers. Requires the [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) at runtime. | `Maktaby`, `Maktaby.Shared`, `Maktaby.LiveWallpaper`
 
 ### Graphics & rendering (live wallpaper engine)
 
-| Package | Version | Used for | Project |
+ Package | Version | Used for | Project
 | --- | --- | --- | --- |
-| [Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows) — `Direct3D11`, `Direct2D1`, `DirectComposition` | 3.8.3 | Direct3D / Direct2D video and GIF rendering, swapchains, desktop composition layer | `Maktaby.LiveWallpaper` |
-| [System.Drawing.Common](https://github.com/dotnet/runtime) | 10.0.12 | Frame extraction and image handling for animated wallpapers | `Maktaby.LiveWallpaper` |
-| [Microsoft.Windows.Compatibility](https://github.com/dotnet/runtime) | 10.0.12 | Compatibility shims (Shell/COM interop) | `Maktaby.LiveWallpaper` |
+ [Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows) — `Direct3D11`, `Direct2D1`, `DirectComposition` | 3.8.3 | Direct3D / Direct2D video and GIF rendering, swapchains, desktop composition layer | `Maktaby.LiveWallpaper`
+ [System.Drawing.Common](https://github.com/dotnet/runtime) | 10.0.12 | Frame extraction and image handling for animated wallpapers | `Maktaby.LiveWallpaper`
+ [Microsoft.Windows.Compatibility](https://github.com/dotnet/runtime) | 10.0.12 | Compatibility shims (Shell/COM interop) | `Maktaby.LiveWallpaper`
 
 ### Widget SDK
 
-| Package | Version | Used for | Project |
+ Package | Version | Used for | Project
 | --- | --- | --- | --- |
-| [Microsoft.CodeAnalysis.CSharp (Roslyn)](https://github.com/dotnet/roslyn) | 5.9.0 | Compiles C# native-widget sources at load time, with a hashed cache | `Maktaby` |
+ [Microsoft.CodeAnalysis.CSharp (Roslyn)](https://github.com/dotnet/roslyn) | 5.9.0 | Compiles C# native-widget sources at load time, with a hashed cache | `Maktaby`
 
 ### Infrastructure
 
-| Package | Version | Used for |
+ Package | Version | Used for
 | --- | --- | --- |
-| [Microsoft.Extensions.DependencyInjection](https://github.com/dotnet/runtime) | 10.0.12 | Service registration and the composition root |
-| [Microsoft.Extensions.Configuration(.Json)](https://github.com/dotnet/runtime) | 10.0.12 | Reading the app settings file |
-| [Serilog](https://github.com/serilog/serilog) | 4.4.0 | Structured logging |
-| [Serilog.Exceptions](https://github.com/serilog/serilog-exceptions) | 8.4.0 | Rich exception detail in the log |
-| [Serilog.Sinks.File](https://github.com/serilog/serilog) | 7.0.0 | Daily rolling log files (viewable in-app) |
-| [Serilog.Sinks.Console](https://github.com/serilog/serilog) | 6.1.1 | Debug-build console output |
+ [Microsoft.Extensions.DependencyInjection](https://github.com/dotnet/runtime) | 10.0.12 | Service registration and the composition root
+ [Microsoft.Extensions.Configuration(.Json)](https://github.com/dotnet/runtime) | 10.0.12 | Reading the app settings file
+ [Serilog](https://github.com/serilog/serilog) | 4.4.0 | Structured logging
+ [Serilog.Exceptions](https://github.com/serilog/serilog-exceptions) | 8.4.0 | Rich exception detail in the log
+ [Serilog.Sinks.File](https://github.com/serilog/serilog) | 7.0.0 | Daily rolling log files (viewable in-app)
+ [Serilog.Sinks.Console](https://github.com/serilog/serilog) | 6.1.1 | Debug-build console output
 
 ### Build & packaging
 
-| Tool | Version | Used for |
+ Tool | Version | Used for
 | --- | --- | --- |
-| [MinVer](https://github.com/adamralph/minver) | 8.0.0 | Derives the assembly version from git tags |
-| [Inno Setup](https://jrsoftware.org/isinfo.php) | 6 | Builds the setup executable from `installer.iss` |
-| [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | 10.0.x | Build toolchain (`net10.0-windows10.0.19041.0`) |
+ [MinVer](https://github.com/adamralph/minver) | 8.0.0 | Derives the assembly version from git tags
+ [Inno Setup](https://jrsoftware.org/isinfo.php) | 6 | Builds the setup executable from `installer.iss`
+ [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | 10.0.x | Build toolchain (`net10.0-windows10.0.19041.0`)
 
 > All package versions are pinned centrally in [`Directory.Packages.props`](Directory.Packages.props) — that is the single place to bump or add a dependency.
 >
