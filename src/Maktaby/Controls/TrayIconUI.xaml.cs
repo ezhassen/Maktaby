@@ -1,4 +1,6 @@
 using Maktaby.Core.Interfaces;
+using Maktaby.Helpers;
+using Maktaby.Native;
 using Maktaby.Win32.NativeMethods;
 using Microsoft.Extensions.DependencyInjection;
 using System;
@@ -9,7 +11,6 @@ using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Maktaby.Native;
 using Wpf.Ui.Tray.Controls;
 
 namespace Maktaby.Controls;
@@ -105,6 +106,7 @@ public partial class TrayIconUI
             if (item is not MenuItem mItem) continue;
             mItem.IsEnabled = !isDisabled;
         }
+        menuCheckForUpdates.Visibility = AppBuildInfo.IsPortable ? Visibility.Collapsed : Visibility.Visible;
     }
 
     #region Sync Menu Items States

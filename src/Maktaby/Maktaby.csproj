@@ -28,7 +28,20 @@
       uncatchable native fault, so disable CET marking for this binary.
     -->
 		<CETCompat>false</CETCompat>
+		<!--
+			Portable build switch. `dotnet build -p:PortableBuild=true` stamps the
+			`PortableBuild` assembly metadata, which AppBuildInfo reads to DISABLE the in-app
+			updater: it downloads and runs the Inno Setup .exe, which would install over a
+			portable copy, create a second installation and re-register the startup key,
+			silently converting a portable install into an installed one. Defaults to false,
+			i.e. the normal updatable build.
+		-->
+		<PortableBuild Condition="'$(PortableBuild)' == ''">false</PortableBuild>
 	</PropertyGroup>
+
+	<ItemGroup Condition="'$(PortableBuild)' == 'true'">
+		<AssemblyMetadata Include="PortableBuild" Value="true" />
+	</ItemGroup>
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.Configuration" />

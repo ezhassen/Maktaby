@@ -45,6 +45,11 @@ public partial class SettingsView : AppWindows.AppFluentWindow
             }
             //if (item is System.Windows.Controls.ListBoxItem listBoxItem && listBoxItem.Tag is string sn) _sectionNames.Add(sn);
         }
+        if (AppBuildInfo.IsPortable)
+        {
+            SectionUpdates.Visibility = Visibility.Collapsed;
+            listBoxItem_SectionUpdates.Visibility = Visibility.Collapsed;
+        }
 
         ApplyDesktopBackground();
         BuildPreviewItems();

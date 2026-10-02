@@ -71,7 +71,10 @@
                     <ListBoxItem Content="Widgets" Tag="SectionWebWidgets" />
                     <ListBoxItem Content="Containers" Tag="SectionContainers" />
                     <ListBoxItem Content="Live Wallpaper" Tag="SectionLiveWallpaper" />
-                    <ListBoxItem Content="Updates" Tag="SectionUpdates" />
+                    <ListBoxItem
+                        x:Name="listBoxItem_SectionUpdates"
+                        Content="Updates"
+                        Tag="SectionUpdates" />
                     <ListBoxItem Content="General" Tag="SectionGeneral" />
                     <ListBoxItem Content="Snapshot" Tag="SectionSnapshot" />
                 </ListBox>
@@ -544,9 +547,11 @@
                                         Width="200"
                                         ItemsSource="{Binding UpdateChannelOptions}"
                                         SelectedItem="{Binding UpdateChannel, UpdateSourceTrigger=PropertyChanged}" />
-                                    <!--  CommandParameter MUST be the UserSettings property name:
-                                          the reset command reflects it. "UpdateChannel", never
-                                          "SelectedUpdateChannelOption".  -->
+                                    <!--
+                                        CommandParameter MUST be the UserSettings property name:
+                                        the reset command reflects it. "UpdateChannel", never
+                                        "SelectedUpdateChannelOption".
+                                    -->
                                     <ui:Button
                                         Command="{Binding ResetToDefaultCommand}"
                                         CommandParameter="UpdateChannel"

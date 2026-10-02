@@ -1,10 +1,12 @@
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using System;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,8 +35,25 @@ public sealed class UpdateService : IUpdateService, IDisposable
     /// <summary>Only the release channel is needed, not every release ever.</summary>
     private const int ReleasesToFetch = 10;
 
-    /// <summary>The single asset shape the release workflow publishes.</summary>
-    private const string InstallerAssetSuffix = "-x64-setup.exe";
+    /// <summary>Asset naming convention the release workflow publishes:
+    /// <c>Maktaby-&lt;version&gt;-&lt;arch&gt;-setup.exe</c>. The architecture token is NOT
+    /// hard-coded - it is matched against the running process, so adding an arm64 or x86
+    /// release to the same tag needs no change here.</summary>
+    private const string InstallerAssetSuffix = "-setup.exe";
+
+    /// <summary>Architecture token in a release asset name -> the process architecture it
+    /// serves. Extended (not replaced) as new runtimes ship: an unknown token simply matches
+    /// nothing, and the check degrades to "no installer for this machine" rather than
+    /// offering the wrong build.</summary>
+    private static readonly IReadOnlyDictionary<string, Architecture> s_archTokens =
+        new Dictionary<string, Architecture>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["x64"] = Architecture.X64,
+            ["amd64"] = Architecture.X64,
+            ["x86"] = Architecture.X86,
+            ["win32"] = Architecture.X86,
+            ["arm64"] = Architecture.Arm64,
+        };
 
     private static readonly JsonSerializerOptions s_json = new()
     {
@@ -178,15 +197,81 @@ public sealed class UpdateService : IUpdateService, IDisposable
         return JsonSerializer.Deserialize<List<ReleaseDto>>(json, s_json) ?? new List<ReleaseDto>();
     }
 
+    /// <summary>
+    /// Picks the installer for the architecture this process is running on.
+    /// </summary>
+    /// <remarks>
+    /// Ordered by decreasing confidence, because picking the wrong one is worse than picking
+    /// none - a user would be offered an arm64 setup on an x64 machine and it would fail
+    /// mid-install:
+    /// <list type="number">
+    ///   <item><description>the exact <c>-&lt;arch&gt;-setup.exe</c> the workflow publishes;</description></item>
+    ///   <item><description>any other arch-tagged <c>.exe</c> for this architecture (covers the
+    ///   older <c>Maktaby.1.0.32-beta-x64.exe</c> naming);</description></item>
+    ///   <item><description>a single un-tagged <c>.exe</c>, only when it is unambiguously the
+    ///   only one;</description></item>
+    ///   <item><description>nothing - several candidates, or none for this architecture.</description></item>
+    /// </list>
+    /// </remarks>
     private static ReleaseAssetDto? SelectInstaller(ReleaseAssetDto[]? assets)
     {
         if (assets is null || assets.Length == 0) { return null; }
 
-        // Prefer the conventional x64 setup name published by release.yml, then fall back to
-        // any .exe so a renamed asset does not silently disable updates.
-        return assets.FirstOrDefault(a =>
-                   a.Name?.EndsWith(InstallerAssetSuffix, StringComparison.OrdinalIgnoreCase) == true)
-               ?? assets.FirstOrDefault(a => a.Name?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) == true);
+        var running = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture;
+
+        // 1. The conventional name for this architecture.
+        var exact = assets.FirstOrDefault(a =>
+            a.Name is not null
+            && a.Name.EndsWith($"{ArchitectureToken(running)}{InstallerAssetSuffix}", StringComparison.OrdinalIgnoreCase));
+        if (exact is not null) { return exact; }
+
+        var executables = assets
+            .Where(a => !string.IsNullOrEmpty(a.Name) && a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+
+        // 2. Any arch-tagged executable that matches the running process.
+        var tagged = executables.FirstOrDefault(a => TokenFor(a.Name!) == running);
+        if (tagged is not null) { return tagged; }
+
+        // 3. A lone untagged executable is safe only when there is exactly one; two or more
+        //    would be a guess between architectures.
+        var untagged = executables.Where(a => TokenFor(a.Name!) is null).ToArray();
+        if (untagged.Length == 1) { return untagged[0]; }
+
+        return null;
+    }
+
+    /// <summary>The architecture token for the running process, e.g. <c>x64</c>.</summary>
+    private static string ArchitectureToken(Architecture architecture) => architecture switch
+    {
+        Architecture.X64 => "x64",
+        Architecture.X86 => "x86",
+        Architecture.Arm64 => "arm64",
+        _ => architecture.ToString().ToLowerInvariant(),
+    };
+
+    /// <summary>
+    /// Reads the architecture out of an asset name, or null when it carries none.
+    /// Only tokens that actually separate words count, so a version like "1.0.3" is not
+    /// mistaken for an architecture.
+    /// </summary>
+    private static Architecture? TokenFor(string assetName)
+    {
+        var stem = Path.GetFileNameWithoutExtension(assetName);
+        if (string.IsNullOrEmpty(stem)) { return null; }
+
+        foreach (var (token, architecture) in s_archTokens)
+        {
+            // Require a separator before the token, so "x64" matches in "beta-x64" and
+            // "-x64-setup" but never inside a longer word.
+            if (stem.Contains($"-{token}", StringComparison.OrdinalIgnoreCase)
+                || stem.EndsWith(token, StringComparison.OrdinalIgnoreCase))
+            {
+                return architecture;
+            }
+        }
+
+        return null;
     }
 
     private static UpdateInfo BuildInfo(ReleaseDto release, SemVersion candidate, ReleaseAssetDto asset)

@@ -50,6 +50,17 @@ public sealed class UpdateManager : IDisposable
     {
         if (_disposed || _timer is not null) { return; }
 
+        if (AppBuildInfo.IsPortable)
+        {
+            // A portable copy has no installer to update to. Offering one would download an
+            // Inno Setup .exe that installs a SECOND copy under %ProgramFiles%, registers the
+            // startup key and leaves the portable folder behind — silently turning a
+            // portable install into an installed one. Portable users replace the folder.
+            Logging.Log.Information(
+                "Portable build: the in-app update checker is disabled (no installer to update to)");
+            return;
+        }
+
         _timer = new System.Windows.Threading.DispatcherTimer { Interval = s_checkInterval };
         _timer.Tick += OnTick;
         _timer.Start();
@@ -74,6 +85,14 @@ public sealed class UpdateManager : IDisposable
     public async Task<UpdateCheckResult?> CheckAsync(bool interactive)
     {
         if (_disposed) { return null; }
+
+        if (AppBuildInfo.IsPortable)
+        {
+            // Reached by the tray "Check for updates…" and the Settings button, which both
+            // bypass Start(). Say why rather than looking broken.
+            if (interactive) { _ui.ReportUnavailable("Updates are not available in a portable build."); }
+            return null;
+        }
 
         // One check at a time. A slow network must not let the timer stack requests.
         if (_inFlight is not null) { return null; }
