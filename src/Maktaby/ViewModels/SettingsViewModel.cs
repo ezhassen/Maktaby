@@ -101,6 +101,33 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     // Log level: Serilog levels, staged by the selector and applied on Save.
     public IReadOnlyList<string> LogLevelOptions { get; } = new[] { "Verbose", "Debug", "Information", "Warning", "Error", "Fatal" };
 
+    // Update channel. "Auto" follows the installed build; the other two pin it.
+    public IReadOnlyList<string> UpdateChannelOptions { get; } = new[] { "Auto", "Stable", "Beta" };
+
+    private string _updateChannelOption = "Auto";
+
+    /// <summary>
+    /// Named after the model property (<c>UserSettings.UpdateChannel</c>), NOT "Selected...".
+    /// <see cref="ResetToDefault"/> resolves the setting by reflecting
+    /// <c>typeof(UserSettings).GetProperty(CommandParameter)</c> and then the view-model
+    /// property of the SAME name, so a mismatched name makes the reset button a silent
+    /// no-op. Same for <see cref="CheckForUpdatesOnStartup"/> below.
+    /// </summary>
+    public string UpdateChannel
+    {
+        get => _updateChannelOption;
+        set => SetField(ref _updateChannelOption, value);
+    }
+
+    private bool _checkForUpdatesOnStartup = true;
+
+    /// <summary>See <see cref="UpdateChannel"/> for why this keeps the model's name.</summary>
+    public bool CheckForUpdatesOnStartup
+    {
+        get => _checkForUpdatesOnStartup;
+        set => SetField(ref _checkForUpdatesOnStartup, value);
+    }
+
     private string _selectedLogLevelOption = "Warning";
     public string SelectedLogLevelOption
     {
@@ -243,6 +270,13 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
             "light" => "Light",
             _ => "App"
         };
+        _updateChannelOption = s.UpdateChannel?.Trim() switch
+        {
+            "Stable" => "Stable",
+            "Beta" => "Beta",
+            _ => "Auto"
+        };
+        _checkForUpdatesOnStartup = s.CheckForUpdatesOnStartup;
 
         _defaultBoxTransparencyValue = s.DefaultBoxTransparencyValue;
         _defaultBoxBackColor = s.DefaultBoxBackColor;
@@ -335,21 +369,33 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // Every early return below is logged, not silent. A reset button whose
+        // CommandParameter does not match a UserSettings property fails in exactly the same
+        // way as one that legitimately has no default, and that ambiguity is what hid a
+        // broken button (CommandParameter="SelectedUpdateChannelOption" against a model
+        // property named "UpdateChannel").
         var modelProp = typeof(UserSettings).GetProperty(name);
         if (modelProp is null)
         {
+            Logging.Log.Warning(
+                "Settings reset: '{Name}' is not a UserSettings property, so the reset button is wired to the wrong name",
+                name);
             return;
         }
 
         var defAttr = modelProp.GetCustomAttribute<DefaultValueAttribute>();
         if (defAttr is null)
         {
+            Logging.Log.Information("Settings reset: '{Name}' has no [DefaultValue], nothing to reset to", name);
             return;
         }
 
         var vmProp = GetType().GetProperty(name);
         if (vmProp is null || !vmProp.CanWrite)
         {
+            Logging.Log.Warning(
+                "Settings reset: '{Name}' has no writable view-model property of the same name, so the reset is a no-op",
+                name);
             return;
         }
 
@@ -390,6 +436,8 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         DefaultBoxBorderThickness = _defaultBoxBorderThickness,
         DefaultBoxTitleBarColorsSameAsBox = _defaultBoxTitleBarColorsSameAsBox,
         DefaultBoxIconSize = _defaultBoxIconSize,
+        UpdateChannel = _updateChannelOption,
+        CheckForUpdatesOnStartup = _checkForUpdatesOnStartup,
     };
 
     public void Save()
@@ -409,6 +457,8 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         s.DefaultBoxIconSize = _defaultBoxIconSize;
         s.LiveWallpaperPreloadMaxMB = System.Math.Clamp(_liveWallpaperPreloadMaxMB, 0, 1024);
         _liveWallpaperPreloadMaxMB = s.LiveWallpaperPreloadMaxMB;
+        s.UpdateChannel = _updateChannelOption;
+        s.CheckForUpdatesOnStartup = _checkForUpdatesOnStartup;
         _settingsService.Save();
         // ApplyTheme applies the theme and registers the system-theme watcher; the boxes are
         // repainted by the ApplicationThemeManager.Changed handler.

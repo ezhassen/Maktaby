@@ -8,6 +8,7 @@
     <!--  Shared converters and application-wide styles live here.  -->
     <conv:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     <conv:BoolInvertedToVisibilityConverter x:Key="BoolInvertedToVisibilityConverter" />
+    <conv:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
 
     <!--
         Tray/context menu icons — app-wide reusable SymbolIcons (x:Shared=False so each
@@ -169,6 +170,18 @@
         x:Shared="False"
         FontSize="16"
         Symbol="ResizeSmall20" />
+    <!--
+        Update / "check for the latest build". Two-arrow sync loop: the universal refresh
+        glyph, and it matches the menu item's verb ("Check for updates..."). A download-arrow
+        icon was rejected because it reads as the RESULT rather than the action.
+        The *20 Filled variant keeps it consistent with ItemIcon_About (Info20) and
+        ItemIcon_ThemeLight (WeatherSunny20).
+    -->
+    <ui:SymbolIcon
+        x:Key="ItemIcon_Update"
+        x:Shared="False"
+        FontSize="16"
+        Symbol="ArrowSync20" />
 
     <!--
         Box appearance resources. These are resolved from UserSettings by BoxAppearance and

@@ -150,6 +150,25 @@ public class UserSettings
 
     #endregion
 
+    #region Updates
+
+    /// <summary>Stored as "Auto" / "Stable" / "Beta". Auto (the default) follows the installed
+    /// build: a prerelease install tracks prereleases, a stable install tracks stable.</summary>
+    [Category("Updates"), DefaultValue("Auto")]
+    public string UpdateChannel { get; set; } = "Auto";
+
+    /// <summary>Version the user chose to skip, or null. Applies to exactly this version —
+    /// a newer release is offered again. Cleared once an update is actually installed.</summary>
+    [Category("Updates"), DefaultValue(null)]
+    public string? UpdateSkippedVersion { get; set; }
+
+    /// <summary>Master switch for the background check. The tray "Check for updates" item and
+    /// Settings → Updates → "Check now" still work when this is off.</summary>
+    [Category("Updates"), DefaultValue(true)]
+    public bool CheckForUpdatesOnStartup { get; set; } = true;
+
+    #endregion
+
 }
 
 

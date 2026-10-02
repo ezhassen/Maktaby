@@ -133,6 +133,12 @@
                 Icon="{StaticResource ItemIcon_Test}"
                 ToolTip="Used for tests" />
             <MenuItem
+                x:Name="menuCheckForUpdates"
+                Click="CheckForUpdates_Click"
+                Header="Check for updates…"
+                Icon="{StaticResource ItemIcon_Update}"
+                ToolTip="Look for a newer Maktaby release on GitHub" />
+            <MenuItem
                 x:Name="menuAbout"
                 Click="About_Click"
                 Header="About"

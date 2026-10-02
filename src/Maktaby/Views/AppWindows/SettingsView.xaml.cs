@@ -1,6 +1,7 @@
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using Maktaby.Helpers;
+using Maktaby.Shared.Interfaces;
 using Maktaby.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
@@ -15,7 +16,6 @@ using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Wpf.Ui.Controls;
-using Maktaby.Shared.Interfaces;
 
 namespace Maktaby.Views;
 
@@ -31,6 +31,20 @@ public partial class SettingsView : AppWindows.AppFluentWindow
     {
         InitializeComponent();
         DataContext = vm;
+
+        //populate _sectionNames from CategoryList ListBoxItems instead of hardcoding it (making adding new or re-ordaring easy)
+        _sectionNames = new List<string>();
+        foreach (var item in CategoryList.Items)
+        {
+            if (item is System.Windows.Controls.ListBoxItem listBoxItem)
+            {
+                if (listBoxItem.Tag is string sn)
+                {
+                    _sectionNames.Add(sn);
+                }
+            }
+            //if (item is System.Windows.Controls.ListBoxItem listBoxItem && listBoxItem.Tag is string sn) _sectionNames.Add(sn);
+        }
 
         ApplyDesktopBackground();
         BuildPreviewItems();
@@ -79,8 +93,7 @@ public partial class SettingsView : AppWindows.AppFluentWindow
     private IDialogService? _dialogs;
     private IDialogService Dialogs => _dialogs ??= App.Services.GetRequiredService<IDialogService>();
 
-    private static readonly string[] _sectionNames =
-        { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionWebWidgets", "SectionContainers", "SectionLiveWallpaper", "SectionGeneral", "SectionSnapshot" };
+    private readonly List<string> _sectionNames;// =        { "SectionPreview", "SectionAppearance", "SectionBoxes", "SectionWebWidgets", "SectionContainers", "SectionLiveWallpaper", "SectionUpdates", "SectionGeneral", "SectionSnapshot" };
 
     // Clicking a tab scrolls its section to the top of the viewport and plays a brief orange focus border.
     private void CategoryList_PreviewMouseDown(object sender, MouseButtonEventArgs e)
@@ -507,6 +520,34 @@ public partial class SettingsView : AppWindows.AppFluentWindow
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    /// <summary>"Check now" runs an INTERACTIVE check, so the user gets an answer even when
+    /// nothing is found. Settings changes are saved first, so the check uses the channel
+    /// currently selected in the panel rather than the persisted one.</summary>
+    private void CheckForUpdatesNow_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (DataContext is SettingsViewModel vm) { vm.Save(); }
+
+            Application.Current.Dispatcher.BeginInvoke(async () =>
+            {
+                try
+                {
+                    await App.Services.GetRequiredService<WPFServices.UpdateManager>()
+                        .CheckAsync(interactive: true);
+                }
+                catch (Exception ex)
+                {
+                    Logging.Log.Warning(ex, "Update check from Settings failed");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logging.Log.Warning(ex, "Could not start an update check from Settings");
+        }
     }
 
     private void ViewLogs_Click(object sender, RoutedEventArgs e)

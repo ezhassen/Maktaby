@@ -45,15 +45,12 @@ public partial class AboutView : AppWindows.AppFluentWindow
 
     private void PopulateAssemblyInfo()
     {
+        // AppVersion is the single reader of the running build's version: the About window and
+        // the update checker must never be able to disagree about what is installed. MinVer
+        // writes InformationalVersion as "1.0.2-beta+88c49b5"; the '+sha' is dropped there.
+        VersionText.Text = $"Version {Helpers.AppVersion.Current}";
+
         var entry = Assembly.GetEntryAssembly();
-
-        var infoVersion = entry?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-            ?.InformationalVersion ?? string.Empty;
-
-        // InformationalVersion carries the commit id after '+': "1.0.2-beta+88c49b5" -> "1.0.2-beta".
-        var version = infoVersion.Split('+')[0];
-        VersionText.Text = string.IsNullOrEmpty(version) ? "Version" : $"Version {version}";
-
         var copyright = entry?.GetCustomAttribute<AssemblyCopyrightAttribute>()?.Copyright;
         CopyrightText.Text = copyright ?? string.Empty;
 

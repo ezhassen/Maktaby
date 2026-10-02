@@ -241,6 +241,21 @@ public partial class App : Application
             return null;
         }, pausePlayback: false);
 
+        // Update checks start only after the loading dialog is gone: a release check must
+        // never overlap initialisation, and the prompt window is useless before the desktop
+        // surface exists. OnStartupComplete also reports a version transition left behind by
+        // a previous self-update.
+        try
+        {
+            var updater = Services.GetRequiredService<WPFServices.UpdateManager>();
+            updater.OnStartupComplete();
+            updater.Start();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not start the update checker");
+        }
+
         //StartHealthSnapshots, when logging
         if (GlobalFeaturesSwitches.EnableHealthSnapshots) StartHealthSnapshots();
     }
@@ -680,6 +695,9 @@ public partial class App : Application
         // of the message pump. Done next to the power-resume teardown for the same reason.
         try { _systemThemeFollower?.Dispose(); } catch { }
         _systemThemeFollower = null;
+        // Stop the periodic release check and cancel any in-flight request, so a background
+        // timer cannot resurrect a dead App instance during teardown.
+        try { Services.GetService<WPFServices.UpdateManager>()?.Dispose(); } catch { }
         // The power-resume quiesce owns suspended widgets + a one-shot timer: stop the timer
         // (no recovery on the way out — the process is dying) and drop the SystemEvents
         // subscription, whose hidden window would otherwise linger past shutdown.
@@ -810,6 +828,10 @@ public partial class App : Application
         // Win32 watchers
         services.AddSingleton<IMouseMonitor, MouseMonitor>();
         services.AddSingleton<Core.Interfaces.IDesktopIconSizeService, Win32.Services.DesktopIconSizeService>();
+
+        services.AddSingleton<IUpdateService, UpdateService>();
+        services.AddSingleton<IAppUpdateUi, WPFServices.WpfUpdateUi>();
+        services.AddSingleton<WPFServices.UpdateManager>();
 
         // Debug overlay (single instance; toggled from the tray "Debug Desktop Tree" menu).
         services.AddSingleton<DesktopTreeDebugOverlay>();
@@ -1114,6 +1136,24 @@ public partial class App : Application
                 new SettingsView(vm).Show();
             });
         };
+        // Manual "Check for updates…": interactive, so the user always gets an answer — an
+        // up-to-date result, a skipped version, or a clear failure — instead of silence.
+        tray.CheckForUpdatesRequested += (_, _) =>
+        {
+            Dispatcher.BeginInvoke(async () =>
+            {
+                try
+                {
+                    await Services.GetRequiredService<WPFServices.UpdateManager>()
+                        .CheckAsync(interactive: true);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Manual update check failed");
+                }
+            });
+        };
+
         tray.AboutRequested += (_, _) =>
         {
             Application.Current.Dispatcher.BeginInvoke(() =>
