@@ -629,7 +629,19 @@ public partial class App : Application
     /// When the tier-0 pass is active it owns the widgets: our suspended list is adopted into
     /// its list instead of resuming behind its back (those windows were already suspended when
     /// tier-0 arrived, so the tier pass never listed them — adopting is the only way they get
-    /// resumed on tier recovery).</summary>
+    /// resumed on tier recovery).</remarks>
+    /// <para>
+    /// Deliberately no "nothing to do" early return. The freeze applied by
+    /// <see cref="OnPowerResumeQuiesce"/> covers EVERY live widget window, but only the ones this
+    /// pass actually suspended were tracked — so the two sets differ. A widget that was already
+    /// suspended when the resume landed (the usual case after hibernate, where session lock
+    /// suspended it beforehand) is frozen but untracked, and returning on an empty tracked list
+    /// would skip the hand-back below and leave its chrome overlay frozen for the rest of the
+    /// session: <c>UpdateChrome</c> early-outs on <c>IsFrozen</c>, so activating or focusing the
+    /// widget showed nothing. Both halves therefore use the same scope — freeze over all live
+    /// windows, hand back over all live windows. <c>Unfreeze</c> itself early-outs for a window
+    /// that was never frozen, so the extra sweep is a no-op in the common case.
+    /// </para>
     private void RecoverPowerResume()
     {
         try
@@ -642,8 +654,6 @@ public partial class App : Application
                 return;
             }
             try { System.Windows.Media.RenderOptions.ProcessRenderMode = System.Windows.Interop.RenderMode.Default; } catch { }
-            if (_resumeSuspendedWidgets.Count == 0) return;
-
             if (_tierPauseActive)
             {
                 int adopted = 0;
