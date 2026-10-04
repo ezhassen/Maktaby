@@ -351,9 +351,6 @@ internal static class Win32Apis
     public static bool UnhookWinEvent(IntPtr hWinEventHook)
         => User32.UnhookWinEvent(hWinEventHook);
 
-    public static bool ShellNotifyIcon(uint dwMessage, ref NOTIFYICONDATA data)
-        => Shell32.Shell_NotifyIcon(dwMessage, ref data);
-
     /// <summary>Returns the bounding rectangle of the tray icon in physical screen pixels (S_OK on success).</summary>
     public static bool ShellNotifyIconGetRect(IntPtr hWnd, uint uID, out RECT rect)
     {

@@ -30,6 +30,8 @@ public partial class TrayIconUI
     public event EventHandler? SettingsRequested;
     public event EventHandler? AboutRequested;
     public event EventHandler? CheckForUpdatesRequested;
+    /// <summary>Debug: run a NON-interactive check, which notifies instead of prompting.</summary>
+    public event EventHandler? BackgroundUpdateCheckRequested;
     public event EventHandler<string?>? ThemeRequested;
     public event EventHandler? ExitRequested;
     public event EventHandler? ToggleHideAllRequested;
@@ -73,8 +75,10 @@ public partial class TrayIconUI
         // loading dialog is up, so reaching this point means the app is idle.
 #if DEBUG
         menuTest.Visibility = GlobalFeaturesSwitches.TrayIcon_ShowTestButton ? Visibility.Visible : Visibility.Collapsed;
+        menuTestBackgroundUpdateCheck.Visibility = GlobalFeaturesSwitches.SimulateUpdateAvailable ? Visibility.Visible : Visibility.Collapsed;
 #else
-    menuTest.Visibility = Visibility.Collapsed;
+        menuTest.Visibility = Visibility.Collapsed;
+        menuTestBackgroundUpdateCheck.Visibility = Visibility.Collapsed;
 #endif
 
         var dtMan = App.Services.GetRequiredService<DesktopManager>();
@@ -172,6 +176,8 @@ public partial class TrayIconUI
     private void About_Click(object sender, RoutedEventArgs e) => AboutRequested?.Invoke(this, EventArgs.Empty);
 
     private void CheckForUpdates_Click(object sender, RoutedEventArgs e) => CheckForUpdatesRequested?.Invoke(this, EventArgs.Empty);
+
+    private void TestBackgroundUpdateCheck_Click(object sender, RoutedEventArgs e) => BackgroundUpdateCheckRequested?.Invoke(this, EventArgs.Empty);
 
     private void Exit_Click(object sender, RoutedEventArgs e) => ExitRequested?.Invoke(this, EventArgs.Empty);
 

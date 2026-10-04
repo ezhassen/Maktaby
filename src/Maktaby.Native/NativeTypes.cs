@@ -106,26 +106,6 @@ public struct BLENDFUNCTION
     public byte AlphaFormat;
 }
 
-[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-public struct NOTIFYICONDATA
-{
-    public uint Size;
-    public IntPtr Hwnd;
-    public uint Id;
-    public uint Flags;
-    public uint CallbackMessage;
-    public IntPtr Icon;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string Tip;
-    public uint State;
-    public uint StateMask;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string Info;
-    public uint TimeoutOrVersion;
-    [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string InfoTitle;
-    public uint InfoFlags;
-    public Guid GuidItem;
-    public IntPtr BalloonIcon;
-}
-
 [StructLayout(LayoutKind.Sequential)]
 public struct NOTIFYICONIDENTIFIER
 {

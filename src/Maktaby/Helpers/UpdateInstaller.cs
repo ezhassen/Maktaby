@@ -43,8 +43,20 @@ public enum InstallerVerification
 /// </remarks>
 internal static class UpdateInstaller
 {
-    /// <summary>Where installers land between download and install.</summary>
-    public static string UpdatesDirectory =>
+    /// <summary>
+    /// Where the installer is downloaded to. Under %TEMP%, NOT next to the app: the file is a
+    /// throwaway executable that is replaced on every release, and the system is entitled to
+    /// reclaim temp space. Nothing here is worth persisting.
+    /// </summary>
+    public static string DownloadsDirectory =>
+        Path.Combine(Path.GetTempPath(), "Maktaby");
+
+    /// <summary>
+    /// Where the pending-update marker lives. Deliberately NOT under %TEMP%: it must survive
+    /// the process being terminated by the installer and the user restarting later, and temp
+    /// is reaped at inconvenient moments.
+    /// </summary>
+    private static string MarkerDirectory =>
         Path.Combine(Core.Services.SettingsService.AppDataDir, "Updates");
 
     /// <summary>
@@ -56,9 +68,9 @@ internal static class UpdateInstaller
     {
         try
         {
-            Directory.CreateDirectory(UpdatesDirectory);
+            Directory.CreateDirectory(MarkerDirectory);
             File.WriteAllText(
-                Path.Combine(UpdatesDirectory, "pending-update.txt"),
+                Path.Combine(MarkerDirectory, "pending-update.txt"),
                 $"{fromVersion}\n{toVersion}\n");
         }
         catch
@@ -72,7 +84,7 @@ internal static class UpdateInstaller
     {
         try
         {
-            var path = Path.Combine(UpdatesDirectory, "pending-update.txt");
+            var path = Path.Combine(MarkerDirectory, "pending-update.txt");
             if (!File.Exists(path)) { return null; }
 
             var lines = File.ReadAllLines(path);
@@ -88,9 +100,15 @@ internal static class UpdateInstaller
     }
 
     /// <summary>
-    /// Downloads <paramref name="update"/> and verifies it. Returns the local path, or null if
-    /// verification failed — in which case the file is deleted and must never be run.
+    /// Ensures <paramref name="update"/> is downloaded and verified. Returns the local path, or
+    /// null if verification failed — in which case the file is deleted and must never be run.
     /// </summary>
+    /// <remarks>
+    /// An existing file is verified FIRST and returned when it matches, so resuming after a
+    /// cancelled download or a crash does not re-fetch 15 MB. A file that fails verification is
+    /// deleted and re-downloaded rather than treated as fatal: a truncated partial from an
+    /// abandoned transfer is exactly what is most likely to be sitting there.
+    /// </remarks>
     public static async Task<string?> DownloadAndVerifyAsync(
         UpdateInfo update,
         IProgress<int>? progress,
@@ -102,8 +120,24 @@ internal static class UpdateInstaller
             return null;
         }
 
-        Directory.CreateDirectory(UpdatesDirectory);
-        var target = Path.Combine(UpdatesDirectory, Path.GetFileName(new Uri(update.DownloadUrl).LocalPath));
+        Directory.CreateDirectory(DownloadsDirectory);
+        var target = Path.Combine(DownloadsDirectory, Path.GetFileName(new Uri(update.DownloadUrl).LocalPath));
+
+        if (File.Exists(target))
+        {
+            var existing = Verify(target, update.Sha256);
+            if (existing != InstallerVerification.Failed)
+            {
+                Logging.Log.Information("Reusing the already-downloaded installer {File}", target);
+                progress?.Report(100);
+                return target;
+            }
+
+            // Wrong hash: corrupt, truncated by a cancelled download, or from another
+            // release. Discard it and fetch the real one.
+            Logging.Log.Warning("Discarding a stale installer that failed verification: {File}", target);
+            TryDelete(target);
+        }
 
         using var http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Maktaby-Desktop-UpdateCheck");

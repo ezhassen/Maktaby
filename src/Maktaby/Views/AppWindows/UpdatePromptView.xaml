@@ -85,16 +85,47 @@
             Margin="20,14,20,0"
             Visibility="{Binding IsBusy, Converter={StaticResource BoolToVisibilityConverter}}">
             <TextBlock FontSize="11" Text="{Binding StatusText}" TextWrapping="Wrap" />
-            <!--  Plain WPF ProgressBar, not a ui: control: the value is driven by a real
-                  download percentage, and Wpf.Ui has no determinate bar. Deterministic value
-                  (never IsIndeterminate) also means no animation clock runs while hidden.  -->
-            <ProgressBar
-                Height="6"
-                Margin="0,6,0,0"
-                HorizontalAlignment="Left"
-                Width="380"
-                Maximum="100"
-                Value="{Binding Progress, Mode=OneWay}" />
+            <TextBlock
+                Margin="0,4,0,0"
+                FontSize="11"
+                Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                Text="{Binding ErrorText}"
+                TextWrapping="Wrap"
+                Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}" />
+            <Grid Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <!--  Plain WPF ProgressBar, not a ui: control: the value is driven by a real
+                      download percentage, and Wpf.Ui has no determinate bar. Deterministic value
+                      (never IsIndeterminate) also means no animation clock runs while hidden.  -->
+                <ProgressBar
+                    Grid.Column="0"
+                    Height="6"
+                    HorizontalAlignment="Left"
+                    Width="380"
+                    Maximum="100"
+                    Value="{Binding Progress, Mode=OneWay}" />
+                <!--  Exactly one of these shows at a time: Cancel while the download can still
+                      be abandoned (IsCancellable goes false the moment the installer is
+                      launched), or Retry once an attempt has failed (HasError).  -->
+                <ui:Button
+                    Grid.Column="1"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Center"
+                    Appearance="Secondary"
+                    Click="Cancel_Click"
+                    Content="Cancel"
+                    Visibility="{Binding IsCancellable, Converter={StaticResource BoolToVisibilityConverter}}" />
+                <ui:Button
+                    Grid.Column="1"
+                    Margin="12,0,0,0"
+                    VerticalAlignment="Center"
+                    Click="Retry_Click"
+                    Content="Retry"
+                    Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}" />
+            </Grid>
         </StackPanel>
 
         <StackPanel
@@ -105,16 +136,19 @@
             <ui:Button
                 Margin="0,0,8,0"
                 Click="Skip_Click"
-                Content="Skip this version" />
+                Content="Skip this version"
+                IsEnabled="{Binding CanChoose}" />
             <ui:Button
                 Margin="0,0,8,0"
                 Appearance="Secondary"
                 Click="Later_Click"
-                Content="Update later" />
+                Content="Update later"
+                IsEnabled="{Binding CanChoose}" />
             <ui:Button
                 Appearance="Primary"
                 Click="Install_Click"
-                Content="Update now" />
+                Content="Update now"
+                IsEnabled="{Binding CanChoose}" />
         </StackPanel>
     </Grid>
 </appwin:AppFluentWindow>

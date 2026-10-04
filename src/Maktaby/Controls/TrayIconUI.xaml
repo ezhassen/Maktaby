@@ -133,6 +133,13 @@
                 Icon="{StaticResource ItemIcon_Test}"
                 ToolTip="Used for tests" />
             <MenuItem
+                x:Name="menuTestBackgroundUpdateCheck"
+                Click="TestBackgroundUpdateCheck_Click"
+                Foreground="OrangeRed"
+                Header="Test background update check"
+                Icon="{StaticResource ItemIcon_Update}"
+                ToolTip="Runs the NON-interactive check: raises the update notification instead of opening the prompt" />
+            <MenuItem
                 x:Name="menuCheckForUpdates"
                 Click="CheckForUpdates_Click"
                 Header="Check for updates…"

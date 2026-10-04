@@ -4,9 +4,10 @@
   
 ## Maktaby - Windows Desktop Organizer
 
-[![Windows 11](https://img.shields.io/badge/Windows%2011-0078D6?logo=windows11&logoColor=white)](#-installation)
+[![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4.svg)](#-installation)
 [![Latest release](https://img.shields.io/github/v/release/ezhassen/Maktaby?sort=semver&label=release&color=blue)](https://github.com/ezhassen/Maktaby/releases)
 [![Latest beta](https://img.shields.io/github/v/release/ezhassen/Maktaby?include_prereleases&sort=semver&label=beta&color=orange)](https://github.com/ezhassen/Maktaby/releases)
+[![Downloads](https://img.shields.io/github/downloads/ezhassen/Maktaby/total?style=flat&color=brightgreen)](https://github.com/ezhassen/Maktaby/releases)
 [![License](https://img.shields.io/badge/license-Apache2.0-orange.svg)](https://github.com/ezhassen/Maktaby/blob/main/LICENSE.txt)
 [![CI](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml)
 [![Release](https://github.com/ezhassen/Maktaby/actions/workflows/release.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions/workflows/release.yml)

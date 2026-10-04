@@ -5,11 +5,13 @@ namespace Maktaby.Native;
 
 public static class Shell32
 {
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-    public static extern bool Shell_NotifyIconW(uint message, ref NOTIFYICONDATA data);
-
-    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    public static extern bool Shell_NotifyIcon(uint dwMessage, ref NOTIFYICONDATA lpdata);
+    /// <summary>
+    /// Tells the shell which AppUserModelID this process owns. Without it, Windows 10/11
+    /// attributes notifications to the shell itself and frequently drops them, so an update
+    /// toast never appears.
+    /// </summary>
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = false)]
+    public static extern int SetCurrentProcessExplicitAppUserModelID(string? appID);
 
     [DllImport("shell32.dll")]
     public static extern int SHQueryUserNotificationState(out int state);

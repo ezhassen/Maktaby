@@ -86,6 +86,42 @@ public static class DesignTimeData
         }
     }
 
+    private static UpdatePromptViewModel? _updatePrompt;
+
+    /// <summary>Sample update prompt. <see cref="UpdatePromptViewModel"/> takes the release and
+    /// the installed version, and derives every label from them, so a fabricated
+    /// <see cref="UpdateInfo"/> renders the whole window.</summary>
+    public static UpdatePromptViewModel? SampleUpdatePrompt
+    {
+        get
+        {
+            try
+            {
+                if (_updatePrompt != null) return _updatePrompt;
+                var vm = new UpdatePromptViewModel(
+                    new UpdateInfo
+                    {
+                        Version = "1.0.33-beta.1",
+                        TagName = "v1.0.33-beta.1",
+                        DownloadUrl = "https://localhost.invalid/Maktaby-1.0.33-beta.1-x64-setup.exe",
+                        Sha256 = new string('0', 64),
+                        SizeBytes = 15 * 1024 * 1024,
+                        IsPreRelease = true,
+                        PublishedAt = new DateTimeOffset(2026, 10, 1, 9, 30, 0, TimeSpan.Zero),
+                        ReleasePageUrl = "https://localhost.invalid/releases/v1.0.33-beta.1",
+                        ReleaseNotes = "* Fixed the update prompt layout\n* Faster startup check",
+                    },
+                    currentVersion: "1.0.32-beta.2");
+                return _updatePrompt = vm;
+            }
+            catch (Exception ex)
+            {
+                try { Debug.WriteLine($"[design] SampleUpdatePrompt failed: {ex}"); } catch { }
+                return null;
+            }
+        }
+    }
+
     private static System.Collections.Generic.IReadOnlyList<Views.WidgetGalleryItem>? _gallery;
 
     /// <summary>Sample gallery rows. Bound via <c>d:ItemsSource</c> so the list renders even

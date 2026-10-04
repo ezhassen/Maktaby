@@ -1,7 +1,7 @@
-using System.Windows;
-using Wpf.Ui.Controls;
 using Maktaby.Shared.Controls;
 using Maktaby.Shared.Interfaces;
+using System.Windows;
+using Wpf.Ui.Controls;
 
 namespace Maktaby.Shared.Services;
 
@@ -67,15 +67,19 @@ public sealed class DialogService : IDialogService
                 return Task.FromResult(ContentDialogResult.None);
             }
 
-            var resolvedOwner = ResolveOwner(owner);
-
-            // Must run on UI thread because we create and show a Window
-            if (Application.Current?.Dispatcher.CheckAccess() == false)
+            // Both ShowDialogInternal (it creates a Window) AND ResolveOwner (it enumerates
+            // Application.Windows, which is thread-affine) must run on the UI thread. ResolveOwner
+            // used to be evaluated BEFORE this hop, so any caller arriving on a background thread
+            // - a WinRT toast's Activated handler, for one - died with "a different thread owns
+            // this object" at System.Windows.Application.get_Windows().
+            var app = Application.Current;
+            if (app is not null && !app.Dispatcher.CheckAccess())
             {
-                return Application.Current.Dispatcher.Invoke(() => ShowDialogInternal(options, resolvedOwner, cancellationToken));
+                return app.Dispatcher.Invoke(
+                    () => ShowDialogInternal(options, ResolveOwner(owner), cancellationToken));
             }
 
-            return ShowDialogInternal(options, resolvedOwner, cancellationToken);
+            return ShowDialogInternal(options, ResolveOwner(owner), cancellationToken);
         }
         catch (Exception ex)
         {

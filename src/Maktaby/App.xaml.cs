@@ -33,6 +33,7 @@ namespace Maktaby;
 [SupportedOSPlatform("windows10.0.14393")]
 public partial class App : Application
 {
+    #region Service provider and shared state
     public static IServiceProvider Services { get; private set; } = null!;
 
     // Tray infrastructure: the NotifyIcon must live in a visual tree, so it is hosted in a hidden
@@ -44,6 +45,9 @@ public partial class App : Application
     private bool _shellRecoveryPending;
     private bool _isSecondInstanceExit;
     private bool _isExiting;
+    #endregion
+
+    #region Startup
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -260,6 +264,155 @@ public partial class App : Application
         if (GlobalFeaturesSwitches.EnableHealthSnapshots) StartHealthSnapshots();
     }
 
+    #endregion
+
+    #region Shutdown
+    protected override void OnExit(ExitEventArgs e)
+    {
+        // Secondary instance (single-instance guard) never initialized Services/DesktopManager;
+        // skip all persistence and shell teardown — it just activated the first instance and exited.
+        if (_isSecondInstanceExit || Services is null)
+        {
+            Helpers.ApplicationSingleInstance.Release();
+            base.OnExit(e);
+            return;
+        }
+
+        // Stop the minimize-prevention hooks from fighting window teardown (owned chains collapsing
+        // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
+        Win32Apis.SystemTeardown = true;
+        _isExiting = true;
+        // Detach the system-theme hook here. It is an HwndSource hook on the tray host, so
+        // leaving it attached keeps this app (and its whole visual tree) rooted for the life
+        // of the message pump. Done next to the power-resume teardown for the same reason.
+        try { _systemThemeFollower?.Dispose(); } catch { }
+        _systemThemeFollower = null;
+        // Stop the periodic release check and cancel any in-flight request, so a background
+        // timer cannot resurrect a dead App instance during teardown.
+        try { Services.GetService<WPFServices.UpdateManager>()?.Dispose(); } catch { }
+        // The power-resume quiesce owns suspended widgets + a one-shot timer: stop the timer
+        // (no recovery on the way out — the process is dying) and drop the SystemEvents
+        // subscription, whose hidden window would otherwise linger past shutdown.
+        try { _resumeRecoverTimer?.Stop(); } catch { }
+        _resumeRecoverTimer = null;
+        _resumeSuspendedWidgets.Clear();
+        try
+        {
+            if (_powerModeHandler is not null) Microsoft.Win32.SystemEvents.PowerModeChanged -= _powerModeHandler;
+            _powerModeHandler = null;
+        }
+        catch { }
+        // Drop the shell icon before the UI thread blocks in teardown (ghost-icon prevention
+        // on every exit path; the Exit-menu path already did this — dispose is idempotent).
+        try
+        {
+            if (_trayHost != null) _trayHost.Content = null;
+            (_tray as IDisposable)?.Dispose();
+            _tray = null;
+        }
+        catch { }
+        try { Services.GetRequiredService<LiveWallpaperManager>().Shutdown(); } catch { }
+
+
+        var mang = Services.GetRequiredService<DesktopManager>();
+        if (!mang.IsDisabled)
+        {
+            //RestoreIcons first. Guarded: Explorer may already be terminating during a system shutdown.
+            try
+            {
+                mang.RestoreIcons();
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "RestoreIcons during exit failed (shell likely gone)");
+            }
+
+            Services.GetRequiredService<IMouseMonitor>().Stop();
+            //async is not ok in app exit
+            //await mang.SaveAsync();
+            mang.SaveSync();
+        }
+        //
+        Logging.DisposeAllDefaultLoggers();
+        Helpers.ApplicationSingleInstance.Release();
+        base.OnExit(e);
+    }
+    #endregion
+
+    #region Dependency injection
+    [SupportedOSPlatform("windows10.0.14393")]
+    private static void ConfigureServices(IServiceCollection services)
+    {
+        services.AddSingleton<ILogger, Logger>((serv) => Logging.Log);
+        //
+
+        // Core (pure .NET, no platform dependencies)
+        services.AddSingleton<IBoxService, BoxService>();
+        services.AddSingleton<IContainerService, ContainerService>();
+        services.AddSingleton<ISettingsService, SettingsService>();
+        services.AddSingleton<IPersistenceService, JsonSnapshotPersistenceService>();
+        services.AddSingleton<IRuleService, RuleService>();
+        services.AddSingleton<IFileRuleCoordinator, FileRuleCoordinator>((serv) => new FileRuleCoordinator(
+            serv.GetRequiredService<IShellWatcherService>(),
+            serv.GetRequiredService<IRuleService>(),
+            serv.GetRequiredService<IBoxService>(),
+            serv.GetRequiredService<IDispatcher>(),
+            serv.GetRequiredService<IFileOperationService>(),
+            () => serv.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget()));
+
+        services.AddSingleton<IFileOperationService, FileOperationService>();
+        services.AddSingleton<IFileSystemService, FileSystemService>();
+
+        // Win32 platform services
+        services.AddSingleton<IMonitorService, MonitorService>();
+        services.AddSingleton<IDpiService, DpiService>();
+        services.AddSingleton<IWindowSnappingService, WindowSnappingService>();
+        services.AddSingleton<IWindowPositioningService, WindowPositioningService>();
+        services.AddSingleton<IZOrderService, ZOrderService>();
+        services.AddSingleton<IDesktopWindowService, DesktopWindowService>();
+        services.AddSingleton<IExplorerDesktopService, ExplorerDesktopService>();
+        services.AddSingleton<IShellWatcherService, ShellDesktopWatcher>();
+        //services.AddSingleton<IFileWatcherService, DesktopFileWatcher>();
+        services.AddSingleton<IDispatcher, WpfDispatcher>();
+        services.AddSingleton<DesktopManager, DesktopManager>((serv) => new DesktopManager(serv));
+
+        // Shell platform services
+        services.AddSingleton<IShellItemService, ShellItemService>();
+        services.AddSingleton<IShellIconService, ShellIconService>();
+        services.AddSingleton<IDesktopService, DesktopService>();
+
+        // UI services and view models
+        services.AddSingleton<LiveWallpaperManager>();
+        services.AddSingleton<IconImageService>();
+        services.AddSingleton<MainViewModel>();
+        services.AddTransient<SettingsViewModel>();
+        services.AddSingleton<IDialogService, DialogService>();
+        services.AddSingleton<ILoadingDialogService, LoadingDialogService>();
+        services.AddSingleton<IWebWidgetService, WebWidgetService>();
+        services.AddSingleton<INativeWidgetService, NativeWidgetService>();
+        services.AddSingleton<INativeWidgetSettingsService, NativeWidgetSettingsService>();
+
+        // Win32 watchers
+        services.AddSingleton<IMouseMonitor, MouseMonitor>();
+        services.AddSingleton<Core.Interfaces.IDesktopIconSizeService, Win32.Services.DesktopIconSizeService>();
+
+        services.AddSingleton<IUpdateService, UpdateService>();
+        services.AddSingleton<IAppUpdateUi, WPFServices.WpfUpdateUi>();
+
+        // Singleton: the constructor claims this process's AppUserModelID (writes the HKCU
+        // key and calls SetCurrentProcessExplicitAppUserModelID), which must happen exactly
+        // once and before any toast is shown. Windows 10/11 drops notifications from a process
+        // that has not claimed an id, so this is what makes the update toast appear at all.
+        services.AddSingleton<IToastNotificationService, Win32.Services.ToastNotificationService>();
+        services.AddSingleton<WPFServices.UpdateManager>();
+
+        // Debug overlay (single instance; toggled from the tray "Debug Desktop Tree" menu).
+        services.AddSingleton<DesktopTreeDebugOverlay>();
+    }
+
+    #endregion
+
+    #region Render tier and power-resume quiesce
     private System.Windows.Threading.DispatcherTimer? _healthTimer;
 
     private bool _tierPauseActive;
@@ -547,6 +700,9 @@ public partial class App : Application
         catch { }
     }
 
+    #endregion
+
+    #region Diagnostics
     /// <summary>Per-widget render-resource census for the tier-transition and health log lines.
     /// Cached render-target bitmaps and effects are the resources that strand native memory
     /// when the tier flips underneath them, so they are the attribution signal: a native-memory
@@ -675,76 +831,9 @@ public partial class App : Application
         catch { }
     }
 
-    protected override void OnExit(ExitEventArgs e)
-    {
-        // Secondary instance (single-instance guard) never initialized Services/DesktopManager;
-        // skip all persistence and shell teardown — it just activated the first instance and exited.
-        if (_isSecondInstanceExit || Services is null)
-        {
-            Helpers.ApplicationSingleInstance.Release();
-            base.OnExit(e);
-            return;
-        }
+    #endregion
 
-        // Stop the minimize-prevention hooks from fighting window teardown (owned chains collapsing
-        // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
-        Win32Apis.SystemTeardown = true;
-        _isExiting = true;
-        // Detach the system-theme hook here. It is an HwndSource hook on the tray host, so
-        // leaving it attached keeps this app (and its whole visual tree) rooted for the life
-        // of the message pump. Done next to the power-resume teardown for the same reason.
-        try { _systemThemeFollower?.Dispose(); } catch { }
-        _systemThemeFollower = null;
-        // Stop the periodic release check and cancel any in-flight request, so a background
-        // timer cannot resurrect a dead App instance during teardown.
-        try { Services.GetService<WPFServices.UpdateManager>()?.Dispose(); } catch { }
-        // The power-resume quiesce owns suspended widgets + a one-shot timer: stop the timer
-        // (no recovery on the way out — the process is dying) and drop the SystemEvents
-        // subscription, whose hidden window would otherwise linger past shutdown.
-        try { _resumeRecoverTimer?.Stop(); } catch { }
-        _resumeRecoverTimer = null;
-        _resumeSuspendedWidgets.Clear();
-        try
-        {
-            if (_powerModeHandler is not null) Microsoft.Win32.SystemEvents.PowerModeChanged -= _powerModeHandler;
-            _powerModeHandler = null;
-        }
-        catch { }
-        // Drop the shell icon before the UI thread blocks in teardown (ghost-icon prevention
-        // on every exit path; the Exit-menu path already did this — dispose is idempotent).
-        try
-        {
-            if (_trayHost != null) _trayHost.Content = null;
-            (_tray as IDisposable)?.Dispose();
-            _tray = null;
-        }
-        catch { }
-        try { Services.GetRequiredService<LiveWallpaperManager>().Shutdown(); } catch { }
-
-
-        var mang = Services.GetRequiredService<DesktopManager>();
-        if (!mang.IsDisabled)
-        {
-            //RestoreIcons first. Guarded: Explorer may already be terminating during a system shutdown.
-            try
-            {
-                mang.RestoreIcons();
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "RestoreIcons during exit failed (shell likely gone)");
-            }
-
-            Services.GetRequiredService<IMouseMonitor>().Stop();
-            //async is not ok in app exit
-            //await mang.SaveAsync();
-            mang.SaveSync();
-        }
-        //
-        Logging.DisposeAllDefaultLoggers();
-        Helpers.ApplicationSingleInstance.Release();
-        base.OnExit(e);
-    }
+    #region Exception filtering
     /// <summary>True when <paramref name="ex"/> or any inner exception is an
     /// <see cref="OutOfMemoryException"/> (managed or composition-channel starvation).</summary>
     private static bool IsOutOfMemory(Exception? ex)
@@ -773,70 +862,9 @@ public partial class App : Application
         return false;
     }
 
-    [SupportedOSPlatform("windows10.0.14393")]
-    private static void ConfigureServices(IServiceCollection services)
-    {
-        services.AddSingleton<ILogger, Logger>((serv) => Logging.Log);
-        //
+    #endregion
 
-        // Core (pure .NET, no platform dependencies)
-        services.AddSingleton<IBoxService, BoxService>();
-        services.AddSingleton<IContainerService, ContainerService>();
-        services.AddSingleton<ISettingsService, SettingsService>();
-        services.AddSingleton<IPersistenceService, JsonSnapshotPersistenceService>();
-        services.AddSingleton<IRuleService, RuleService>();
-        services.AddSingleton<IFileRuleCoordinator, FileRuleCoordinator>((serv) => new FileRuleCoordinator(
-            serv.GetRequiredService<IShellWatcherService>(),
-            serv.GetRequiredService<IRuleService>(),
-            serv.GetRequiredService<IBoxService>(),
-            serv.GetRequiredService<IDispatcher>(),
-            serv.GetRequiredService<IFileOperationService>(),
-            () => serv.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget()));
-
-        services.AddSingleton<IFileOperationService, FileOperationService>();
-        services.AddSingleton<IFileSystemService, FileSystemService>();
-
-        // Win32 platform services
-        services.AddSingleton<IMonitorService, MonitorService>();
-        services.AddSingleton<IDpiService, DpiService>();
-        services.AddSingleton<IWindowSnappingService, WindowSnappingService>();
-        services.AddSingleton<IWindowPositioningService, WindowPositioningService>();
-        services.AddSingleton<IZOrderService, ZOrderService>();
-        services.AddSingleton<IDesktopWindowService, DesktopWindowService>();
-        services.AddSingleton<IExplorerDesktopService, ExplorerDesktopService>();
-        services.AddSingleton<IShellWatcherService, ShellDesktopWatcher>();
-        //services.AddSingleton<IFileWatcherService, DesktopFileWatcher>();
-        services.AddSingleton<IDispatcher, WpfDispatcher>();
-        services.AddSingleton<DesktopManager, DesktopManager>((serv) => new DesktopManager(serv));
-
-        // Shell platform services
-        services.AddSingleton<IShellItemService, ShellItemService>();
-        services.AddSingleton<IShellIconService, ShellIconService>();
-        services.AddSingleton<IDesktopService, DesktopService>();
-
-        // UI services and view models
-        services.AddSingleton<LiveWallpaperManager>();
-        services.AddSingleton<IconImageService>();
-        services.AddSingleton<MainViewModel>();
-        services.AddTransient<SettingsViewModel>();
-        services.AddSingleton<IDialogService, DialogService>();
-        services.AddSingleton<ILoadingDialogService, LoadingDialogService>();
-        services.AddSingleton<IWebWidgetService, WebWidgetService>();
-        services.AddSingleton<INativeWidgetService, NativeWidgetService>();
-        services.AddSingleton<INativeWidgetSettingsService, NativeWidgetSettingsService>();
-
-        // Win32 watchers
-        services.AddSingleton<IMouseMonitor, MouseMonitor>();
-        services.AddSingleton<Core.Interfaces.IDesktopIconSizeService, Win32.Services.DesktopIconSizeService>();
-
-        services.AddSingleton<IUpdateService, UpdateService>();
-        services.AddSingleton<IAppUpdateUi, WPFServices.WpfUpdateUi>();
-        services.AddSingleton<WPFServices.UpdateManager>();
-
-        // Debug overlay (single instance; toggled from the tray "Debug Desktop Tree" menu).
-        services.AddSingleton<DesktopTreeDebugOverlay>();
-    }
-
+    #region Theming
     /// <summary>
     /// Applies the application theme (Dark / Light / System) to the whole app via WPF-UI's
     /// <see cref="ApplicationThemeManager"/>. <paramref name="selectedTheme"/> uses the same
@@ -968,6 +996,9 @@ public partial class App : Application
         }
     }
 
+    #endregion
+
+    #region Tray icon and shell recovery
     private void BuildTrayAndMenuItems(IServiceProvider services)
     {
         // WPF-UI's NotifyIcon must live inside a visual tree, so host it in an always-on
@@ -1136,6 +1167,25 @@ public partial class App : Application
                 new SettingsView(vm).Show();
             });
         };
+        // Debug: the same check as above but NON-interactive, so it takes the background path
+        // and raises the notification instead of opening the prompt. There is no other way to
+        // trigger that path by hand - startup and the 6-hour timer are the only real callers.
+        tray.BackgroundUpdateCheckRequested += (_, _) =>
+        {
+            Dispatcher.BeginInvoke(async () =>
+            {
+                try
+                {
+                    await Services.GetRequiredService<WPFServices.UpdateManager>()
+                        .CheckAsync(interactive: false);
+                }
+                catch (Exception ex)
+                {
+                    Log.Warning(ex, "Background update check (debug) failed");
+                }
+            });
+        };
+
         // Manual "Check for updates…": interactive, so the user always gets an answer — an
         // up-to-date result, a skipped version, or a clear failure — instead of silence.
         tray.CheckForUpdatesRequested += (_, _) =>
@@ -1295,6 +1345,9 @@ public partial class App : Application
         catch { }
     }
 
+    #endregion
+
+    #region Desktop and widget commands
     private void ShowWidgetsList(bool selectMode)
     {
         Application.Current.Dispatcher.BeginInvoke(() =>
@@ -1338,4 +1391,5 @@ public partial class App : Application
             svc.Stop();
         }
     }
+    #endregion
 }

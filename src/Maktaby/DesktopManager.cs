@@ -1607,16 +1607,22 @@ public sealed class DesktopManager
     private void OnWidgetPauseChanged(string device, PauseReason reason)
     {
         if (IsDisabled) return;
-        _ = _dispatcher.InvokeAsync(() =>
+
+        // BeginInvoke, deliberately NOT InvokeAsync: this runs on the shared pause-supervision
+        // hook thread, which must not block on UI work. InvokeAsync genuinely waits (it used
+        // to return early and only appeared to be fire-and-forget because of a bug), so it
+        // would stall that hook thread behind ApplyWidgetPause. The interface states the intent
+        // by name, which a discarded '_ = InvokeAsync' never did.
+        _dispatcher.BeginInvoke(() =>
         {
             try
             {
                 if (IsDisabled) return;
                 ApplyWidgetPause(device, reason);
             }
-            catch (Exception ex) { Serilog.Log.Error(ex, "Widget auto-pause apply failed"); }
-        });
-    }
+                catch (Exception ex) { Serilog.Log.Error(ex, "Widget auto-pause apply failed"); }
+            });
+        }
 
     /// <summary>Suspends (or resumes) every widget window currently on the given monitor.
     /// Runs on the UI thread. Resume is gated on visibility so a hidden/minimized widget

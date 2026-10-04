@@ -1,4 +1,5 @@
 using Maktaby.ViewModels;
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Interop;
 
@@ -23,6 +24,27 @@ public partial class UpdatePromptView : AppWindows.AppFluentWindow
 
     private UpdatePromptViewModel? Vm => DataContext as UpdatePromptViewModel;
 
+    /// <summary>
+    /// Blocks closing while an update is in flight.
+    /// </summary>
+    /// <remarks>
+    /// Closing resolves the prompt as "Update later", so during a download that would abandon
+    /// the transfer behind a progress bar nobody can see, and during the install it would
+    /// leave the app without the window that owns its progress. The X button stays enabled
+    /// visually but does nothing, which is honest: the operation cannot be interrupted. Use
+    /// the Cancel button beside the bar to abandon a download.
+    /// </remarks>
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        if (Vm is { IsBusy: true })
+        {
+            e.Cancel = true;
+            return;
+        }
+
+        base.OnClosing(e);
+    }
+
     private void Install_Click(object sender, RoutedEventArgs e) =>
         Vm?.Choose(ViewModels.UpdatePromptChoice.Install);
 
@@ -31,4 +53,8 @@ public partial class UpdatePromptView : AppWindows.AppFluentWindow
 
     private void Skip_Click(object sender, RoutedEventArgs e) =>
         Vm?.Choose(ViewModels.UpdatePromptChoice.Skip);
+
+    private void Cancel_Click(object sender, RoutedEventArgs e) => Vm?.Cancel();
+
+    private void Retry_Click(object sender, RoutedEventArgs e) => Vm?.Retry();
 }
