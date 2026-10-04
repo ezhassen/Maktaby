@@ -2,6 +2,7 @@ using Maktaby.Controls.ContainersControls;
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using Maktaby.Helpers;
+using Maktaby.Native;
 using Maktaby.ViewModels;
 using Maktaby.Win32.NativeMethods;
 using Maktaby.Win32.Services;
@@ -11,7 +12,6 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
-using Maktaby.Native;
 using static Maktaby.Native.Win32Constants;
 
 namespace Maktaby.Views.Containers;
@@ -305,6 +305,27 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
         bool show = (ShowChromeOnHover && _isHover) || _isActive || this.IsActive || this.IsFocused || (ShowChromeOnHover && IsMouseOver);
         return show;
     }
+    /// <summary>Shows the chrome overlay one dispatcher turn after the decision to show it, so
+    /// it is inserted into the z-order after this widget's activation raise settles. Re-checks
+    /// the decision first: the state that asked for the chrome may be gone by then.</summary>
+    private void ShowChromeOverlay()
+    {
+        try
+        {
+            if (_chromeOverlay is null) return;
+            if (_chromeOverlay is null)
+            {
+                EnsureOverlayAboveHost();
+                return;
+            }
+            if (_softwareFallback.IsFrozen || _chromeOverlay.IsDragging || _chromeOverlay.IsResizing) return;
+            if (!CanShowHeader()) return;
+            _chromeOverlay.Show();
+            EnsureOverlayAboveHost();
+        }
+        catch { }
+    }
+
     public override void UpdateChrome()
     {
         EnsureChromeOverlay();
@@ -332,7 +353,18 @@ public partial class WebWidgetWindow : WidgetWindow, IWidgetChromeOwner
                 if (!_chromeOverlay.IsVisible)
                 {
                     if (_chromeOverlay.ResizeMode != ResizeMode) _chromeOverlay.ResizeMode = ResizeMode;
-                    _chromeOverlay.Show();
+                    // Insert the overlay LAST, not now. Showing it inline loses the race with
+                    // this widget's own activation raise and the desktop-band re-pin, both of
+                    // which insert the WIDGET at the top of the band AFTER this call returns -
+                    // and last inserted wins. That is the whole failure: the overlay was shown,
+                    // then the widget was raised over it, and because this window is
+                    // WS_EX_LAYERED with a GDI child HWND (the HwndHost WebView2), DWM then
+                    // lets that child win over the overlay in some frame orders.
+                    // Deferring one dispatcher turn lets the raise settle first, so the overlay
+                    // is genuinely the last window inserted. Cost: one turn of latency.
+                    Dispatcher.BeginInvoke(new Action(ShowChromeOverlay),
+                        System.Windows.Threading.DispatcherPriority.Background);
+                    return;
                 }
                 EnsureOverlayAboveHost();
             }
