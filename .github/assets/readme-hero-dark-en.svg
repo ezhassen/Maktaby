@@ -1,0 +1,193 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 420" width="100%" role="img"
+     aria-labelledby="title desc">
+  <title id="title">Maktaby</title>
+  <desc id="desc">Maktaby — boxes, widgets and live wallpapers for a Windows desktop that stays yours.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#0A1220"/>
+      <stop offset="55%"  stop-color="#070C16"/>
+      <stop offset="100%" stop-color="#050810"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#3B93FF" stop-opacity="0.28"/>
+      <stop offset="60%"  stop-color="#3B93FF" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#3B93FF" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="cardGrey" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#CCD5DF"/>
+      <stop offset="100%" stop-color="#A2B1C1"/>
+    </linearGradient>
+    <linearGradient id="cardBlue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3B93FF"/>
+      <stop offset="100%" stop-color="#156FE6"/>
+    </linearGradient>
+
+    <linearGradient id="glass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.13"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.05"/>
+    </linearGradient>
+    <!-- Verbatim from app_icon_svg.svg: the clock face in the logo's top-right card. -->
+    <linearGradient id="clockFace" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#EBF1F7"/>
+    </linearGradient>
+    <clipPath id="boxClip">
+      <rect x="700" y="108" width="456" height="196" rx="20"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1200" height="420" fill="url(#bg)"/>
+  <ellipse cx="910" cy="210" rx="330" ry="215" fill="url(#glow)"/>
+
+  <!-- ============================= LEFT =============================
+       The text column occupies x 246..615 and the illustration cluster starts at
+       640, so every line below is measured to stay inside that and nothing collides. -->
+
+  <!-- The logo, reproduced verbatim from .github/assets/app_icon_svg.svg rather than redrawn,
+       so the banner and the app icon cannot drift apart. The 512-unit artwork is scaled by
+       0.375, which lands the four cards exactly on x 56..206 / y 135..285 - the same box as
+       before, still centred on y=210. Its gradients reuse this file's identical card fills. -->
+  <g transform="translate(35,114) scale(0.375)">
+    <!-- TOP-LEFT CARD -->
+    <rect x="56" y="56" width="176" height="176" rx="44" fill="url(#cardGrey)"/>
+    <rect x="86" y="86" width="46" height="46" rx="12" fill="#FF5232"/>
+    <rect x="146" y="86" width="46" height="46" rx="12" fill="#FFB703"/>
+    <rect x="86" y="146" width="46" height="46" rx="12" fill="#00B4D8"/>
+
+    <!-- TOP-RIGHT CARD: ANALOG CLOCK WIDGET -->
+    <rect x="280" y="56" width="176" height="176" rx="44" fill="url(#cardGrey)"/>
+    <circle cx="368" cy="144" r="68" fill="url(#clockFace)"/>
+    <circle cx="368" cy="88" r="3.5" fill="#6C7A89"/>
+    <circle cx="424" cy="144" r="3.5" fill="#6C7A89"/>
+    <circle cx="368" cy="200" r="3.5" fill="#6C7A89"/>
+    <circle cx="312" cy="144" r="3.5" fill="#6C7A89"/>
+    <circle cx="396" cy="95.5" r="2.5" fill="#A0ACBA"/>
+    <circle cx="416.5" cy="116" r="2.5" fill="#A0ACBA"/>
+    <circle cx="416.5" cy="172" r="2.5" fill="#A0ACBA"/>
+    <circle cx="396" cy="192.5" r="2.5" fill="#A0ACBA"/>
+    <circle cx="340" cy="192.5" r="2.5" fill="#A0ACBA"/>
+    <circle cx="319.5" cy="172" r="2.5" fill="#A0ACBA"/>
+    <circle cx="319.5" cy="116" r="2.5" fill="#A0ACBA"/>
+    <circle cx="340" cy="95.5" r="2.5" fill="#A0ACBA"/>
+    <line x1="368" y1="144" x2="338" y2="122" stroke="#2B3A4A" stroke-width="6" stroke-linecap="round"/>
+    <line x1="368" y1="144" x2="402" y2="104" stroke="#2B3A4A" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="368" y1="144" x2="368" y2="86" stroke="#FF3B30" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="368" cy="144" r="5" fill="#FF3B30"/>
+    <circle cx="368" cy="144" r="2" fill="#FFFFFF"/>
+
+    <!-- BOTTOM-LEFT CARD -->
+    <rect x="56" y="280" width="176" height="176" rx="44" fill="url(#cardGrey)"/>
+    <rect x="86" y="310" width="46" height="46" rx="12" fill="#FFB703"/>
+    <rect x="146" y="310" width="46" height="46" rx="12" fill="#FF5232"/>
+
+    <!-- BOTTOM-RIGHT CARD (narrow bottom+right shadow layer, then four white sub-boxes) -->
+    <rect x="290" y="290" width="176" height="176" rx="44" fill="#9AA4AF"/>
+    <rect x="280" y="280" width="176" height="176" rx="44" fill="url(#cardBlue)"/>
+    <rect x="311" y="311" width="48" height="48" rx="13" fill="#EDF5FF"/>
+    <rect x="377" y="311" width="48" height="48" rx="13" fill="#EDF5FF"/>
+    <rect x="311" y="377" width="48" height="48" rx="13" fill="#EDF5FF"/>
+    <rect x="377" y="377" width="48" height="48" rx="13" fill="#EDF5FF"/>
+  </g>
+
+  <!-- Baselines 171 / 225 / 259 / 291 put the optical centre of the four-line text block on
+       y=210, matching the logo's centre. The steps tighten down the stack: a wide gap under
+       the wordmark, then progressively closer leading for the smaller lines. -->
+  <text x="246" y="171"
+        font-family="Segoe UI Variable Display, Segoe UI, Inter, system-ui, sans-serif"
+        font-size="64" font-weight="700" letter-spacing="-1.5" fill="#FFFFFF">Maktaby</text>
+
+  <text x="250" y="225"
+        font-family="Segoe UI, Inter, system-ui, sans-serif"
+        font-size="20" font-weight="600" fill="#E6EDF6">Boxes, Widgets &amp; Live Wallpapers</text>
+
+  <text x="250" y="259"
+        font-family="Segoe UI, Inter, system-ui, sans-serif"
+        font-size="18" fill="#93A4B8">Windows Desktop Organizer</text>
+
+  <text x="250" y="291"
+        font-family="Segoe UI, Inter, system-ui, sans-serif"
+        font-size="15" fill="#8497AD">Windows 10 / 11</text>
+
+  <!-- ============================= RIGHT =============================
+       A box, with a calendar widget and a notes widget overlapping it — the two things the
+       app puts on a desktop. The cluster spans x 640..1150. -->
+
+  <!-- The logo's clock hand positions are copied verbatim, so the banner clock always shows
+       the same time as the app icon. Nothing below this block animates. -->
+
+  <!-- Calendar widget, over the box's top-left corner. Deliberately NOT another clock: the
+       logo's top-right card is already an analog clock, and two clocks in one banner reads as
+       a duplication bug rather than as variety. -->
+  <g>
+    <rect x="640" y="62" width="150" height="150" rx="26"
+          fill="url(#glass)" stroke="#FFFFFF" stroke-opacity="0.16"/>
+    <rect x="658" y="82" width="64" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.30"/>
+    <rect x="730" y="82" width="42" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.18"/>
+
+    <g fill="#FFFFFF" fill-opacity="0.13">
+      <rect x="654" y="120" width="18" height="18" rx="5"/><rect x="680" y="120" width="18" height="18" rx="5"/>
+      <rect x="732" y="120" width="18" height="18" rx="5"/><rect x="758" y="120" width="18" height="18" rx="5"/>
+      <rect x="654" y="146" width="18" height="18" rx="5"/>
+      <rect x="732" y="146" width="18" height="18" rx="5"/><rect x="758" y="146" width="18" height="18" rx="5"/>
+      <rect x="654" y="172" width="18" height="18" rx="5"/><rect x="706" y="172" width="18" height="18" rx="5"/>
+      <rect x="732" y="172" width="18" height="18" rx="5"/>
+    </g>
+    <g fill="#FFB703">
+      <rect x="680" y="146" width="18" height="18" rx="5"/>
+      <rect x="758" y="172" width="18" height="18" rx="5" fill-opacity="0.55"/>
+    </g>
+    <rect x="706" y="120" width="18" height="18" rx="5" fill="#3B93FF"/>
+  </g>
+
+  <!-- The container box: title bar, traffic lights, and the shortcut grid it exists to hold. -->
+  <g>
+    <rect x="700" y="108" width="456" height="196" rx="20"
+          fill="url(#glass)" stroke="#FFFFFF" stroke-opacity="0.16"/>
+    <g clip-path="url(#boxClip)">
+      <rect x="700" y="108" width="456" height="34" fill="#FFFFFF" fill-opacity="0.07"/>
+    </g>
+    <line x1="700" y1="142" x2="1156" y2="142" stroke="#FFFFFF" stroke-opacity="0.12"/>
+    <circle cx="722" cy="125" r="4" fill="#FF5F57"/>
+    <circle cx="738" cy="125" r="4" fill="#FEBC2E"/>
+    <circle cx="754" cy="125" r="4" fill="#28C840"/>
+    <rect x="772" y="120" width="86" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.18"/>
+
+    <g>
+      <rect x="726"  y="164" width="52" height="52" rx="14" fill="#FF5232" fill-opacity="0.85"/>
+      <rect x="796"  y="164" width="52" height="52" rx="14" fill="#FFB703" fill-opacity="0.85"/>
+      <rect x="866"  y="164" width="52" height="52" rx="14" fill="#00B4D8" fill-opacity="0.85"/>
+      <rect x="936"  y="164" width="52" height="52" rx="14" fill="#3B93FF" fill-opacity="0.85"/>
+      <rect x="1006" y="164" width="52" height="52" rx="14" fill="#FFFFFF" fill-opacity="0.16"/>
+    </g>
+    <g fill="#FFFFFF" fill-opacity="0.30">
+      <rect x="730"  y="228" width="44" height="6" rx="3"/>
+      <rect x="800"  y="228" width="44" height="6" rx="3"/>
+      <rect x="870"  y="228" width="44" height="6" rx="3"/>
+      <rect x="940"  y="228" width="44" height="6" rx="3"/>
+      <rect x="1010" y="228" width="44" height="6" rx="3"/>
+    </g>
+    <rect x="726" y="250" width="332" height="1" fill="#FFFFFF" fill-opacity="0.14"/>
+    <rect x="730" y="264" width="120" height="6" rx="3" fill="#FFFFFF" fill-opacity="0.22"/>
+  </g>
+
+  <!-- Notes widget, over the box's bottom-right corner. -->
+  <g>
+    <rect x="980" y="232" width="170" height="126" rx="22"
+          fill="url(#glass)" stroke="#FFFFFF" stroke-opacity="0.16"/>
+    <rect x="1000" y="252" width="58" height="9" rx="4.5" fill="#FFFFFF" fill-opacity="0.26"/>
+
+    <rect x="1000" y="278" width="18" height="18" rx="5" fill="#3B93FF"/>
+    <path d="M1005 287 l4 4 l7 -8" fill="none" stroke="#FFFFFF" stroke-width="2.2"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="1028" y="282" width="100" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.17"/>
+
+    <circle cx="1009" cy="318" r="5" fill="#FF5232"/>
+    <rect x="1024" y="313" width="104" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.14"/>
+
+    <circle cx="1009" cy="340" r="5" fill="#FFB703"/>
+    <rect x="1024" y="335" width="82" height="10" rx="5" fill="#FFFFFF" fill-opacity="0.14"/>
+  </g>
+</svg>

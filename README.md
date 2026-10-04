@@ -1,8 +1,8 @@
 <div align="center">
-  
-  <img src=".github/assets/app_icon_svg.svg" alt="Maktaby logo" width="128" />
-  
+
 ## Maktaby - Windows Desktop Organizer
+
+  <img src=".github/assets/readme-hero-dark-en.svg" alt="Maktaby — boxes, widgets and live wallpapers for a Windows desktop that stays yours" />
 
 [![Windows 10/11](https://img.shields.io/badge/Windows-10%2F11-0078D4.svg)](#-installation)
 [![Latest release](https://img.shields.io/github/v/release/ezhassen/Maktaby?sort=semver&label=release&color=blue)](https://github.com/ezhassen/Maktaby/releases)
@@ -12,7 +12,7 @@
 [![CI](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml)
 [![Release](https://github.com/ezhassen/Maktaby/actions/workflows/release.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions/workflows/release.yml)
 
-[**⬇ Download**](https://github.com/ezhassen/Maktaby/releases/latest) · [Features](#-features) · [Screenshots](#-screenshots) · [Installation](#-installation) · [Build from source](#️-build-from-source)
+[**⬇ Download**](https://github.com/ezhassen/Maktaby/releases/latest) · [Features](#-features) · [Screenshots](#-screenshots) · [Installation](#-installation) · [Build from source](#-build-from-source)
  <!-- to be added [FAQ](https://github.com/ezhassen/Maktaby/blob/main/docs/FAQ.md) · [Changelog](https://github.com/ezhassen/Maktaby/blob/main/docs/CHANGELOG.md) · -->
 
 ### Maktaby turns a cluttered Windows desktop into a workspace you actually keep
