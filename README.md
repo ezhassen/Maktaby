@@ -12,7 +12,7 @@
 [![CI](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions/workflows/ci.yml)
 [![Release](https://github.com/ezhassen/Maktaby/actions/workflows/release.yml/badge.svg)](https://github.com/ezhassen/Maktaby/actions/workflows/release.yml)
 
-[**⬇ Download**](https://github.com/ezhassen/Maktaby/releases/latest) · [Features](#-features) · [Screenshots](#-screenshots) · [Installation](#-installation) · [Build from source](#-build-from-source)
+[**⬇ Download**](https://github.com/ezhassen/Maktaby/releases/latest) · [Website](https://ezhassen.github.io/Maktaby/) · [Features](#-features) · [Screenshots](#-screenshots) · [Installation](#-installation) · [Build from source](#-build-from-source)
  <!-- to be added [FAQ](https://github.com/ezhassen/Maktaby/blob/main/docs/FAQ.md) · [Changelog](https://github.com/ezhassen/Maktaby/blob/main/docs/CHANGELOG.md) · -->
 
 ### Maktaby turns a cluttered Windows desktop into a workspace you actually keep
@@ -195,6 +195,18 @@ Releases are tag-driven: push a `v1.0.33-beta.1` tag from `develop` for a pre-re
 `.\build_publish.ps1` does that for you — it verifies the tree is clean, pushes the branch, works out the next version from the last tag, tags and pushes it, and then asks whether to build a local copy of the installer too (the tag push already triggers CI, so the answer defaults to no). Use `-BuildInstaller` or `-SkipInstaller` to answer up front, and `-DryRun` to print the plan without doing anything.
 
 Full details: **[docs/releasing.md](docs/releasing.md)**.
+
+## 🌐 Website
+
+The project page lives at **https://ezhassen.github.io/Maktaby/** and its source is [`website/`](website) — plain HTML, CSS and one dependency-free JS file, no build tooling. `website/build.ps1` stages it (merging the screenshots straight out of `.github/assets`, so this README and the site can never show different captures) and `.github/workflows/pages.yml` publishes the result on every push that touches `website/`, `.github/assets/` or the workflow itself.
+
+To preview a change locally:
+
+```powershell
+pwsh -File website/build.ps1     # -> website/dist
+```
+
+Repo setting needed once: **Settings → Pages → Source = "GitHub Actions"**.
 
 ## 🤝 Contributing
 

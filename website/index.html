@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Maktaby — Boxes, Widgets &amp; Live Wallpapers for Windows</title>
+<meta name="description" content="Maktaby turns a cluttered Windows desktop into a workspace you actually keep: resizable snap-able boxes, HTML/CSS/JS and native C#/WPF widgets, and video or GIF live wallpapers — all from the system tray." />
+<meta name="theme-color" content="#070C16" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#F6F8FC" media="(prefers-color-scheme: light)" />
+<meta name="color-scheme" content="dark light" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Maktaby" />
+<meta property="og:title" content="Maktaby — Boxes, Widgets &amp; Live Wallpapers for Windows" />
+<meta property="og:description" content="Resizable, snap-able boxes, build-your-own widgets, and live wallpapers — layered above a Windows desktop that keeps working normally." />
+<meta property="og:url" content="https://ezhassen.github.io/Maktaby/" />
+<meta property="og:image" content="https://ezhassen.github.io/Maktaby/img/Screenshot-Dark.webp" />
+<meta name="twitter:card" content="summary_large_image" />
+
+<link rel="icon" type="image/svg+xml" href="img/app_icon_svg.svg" />
+<link rel="apple-touch-icon" href="img/app_icon_svg.svg" />
+<link rel="preconnect" href="https://api.github.com" crossorigin />
+<link rel="stylesheet" href="assets/css/styles.css" />
+
+<!-- Applied before first paint so a light-theme visitor never sees a dark flash.
+     Kept inline and tiny on purpose; main.js re-applies the same value on boot. -->
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem('maktaby-theme');
+      document.documentElement.setAttribute('data-theme',
+        stored === 'dark' || stored === 'light'
+          ? stored
+          : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+    } catch (e) { /* private mode: the markup default stands */ }
+  })();
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- Ambient background wash. Purely decorative, hidden from assistive tech. -->
+<div class="bg-grid" aria-hidden="true"></div>
+<div class="bg-glow bg-glow--one" aria-hidden="true"></div>
+<div class="bg-glow bg-glow--two" aria-hidden="true"></div>
+
+<header class="site-header" id="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="#top" aria-label="Maktaby home">
+      <img class="brand-mark" src="img/app_icon_svg.svg" alt="" width="34" height="34" />
+      <span class="brand-name">Maktaby</span>
+    </a>
+
+    <nav class="site-nav" id="site-nav" aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#screenshots">Screenshots</a>
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+
+    <div class="header-actions">
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch to light theme" title="Toggle theme">
+        <svg class="icon icon--sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><g stroke-linecap="round"><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></g></svg>
+        <svg class="icon icon--moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1Z"/></svg>
+      </button>
+      <a class="btn btn--ghost btn--sm hide-md" href="https://github.com/ezhassen/Maktaby" target="_blank" rel="noopener">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+      </a>
+      <button class="icon-btn nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <span id="top"></span>
+
+  <!-- ============================ HERO ============================ -->
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow reveal">
+          <span class="pill"><span class="dot"></span> Windows 10 / 11 · x64 · Apache-2.0</span>
+        </p>
+
+        <h1 class="reveal" data-reveal-delay="1">
+          Your desktop,<br />
+          <span class="grad">organized the way you think.</span>
+        </h1>
+
+        <p class="lede reveal" data-reveal-delay="2">
+          Maktaby groups your shortcuts, folders and files into <strong>resizable, snap-able boxes</strong> that
+          float <em>above</em> the Windows desktop instead of being buried in it — then adds the two things a plain
+          desktop organizer never has: <strong>widgets you write yourself</strong> and <strong>live wallpapers</strong>.
+        </p>
+
+        <div class="hero-cta reveal" data-reveal-delay="3">
+          <a class="btn btn--primary btn--lg" id="download-stable"
+             href="https://github.com/ezhassen/Maktaby/releases/latest"
+             target="_blank" rel="noopener"
+             data-release="stable">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3.5v11m0 0 4.2-4.2M12 14.5 7.8 10.3M4.5 17v2.2A1.8 1.8 0 0 0 6.3 21h11.4a1.8 1.8 0 0 0 1.8-1.8V17"/></svg>
+            <span class="btn-label">Download for Windows</span>
+          </a>
+          <a class="btn btn--outline btn--lg" id="download-beta"
+             href="https://github.com/ezhassen/Maktaby/releases"
+             target="_blank" rel="noopener"
+             data-release="beta">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3.5v11m0 0 4.2-4.2M12 14.5 7.8 10.3M4.5 17v2.2A1.8 1.8 0 0 0 6.3 21h11.4a1.8 1.8 0 0 0 1.8-1.8V17"/></svg>
+            <span class="btn-label">Download Beta</span>
+          </a>
+        </div>
+
+        <p class="hero-meta reveal" data-reveal-delay="4">
+          <span id="stable-version" class="meta-item" data-slot="version">
+            <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none"/><path stroke-linecap="round" d="M8 7.2v4M8 5.1v.9"/></svg>
+            Latest: <span data-field="tag">—</span>
+          </span>
+          <span class="meta-item" id="stable-size" hidden>
+            <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke-linecap="round" d="M2.5 4.8h11a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H8.2L5 15.6v-2.4H2.5a1 1 0 0 1-1-1V5.8a1 1 0 0 1 1-1Z"/></svg>
+            <span data-field="size">—</span>
+          </span>
+          <span class="meta-item" id="stable-note" hidden>
+            <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none"/><path stroke-linecap="round" d="M8 7.2v4M8 5.1v.9"/></svg>
+            <span data-field="note">No stable release yet — beta is the only download</span>
+          </span>
+          <span class="meta-item" id="beta-version" hidden>
+            Beta: <span data-field="tag">—</span>
+          </span>
+        </p>
+
+        <p class="hero-note reveal" data-reveal-delay="4">
+          Requires the <a href="https://dotnet.microsoft.com/download/dotnet/10.0" target="_blank" rel="noopener">.NET 10 Desktop Runtime (x64)</a>.
+          Web widgets additionally need the
+          <a href="https://developer.microsoft.com/microsoft-edge/webview2/" target="_blank" rel="noopener">WebView2 Runtime</a>.
+        </p>
+      </div>
+
+      <div class="hero-visual reveal" data-reveal-delay="2">
+        <div class="shot-frame">
+          <div class="shot-frame-bar">
+            <span class="tl"><i></i><i></i><i></i></span>
+            <span class="shot-frame-title">Maktaby — desktop</span>
+          </div>
+          <button class="shot-frame-body" type="button" data-lightbox="img/Screenshot-Dark.webp"
+                  data-caption="Boxes and a clock widget, above a live wallpaper." aria-label="Open larger screenshot">
+            <img src="img/Screenshot-Dark.webp" alt="Maktaby boxes holding app shortcuts on a Windows desktop, with a clock widget" width="1920" height="1080" fetchpriority="high" decoding="sync" />
+            <span class="shot-zoom" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 15v5h-5M20 9V4h-5M4 15v5h5"/></svg>
+            </span>
+          </button>
+        </div>
+        <p class="shot-caption">Boxes, tabs, widgets and a live wallpaper — all above a desktop that still works.</p>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="stat-row reveal" data-reveal-delay="5">
+        <div class="stat"><strong>Zero</strong><span>icons moved on disk</span></div>
+        <div class="stat"><strong>Tray-first</strong><span>no main window</span></div>
+        <div class="stat"><strong>1&nbsp;click</strong><span>hide everything</span></div>
+        <div class="stat"><strong>HTML + C#</strong><span>write your own widgets</span></div>
+        <div class="stat"><strong>SHA-256</strong><span>verified downloads</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ FEATURES ============================ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <header class="section-head reveal">
+        <p class="kicker">Features</p>
+        <h2>Everything a desktop organizer should have done years ago</h2>
+        <p class="section-sub">
+          Boxes stay exactly where you put them. Widgets and wallpapers render behind the Windows icons, per monitor.
+          And when you want the desktop back, one double-click gives it to you.
+        </p>
+      </header>
+
+      <div class="feature-grid">
+        <article class="card card--wide reveal">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">📦</span>
+            <h3>Boxes</h3>
+            <p>Group shortcuts, files and folders into resizable containers that sit on top of the desktop.</p>
+            <ul class="ticks">
+              <li>Drag &amp; drop creation — drop from Explorer, Start Menu or another Box</li>
+              <li>Snap to boxes and screen edges with live guide lines</li>
+              <li>Roll-up to Top / Bottom / Left / Right to reclaim space</li>
+              <li>Multi-tab containers for large collections</li>
+              <li>Per-box transparency, colors, border and title bar</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="1">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🧩</span>
+            <h3>Web widgets</h3>
+            <p>Self-contained HTML / CSS / JS widgets, each in its own WebView2 instance — fully client-side.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="2">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🖥️</span>
+            <h3>Native widgets</h3>
+            <p>C# / WPF plugins compiled at load via Roslyn, or dropped in as a DLL. WPF, WinForms, raw HWND, D3D11, SkiaSharp.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="3">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🎬</span>
+            <h3>Live wallpaper</h3>
+            <p>Any image, animated GIF or video behind your icons, laid out across every monitor — with auto-pause when nothing is visible.</p>
+          </div>
+        </article>
+
+        <article class="card card--wide reveal" data-reveal-delay="1">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🔒</span>
+            <h3>A trust model that says so out loud</h3>
+            <p>
+              Native widgets are arbitrary .NET code running with your privileges, so Maktaby prompts once per
+              content hash before running anything you wrote or dropped in — and fails closed the moment you edit it.
+              Built-in widgets are implicitly trusted. Everything else about the app is local-first: your layout,
+              settings and widgets stay in <code>%LocalAppData%\Maktaby</code>.
+            </p>
+            <p class="card-foot">
+              <a class="link" href="https://github.com/ezhassen/Maktaby/blob/develop/docs/native-widgets.md" target="_blank" rel="noopener">Read the plugin guide →</a>
+            </p>
+          </div>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🌗</span>
+            <h3>Dark &amp; light</h3>
+            <p>Follow the system theme or pick one. App theme, widget theme and per-box overrides are independent.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="1">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🔄</span>
+            <h3>In-app updates</h3>
+            <p>Checks GitHub Releases at startup, every 6 hours, or on demand — downloads, SHA-256 verifies, installs.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="2">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">📊</span>
+            <h3>Performance Monitor</h3>
+            <p>Memory, CPU, handles, render tier, WebView2 processes and per-widget state — with one-click suspend.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="3">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">💾</span>
+            <h3>Backups</h3>
+            <p>Export your layout, settings and widgets as a single <code>.dbe1</code> bundle and restore it later.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ SCREENSHOTS ============================ -->
+  <section class="section section--alt" id="screenshots">
+    <div class="wrap">
+      <header class="section-head reveal">
+        <p class="kicker">Screenshots</p>
+        <h2>It looks like your desktop, because it is your desktop</h2>
+        <p class="section-sub">Real captures — click any image to open it full size.</p>
+      </header>
+
+      <div class="gallery">
+        <figure class="shot shot--feature reveal">
+          <button class="shot-open" type="button" data-lightbox="img/Screenshot-Dark.webp"
+                  data-caption="Dark theme — a working desktop with eight boxes, tabs and a clock widget.">
+            <img src="img/Screenshot-Dark.webp" alt="Dark theme: several Maktaby boxes holding shortcuts, a clock widget and a live wallpaper" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>Boxes on a real desktop</strong>
+            Tabs, roll-ups, per-box styling and a clock widget — with the Windows taskbar untouched.
+          </figcaption>
+        </figure>
+
+        <div class="gallery-masonry">
+        <figure class="shot reveal" data-reveal-delay="1">
+          <button class="shot-open" type="button" data-lightbox="img/Screenshot-Light.webp"
+                  data-caption="Light theme — same layout, light chrome.">
+            <img src="img/Screenshot-Light.webp" alt="Light theme: Maktaby boxes over a bright desktop" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>Light theme</strong>
+            Same layout, light chrome. Widgets can follow the app theme independently.
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal">
+          <button class="shot-open" type="button" data-lightbox="img/boxes.webp"
+                  data-caption="A folder portal box — a box that opens a chosen folder in Explorer.">
+            <img src="img/boxes.webp" alt="A Maktaby box next to a folder portal showing file details" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>Folder portals</strong>
+            A box that opens a folder in Explorer — icons or details view.
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal" data-reveal-delay="1">
+          <button class="shot-open" type="button" data-lightbox="img/screenshot-settings.webp"
+                  data-caption="Settings — appearance preview, box theme and transparency.">
+            <img src="img/screenshot-settings.webp" alt="Maktaby settings window with the appearance tab and a live preview" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>Settings with live preview</strong>
+            Every change renders in the preview panel before you save.
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal">
+          <button class="shot-open" type="button" data-lightbox="img/screenshot-marquee.webp"
+                  data-caption="Dragging a marquee over empty desktop space offers to create a new Box.">
+            <img src="img/screenshot-marquee.webp" alt="A marquee selection on the desktop with a Create New Box menu" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>Marquee → Create new</strong>
+            Select empty space and a menu offers to drop the selection into a new Box.
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal" data-reveal-delay="1">
+          <button class="shot-open" type="button" data-lightbox="img/screenshot-tray.webp"
+                  data-caption="The tray menu — where the whole app lives.">
+            <img src="img/screenshot-tray.webp" alt="Maktaby tray icon context menu listing the app commands" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>Everything lives in the tray</strong>
+            New box, widgets, wallpaper, settings, hide-all, exit.
+          </figcaption>
+        </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ HOW IT WORKS ============================ -->
+  <section class="section" id="how">
+    <div class="wrap">
+      <header class="section-head reveal">
+        <p class="kicker">How it works</p>
+        <h2>Three steps, then it stays out of the way</h2>
+      </header>
+
+      <ol class="steps">
+        <li class="step reveal">
+          <span class="step-num">1</span>
+          <h3>Install</h3>
+          <p>Run the setup, accept the UAC prompt. The installer closes a running copy before updating and reopens it afterwards.</p>
+        </li>
+        <li class="step reveal" data-reveal-delay="1">
+          <span class="step-num">2</span>
+          <h3>Arrange</h3>
+          <p>Drop files onto empty desktop space to create a Box. Drag, resize, snap, add tabs, drop a widget on top.</p>
+        </li>
+        <li class="step reveal" data-reveal-delay="2">
+          <span class="step-num">3</span>
+          <h3>Get it back whenever</h3>
+          <p>Double-click the empty desktop to hide every box and reveal a clean screen. Double-click again to bring it all back.</p>
+        </li>
+      </ol>
+
+      <div class="shortcut-table reveal" data-reveal-delay="3">
+        <h3 class="shortcut-title">Gestures &amp; shortcuts</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Gesture</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>Double-click</kbd> empty desktop</td><td>Toggle hide / show all boxes</td></tr>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>Wheel</kbd> on desktop</td><td>Change icon size</td></tr>
+              <tr><td><kbd>Right-click</kbd> box header</td><td>Box menu — delete, hide, lock, roll, tabs</td></tr>
+              <tr><td><kbd>Alt</kbd> + <kbd>Enter</kbd> on an item</td><td>Show properties</td></tr>
+              <tr><td>Drag onto empty space</td><td>Marquee → <em>Create New Box</em></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ INSTALL ============================ -->
+  <section class="section section--alt" id="install">
+    <div class="wrap install-grid">
+      <div class="install-copy">
+        <p class="kicker">Install</p>
+        <h2>Download, run, done</h2>
+        <p class="section-sub">
+          Maktaby ships as a single <code>win-x64</code> installer. It installs to
+          <code>%ProgramFiles%\Maktaby</code>, asks for elevation once, and then lives in the system tray.
+        </p>
+
+        <ol class="install-steps">
+          <li>Grab the latest <code>Maktaby-&lt;version&gt;-x64-setup.exe</code> from the buttons above or the
+            <a href="https://github.com/ezhassen/Maktaby/releases" target="_blank" rel="noopener">releases page</a>.</li>
+          <li>Run it and accept the UAC prompt.</li>
+          <li>On the last page choose whether to launch Maktaby and whether to start it with Windows (both ticked by default).</li>
+          <li>The tray icon appears on first launch. There is no main window.</li>
+        </ol>
+
+        <p class="install-aside">
+          Each release publishes a SHA-256 checksum on the release page. Installed copies can update themselves from
+          <strong>Settings → Updates</strong> or <em>Check for updates…</em> in the tray.
+        </p>
+      </div>
+
+      <div class="install-card reveal" data-reveal-delay="1">
+        <h3 class="install-card-title">Requirements</h3>
+        <ul class="reqs">
+          <li>
+            <span class="req-label">OS</span>
+            <span>Windows 10 version 2004 (build 19041) or later, or Windows 11 — 64-bit</span>
+          </li>
+          <li>
+            <span class="req-label">Runtime</span>
+            <span>
+              <a href="https://dotnet.microsoft.com/download/dotnet/10.0" target="_blank" rel="noopener">.NET 10 Desktop Runtime (x64)</a>
+              — required, the installer is framework-dependent
+            </span>
+          </li>
+          <li>
+            <span class="req-label">WebView2</span>
+            <span>
+              <a href="https://developer.microsoft.com/microsoft-edge/webview2/" target="_blank" rel="noopener">Edge WebView2 Evergreen Runtime</a>
+              — only for web widgets and HTML wallpapers; preinstalled on Windows 11 and most Windows 10 machines
+            </span>
+          </li>
+          <li>
+            <span class="req-label">Architecture</span>
+            <span>x64 only — no x86 or ARM64 build yet</span>
+          </li>
+          <li>
+            <span class="req-label">Elevation</span>
+            <span>Requested once, to install into Program Files</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ FAQ ============================ -->
+  <section class="section" id="faq">
+    <div class="wrap wrap--narrow">
+      <header class="section-head reveal">
+        <p class="kicker">FAQ</p>
+        <h2>Reasonable questions</h2>
+      </header>
+
+      <div class="faq">
+        <details class="reveal">
+          <summary>Does Maktaby replace or modify my Windows desktop?</summary>
+          <p>
+            No. It layers its own windows <em>above</em> the desktop and wallpaper. Explorer keeps running, your icons
+            are untouched, and nothing is written to your files or registry beyond the optional startup key.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="1">
+          <summary>Is it free?</summary>
+          <p>
+            Yes — Apache-2.0. You can use, modify and redistribute it, including commercially, as long as you keep the
+            license and state your changes. It comes with no warranty.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="2">
+          <summary>What is the difference between Stable and Beta?</summary>
+          <p>
+            Stable is tagged from <code>main</code>; Beta is a pre-release tagged from <code>develop</code>. Installed
+            copies follow the channel of the build they are running, or you can pin Auto / Stable / Beta in
+            <strong>Settings → Updates</strong>. Portable copies skip in-app updates — there is nothing installed to update.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="3">
+          <summary>Are widgets safe to install?</summary>
+          <p>
+            A native widget is arbitrary .NET code executing inside the app with your privileges. Maktaby prompts once
+            per content hash before running a user widget and refuses to run one you have edited since — but only install
+            widgets from folders you trust. The
+            <a href="https://github.com/ezhassen/Maktaby/blob/develop/docs/native-widgets.md" target="_blank" rel="noopener">plugin guide</a>
+            explains the model in full.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="4">
+          <summary>Where does my data live?</summary>
+          <p>
+            Locally, under <code>%LocalAppData%\Maktaby</code> — layout, settings, your <code>UserWidgets</code> folder
+            and one log file per day. There is no telemetry and no account.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="5">
+          <summary>Does it work on multiple monitors?</summary>
+          <p>
+            Widgets, containers and the desktop surface currently target the primary display only, and live wallpapers
+            render across all monitors with per-monitor layout tracking. Multi-monitor positioning for widgets is not
+            there yet — open an issue if you need it.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="6">
+          <summary>How do I build it from source?</summary>
+          <p>
+            Clone the repo and run <code>dotnet run --project src/Maktaby</code> on the .NET 10 SDK. To produce an
+            installer you need Inno Setup 6 and <code>./build.ps1 -Action Publish</code>. Releases are tag-driven —
+            see <a href="https://github.com/ezhassen/Maktaby/blob/develop/docs/releasing.md" target="_blank" rel="noopener">docs/releasing.md</a>.
+          </p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ CTA ============================ -->
+  <section class="section section--cta">
+    <div class="wrap cta-inner reveal">
+      <h2>Give the desktop a second job.</h2>
+      <p>Free, open source, and about to be deleted from your Downloads folder forever.</p>
+      <div class="cta-actions">
+        <a class="btn btn--primary btn--lg" id="download-stable-2" href="https://github.com/ezhassen/Maktaby/releases/latest" target="_blank" rel="noopener">
+          <span class="btn-label">Download for Windows</span>
+        </a>
+        <a class="btn btn--outline btn--lg" href="https://github.com/ezhassen/Maktaby" target="_blank" rel="noopener">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          Star on GitHub
+        </a>
+      </div>
+      <p class="cta-meta">
+        <span id="downloads-total" hidden>
+          <span data-field="count">—</span> downloads on GitHub Releases
+        </span>
+        <span>Windows 10 / 11 · x64 · Apache-2.0</span>
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-brand">
+      <img class="brand-mark" src="img/app_icon_svg.svg" alt="" width="28" height="28" />
+      <div>
+        <p class="footer-name">Maktaby</p>
+        <p class="footer-tag">Windows Desktop Organizer</p>
+      </div>
+    </div>
+
+    <nav class="footer-links" aria-label="Footer">
+      <div class="footer-col">
+        <h4>Product</h4>
+        <a href="#features">Features</a>
+        <a href="#screenshots">Screenshots</a>
+        <a href="#install">Install</a>
+        <a href="https://github.com/ezhassen/Maktaby/releases" target="_blank" rel="noopener">Releases</a>
+      </div>
+      <div class="footer-col">
+        <h4>Project</h4>
+        <a href="https://github.com/ezhassen/Maktaby" target="_blank" rel="noopener">Source code</a>
+        <a href="https://github.com/ezhassen/Maktaby/issues" target="_blank" rel="noopener">Report an issue</a>
+        <a href="https://github.com/ezhassen/Maktaby/blob/develop/docs/native-widgets.md" target="_blank" rel="noopener">Widget SDK guide</a>
+        <a href="https://github.com/ezhassen/Maktaby/blob/develop/docs/releasing.md" target="_blank" rel="noopener">Releasing</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="https://github.com/ezhassen/Maktaby/blob/main/LICENSE.txt" target="_blank" rel="noopener">Apache-2.0 license</a>
+        <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">License terms</a>
+      </div>
+    </nav>
+  </div>
+
+  <div class="wrap footer-bottom">
+    <p>&copy; <span data-year>2026</span> Maktaby · Windows, .NET and WebView2 are trademarks of their respective owners. Maktaby is not affiliated with Microsoft.</p>
+  </div>
+</footer>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot viewer" hidden>
+  <button class="lightbox-close" id="lightbox-close" type="button" aria-label="Close">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+  </button>
+  <figure class="lightbox-figure">
+    <img id="lightbox-img" src="" alt="" />
+    <figcaption id="lightbox-caption"></figcaption>
+  </figure>
+</div>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>

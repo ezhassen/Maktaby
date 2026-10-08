@@ -1,0 +1,80 @@
+# Publishes the landing page in /website to GitHub Pages.
+#
+# Source of truth is /website (index.html + assets/css + assets/js). Images are
+# NOT duplicated into that folder: every <img src="img/..."> resolves to a file
+# in /.github/assets, which website/build.ps1 copies into dist/img at build time.
+# That way the README screenshots and the website screenshots are always the
+# same files, and a new capture only has to be committed in one place.
+#
+#   push to main     -> https://ezhassen.github.io/Maktaby/
+#   push to develop  -> same URL (Pages always serves the default branch)
+#   workflow_dispatch-> re-deploy without touching anything
+#
+# One-time repo setup (Settings -> Pages): Source = "GitHub Actions".
+name: Pages
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'website/**'
+      - '.github/assets/**'
+      - '.github/workflows/pages.yml'
+  # Also run for manual deploys and any future trigger.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A newer push to the site must never be overtaken by an older run.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Stage site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage website/dist
+        shell: pwsh
+        run: ./website/build.ps1
+
+      - name: Fail if the HTML references a missing image
+        shell: bash
+        # A typo in an <img src> would ship a broken screenshot to the landing
+        # page silently - nothing in a static site validates references. Cheap
+        # insurance: collect every local src/href and confirm the file is staged.
+        run: |
+          cd website/dist
+          missing=0
+          for ref in $(grep -rhoE '(src|href)="[^"#?]+"' . \
+                       | sed -E 's/^(src|href)="//; s/"$//' \
+                       | grep -vE '^(https?:|//|data:|mailto:)'); do
+            if [ ! -e "$ref" ]; then
+              echo "::error::missing asset referenced by index.html: $ref"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+          echo "All local references resolve."
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
