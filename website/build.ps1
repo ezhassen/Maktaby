@@ -3,14 +3,17 @@
     Stages the Maktaby landing page into website/dist for publishing.
 
 .DESCRIPTION
-    The site source lives in website/ (index.html + assets/css + assets/js), but
-    every image is referenced from .github/assets so the README and the website
-    can never show different screenshots of the same build. This script merges
-    the two into a single self-contained dist/ folder:
+    The site source lives in website/ (index.html + robots.txt + sitemap.xml +
+    assets/css + assets/js + assets/img). Every screenshot is referenced from
+    .github/assets instead of being duplicated, so the README and the website can
+    never show different captures of the same build. This script merges the two
+    into a single self-contained dist/ folder:
 
         website/dist/index.html          <- website/index.html
-        website/dist/assets/css|js/...   <- website/assets/**
-        website/dist/img/...             <- .github/assets/**
+        website/dist/robots.txt          <- website/robots.txt
+        website/dist/sitemap.xml         <- website/sitemap.xml
+        website/dist/assets/**           <- website/assets/**
+        website/dist/img/**              <- .github/assets/**
 
     The same script runs locally (to preview) and in .github/workflows/pages.yml
     (to publish), so the published output is whatever this script produced.
@@ -41,8 +44,13 @@ if (Test-Path -LiteralPath $OutDir) {
 }
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
-# 1. The hand-written site: index.html plus assets/** (css + js).
-Copy-Item -LiteralPath (Join-Path $siteRoot 'index.html') -Destination $OutDir -Force
+# 1. The hand-written site: index.html, robots.txt, sitemap.xml and assets/** (css, js, img).
+#    Listed explicitly so build.ps1 and dist/.gitignore never end up in the output.
+foreach ($file in @('index.html', 'robots.txt', 'sitemap.xml')) {
+    $src = Join-Path $siteRoot $file
+    if (-not (Test-Path -LiteralPath $src)) { throw "Missing site file: $src" }
+    Copy-Item -LiteralPath $src -Destination $OutDir -Force
+}
 $siteAssetsOut = Join-Path $OutDir 'assets'
 New-Item -ItemType Directory -Path $siteAssetsOut -Force | Out-Null
 Copy-Item -Path (Join-Path $siteRoot 'assets\*') -Destination $siteAssetsOut -Recurse -Force

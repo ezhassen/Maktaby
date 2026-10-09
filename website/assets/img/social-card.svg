@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630" role="img"
+     aria-labelledby="title desc">
+  <title id="title">Maktaby — Windows Desktop Organizer</title>
+  <desc id="desc">Social card: Maktaby, boxes, widgets and live wallpapers for Windows 10 and 11.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#0A1220"/>
+      <stop offset="55%"  stop-color="#070C16"/>
+      <stop offset="100%" stop-color="#050810"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#3B93FF" stop-opacity="0.26"/>
+      <stop offset="60%"  stop-color="#3B93FF" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="#3B93FF" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="cardGrey" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#CCD5DF"/>
+      <stop offset="100%" stop-color="#A2B1C1"/>
+    </linearGradient>
+    <linearGradient id="cardBlue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#3B93FF"/>
+      <stop offset="100%" stop-color="#156FE6"/>
+    </linearGradient>
+    <linearGradient id="clockFace" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#EBF1F7"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.13"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.05"/>
+    </linearGradient>
+
+    <clipPath id="boxClip">
+      <rect x="770" y="236" width="360" height="182" rx="22"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <ellipse cx="930" cy="300" rx="400" ry="290" fill="url(#glow)"/>
+
+  <!-- Logo, reproduced from app_icon_svg.svg (512-unit artwork scaled to 200px). -->
+  <g transform="translate(44.68,187.68) scale(0.4878)">
+    <rect x="56" y="56" width="176" height="176" rx="44" fill="url(#cardGrey)"/>
+    <rect x="86" y="86" width="46" height="46" rx="12" fill="#FF5232"/>
+    <rect x="146" y="86" width="46" height="46" rx="12" fill="#FFB703"/>
+    <rect x="86" y="146" width="46" height="46" rx="12" fill="#00B4D8"/>
+
+    <rect x="280" y="56" width="176" height="176" rx="44" fill="url(#cardGrey)"/>
+    <circle cx="368" cy="144" r="68" fill="url(#clockFace)"/>
+    <circle cx="368" cy="88" r="3.5" fill="#6C7A89"/>
+    <circle cx="424" cy="144" r="3.5" fill="#6C7A89"/>
+    <circle cx="368" cy="200" r="3.5" fill="#6C7A89"/>
+    <circle cx="312" cy="144" r="3.5" fill="#6C7A89"/>
+    <circle cx="396" cy="95.5" r="2.5" fill="#A0ACBA"/>
+    <circle cx="416.5" cy="116" r="2.5" fill="#A0ACBA"/>
+    <circle cx="416.5" cy="172" r="2.5" fill="#A0ACBA"/>
+    <circle cx="396" cy="192.5" r="2.5" fill="#A0ACBA"/>
+    <circle cx="340" cy="192.5" r="2.5" fill="#A0ACBA"/>
+    <circle cx="319.5" cy="172" r="2.5" fill="#A0ACBA"/>
+    <circle cx="319.5" cy="116" r="2.5" fill="#A0ACBA"/>
+    <circle cx="340" cy="95.5" r="2.5" fill="#A0ACBA"/>
+    <line x1="368" y1="144" x2="338" y2="122" stroke="#2B3A4A" stroke-width="6" stroke-linecap="round"/>
+    <line x1="368" y1="144" x2="402" y2="104" stroke="#2B3A4A" stroke-width="4.5" stroke-linecap="round"/>
+    <line x1="368" y1="144" x2="368" y2="86" stroke="#FF3B30" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="368" cy="144" r="5" fill="#FF3B30"/>
+    <circle cx="368" cy="144" r="2" fill="#FFFFFF"/>
+
+    <rect x="56" y="280" width="176" height="176" rx="44" fill="url(#cardGrey)"/>
+    <rect x="86" y="310" width="46" height="46" rx="12" fill="#FFB703"/>
+    <rect x="146" y="310" width="46" height="46" rx="12" fill="#FF5232"/>
+
+    <rect x="290" y="290" width="176" height="176" rx="44" fill="#9AA4AF"/>
+    <rect x="280" y="280" width="176" height="176" rx="44" fill="url(#cardBlue)"/>
+    <rect x="311" y="311" width="48" height="48" rx="13" fill="#EDF5FF"/>
+    <rect x="377" y="311" width="48" height="48" rx="13" fill="#EDF5FF"/>
+    <rect x="311" y="377" width="48" height="48" rx="13" fill="#EDF5FF"/>
+    <rect x="377" y="377" width="48" height="48" rx="13" fill="#EDF5FF"/>
+  </g>
+
+  <g font-family="Segoe UI Variable Display, Segoe UI, Inter, system-ui, sans-serif">
+    <text x="316" y="300" font-size="84" font-weight="700" letter-spacing="-2" fill="#FFFFFF">Maktaby</text>
+    <text x="320" y="350" font-size="27" font-weight="600" fill="#E6EDF6">Boxes, Widgets &amp; Live Wallpapers</text>
+    <text x="320" y="392" font-size="23" fill="#93A4B8">Windows 10 / 11 &#183; x64 &#183; Apache-2.0</text>
+    <text x="320" y="434" font-size="21" fill="#8497AD">Free &amp; open source</text>
+  </g>
+
+  <text x="72" y="556" font-family="Segoe UI, Inter, system-ui, sans-serif"
+        font-size="24" font-weight="600" fill="#6FB4FF">github.com/ezhassen/Maktaby</text>
+
+  <!-- The container box the app is named after, with a clock widget on its corner. -->
+  <g>
+    <rect x="770" y="236" width="360" height="182" rx="22"
+          fill="url(#glass)" stroke="#FFFFFF" stroke-opacity="0.16"/>
+    <g clip-path="url(#boxClip)">
+      <rect x="770" y="236" width="360" height="32" fill="#FFFFFF" fill-opacity="0.07"/>
+    </g>
+    <line x1="770" y1="268" x2="1130" y2="268" stroke="#FFFFFF" stroke-opacity="0.12"/>
+    <circle cx="790" cy="252" r="4" fill="#FF5F57"/>
+    <circle cx="804" cy="252" r="4" fill="#FEBC2E"/>
+    <circle cx="818" cy="252" r="4" fill="#28C840"/>
+
+    <rect x="810" y="290" width="44" height="44" rx="12" fill="#FF5232" fill-opacity="0.85"/>
+    <rect x="870" y="290" width="44" height="44" rx="12" fill="#FFB703" fill-opacity="0.85"/>
+    <rect x="930" y="290" width="44" height="44" rx="12" fill="#00B4D8" fill-opacity="0.85"/>
+    <rect x="990" y="290" width="44" height="44" rx="12" fill="#3B93FF" fill-opacity="0.85"/>
+    <rect x="1050" y="290" width="44" height="44" rx="12" fill="#FFFFFF" fill-opacity="0.16"/>
+
+    <g fill="#FFFFFF" fill-opacity="0.30">
+      <rect x="813" y="348" width="38" height="5" rx="2.5"/>
+      <rect x="873" y="348" width="38" height="5" rx="2.5"/>
+      <rect x="933" y="348" width="38" height="5" rx="2.5"/>
+      <rect x="993" y="348" width="38" height="5" rx="2.5"/>
+      <rect x="1053" y="348" width="38" height="5" rx="2.5"/>
+    </g>
+
+    <rect x="810" y="368" width="320" height="1" fill="#FFFFFF" fill-opacity="0.14"/>
+    <rect x="810" y="384" width="110" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.22"/>
+  </g>
+
+  <!-- Clock widget, over the box's top-left corner. -->
+  <g>
+    <circle cx="742" cy="212" r="48" fill="url(#glass)" stroke="#FFFFFF" stroke-opacity="0.18"/>
+    <circle cx="742" cy="212" r="35" fill="url(#clockFace)"/>
+    <line x1="742" y1="212" x2="726" y2="200" stroke="#2B3A4A" stroke-width="4.2" stroke-linecap="round"/>
+    <line x1="742" y1="212" x2="760" y2="189" stroke="#2B3A4A" stroke-width="3.2" stroke-linecap="round"/>
+    <line x1="742" y1="212" x2="742" y2="180" stroke="#FF3B30" stroke-width="1.8" stroke-linecap="round"/>
+    <circle cx="742" cy="212" r="3.4" fill="#FF3B30"/>
+  </g>
+</svg>

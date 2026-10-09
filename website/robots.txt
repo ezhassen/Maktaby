@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://ezhassen.github.io/Maktaby/sitemap.xml

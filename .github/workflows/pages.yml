@@ -7,15 +7,19 @@
 # same files, and a new capture only has to be committed in one place.
 #
 #   push to main     -> https://ezhassen.github.io/Maktaby/
-#   push to develop  -> same URL (Pages always serves the default branch)
 #   workflow_dispatch-> re-deploy without touching anything
+#
+# main only: the published site must always describe the released product, so a
+# develop push (which is where betas are cut from) never publishes it. Note this
+# is also the branch Pages serves from, and the branch the workflow file has to
+# live on for "Run workflow" to be offered.
 #
 # One-time repo setup (Settings -> Pages): Source = "GitHub Actions".
 name: Pages
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - 'website/**'
       - '.github/assets/**'
@@ -38,7 +42,9 @@ jobs:
     name: Stage site
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Node 24 majors throughout: the v4/v5 generations of these actions run on
+      # Node 20, which the runners force-upgrade anyway and warn about every run.
+      - uses: actions/checkout@v7
 
       - name: Stage website/dist
         shell: pwsh
@@ -63,8 +69,8 @@ jobs:
           if [ "$missing" -ne 0 ]; then exit 1; fi
           echo "All local references resolve."
 
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: website/dist
 
@@ -77,4 +83,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

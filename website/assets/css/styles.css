@@ -253,6 +253,23 @@ html[data-theme="light"] .btn--primary { color: #fff; }
 .btn--sm { padding: 8px 13px; font-size: .88rem; border-radius: 9px; }
 .btn--lg { padding: 14px 24px; font-size: 1rem; border-radius: 13px; }
 
+/* Live star count inside the header's GitHub button. Hidden until the API
+   answers, so the button never shows a placeholder dash. */
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: .78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.count-badge .icon { color: var(--amber); fill: var(--amber); stroke: none; width: 12px; height: 12px; }
+
 .btn[aria-disabled="true"], .btn.is-disabled {
   opacity: .5;
   pointer-events: none;
@@ -312,7 +329,10 @@ html[data-theme="light"] .grad { background-image: linear-gradient(100deg, #156F
   font-size: .88rem;
   color: var(--text-3);
 }
-.meta-item { display: inline-flex; align-items: center; gap: 7px; }
+/* gap 4px, not more: a .meta-item is a flex container, so whitespace between
+   two flex items is discarded and a wider gap would read as a loose space.
+   The literal spaces in the markup are kept for screen readers. */
+.meta-item { display: inline-flex; align-items: center; gap: 4px; }
 .meta-item .icon { color: var(--text-3); }
 
 .hero-note { margin-top: 16px; font-size: .85rem; color: var(--text-3); max-width: 56ch; }
@@ -698,7 +718,10 @@ kbd {
   font-size: .84rem;
   color: var(--text-3);
 }
-.cta-meta span { display: inline-flex; align-items: center; }
+/* Direct children only: making the nested value spans flex items too would
+   swallow the space between the number and its label. `gap` supplies that space
+   because whitespace between flex items is never rendered. */
+.cta-meta > span { display: inline-flex; align-items: center; gap: 5px; }
 
 /* -------------------------------- Footer ---------------------------------- */
 .site-footer {
@@ -734,48 +757,95 @@ kbd {
 }
 
 /* ------------------------------- Lightbox -------------------------------- */
+/* The side gutters hold the prev/next buttons, so the image never sits under
+   them and the controls stay reachable on a narrow phone. */
 .lightbox {
   position: fixed;
   inset: 0;
   z-index: 300;
   display: grid;
   place-items: center;
-  padding: clamp(16px, 4vw, 48px);
-  background: rgba(3, 6, 12, .82);
+  padding: clamp(16px, 3vw, 40px) clamp(52px, 7vw, 84px);
+  background: rgba(3, 6, 12, .84);
   backdrop-filter: blur(6px);
   animation: fade .2s var(--ease);
 }
 .lightbox[hidden] { display: none; }
 @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-.lightbox-figure { margin: 0; max-width: min(1400px, 100%); }
+.lightbox-figure {
+  margin: 0;
+  max-width: min(1400px, 100%);
+  display: grid;
+  gap: 12px;
+  justify-items: center;
+}
 .lightbox-figure img {
   max-width: 100%;
-  max-height: 78vh;
+  max-height: 76vh;
   width: auto;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, .14);
   box-shadow: 0 40px 100px -30px rgba(0, 0, 0, .9);
 }
 .lightbox-figure figcaption {
-  margin-top: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 12px;
   text-align: center;
   color: #C6D2E2;
   font-size: .9rem;
 }
-.lightbox-figure figcaption:empty { display: none; }
-.lightbox-close {
+.lightbox-count {
+  padding: 2px 9px;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 999px;
+  color: #93A4B8;
+  font-size: .8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.lightbox-hint {
   position: absolute;
-  top: 16px; right: 16px;
-  width: 42px; height: 42px;
-  display: grid; place-items: center;
+  bottom: 12px;
+  left: 0; right: 0;
+  text-align: center;
+  color: rgba(198, 210, 226, .45);
+  font-size: .76rem;
+  letter-spacing: .02em;
+}
+
+.lightbox-close,
+.lightbox-nav {
+  position: absolute;
+  display: grid;
+  place-items: center;
   border: 1px solid rgba(255, 255, 255, .2);
-  border-radius: 11px;
   background: rgba(255, 255, 255, .08);
   color: #fff;
   cursor: pointer;
+  transition: background-color .18s var(--ease), transform .18s var(--ease);
 }
-.lightbox-close:hover { background: rgba(255, 255, 255, .16); }
+.lightbox-close:hover,
+.lightbox-nav:hover { background: rgba(255, 255, 255, .2); }
+.lightbox-close:active,
+.lightbox-nav:active { transform: scale(.94); }
+.lightbox-close { top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 11px; z-index: 2; }
 .lightbox-close .icon { width: 18px; height: 18px; }
+
+.lightbox-nav {
+  top: 50%;
+  width: 46px; height: 46px;
+  margin-top: -23px;
+  border-radius: 50%;
+}
+.lightbox-nav .icon { width: 20px; height: 20px; }
+.lightbox-nav--prev { left: 10px; }
+.lightbox-nav--next { right: 10px; }
+.lightbox-nav[hidden] { display: none; }
+
 body.no-scroll { overflow: hidden; }
 
 /* ------------------------------- Reveals --------------------------------- */

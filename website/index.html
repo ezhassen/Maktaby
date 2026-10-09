@@ -14,13 +14,64 @@
 <meta property="og:title" content="Maktaby — Boxes, Widgets &amp; Live Wallpapers for Windows" />
 <meta property="og:description" content="Resizable, snap-able boxes, build-your-own widgets, and live wallpapers — layered above a Windows desktop that keeps working normally." />
 <meta property="og:url" content="https://ezhassen.github.io/Maktaby/" />
-<meta property="og:image" content="https://ezhassen.github.io/Maktaby/img/Screenshot-Dark.webp" />
+<meta property="og:image" content="https://ezhassen.github.io/Maktaby/assets/img/social-card.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Maktaby — boxes, widgets and live wallpapers for Windows 10 and 11" />
+<meta property="og:locale" content="en_US" />
 <meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://ezhassen.github.io/Maktaby/assets/img/social-card.png" />
 
+<link rel="canonical" href="https://ezhassen.github.io/Maktaby/" />
 <link rel="icon" type="image/svg+xml" href="img/app_icon_svg.svg" />
 <link rel="apple-touch-icon" href="img/app_icon_svg.svg" />
+<link rel="alternate" type="application/rss+xml" title="Maktaby releases" href="https://github.com/ezhassen/Maktaby/releases.atom" />
 <link rel="preconnect" href="https://api.github.com" crossorigin />
 <link rel="stylesheet" href="assets/css/styles.css" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Maktaby",
+  "alternateName": "Maktaby — Windows Desktop Organizer",
+  "description": "Groups shortcuts, folders and files into resizable, snap-able boxes that float above the Windows desktop, and adds HTML/CSS/JS widgets, native C#/WPF widgets and video or GIF live wallpapers. Runs from the system tray, persists the layout between sessions, and hides every box on a double-click of the empty desktop.",
+  "url": "https://ezhassen.github.io/Maktaby/",
+  "image": "https://ezhassen.github.io/Maktaby/assets/img/social-card.png",
+  "screenshot": "https://ezhassen.github.io/Maktaby/img/Screenshot-Dark.webp",
+  "downloadUrl": "https://github.com/ezhassen/Maktaby/releases/latest",
+  "applicationCategory": "UtilitiesApplication",
+  "applicationSubCategory": "Desktop organizer",
+  "operatingSystem": "Windows 10 version 2004 (build 19041) or later, or Windows 11",
+  "softwareRequirements": ".NET 10 Desktop Runtime (x64); Microsoft Edge WebView2 Evergreen Runtime for web widgets and HTML wallpapers; 64-bit; administrator rights to install",
+  "processorRequirements": "x64",
+  "permissions": "Runs locally only. No account, no telemetry. User widgets are arbitrary .NET code and prompt once per content hash before running.",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "codeRepository": "https://github.com/ezhassen/Maktaby",
+  "issueTracker": "https://github.com/ezhassen/Maktaby/issues",
+  "releaseNotes": "https://github.com/ezhassen/Maktaby/releases",
+  "author": { "@type": "Organization", "name": "Maktaby", "url": "https://github.com/ezhassen" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "featureList": [
+    "Resizable, snap-able boxes that float above the Windows desktop",
+    "Drag and drop box creation from Explorer, the Start Menu or another box",
+    "Roll-up containers and multi-tab boxes",
+    "Per-box transparency, background, foreground, border and title-bar colours",
+    "HTML, CSS and JavaScript web widgets on WebView2",
+    "Native C# and WPF widgets compiled at load via Roslyn or dropped in as a DLL",
+    "Built-in widget editor with a live preview",
+    "Live wallpapers from video, animated GIF or still images, per monitor",
+    "Live wallpaper auto-pause when nothing is visible",
+    "System tray first: no main window, single instance",
+    "Double-click the empty desktop to hide or show every box",
+    "Dark and light themes, following the system by default",
+    "In-app updates from GitHub Releases with SHA-256 verification",
+    "Performance monitor and daily rolling logs",
+    "Layout backup and restore as a single .dbe1 bundle"
+  ]
+}
+</script>
 
 <!-- Applied before first paint so a light-theme visitor never sees a dark flash.
      Kept inline and tiny on purpose; main.js re-applies the same value on boot. -->
@@ -67,6 +118,10 @@
       <a class="btn btn--ghost btn--sm hide-md" href="https://github.com/ezhassen/Maktaby" target="_blank" rel="noopener">
         <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
         GitHub
+        <span class="count-badge" id="stars-badge" hidden>
+          <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" stroke="none" d="M8 .8l2.2 4.45 4.9.71-3.55 3.46.84 4.88L8 11.85 3.61 14.3l.84-4.88L.9 5.96l4.9-.71z"/></svg>
+          <span data-field="stars">—</span>
+        </span>
       </a>
       <button class="icon-btn nav-toggle" id="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav">
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -117,7 +172,7 @@
         <p class="hero-meta reveal" data-reveal-delay="4">
           <span id="stable-version" class="meta-item" data-slot="version">
             <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none"/><path stroke-linecap="round" d="M8 7.2v4M8 5.1v.9"/></svg>
-            Latest: <span data-field="tag">—</span>
+            <span>Latest:</span> <span data-field="tag">—</span>
           </span>
           <span class="meta-item" id="stable-size" hidden>
             <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke-linecap="round" d="M2.5 4.8h11a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H8.2L5 15.6v-2.4H2.5a1 1 0 0 1-1-1V5.8a1 1 0 0 1 1-1Z"/></svg>
@@ -128,7 +183,7 @@
             <span data-field="note">No stable release yet — beta is the only download</span>
           </span>
           <span class="meta-item" id="beta-version" hidden>
-            Beta: <span data-field="tag">—</span>
+            <span>Beta:</span> <span data-field="tag">—</span>
           </span>
         </p>
 
@@ -545,7 +600,10 @@
       </div>
       <p class="cta-meta">
         <span id="downloads-total" hidden>
-          <span data-field="count">—</span> downloads on GitHub Releases
+          <span data-field="count">—</span> <span>downloads on GitHub Releases</span>
+        </span>
+        <span id="stars-total" hidden>
+          <span data-field="stars">—</span> <span>GitHub stars</span>
         </span>
         <span>Windows 10 / 11 · x64 · Apache-2.0</span>
       </p>
@@ -593,13 +651,23 @@
 
 <!-- Lightbox -->
 <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot viewer" hidden>
-  <button class="lightbox-close" id="lightbox-close" type="button" aria-label="Close">
+  <button class="lightbox-close" id="lightbox-close" type="button" aria-label="Close viewer">
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+  </button>
+  <button class="lightbox-nav lightbox-nav--prev" id="lightbox-prev" type="button" aria-label="Previous screenshot">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.5 4.5 7.5 12l7 7.5"/></svg>
+  </button>
+  <button class="lightbox-nav lightbox-nav--next" id="lightbox-next" type="button" aria-label="Next screenshot">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.5 4.5 16.5 12l-7 7.5"/></svg>
   </button>
   <figure class="lightbox-figure">
     <img id="lightbox-img" src="" alt="" />
-    <figcaption id="lightbox-caption"></figcaption>
+    <figcaption>
+      <span id="lightbox-caption"></span>
+      <span class="lightbox-count" id="lightbox-count"></span>
+    </figcaption>
   </figure>
+  <p class="lightbox-hint" aria-hidden="true">&larr; &rarr; to browse &middot; Esc to close</p>
 </div>
 
 <script src="assets/js/main.js" defer></script>
