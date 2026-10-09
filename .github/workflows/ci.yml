@@ -27,13 +27,18 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      # Node 24 majors. The v4 generation of these actions targets Node 20, which
+      # the runners force-upgrade and then warn about on every single run. Note
+      # upload-artifact@v5 advertises Node 24 support but still ran on Node 20 by
+      # default — v6 is the first release that genuinely moves the runtime, and it
+      # is otherwise identical to v4. Inputs are unchanged across all three.
+      - uses: actions/checkout@v7
         with:
           # MinVer derives the assembly version from the nearest git tag. A shallow
           # checkout has no tags, so without this every build reports 0.0.0-alpha.0.1.
           fetch-depth: 0
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
           # Central Package Management: the versions live in Directory.Packages.props,
@@ -56,7 +61,7 @@ jobs:
 
       - name: Upload build log on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: build-log
           path: '**/bin/**/*.log'

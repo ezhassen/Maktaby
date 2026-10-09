@@ -69,7 +69,12 @@ jobs:
           echo "version=$ver"    >> "$GITHUB_OUTPUT"
           echo "Building $tag ($ver) -> $channel channel, expected on $branch"
 
-      - uses: actions/checkout@v4
+      # Node 24 majors. The v4 generation of these actions targets Node 20, which
+      # the runners force-upgrade and then warn about on every run. Note
+      # upload-artifact@v5 advertises Node 24 support but still ran on Node 20 by
+      # default — v6 is the first release that genuinely moves the runtime, and it
+      # is otherwise identical to v4. Inputs are unchanged across all three.
+      - uses: actions/checkout@v7
         with:
           ref: ${{ steps.tag.outputs.tag }}
           # MinVer derives the assembly version from the nearest git tag. A shallow
@@ -96,7 +101,7 @@ jobs:
           fi
           echo "OK: $TAG (${sha:0:8}) is reachable from '$EXPECTED_BRANCH'."
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
           # Central Package Management: versions live in Directory.Packages.props,
@@ -208,7 +213,7 @@ jobs:
           echo "asset=$(echo ${ASSET//\\//})"
 
       - name: Keep the installer for this run
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: maktaby-installer
           path: artifacts/*.exe
