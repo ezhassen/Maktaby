@@ -13,26 +13,86 @@ public sealed class NativeWidgetSettingsService : INativeWidgetSettingsService
     private const string FileName = "settings.json";
     private const string AppSettingsDirName = "WidgetSettings";
 
-    public string GetSettingsPath(NativeWidgetInfo info)
+    /// <summary>Prefix and extension a generated per-instance name must have.</summary>
+    private const string InstancePrefix = "settings_";
+    private const int InstanceTokenLength = 8;
+
+    public string GetSettingsPath(NativeWidgetInfo info, string? settingsFileName)
     {
+        string? name = SanitizeSettingsFileName(settingsFileName) ?? FileName;
+
         if (info.Source == NativeWidgetSource.App)
         {
-            return Path.Combine(SettingsService.AppDataDir, AppSettingsDirName, SanitizeSlug(info.Slug) + ".json");
+            // One folder per plugin so a folder can hold the default file plus its instances, exactly
+            // like a user-source widget folder does.
+            string slugFolder = Path.Combine(SettingsService.AppDataDir, AppSettingsDirName, SanitizeSlug(info.Slug));
+            MigrateLegacyAppFile(slugFolder);
+            return Path.Combine(slugFolder, name);
         }
 
         string folder = string.IsNullOrWhiteSpace(info.FolderPath)
             ? Path.Combine(SettingsService.AppDataDir, AppSettingsDirName, SanitizeSlug(info.Slug))
             : info.FolderPath;
-        return Path.Combine(folder, FileName);
+        return Path.Combine(folder, name);
     }
 
-    public void LoadInto(NativeWidgetInfo info, IWidgetSettingsProvider provider)
+    /// <summary>
+    /// Moves the pre-per-instance flat <c>WidgetSettings/{slug}.json</c> to
+    /// <c>WidgetSettings/{slug}/settings.json</c> the first time that plugin is resolved. Without it
+    /// every built-in widget would silently fall back to declared defaults on upgrade.
+    /// </summary>
+    private static void MigrateLegacyAppFile(string slugFolder)
     {
-        string path = GetSettingsPath(info);
+        try
+        {
+            string target = Path.Combine(slugFolder, FileName);
+            if (File.Exists(target)) return;
+
+            string legacy = Path.Combine(Path.GetDirectoryName(slugFolder)!, Path.GetFileName(slugFolder) + ".json");
+            if (!File.Exists(legacy)) return;
+
+            Directory.CreateDirectory(slugFolder);
+            File.Move(legacy, target);
+        }
+        catch
+        {
+            // Migration is a convenience: a locked or already-moved file just means the defaults win.
+        }
+    }
+
+    /// <summary>
+    /// Accepts only a bare generated instance name (<c>settings_xxxxxxxx.json</c>). The value round
+    /// trips through the snapshot file, so it is untrusted input on its way to becoming a path -
+    /// anything carrying a separator, "..", or a rooted path falls back to the default file.
+    /// </summary>
+    private static string? SanitizeSettingsFileName(string? settingsFileName)
+    {
+        if (string.IsNullOrWhiteSpace(settingsFileName)) return null;
+
+        var name = settingsFileName.Trim();
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;
+        if (name.Contains('/') || name.Contains('\\')) return null;
+        if (name.Contains("..", StringComparison.Ordinal)) return null;
+        if (!name.StartsWith(InstancePrefix, StringComparison.OrdinalIgnoreCase)) return null;
+        if (!name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return null;
+
+        string token = name[InstancePrefix.Length..^".json".Length];
+        if (token.Length != InstanceTokenLength) return null;
+        foreach (char c in token)
+        {
+            if (!char.IsAsciiDigit(c) && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F')) return null;
+        }
+
+        return name;
+    }
+
+    public void LoadInto(NativeWidgetInfo info, IWidgetSettingsProvider provider, string? settingsFileName)
+    {
+        string path = GetSettingsPath(info, settingsFileName);
         if (!File.Exists(path))
         {
             // First run: materialise the file with defaults so users can discover/edit it.
-            try { Save(info, provider); } catch { }
+            try { Save(info, provider, settingsFileName); } catch { }
             return;
         }
 
@@ -73,9 +133,9 @@ public sealed class NativeWidgetSettingsService : INativeWidgetSettingsService
         }
     }
 
-    public void Save(NativeWidgetInfo info, IWidgetSettingsProvider provider)
+    public void Save(NativeWidgetInfo info, IWidgetSettingsProvider provider, string? settingsFileName)
     {
-        string path = GetSettingsPath(info);
+        string path = GetSettingsPath(info, settingsFileName);
         try
         {
             var dir = Path.GetDirectoryName(path);
@@ -92,6 +152,52 @@ public sealed class NativeWidgetSettingsService : INativeWidgetSettingsService
         catch
         {
             // Best effort: a failed save must never break the widget.
+        }
+    }
+
+    /// <summary>
+    /// Deletes the settings file of a single removed instance. A null
+    /// <paramref name="settingsFileName"/> is deliberately a no-op: that instance shares the
+    /// plugin's default file, which belongs to the remaining first instance, not to the one being
+    /// deleted.
+    /// </summary>
+    public void Delete(NativeWidgetInfo info, string? settingsFileName)
+    {
+        var name = SanitizeSettingsFileName(settingsFileName);
+        if (name is null) return;
+
+        try
+        {
+            string path = GetSettingsPath(info, name);
+            if (File.Exists(path)) File.Delete(path);
+        }
+        catch
+        {
+            // Best effort: an undeletable settings file must never block removing the widget.
+        }
+    }
+
+    /// <summary>Copies one instance's settings file onto another, for the duplicate migration.
+    /// A null <paramref name="fromFileName"/> means the shared default file, which is exactly what
+    /// the migration copies from.</summary>
+    public void CopySettings(NativeWidgetInfo info, string? fromFileName, string? toFileName)
+    {
+        if (SanitizeSettingsFileName(toFileName) is not { } to) return;
+
+        try
+        {
+            string source = GetSettingsPath(info, fromFileName);
+            string target = GetSettingsPath(info, to);
+            var dir = Path.GetDirectoryName(target);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            // No source file: leave the absence in place. LoadInto materialises the declared
+            // defaults on first attach, which is the same end state.
+            if (File.Exists(source)) File.Copy(source, target, overwrite: true);
+        }
+        catch
+        {
+            // Best effort, same contract as Save.
         }
     }
 

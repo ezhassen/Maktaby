@@ -17,6 +17,7 @@ public partial class WidgetSettingsWindow : AppFluentWindow
     private readonly NativeWidgetInfo _info;
     private readonly IWidgetSettingsProvider _provider;
     private readonly INativeWidgetSettingsService _svc;
+    private readonly string? _settingsFileName;
     private readonly Dictionary<string, object?> _initial = new();
 
     public string WindowTitle { get; }
@@ -27,7 +28,8 @@ public partial class WidgetSettingsWindow : AppFluentWindow
         : this(
             new NativeWidgetInfo("analog-clock", NativeWidgetSource.App, "", new NativeWidgetManifest { Name = "Analog Clock" }, null, null),
             new DesignSettingsProvider(),
-            null!)
+            null!,
+            null)
     {
     }
 
@@ -43,11 +45,13 @@ public partial class WidgetSettingsWindow : AppFluentWindow
         };
     }
 
-    public WidgetSettingsWindow(NativeWidgetInfo info, IWidgetSettingsProvider provider, INativeWidgetSettingsService svc)
+    public WidgetSettingsWindow(NativeWidgetInfo info, IWidgetSettingsProvider provider, INativeWidgetSettingsService svc,
+        string? settingsFileName = null)
     {
         _info = info;
         _provider = provider;
         _svc = svc;
+        _settingsFileName = settingsFileName;
         WindowTitle = $"{(string.IsNullOrWhiteSpace(info.Manifest.Name) ? info.Slug : info.Manifest.Name)} Settings";
         InitializeComponent();
         // This dialog titles from its own WindowTitle property (not Window.Title) and hides
@@ -166,7 +170,7 @@ public partial class WidgetSettingsWindow : AppFluentWindow
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        try { _svc.Save(_info, _provider); } catch { }
+        try { _svc.Save(_info, _provider, _settingsFileName); } catch { }
         DialogResult = true;
         Close();
     }

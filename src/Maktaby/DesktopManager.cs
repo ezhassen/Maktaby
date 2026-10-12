@@ -53,6 +53,8 @@ public sealed class DesktopManager
     private readonly ISettingsService _settingsService;
     private readonly IMonitorService _monitors;
     private readonly IDispatcher _dispatcher;
+    private readonly INativeWidgetService _widgetService;
+    private readonly INativeWidgetSettingsService _widgetSettingsService;
 
     private readonly Dictionary<System.Guid, Window> _windows = new();
     /// <summary>Widget half of the shared pause supervision. Created in
@@ -129,6 +131,8 @@ public sealed class DesktopManager
         _settingsService = provider.GetRequiredService<ISettingsService>();
         _monitors = provider.GetRequiredService<IMonitorService>();
         _dispatcher = provider.GetRequiredService<IDispatcher>();
+        _widgetService = provider.GetRequiredService<INativeWidgetService>();
+        _widgetSettingsService = provider.GetRequiredService<INativeWidgetSettingsService>();
     }
 
     public async Task InitializeAsync()
@@ -163,6 +167,12 @@ public sealed class DesktopManager
 
             EnsureDefaultRuleAndBox();
         }
+
+        // Snapshots written before per-instance widget settings can hold several instances of the
+        // same slug that all share one settings file. Give each of them (except the lowest-Id one,
+        // which stays on the default file) a private file seeded with the values they were sharing,
+        // so nothing visibly changes - the fix only stops the next save from cross-writing them.
+        MigrateSharedWidgetSettings();
 
         // Build the container view-models off the UI thread (this also kicks off the per-item icon loads)
         // so the splash keeps animating, then add the already-built VMs on the UI thread. The
@@ -1936,10 +1946,91 @@ public sealed class DesktopManager
 
     public void RemoveContainer(Guid id)
     {
+        // Per-instance native-widget settings belong to the placed instance, so they go when it does.
+        // A null SettingsFileName means this instance shares the plugin's default settings file, and
+        // that belongs to the remaining first instance - never delete it here. The bulk paths (reset,
+        // both restore flavours) remove containers straight through IContainerService and so cannot
+        // reach this method, which is why restore can re-overlay the folder afterwards without the
+        // hook first destroying what the bundle is about to bring back.
+        DeleteWidgetSettingsFile(id);
+
         var vm = _mainVm.Containers.FirstOrDefault(c => c.Id == id);
         if (vm is not null) _mainVm.RemoveContainer(vm);
         else _containers.RemoveContainer(id);
         _ = SaveAsync();
+    }
+
+    /// <summary>
+    /// Deletes the settings file of one removed native-widget instance. No-op unless that instance
+    /// owns a private file; best effort, so a locked file cannot block removing the widget.
+    /// </summary>
+    private void DeleteWidgetSettingsFile(Guid id)
+    {
+        try
+        {
+            var model = _containers.GetContainer(id);
+            if (model is null || model.Type != DesktopItemContainerType.NativeWidget) return;
+            if (model.SettingsFileName is null) return;
+
+            var info = _widgetService.TryGetWidgetForContainer(model);
+            if (info is null) return;
+
+            _widgetSettingsService.Delete(info, model.SettingsFileName);
+        }
+        catch (Exception ex)
+        {
+            Logging.Log.Warning("Remove: could not delete widget settings for {Id}: {Message}", id, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// One-time repair for snapshots predating per-instance widget settings: within each slug, the
+    /// lowest-Id instance keeps the shared default file and every other one is moved onto a private
+    /// file copied from it. Idempotent - once a group has a single null, later runs find nothing to
+    /// do - and persisted, so it runs at most once per desktop rather than once per startup.
+    /// </summary>
+    private void MigrateSharedWidgetSettings()
+    {
+        try
+        {
+            var containers = _containers.GetContainers();
+            var shared = containers
+                .Where(c => c.Type == DesktopItemContainerType.NativeWidget
+                            && c.SettingsFileName is null
+                            && !string.IsNullOrWhiteSpace(c.NativeWidgetName))
+                .GroupBy(c => c.NativeWidgetName!, StringComparer.Ordinal)
+                .Where(g => g.Count() > 1);
+
+            var changed = false;
+            foreach (var group in shared)
+            {
+                // Lowest Id wins the default file so the outcome does not depend on list order.
+                var ordered = group.OrderBy(c => c.Id).ToList();
+                foreach (var container in ordered.Skip(1))
+                {
+                    container.SettingsFileName = $"settings_{Guid.NewGuid():N}"[..17] + ".json";
+
+                    var info = _widgetService.TryGetWidgetForContainer(container);
+                    if (info is not null)
+                    {
+                        // Copy the shared values so the instance keeps behaving exactly as before.
+                        _widgetSettingsService.CopySettings(info, fromFileName: null, toFileName: container.SettingsFileName);
+                    }
+
+                    changed = true;
+                }
+
+                Logging.Log.Information(
+                    "Widget settings: {Slug} had {Count} instances sharing one settings file; {Moved} moved to per-instance files",
+                    group.Key, ordered.Count, ordered.Count - 1);
+            }
+
+            if (changed) _ = SaveAsync();
+        }
+        catch (Exception ex)
+        {
+            Logging.Log.Warning("Widget settings: migration of shared instance files failed: {Message}", ex.Message);
+        }
     }
 
     /// <summary>Hides a container's window and marks the model not visible. Never saves the

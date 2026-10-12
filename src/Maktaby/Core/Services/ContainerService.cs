@@ -118,11 +118,51 @@ public sealed class ContainerService : IContainerService
             IsVisible = true,
             NativeWidgetName = slug
         };
+
         lock (_gate)
         {
+            // Only the second and later instances of a slug get their own settings file. The first
+            // one keeps null, which is what every layout written before per-instance settings relies
+            // on — so the check is "is a first instance already present", not "are any present".
+            if (_containers.Any(c => c.Type == DesktopItemContainerType.NativeWidget
+                                    && string.Equals(c.NativeWidgetName, slug, StringComparison.Ordinal)
+                                    && c.SettingsFileName is null))
+            {
+                container.SettingsFileName = GenerateSettingsFileName(slug);
+            }
+
             _containers.Add(container);
         }
         return container;
+    }
+
+    /// <summary>
+    /// Builds an unused per-instance settings file name for <paramref name="slug"/>. The random token
+    /// is what keeps the name stable: a file is assigned once and never renamed afterwards, so
+    /// deleting one instance can never hand its settings to another.
+    /// </summary>
+    private string GenerateSettingsFileName(string slug)
+    {
+        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        lock (_gate)
+        {
+            foreach (var c in _containers)
+            {
+                if (c.Type != DesktopItemContainerType.NativeWidget) continue;
+                if (!string.Equals(c.NativeWidgetName, slug, StringComparison.Ordinal)) continue;
+                if (c.SettingsFileName is not null) taken.Add(c.SettingsFileName);
+            }
+        }
+
+        for (var attempt = 0; attempt < 8; attempt++)
+        {
+            var candidate = $"settings_{Guid.NewGuid():N}"[..17] + ".json";
+            if (taken.Add(candidate)) return candidate;
+        }
+
+        // Unreachable in practice (a 32-bit token, 8 tries); fall back to a full token rather than
+        // silently colliding.
+        return $"settings_{Guid.NewGuid():N}.json";
     }
 
     public void AddContainer(DesktopItemContainer container)

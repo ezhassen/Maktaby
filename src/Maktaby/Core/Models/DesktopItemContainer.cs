@@ -33,6 +33,20 @@ public sealed class DesktopItemContainer
     /// <summary>When <see cref="Type"/> is <see cref="DesktopItemContainerType.NativeWidget"/>: folder name under UserWidgets.</summary>
     public string? NativeWidgetName { get; set; }
 
+    /// <summary>
+    /// Per-instance native-widget settings file name (e.g. <c>settings_3f9a2b1c.json</c>).
+    /// Null means "use the plugin's default settings file", which every first instance of a slug
+    /// shares. Assigned only when a second instance of the same slug already exists on the desktop,
+    /// so layouts saved before per-instance settings keep reading the file they always read.
+    /// <para>
+    /// Written only when non-null: a snapshot that does not use this feature stays byte-identical to
+    /// one written before it existed. The value comes back off disk on load and is therefore
+    /// untrusted - <c>NativeWidgetSettingsService</c> validates it before turning it into a path.
+    /// </para>
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? SettingsFileName { get; set; }
+
     /// <summary>When locked, the container cannot be moved or resized by the user.</summary>
     public bool IsLocked { get; set; }
 

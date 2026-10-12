@@ -219,10 +219,11 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         // apply through ValueChanged (widgets cache them there).
         try
         {
-            if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != null)
-            {
-                App.Services.GetRequiredService<INativeWidgetSettingsService>().LoadInto(_info, provider);
-            }
+if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != null)
+                {
+                    App.Services.GetRequiredService<INativeWidgetSettingsService>()
+                        .LoadInto(_info, provider, _container.SettingsFileName);
+                }
         }
         catch { }
         if (!IsVisible || WindowState == WindowState.Minimized)
@@ -486,7 +487,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         try
         {
             var svc = App.Services.GetRequiredService<INativeWidgetSettingsService>();
-            var w = new Views.AppWindows.WidgetSettingsWindow(_info, provider, svc) { Owner = this };
+            var w = new Views.AppWindows.WidgetSettingsWindow(_info, provider, svc, _container.SettingsFileName) { Owner = this };
             w.ShowDialog();
         }
         catch { }
