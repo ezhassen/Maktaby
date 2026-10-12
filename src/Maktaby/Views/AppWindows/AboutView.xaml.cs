@@ -20,6 +20,7 @@ public partial class AboutView : AppWindows.AppFluentWindow
     public AboutView()
     {
         InitializeComponent();
+        Localization.Loc.ApplyTo(this);
         // Preserve this dialog's compact chrome (was set on its own TitleBar before).
         TitleBar.Height = 26;
         TitleBar.ShowMaximize = false;

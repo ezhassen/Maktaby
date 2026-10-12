@@ -1,4 +1,5 @@
 using Maktaby.Core.Interfaces;
+using Maktaby.Localization;
 using Microsoft.Extensions.DependencyInjection;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,7 +27,7 @@ public static class ContainerHideHint
 
         var dontShow = new CheckBox
         {
-            Content = "Do not show this again",
+            Content = Localization.Loc.Get("Hint.DontShowAgain"),
             Margin = new Thickness(0, 12, 0, 0),
         };
         var panel = new StackPanel
@@ -35,7 +36,7 @@ public static class ContainerHideHint
             {
                 new TextBlock
                 {
-                    Text = "This container is now hidden.\nTo show it again, open Settings → Containers and tick its Visible checkbox.",
+                    Text = Localization.Loc.Get("Hint.ContainerHiddenBody"),
                     TextWrapping = TextWrapping.Wrap,
                 },
                 dontShow,
@@ -44,7 +45,7 @@ public static class ContainerHideHint
         try
         {
             var dialogs = App.Services.GetRequiredService<IDialogService>();
-            await dialogs.ShowMessageAsync("", new DialogOptions { Title = "Container hidden", Content = panel }, owner);
+            await dialogs.ShowMessageAsync("", new DialogOptions { Title = Localization.Loc.Get("Hint.ContainerHiddenTitle"), Content = panel }, owner);
         }
         catch { return; }
 

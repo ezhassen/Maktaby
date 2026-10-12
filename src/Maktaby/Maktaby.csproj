@@ -74,6 +74,9 @@
  	<ItemGroup>
  		<Content Include="WebWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
  		<Content Include="NativeWidgets\**\*.*" CopyToOutputDirectory="PreserveNewest" />
+ 		<!-- Localization: Xliff 2.0 .xlf loaded at runtime (no resx). Langs/ ships the
+ 		     translations; users can drop their own *.xlf into the app's Langs/ folder. -->
+ 		<Content Include="Langs\**\*.xlf" CopyToOutputDirectory="PreserveNewest" />
  	</ItemGroup>
 
 	<ItemGroup>

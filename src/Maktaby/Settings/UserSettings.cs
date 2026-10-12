@@ -11,6 +11,14 @@ public class UserSettings
     [Category("Appearance"), DefaultValue(null)]
     public string? SelectedTheme { get; set; }
 
+    /// <summary>
+    /// Interface language (BCP-47 code, e.g. "en", "ar"). null = follow the OS UI
+    /// culture (English when it has no translation). The .xlf files in Langs/ supply
+    /// the text and the language's content direction (LTR/RTL).
+    /// </summary>
+    [Category("Appearance"), DefaultValue(null)]
+    public string? Language { get; set; }
+
     public ApplicationTheme GetSelectedTheme()
     {
         switch (SelectedTheme?.Trim().ToLowerInvariant())

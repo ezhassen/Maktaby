@@ -23,6 +23,7 @@ public partial class LogViewerWindow : AppWindows.AppFluentWindow
     public LogViewerWindow()
     {
         InitializeComponent();
+        Localization.Loc.ApplyTo(this);
         _tailTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _tailTimer.Tick += (_, _) => TailTick();
         Loaded += (_, _) =>
@@ -212,7 +213,7 @@ public partial class LogViewerWindow : AppWindows.AppFluentWindow
         {
             if (string.IsNullOrEmpty(_currentPath))
             {
-                StatusText.Text = "No log file loaded";
+                StatusText.Text = Localization.Loc.Get("Logs.None");
                 return;
             }
             long len;

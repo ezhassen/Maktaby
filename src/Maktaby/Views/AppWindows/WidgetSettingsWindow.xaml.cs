@@ -54,6 +54,7 @@ public partial class WidgetSettingsWindow : AppFluentWindow
         _settingsFileName = settingsFileName;
         WindowTitle = $"{(string.IsNullOrWhiteSpace(info.Manifest.Name) ? info.Slug : info.Manifest.Name)} Settings";
         InitializeComponent();
+        Localization.Loc.ApplyTo(this);
         // This dialog titles from its own WindowTitle property (not Window.Title) and hides
         // the min/max buttons: rebind/adjust the shared title bar accordingly.
         TitleBar.ShowMaximize = false;
@@ -70,7 +71,7 @@ public partial class WidgetSettingsWindow : AppFluentWindow
         {
             SettingsHost.Children.Add(new TextBlock
             {
-                Text = "This widget has no settings.",
+                Text = Localization.Loc.Get("WidgetSettings.NoSettings"),
                 Foreground = SystemColors.GrayTextBrush,
                 Margin = new Thickness(0, 8, 0, 0),
             });
@@ -104,7 +105,7 @@ public partial class WidgetSettingsWindow : AppFluentWindow
             case WidgetSettingKind.Boolean:
                 var check = new CheckBox
                 {
-                    Content = "Enabled",
+                    Content = Localization.Loc.Get("WidgetSettings.Enabled"),
                     IsChecked = setting.GetBoolean(),
                     Margin = new Thickness(0, 2, 0, 0),
                 };
@@ -139,7 +140,7 @@ public partial class WidgetSettingsWindow : AppFluentWindow
                 {
                     Text = setting.Value?.ToString() ?? "",
                     Margin = new Thickness(0, 2, 0, 0),
-                    ToolTip = "Number",
+                    ToolTip = Localization.Loc.Get("WidgetSettings.Number"),
                 };
                 num.TextChanged += (_, _) =>
                 {

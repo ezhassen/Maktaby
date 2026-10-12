@@ -126,9 +126,28 @@ public partial class App : Application
         var services = new ServiceCollection();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
-        BuildTrayAndMenuItems(Services);
 
         Services.GetRequiredService<ISettingsService>().Load();
+        // Localization MUST be initialized before BuildTrayAndMenuItems: the tray XAML
+        // resolves its {loc:LocKey …} extensions at parse time, and parsing before the
+        // provider is attached caches "[key]" into every tray header for the session.
+        try
+        {
+            var loc = Services.GetRequiredService<ILocalizationProvider>();
+            Localization.Loc.Attach(loc);
+            loc.Initialize(LangsFolder(), Services.GetRequiredService<ISettingsService>().UserSettings.Language);
+            // Shared dialogs (DialogService / exception window) resolve their text and flow
+            // direction through this delegate — Shared does not reference Maktaby.
+            Maktaby.Shared.Localization.SharedText.Resolver = key => Localization.Loc.Get(key);
+            Maktaby.Shared.Localization.SharedText.IsRightToLeft =
+                () => Localization.Loc.CurrentFlowDirection == System.Windows.FlowDirection.RightToLeft;
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Localization init failed; UI will show [key] placeholders");
+        }
+
+        BuildTrayAndMenuItems(Services);
         // Subscribe BEFORE the first ApplyTheme. ApplicationThemeManager.Changed is the single
         // place box appearance is applied, so the handler must already be attached when the
         // initial theme lands — otherwise the boxes come up unstyled for the whole session.
@@ -344,6 +363,8 @@ public partial class App : Application
     private static void ConfigureServices(IServiceCollection services)
     {
         services.AddSingleton<ILogger, Logger>((serv) => Logging.Log);
+        // Localization: runtime Xliff 2.0 provider (no resx). Langs/ next to the exe.
+        services.AddSingleton<ILocalizationProvider, LocalizationProvider>();
         //
 
         // Core (pure .NET, no platform dependencies)
@@ -874,6 +895,54 @@ public partial class App : Application
 
     #endregion
 
+    #region Localization
+
+    /// <summary>Folder holding the .xlf language files: Langs/ next to the exe.
+    /// Users can drop their own *.xlf there; the provider scans the whole folder.</summary>
+    private static string LangsFolder()
+    {
+        try
+        {
+            var dir = AppContext.BaseDirectory;
+            var langs = Path.Combine(dir, "Langs");
+            return langs;
+        }
+        catch
+        {
+            return "Langs";
+        }
+    }
+
+    /// <summary>
+    /// Switches the interface language at runtime (Settings → Language, live apply) and
+    /// persists it. Mirrors <see cref="ApplyTheme"/>: sets the culture, loads the language,
+    /// raises the language-changed event so open windows re-translate. Content direction
+    /// (LTR/RTL) follows the language's <c>meta.flowdirection</c>.
+    /// </summary>
+    public static void ApplyLanguage(string? code)
+    {
+        try
+        {
+            var loc = Services.GetService<ILocalizationProvider>();
+            if (loc is null) return;
+            // Persist the explicit choice; null re-resolves from the OS culture on next start.
+            var settings = Services.GetRequiredService<ISettingsService>();
+            settings.UserSettings.Language = code;
+            settings.Save();
+            // Re-initialize when going back to "follow OS" (null): SetLanguage alone needs a code.
+            if (string.IsNullOrWhiteSpace(code))
+                loc.Initialize(LangsFolder(), null);
+            else
+                loc.SetLanguage(code);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "ApplyLanguage failed");
+        }
+    }
+
+    #endregion
+
     #region Theming
     /// <summary>
     /// Applies the application theme (Dark / Light / System) to the whole app via WPF-UI's
@@ -1155,8 +1224,8 @@ public partial class App : Application
         tray.ResetRequested += async (_, _) =>
         {
             var confirmed = await Services.GetRequiredService<IDialogService>().ShowConfirmAsync(
-                "This will delete all the boxes and create default one, continue?",
-                new DialogOptions { Title = "Confirm delete", PrimaryButtonText = "Reset" });
+                Localization.Loc.Get("Tray.ResetConfirm"),
+                new DialogOptions { Title = Localization.Loc.Get("Tray.ResetConfirmTitle"), PrimaryButtonText = Localization.Loc.Get("Tray.Reset") });
             if (confirmed) await Services.GetRequiredService<DesktopManager>().ResetAsync();
         };
         tray.SettingsRequested += (_, _) =>

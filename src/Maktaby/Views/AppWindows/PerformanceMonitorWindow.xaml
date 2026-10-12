@@ -2,13 +2,14 @@
     x:Class="Maktaby.Views.PerformanceMonitorWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:appwin="clr-namespace:Maktaby.Views.AppWindows"
     xmlns:controls="clr-namespace:Maktaby.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:vm="clr-namespace:Maktaby.ViewModels"
-    Title="Performance Monitor"
+    Title="{loc:LocKey Perf.Title}"
     Width="760"
     Height="800"
     MinWidth="640"
@@ -53,7 +54,7 @@
                     <TextBlock
                         VerticalAlignment="Center"
                         FontWeight="SemiBold"
-                        Text="Overview" />
+                        Text="{loc:LocKey Perf.Overview}" />
                     <StackPanel
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
@@ -63,14 +64,14 @@
                             VerticalAlignment="Center"
                             FontSize="11"
                             Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                            Text="App Status"
-                            ToolTip="Idle when every container is hidden/suspended and no wallpaper is playing." />
+                            Text="{loc:LocKey Perf.AppStatus}"
+                            ToolTip="{loc:LocKey Perf.AppStatusTooltip}" />
                         <Border
                             x:Name="IdleBadge"
                             Padding="8,4"
                             VerticalAlignment="Center"
                             CornerRadius="12"
-                            ToolTip="Green Active: a container is visible or a wallpaper is playing. Amber Idle: everything hidden, suspended or paused.">
+                            ToolTip="{loc:LocKey Perf.StatusLegend}">
                             <Border.Style>
                                 <Style TargetType="Border">
                                     <Setter Property="Background" Value="#D0F0D0" />
@@ -111,28 +112,28 @@
                     <TextBlock
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="APP PROCESS (main)"
-                        ToolTip="Resident RAM private to the process." />
+                        Text="{loc:LocKey Perf.AppProcess}"
+                        ToolTip="{loc:LocKey Perf.PrivateWsTooltip}" />
                     <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
                         <TextBlock
                             FontSize="15"
                             FontWeight="SemiBold"
                             Text="{Binding TotalMemoryMB, StringFormat={}{0} MB}"
-                            ToolTip="Private working set: resident RAM private to the process." />
+                            ToolTip="{loc:LocKey Perf.PrivateWsTooltip2}" />
                         <TextBlock
                             Margin="8,0,0,0"
                             VerticalAlignment="Bottom"
                             FontSize="11"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                             Text="{Binding TotalCpu, StringFormat={}{0:0.0}% CPU}"
-                            ToolTip="Share of total CPU time across all cores, sampled every second." />
+                            ToolTip="{loc:LocKey Perf.CpuTooltip}" />
                     </StackPanel>
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="{Binding TotalIo}"
-                        ToolTip="Disk, network and device throughput: read and write bytes per second." />
+                        ToolTip="{loc:LocKey Perf.IOThumb}" />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
@@ -144,18 +145,18 @@
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                         Text="{Binding WorkingSetMB, StringFormat={}Working set: {0} MB}"
-                        ToolTip="Total working set: resident RAM including shared pages (.NET/WPF/Edge DLLs shared with other processes). Higher than private working set by the shared share." />
+                        ToolTip="{loc:LocKey Perf.WorkingSetTooltip}" />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                         Text="{Binding TotalPrivateMB, StringFormat={}Private (commit): {0} MB}"
-                        ToolTip="Private bytes: committed virtual memory, including paged-out pages. Always the highest of the three." />
+                        ToolTip="{loc:LocKey Perf.CommitTooltip}" />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        ToolTip="GDI / USER handle counts. Climbing GDI = handle leak; flat GDI + climbing memory = driver mappings or pools.">
+                        ToolTip="{loc:LocKey Perf.HandlesTooltip}">
                         <TextBlock.Text>
                             <MultiBinding StringFormat="GDI: {0} · USER: {1}">
                                 <Binding Path="GdiHandles" />
@@ -167,7 +168,7 @@
                         Margin="0,2,0,0"
                         FontSize="11"
                         Text="{Binding RenderTier}"
-                        ToolTip="WPF render tier: HW (tiers 1-2, GPU composition) vs SW fallback (tier 0 — everything rasterized through GDI: high CPU, GDI churn, GBs native). A post-resume drop to SW names the driver, not a handle leak.">
+                        ToolTip="{loc:LocKey Perf.TierTooltip}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
@@ -185,45 +186,45 @@
                     <TextBlock
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="WEBVIEW2"
-                        ToolTip="Memory and CPU of our msedgewebview2.exe processes (widgets and HTML wallpapers, including renderer and utility children)." />
+                        Text="{loc:LocKey Perf.WebView2}"
+                        ToolTip="{loc:LocKey Perf.WebView2Tooltip}" />
                     <TextBlock
                         Margin="0,4,0,0"
                         FontSize="15"
                         FontWeight="SemiBold"
                         Text="{Binding WebView2MemoryMB, StringFormat={}{0} MB}"
-                        ToolTip="Summed private working sets of our msedgewebview2 processes." />
+                        ToolTip="{loc:LocKey Perf.WebView2WsTooltip}" />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="{Binding WebView2Cpu, StringFormat={}{0:0.0}% CPU}"
-                        ToolTip="Summed CPU share across all our WebView2 processes, sampled every second." />
+                        ToolTip="{loc:LocKey Perf.WebView2CpuTooltip}" />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorTertiaryBrush}"
                         Text="{Binding WebView2ProcessCount, StringFormat={}{0} processes}"
-                        ToolTip="Browser = top-level process; Child = renderer, GPU or utility process (see breakdown below)." />
+                        ToolTip="{loc:LocKey Perf.BrowserVsChild}" />
                 </StackPanel>
                 <StackPanel Grid.Column="2" HorizontalAlignment="Center">
                     <TextBlock
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="GROUP"
-                        ToolTip="Main + WebView2 roll-up for the whole app group." />
+                        Text="{loc:LocKey Perf.Group}"
+                        ToolTip="{loc:LocKey Perf.GroupTooltip}" />
                     <TextBlock
                         Margin="0,4,0,0"
                         FontSize="15"
                         FontWeight="SemiBold"
                         Text="{Binding GroupMemoryMB, StringFormat={}{0} MB}"
-                        ToolTip="Main + WebView2 private working sets for the whole app group." />
+                        ToolTip="{loc:LocKey Perf.GroupWsTooltip}" />
                     <TextBlock
                         Margin="0,2,0,0"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="{Binding GroupCpu, StringFormat={}{0:0.0}% CPU}"
-                        ToolTip="Main + WebView2 CPU for the whole app group." />
+                        ToolTip="{loc:LocKey Perf.GroupCpuTooltip}" />
                 </StackPanel>
             </Grid>
         </controls:CollapsibleGroupBox>
@@ -252,14 +253,14 @@
                     <TextBlock
                         VerticalAlignment="Center"
                         FontWeight="SemiBold"
-                        Text="WebView2 processes" />
+                        Text="{loc:LocKey Perf.WebView2Processes}" />
                     <TextBlock
                         Margin="8,0,0,0"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="working set per msedgewebview2.exe · Browser = top-level, Child = renderer/GPU/utility" />
+                        Text="{loc:LocKey Perf.WebView2BreakdownHint}" />
                 </Grid>
             </controls:CollapsibleGroupBox.HeaderContent>
             <DataGrid
@@ -290,19 +291,19 @@
                     <DataGridTextColumn
                         Width="80"
                         Binding="{Binding Pid}"
-                        Header="PID" />
+                        Header="{loc:LocKey Perf.PID}" />
                     <DataGridTextColumn
                         Width="90"
                         Binding="{Binding Kind}"
-                        Header="Type" />
+                        Header="{loc:LocKey Section.Settings.ColumnType}" />
                     <DataGridTextColumn
                         Width="*"
                         Binding="{Binding MemoryMB, StringFormat={}{0} MB}"
-                        Header="Memory" />
+                        Header="{loc:LocKey Perf.Memory}" />
                     <DataGridTextColumn
                         Width="*"
                         Binding="{Binding Cpu, StringFormat={}{0:0.0}%}"
-                        Header="CPU" />
+                        Header="{loc:LocKey Perf.CPU}" />
                 </DataGrid.Columns>
             </DataGrid>
         </controls:CollapsibleGroupBox>
@@ -321,23 +322,23 @@
                     <TextBlock
                         VerticalAlignment="Center"
                         FontWeight="SemiBold"
-                        Text="Windows / Widgets" />
+                        Text="{loc:LocKey Perf.WindowsWidgets}" />
                     <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                         <ui:Button
                             Padding="8,2"
                             Appearance="Secondary"
                             Click="SuspendIdle_Click"
-                            Content="Suspend"
+                            Content="{loc:LocKey Perf.Suspend}"
                             FontSize="11"
-                            ToolTip="Suspend all container widgets (WebViews and native plugins)" />
+                            ToolTip="{loc:LocKey Perf.SuspendTooltip}" />
                         <ui:Button
                             Margin="8,0,0,0"
                             Padding="8,2"
                             Appearance="Secondary"
                             Click="ResumeAll_Click"
-                            Content="Resume"
+                            Content="{loc:LocKey Perf.Resume}"
                             FontSize="11"
-                            ToolTip="Resume all container widgets (WebViews and native plugins)" />
+                            ToolTip="{loc:LocKey Perf.ResumeTooltip}" />
                     </StackPanel>
                     <TextBlock
                         Grid.Row="1"
@@ -347,7 +348,7 @@
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                         Text="{Binding LayoutAnchorStatus}"
                         TextWrapping="Wrap"
-                        ToolTip="Rescale baseline vs live primary area: if they disagree with no recent pass, scheduling (not math) is the suspect." />
+                        ToolTip="{loc:LocKey Perf.RescaleTooltip}" />
                 </Grid>
             </controls:CollapsibleGroupBox.HeaderContent>
             <Grid>
@@ -380,30 +381,30 @@
                     </DataGrid.CellStyle>
                     <DataGrid.ContextMenu>
                         <ContextMenu>
-                            <MenuItem Click="HideSelected_Click" Header="Hide" />
-                            <MenuItem Click="ShowSelected_Click" Header="Show" />
+                            <MenuItem Click="HideSelected_Click" Header="{loc:LocKey Perf.Hide}" />
+                            <MenuItem Click="ShowSelected_Click" Header="{loc:LocKey Perf.Show}" />
                             <Separator />
-                            <MenuItem Click="SuspendSelected_Click" Header="Suspend" />
-                            <MenuItem Click="ResumeSelected_Click" Header="Resume" />
+                            <MenuItem Click="SuspendSelected_Click" Header="{loc:LocKey Perf.Suspend}" />
+                            <MenuItem Click="ResumeSelected_Click" Header="{loc:LocKey Perf.Resume}" />
                         </ContextMenu>
                     </DataGrid.ContextMenu>
                     <DataGrid.Columns>
                         <DataGridTextColumn
                             Width="*"
                             Binding="{Binding Name}"
-                            Header="Name" />
+                            Header="{loc:LocKey Perf.Name}" />
                         <DataGridTextColumn
                             Width="110"
                             Binding="{Binding Type}"
-                            Header="Type" />
+                            Header="{loc:LocKey Section.Settings.ColumnType}" />
                         <DataGridTextColumn
                             Width="70"
                             Binding="{Binding IsVisible}"
-                            Header="Visible" />
+                            Header="{loc:LocKey Section.Settings.ColumnVisible}" />
                         <DataGridTextColumn
                             Width="80"
                             Binding="{Binding Status}"
-                            Header="Status">
+                            Header="{loc:LocKey Perf.Status}">
                             <DataGridTextColumn.CellStyle>
                                 <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                                     <Setter Property="FontWeight" Value="SemiBold" />
@@ -422,7 +423,7 @@
                         <DataGridTextColumn
                             Width="150"
                             Binding="{Binding ModelBounds}"
-                            Header="Model Bounds">
+                            Header="{loc:LocKey Perf.ModelBounds}">
                             <DataGridTextColumn.CellStyle>
                                 <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                                     <Setter Property="Padding" Value="4,1" />
@@ -439,7 +440,7 @@
                         <DataGridTextColumn
                             Width="150"
                             Binding="{Binding AppliedBounds}"
-                            Header="Applied Bounds">
+                            Header="{loc:LocKey Perf.AppliedBounds}">
                             <DataGridTextColumn.CellStyle>
                                 <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                                     <Setter Property="Padding" Value="4,1" />
@@ -462,7 +463,7 @@
                     FontSize="16"
                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                     IsHitTestVisible="False"
-                    Text="Disabled — enable the app to show windows">
+                    Text="{loc:LocKey Perf.Disabled}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -488,7 +489,7 @@
                         Grid.Column="0"
                         VerticalAlignment="Center"
                         FontWeight="SemiBold"
-                        Text="Live Wallpaper" />
+                        Text="{loc:LocKey Section.Settings.LiveWallpaper}" />
                     <StackPanel
                         Grid.Row="0"
                         Grid.Column="1"
@@ -500,19 +501,19 @@
                             Padding="8,2"
                             Appearance="Secondary"
                             Click="WallpaperSuspend_Click"
-                            Content="Suspend"
+                            Content="{loc:LocKey Perf.Suspend}"
                             FontSize="11"
                             IsEnabled="{Binding LiveWallpaperEnabled}"
-                            ToolTip="Pause all live wallpapers" />
+                            ToolTip="{loc:LocKey Perf.PauseWallpaperTooltip}" />
                         <ui:Button
                             Margin="8,0,0,0"
                             Padding="8,2"
                             Appearance="Secondary"
                             Click="WallpaperResume_Click"
-                            Content="Resume"
+                            Content="{loc:LocKey Perf.Resume}"
                             FontSize="11"
                             IsEnabled="{Binding LiveWallpaperEnabled}"
-                            ToolTip="Resume all live wallpapers" />
+                            ToolTip="{loc:LocKey Perf.ResumeWallpaperTooltip}" />
                     </StackPanel>
 
                     <TextBlock
@@ -558,33 +559,33 @@
                         <DataGridTextColumn
                             Width="110"
                             Binding="{Binding Device}"
-                            Header="Monitor" />
+                            Header="{loc:LocKey Perf.Monitor}" />
                         <DataGridTextColumn
                             Width="140"
                             Binding="{Binding Bounds}"
-                            Header="Bounds" />
+                            Header="{loc:LocKey Perf.Bounds}" />
                         <DataGridTextColumn
                             Width="*"
                             Binding="{Binding File}"
-                            Header="File" />
+                            Header="{loc:LocKey Perf.File}" />
                         <DataGridTextColumn
                             Width="60"
                             Binding="{Binding Renderer}"
-                            Header="Type" />
+                            Header="{loc:LocKey Section.Settings.ColumnType}" />
                         <DataGridTextColumn
                             Width="80"
                             Binding="{Binding WebProcess}"
-                            Header="Web PID" />
+                            Header="{loc:LocKey Perf.WebPID}" />
 
                         <DataGridTextColumn
                             Width="90"
                             Binding="{Binding Preloaded}"
-                            Header="Preloaded" />
+                            Header="{loc:LocKey Perf.Preloaded}" />
 
                         <DataGridTextColumn
                             Width="110"
                             Binding="{Binding Status}"
-                            Header="Status">
+                            Header="{loc:LocKey Perf.Status}">
                             <DataGridTextColumn.CellStyle>
                                 <Style BasedOn="{StaticResource DefaultDataGridCellStyle}" TargetType="DataGridCell">
                                     <Setter Property="FontWeight" Value="SemiBold" />
@@ -606,7 +607,7 @@
                         <DataGridTextColumn
                             Width="90"
                             Binding="{Binding PauseReason}"
-                            Header="Paused Reason" />
+                            Header="{loc:LocKey Perf.PausedReason}" />
                     </DataGrid.Columns>
                 </DataGrid>
                 <TextBlock
@@ -616,7 +617,7 @@
                     FontSize="16"
                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                     IsHitTestVisible="False"
-                    Text="Live wallpaper is disabled">
+                    Text="{loc:LocKey Perf.WallpaperDisabled}">
                     <TextBlock.Style>
                         <Style TargetType="TextBlock">
                             <Setter Property="Visibility" Value="Collapsed" />
@@ -641,7 +642,7 @@
             <TextBlock
                 FontSize="10"
                 Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                Text="Idle = all containers hidden/suspended and wallpapers paused: WebViews suspend, playback stops. Memory headline is private working set (resident, private); Working set adds shared pages, Commit adds paged-out."
+                Text="{loc:LocKey Perf.FooterHint}"
                 TextWrapping="Wrap" />
         </Border>
     </Grid>

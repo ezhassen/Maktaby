@@ -1,5 +1,6 @@
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
+using Maktaby.Localization;
 using Maktaby.Shared.Interfaces;
 using Maktaby.ViewModels;
 using System;
@@ -179,11 +180,11 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         try
         {
             _dialogService.ShowMessageAsync(
-                $"Maktaby was updated from {fromVersion} to {toVersion}.",
+                Loc.Get("Update.UpdatedFrom", fromVersion, toVersion),
                 new DialogOptions
                 {
-                    Title = "Update installed",
-                    CloseButtonText = "OK",
+                    Title = Loc.Get("Update.InstalledTitle"),
+                    CloseButtonText = Loc.Get("Dialog.OK"),
                     CloseButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Success,
                 });
         }
@@ -198,11 +199,11 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         try
         {
             _dialogService.ShowMessageAsync(
-                $"Maktaby {currentVersion} is the latest version.",
+                Loc.Get("Update.UpToDate", currentVersion),
                 new DialogOptions
                 {
-                    Title = "No update available",
-                    CloseButtonText = "OK",
+                    Title = Loc.Get("Update.NoUpdateTitle"),
+                    CloseButtonText = Loc.Get("Dialog.OK"),
                     CloseButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Info,
                 });
         }
@@ -219,12 +220,12 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         // DialogService.ShowAsync marshals to the UI thread itself, so awaiting this
         // Task directly is already correct.
         return _dialogService.ShowConfirmAsync(
-            $"Stop offering Maktaby {version}? A newer release will still be suggested.",
+            Loc.Get("Update.SkipConfirm", version),
             new DialogOptions
             {
-                Title = "Skip this version",
-                PrimaryButtonText = "Yes",
-                CloseButtonText = "No",
+                Title = Loc.Get("Update.Skip"),
+                PrimaryButtonText = Loc.Get("Dialog.Yes"),
+                CloseButtonText = Loc.Get("Common.No"),
                 PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Info,
             });
     }
@@ -237,11 +238,11 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         try
         {
             _dialogService.ShowMessageAsync(
-                $"Maktaby {version} is already on your skip list. A newer release will still be suggested.",
+                Loc.Get("Update.AlreadySkipped", version),
                 new DialogOptions
                 {
-                    Title = "Version skipped",
-                    CloseButtonText = "OK",
+                    Title = Loc.Get("Update.VersionSkippedTitle"),
+                    CloseButtonText = Loc.Get("Dialog.OK"),
                     CloseButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Info,
                 });
         }
@@ -255,11 +256,11 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         try
         {
             _dialogService.ShowMessageAsync(
-                "Maktaby could not reach GitHub to check for updates. Check your internet connection and try again.",
+                Loc.Get("Update.CheckFailed"),
                 new DialogOptions
                 {
-                    Title = "Update check failed",
-                    CloseButtonText = "OK",
+                    Title = Loc.Get("Update.CheckFailedTitle"),
+                    CloseButtonText = Loc.Get("Dialog.OK"),
                     CloseButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Info,
                 });
         }
@@ -333,11 +334,11 @@ public sealed class WpfUpdateUi : IAppUpdateUi
         try
         {
             _dialogService.ShowMessageAsync(
-                $"Maktaby found a release it cannot display, please check for update manualy to get latest update:\r\n\r\n{reasons}",
+                Loc.Get("Update.InvalidData") + Environment.NewLine + Environment.NewLine + reasons,
                 new DialogOptions
                 {
-                    Title = "Invalid update data",
-                    CloseButtonText = "OK",
+                    Title = Loc.Get("Update.InvalidDataTitle"),
+                    CloseButtonText = Loc.Get("Dialog.OK"),
                     // Danger, not Warning: Wpf.Ui has no Warning appearance, and this is a
                     // refusal to run the release rather than a caution about it.
                     CloseButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Danger,

@@ -2,6 +2,7 @@
     x:Class="Maktaby.Views.WidgetsListWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:appwin="clr-namespace:Maktaby.Views.AppWindows"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -9,7 +10,7 @@
     xmlns:models2="clr-namespace:Maktaby.Core.Models;assembly=Maktaby.Shared"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:views="clr-namespace:Maktaby.Views"
-    Title="Widgets"
+    Title="{loc:LocKey WidgetsList.Title}"
     Width="860"
     Height="560"
     MinWidth="760"
@@ -135,7 +136,7 @@
                 <TextBlock
                     VerticalAlignment="Center"
                     FontWeight="SemiBold"
-                    Text="Available widgets" />
+                    Text="{loc:LocKey WidgetsList.Available}" />
                 <Border
                     Margin="12,0,0,0"
                     Padding="6,2"
@@ -152,13 +153,13 @@
                     Margin="16,0,0,0"
                     Appearance="Primary"
                     Click="New_Click"
-                    Content="New Widget"
+                    Content="{loc:LocKey WidgetsList.NewWidget}"
                     Icon="{ui:SymbolIcon Add24}" />
                 <ui:Button
                     Margin="8,0,0,0"
                     Appearance="Secondary"
                     Click="Refresh_Click"
-                    Content="Refresh"
+                    Content="{loc:LocKey WidgetData.Refresh}"
                     Icon="{ui:SymbolIcon ArrowClockwise24}" />
             </StackPanel>
 
@@ -210,7 +211,7 @@
                                                 VerticalAlignment="Center"
                                                 FontSize="11"
                                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                                Text="No preview">
+                                                Text="{loc:LocKey WidgetsList.NoPreview}">
                                                 <TextBlock.Style>
                                                     <Style TargetType="TextBlock">
                                                         <Setter Property="Visibility" Value="Collapsed" />
@@ -311,7 +312,7 @@
                                             Padding="8,3"
                                             Appearance="Primary"
                                             Click="Place_Click"
-                                            Content="Place"
+                                            Content="{loc:LocKey WidgetsList.Place}"
                                             Tag="{Binding}"
                                             Template="{StaticResource GalleryRowButtonTemplate}"
                                             Visibility="{Binding DataContext.IsSelectMode, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibilityConverter}}">
@@ -337,7 +338,7 @@
                                             Icon="{ui:SymbolIcon Symbol=Edit20}"
                                             Tag="{Binding}"
                                             Template="{StaticResource GalleryRowButtonTemplate}"
-                                            ToolTip="Edit">
+                                            ToolTip="{loc:LocKey WidgetsList.Edit}">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
                                                     <Style.Triggers>
@@ -362,7 +363,7 @@
                                             Icon="{ui:SymbolIcon Symbol=Folder20}"
                                             Tag="{Binding}"
                                             Template="{StaticResource GalleryRowButtonTemplate}"
-                                            ToolTip="Open widget folder">
+                                            ToolTip="{loc:LocKey WidgetsList.OpenFolder}">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
                                                     <Style.Triggers>
@@ -381,7 +382,7 @@
                                             Icon="{ui:SymbolIcon Copy24}"
                                             Tag="{Binding}"
                                             Template="{StaticResource GalleryRowButtonTemplate}"
-                                            ToolTip="Duplicate">
+                                            ToolTip="{loc:LocKey WidgetsList.Duplicate}">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
                                                     <Style.Triggers>
@@ -403,7 +404,7 @@
                                             Icon="{ui:SymbolIcon Symbol=ArrowSync20}"
                                             Tag="{Binding}"
                                             Template="{StaticResource GalleryRowButtonTemplate}"
-                                            ToolTip="Regenerate Thumbnail">
+                                            ToolTip="{loc:LocKey WidgetsList.RegenThumb}">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
                                                     <Style.Triggers>
@@ -421,7 +422,7 @@
                                             Click="Delete_Click"
                                             Tag="{Binding}"
                                             Template="{StaticResource GalleryRowButtonTemplate}"
-                                            ToolTip="Delete (user widgets only)">
+                                            ToolTip="{loc:LocKey WidgetsList.Delete}">
                                             <ui:Button.Style>
                                                 <Style BasedOn="{StaticResource {x:Type ui:Button}}" TargetType="ui:Button">
                                                     <Style.Triggers>
@@ -456,13 +457,13 @@
                     VerticalAlignment="Center"
                     FontSize="11"
                     Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                    Text="User widgets stored in %LocalAppData%\Maktaby\UserWidgets" />
+                    Text="{loc:LocKey WidgetData.StorageHint}" />
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <ui:Button
                         x:Name="CloseButton"
                         Appearance="Secondary"
                         Click="Close_Click"
-                        Content="Close" />
+                        Content="{loc:LocKey WidgetsList.Close}" />
                 </StackPanel>
             </Grid>
         </Border>

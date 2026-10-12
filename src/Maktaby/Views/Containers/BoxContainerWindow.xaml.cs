@@ -665,7 +665,7 @@ public partial class BoxContainerWindow : WidgetWindow
         {
             FontSize = 14,
             Foreground = Brushes.White,
-            Text = "Custom Widget",
+            Text = Localization.Loc.Get("Box.CustomWidget"),
             TextAlignment = TextAlignment.Center,
         };
         var sub = new TextBlock
@@ -826,15 +826,15 @@ public partial class BoxContainerWindow : WidgetWindow
     {
         if (_vm.ActiveBox is { IsDefault: true })
         {
-            await _dialogs.ShowMessageAsync("The default box cannot be deleted.", new DialogOptions { Title = "Cannot delete" });
+            await _dialogs.ShowMessageAsync(Localization.Loc.Get("Box.CannotDeleteDefault"), new DialogOptions { Title = Localization.Loc.Get("Box.CannotDeleteDefaultTitle") });
             return;
         }
 
         if (_vm.ActiveBox is { Items.Count: > 0 })
         {
             var confirmed = await _dialogs.ShowConfirmAsync(
-                "This box contains items. Delete it anyway?",
-                new DialogOptions { Title = "Confirm delete", PrimaryButtonText = "Delete", PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Danger });
+                Localization.Loc.Get("Box.ConfirmDelete"),
+                new DialogOptions { Title = Localization.Loc.Get("Dialog.ConfirmDeleteTitle"), PrimaryButtonText = Localization.Loc.Get("Dialog.Delete"), PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Danger });
             if (!confirmed)
             {
                 return;
@@ -867,8 +867,8 @@ public partial class BoxContainerWindow : WidgetWindow
         if (_vm.ActiveBox.BoxType == BoxType.DesktopItems && newType == BoxType.FolderPortal && _vm.ActiveBox.Items.Count > 0)
         {
             var confirmed = await _dialogs.ShowConfirmAsync(
-                $"This box contains {_vm.ActiveBox.Items.Count} items. Switch to Folder Portal will move them to the default box. Continue?",
-                new DialogOptions { Title = "Switch Box Type", PrimaryButtonText = "Switch", PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Caution });
+                Localization.Loc.Get("Box.ConfirmSwitch"),
+                new DialogOptions { Title = Localization.Loc.Get("Box.ConfirmSwitchTitle"), PrimaryButtonText = Localization.Loc.Get("Box.Switch"), PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Caution });
             if (!confirmed) return;
 
             // Move items to default via BoxContainerViewModel helper (reuse MoveDesktopItemsToDefault)
@@ -1075,12 +1075,12 @@ public partial class BoxContainerWindow : WidgetWindow
         if (!_vm.IsRolled)
         {
             RollIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.Subtract24;//FullScreenMinimize24, ArrowMinimize24,ArrowMinimizeVertical24
-            RollButton.ToolTip = "Roll";
+            RollButton.ToolTip = Localization.Loc.Get("Box.Roll");
             return;
         }
 
         RollIcon.Symbol = Wpf.Ui.Controls.SymbolRegular.FullScreenMaximize24;
-        RollButton.ToolTip = "Unroll";
+        RollButton.ToolTip = Localization.Loc.Get("Box.Unroll");
     }
 
     /// <summary>
@@ -1259,13 +1259,13 @@ public partial class BoxContainerWindow : WidgetWindow
         {
             if (_vm.BoxContainerVm.Tabs.Any(t => t.IsDefault == true))
             {
-                await _dialogs.ShowMessageAsync("The default box cannot be deleted.", new DialogOptions { Title = "Cannot delete" });
+                await _dialogs.ShowMessageAsync(Localization.Loc.Get("Box.CannotDeleteDefault"), new DialogOptions { Title = Localization.Loc.Get("Box.CannotDeleteDefaultTitle") });
                 return;
             }
 
             var confirmed = await _dialogs.ShowConfirmAsync(
-                "This container contains items. Delete it anyway?",
-                new DialogOptions { Title = "Confirm delete", PrimaryButtonText = "Delete", PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Danger });
+                Localization.Loc.Get("Box.ConfirmDelete"),
+                new DialogOptions { Title = Localization.Loc.Get("Dialog.ConfirmDeleteTitle"), PrimaryButtonText = Localization.Loc.Get("Dialog.Delete"), PrimaryButtonAppearance = Wpf.Ui.Controls.ControlAppearance.Danger });
             if (!confirmed)
             {
                 return;

@@ -1,6 +1,7 @@
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using Maktaby.Helpers;
+using Maktaby.Localization;
 using Maktaby.Shared.Interfaces;
 using Maktaby.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
@@ -54,12 +55,19 @@ public partial class SettingsView : AppWindows.AppFluentWindow
         ApplyDesktopBackground();
         BuildPreviewItems();
 
+        // Content root flow direction (LTR/RTL) from the active language, re-applied on
+        // every language switch. Root child only — the Window follows Windows.
+        Localization.Loc.ApplyTo(this);
+
         // Keep the preview in sync with every edit (the VM raises PropertyChanged per field).
         // Slider drags fire dozens per second: coalesce to one update per dispatcher pass.
         if (vm != null) vm.PropertyChanged += (_, _) => RequestPreviewUpdate();
         UpdatePreview();
 
-        Closed += (_, _) => (DataContext as IDisposable)?.Dispose();
+        Closed += (_, _) =>
+        {
+            (DataContext as IDisposable)?.Dispose();
+        };
     }
 
     /// <summary>Parameterless for the VS/Blend designer: a real VM over faked services with
@@ -574,11 +582,11 @@ public partial class SettingsView : AppWindows.AppFluentWindow
     private Task ShowMessageAsync(string content, string title)
         => Dialogs.ShowMessageAsync(content, new DialogOptions { Title = title });
 
-    private Task<bool> ShowConfirmAsync(string content, string title, string confirmText = "Yes", ControlAppearance primaryButtonAppearance = ControlAppearance.Info)
+    private Task<bool> ShowConfirmAsync(string content, string title, string? confirmText = null, ControlAppearance primaryButtonAppearance = ControlAppearance.Info)
         => Dialogs.ShowConfirmAsync(content, new DialogOptions
         {
             Title = title,
-            PrimaryButtonText = confirmText,
+            PrimaryButtonText = confirmText ?? Localization.Loc.Get("Dialog.Yes"),
             PrimaryButtonAppearance = primaryButtonAppearance
         });
 
@@ -586,7 +594,7 @@ public partial class SettingsView : AppWindows.AppFluentWindow
     {
         var dlg = new SaveFileDialog
         {
-            Title = "Back up",
+            Title = Localization.Loc.Get("Section.Settings.BackupTitle"),
             Filter = "Maktaby bundle (*.dbe1)|*.dbe1",
             FileName = "Maktaby.backup.dbe1",
             DefaultExt = ".dbe1"
@@ -606,12 +614,12 @@ public partial class SettingsView : AppWindows.AppFluentWindow
         try
         {
             await manager.BackupAsync(dlg.FileName);
-            await ShowMessageAsync("Backup created.", "Backup");
+            await ShowMessageAsync(Localization.Loc.Get("Settings.BackupCreated"), Localization.Loc.Get("Section.Settings.BackupTitle"));
         }
         catch (Exception ex)
         {
             ex.Log_Error();
-            await ShowMessageAsync($"Backup failed: {ex.Message}", "Backup");
+            await ShowMessageAsync(Localization.Loc.Get("Settings.BackupFailed", ex.Message), Localization.Loc.Get("Section.Settings.BackupTitle"));
         }
     }
 
@@ -619,7 +627,7 @@ public partial class SettingsView : AppWindows.AppFluentWindow
     {
         var dlg = new OpenFileDialog
         {
-            Title = "Restore",
+            Title = Localization.Loc.Get("Section.Settings.RestoreTitle"),
             Filter = "Maktaby bundle (*.dbe1)|*.dbe1|JSON snapshot (*.json)|*.json|All files (*.*)|*.*",
             Multiselect = false
         };
@@ -645,26 +653,26 @@ public partial class SettingsView : AppWindows.AppFluentWindow
             await Loading.ShowAsync(
                 async report =>
                 {
-                    report("Restoring snapshot…");
+                    report(Localization.Loc.Get("Settings.Restoring"));
                     await manager.RestoreAsync(dlg.FileName);
                     return null;
                 },
                 pausePlayback: false);
-            await ShowMessageAsync("Restore completed.", "Restore");
+            await ShowMessageAsync(Localization.Loc.Get("Settings.RestoreCompleted"), Localization.Loc.Get("Section.Settings.RestoreTitle"));
         }
         catch (Exception ex)
         {
             ex.Log_Error();
-            await ShowMessageAsync($"Restore failed: {ex.Message}", "Restore");
+            await ShowMessageAsync(Localization.Loc.Get("Settings.RestoreFailed", ex.Message), Localization.Loc.Get("Section.Settings.RestoreTitle"));
         }
     }
 
     private async void ResetSnapshot_Click(object sender, RoutedEventArgs e)
     {
         if (!await ShowConfirmAsync(
-            "This will delete all boxes, reset the built-in widgets' settings to their defaults, and rebuild from scratch. Continue?",
-            "Confirm reset",
-            "Reset", primaryButtonAppearance: ControlAppearance.Danger))
+            Localization.Loc.Get("Settings.ConfirmReset"),
+            Localization.Loc.Get("Settings.ConfirmResetTitle"),
+            Localization.Loc.Get("Tray.Reset"), primaryButtonAppearance: ControlAppearance.Danger))
         {
             return;
         }
@@ -678,12 +686,12 @@ public partial class SettingsView : AppWindows.AppFluentWindow
         try
         {
             await manager.ResetAsync();
-            await ShowMessageAsync("Snapshot reset.", "Reset");
+            await ShowMessageAsync(Localization.Loc.Get("Settings.SnapshotReset"), Localization.Loc.Get("Tray.Reset"));
         }
         catch (Exception ex)
         {
             ex.Log_Error();
-            await ShowMessageAsync($"Reset failed: {ex.Message}", "Reset");
+            await ShowMessageAsync(Localization.Loc.Get("Settings.ResetFailed", ex.Message), Localization.Loc.Get("Tray.Reset"));
         }
     }
 

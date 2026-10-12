@@ -83,7 +83,9 @@ public partial class TrayIconUI
 
         var dtMan = App.Services.GetRequiredService<DesktopManager>();
         ISettingsService _settingsService = App.Services.GetRequiredService<ISettingsService>();
-        MenuToggleHideAll.Header = dtMan.AllBoxesHidden ? "Show All Boxes" : "Hide All Boxes";
+        MenuToggleHideAll.Header = dtMan.AllBoxesHidden
+            ? Localization.Loc.Get("Tray.ShowAllBoxes")
+            : Localization.Loc.Get("Tray.HideAllBoxes");
         // Icon per state — centralized in AppStyles.xaml (ItemIcon_HideAllBoxes_*)
         MenuToggleHideAll.Icon = Application.Current.FindResource(dtMan.AllBoxesHidden ? "ItemIcon_HideAllBoxes_Show" : "ItemIcon_HideAllBoxes_Hide") as object ?? MenuToggleHideAll.Icon;
         ToggleDebugTree.Visibility = GlobalFeaturesSwitches.ShowDebugTree ? Visibility.Visible : Visibility.Collapsed;
@@ -96,7 +98,9 @@ public partial class TrayIconUI
         SyncMenuItemState_LiveWallPaperItems();
         //
         bool isDisabled = dtMan.IsDisabled;
-        MenuToggleDisable.Header = isDisabled ? "Enable Maktaby" : "Disable Maktaby";
+        MenuToggleDisable.Header = isDisabled
+            ? Localization.Loc.Get("Tray.EnableApp")
+            : Localization.Loc.Get("Tray.DisableApp");
         MenuToggleDisable.Foreground = isDisabled
             ? System.Windows.Media.Brushes.LimeGreen
             : System.Windows.Media.Brushes.OrangeRed;
@@ -123,7 +127,9 @@ public partial class TrayIconUI
         menuLiveWallpaperEnable.IsChecked = liveWallpaper?.IsEnabled == true;
         bool hasWallpaper = liveWallpaper?.HasWallpaper == true && liveWallpaper?.IsEnabled == true;
         menuLiveWallpaperPlayPause.IsEnabled = hasWallpaper;
-        menuLiveWallpaperPlayPause.Header = liveWallpaper?.IsPlaying == true ? "Pause" : "Play";
+        menuLiveWallpaperPlayPause.Header = liveWallpaper?.IsPlaying == true
+            ? Localization.Loc.Get("Tray.Pause")
+            : Localization.Loc.Get("Tray.Play");
         menuLiveWallpaperPlayPause.Icon = Application.Current.FindResource(liveWallpaper?.IsPlaying == true ? "ItemIcon_Pause" : "ItemIcon_Play") as object;
         menuLiveWallpaperRemove.IsEnabled = liveWallpaper?.HasWallpaper == true;
     }

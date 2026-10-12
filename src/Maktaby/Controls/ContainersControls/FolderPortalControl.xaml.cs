@@ -379,7 +379,7 @@ public partial class FolderPortalControl : WidgetControlBase
 
     private void SelectFolder_Click(object sender, RoutedEventArgs e)
     {
-        var dlg = new OpenFolderDialog { Title = "Select Folder for Portal" };
+        var dlg = new OpenFolderDialog { Title = Localization.Loc.Get("FolderPortal.SelectFolder") };
         var win = Window.GetWindow(this);
         bool? result = win != null ? dlg.ShowDialog(win) : dlg.ShowDialog();
         if (result == true && !string.IsNullOrWhiteSpace(dlg.FolderName) && Directory.Exists(dlg.FolderName))

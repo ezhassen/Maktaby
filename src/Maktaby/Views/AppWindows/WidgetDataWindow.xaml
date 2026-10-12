@@ -2,13 +2,14 @@
     x:Class="Maktaby.Views.WidgetDataWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:appwin="clr-namespace:Maktaby.Views.AppWindows"
     xmlns:avalonEdit="http://icsharpcode.net/sharpdevelop/avalonedit"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:vm="clr-namespace:Maktaby.ViewModels"
-    Title="Widget Editor"
+    Title="{loc:LocKey WidgetData.Title}"
     Width="1100"
     Height="700"
     MinWidth="900"
@@ -58,7 +59,7 @@
                         FontSize="11"
                         FontWeight="SemiBold"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="NAME (FOLDER)" />
+                        Text="{loc:LocKey WidgetData.NameFolder}" />
                     <ui:TextBox
                         x:Name="NameBox"
                         Margin="0,4,0,0"
@@ -91,7 +92,7 @@
                         FontSize="11"
                         FontWeight="SemiBold"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="DESCRIPTION" />
+                        Text="{loc:LocKey WidgetData.Description}" />
                     <ui:TextBox
                         x:Name="DescBox"
                         Margin="0,4,0,0"
@@ -102,7 +103,7 @@
                     <TextBlock
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="VERSION" />
+                        Text="{loc:LocKey WidgetData.Version}" />
                     <ui:TextBox
                         x:Name="VersionBox"
                         Width="100"
@@ -131,7 +132,7 @@
                             FontSize="11"
                             FontWeight="SemiBold"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="AUTHOR" />
+                            Text="{loc:LocKey WidgetData.Author}" />
                         <ui:TextBox
                             x:Name="AuthorBox"
                             Width="200"
@@ -143,7 +144,7 @@
                         <TextBlock
                             FontSize="11"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="WIDTH" />
+                            Text="{loc:LocKey WidgetData.Width}" />
                         <ui:TextBox
                             x:Name="WidthBox"
                             Width="90"
@@ -155,7 +156,7 @@
                         <TextBlock
                             FontSize="11"
                             Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="HEIGHT" />
+                            Text="{loc:LocKey WidgetData.Height}" />
                         <ui:TextBox
                             x:Name="HeightBox"
                             Width="90"
@@ -171,23 +172,23 @@
                         <CheckBox
                             x:Name="ResizableBox"
                             Margin="0,0,12,0"
-                            Content="Resizable"
+                            Content="{loc:LocKey WidgetData.Resizable}"
                             IsChecked="{Binding Resizable, Mode=TwoWay}" />
                         <CheckBox
                             x:Name="NetworkBox"
                             Margin="0,0,12,0"
-                            Content="Allow network"
+                            Content="{loc:LocKey WidgetData.AllowNetwork}"
                             IsChecked="{Binding AllowNetwork, Mode=TwoWay}"
-                            ToolTip="Allow fetch/XHR/WebSocket" />
+                            ToolTip="{loc:LocKey WidgetData.AllowNetworkTooltip}" />
                         <CheckBox
                             x:Name="ThemeSwitchBox"
                             Margin="0,0,0,0"
                             Checked="ThemeSwitchBox_Changed"
-                            Content="Can switch theme"
+                            Content="{loc:LocKey WidgetData.CanSwitchTheme}"
                             Indeterminate="ThemeSwitchBox_Changed"
                             IsChecked="{Binding CanSwitchTheme, Mode=TwoWay}"
                             IsThreeState="True"
-                            ToolTip="Widget adapts to Light/Dark app theme via data-theme (indeterminate = inherited / null)"
+                            ToolTip="{loc:LocKey WidgetData.CanSwitchThemeTooltip}"
                             Unchecked="ThemeSwitchBox_Changed" />
                     </WrapPanel>
                 </Grid>
@@ -207,25 +208,25 @@
                     <ContextMenu x:Key="EditorMenu" Opened="EditorMenu_Opened">
                         <MenuItem
                             Click="EditorCut_Click"
-                            Header="Cut"
+                            Header="{loc:LocKey WidgetData.Cut}"
                             InputGestureText="Ctrl+X" />
                         <MenuItem
                             Click="EditorCopy_Click"
-                            Header="Copy"
+                            Header="{loc:LocKey WidgetData.Copy}"
                             InputGestureText="Ctrl+C" />
                         <MenuItem
                             x:Name="MenuEditPaste"
                             Click="EditorPaste_Click"
-                            Header="Paste"
+                            Header="{loc:LocKey WidgetData.Paste}"
                             InputGestureText="Ctrl+V" />
                         <Separator />
                         <MenuItem
                             Click="EditorSelectAll_Click"
-                            Header="Select All"
+                            Header="{loc:LocKey WidgetData.SelectAll}"
                             InputGestureText="Ctrl+A" />
                     </ContextMenu>
                 </TabControl.Resources>
-                <TabItem Header="HTML">
+                <TabItem Header="{loc:LocKey WidgetData.HTML}">
                     <Grid>
                         <Border
                             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
@@ -250,7 +251,7 @@
                         </Border>
                     </Grid>
                 </TabItem>
-                <TabItem Header="CSS">
+                <TabItem Header="{loc:LocKey WidgetData.CSS}">
                     <Grid>
                         <Border
                             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
@@ -275,7 +276,7 @@
                         </Border>
                     </Grid>
                 </TabItem>
-                <TabItem Header="JavaScript">
+                <TabItem Header="{loc:LocKey WidgetData.JavaScript}">
                     <Grid>
                         <Border
                             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
@@ -330,12 +331,12 @@
                                 FontSize="11"
                                 FontWeight="SemiBold"
                                 Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                Text="PREVIEW" />
+                                Text="{loc:LocKey WidgetData.Preview}" />
                             <ui:Button
                                 HorizontalAlignment="Right"
                                 Appearance="Transparent"
                                 Click="PreviewRefresh_Click"
-                                Content="Refresh"
+                                Content="{loc:LocKey WidgetData.Refresh}"
                                 Icon="{ui:SymbolIcon ArrowClockwise24}" />
                         </Grid>
                     </Border>
@@ -363,17 +364,17 @@
                     VerticalAlignment="Center"
                     FontSize="11"
                     Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                    Text="User widgets stored in %LocalAppData%\Maktaby\UserWidgets" />
+                    Text="{loc:LocKey WidgetData.StorageHint}" />
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <ui:Button
                         Appearance="Secondary"
                         Click="Cancel_Click"
-                        Content="Cancel" />
+                        Content="{loc:LocKey Section.Settings.Cancel}" />
                     <ui:Button
                         Margin="8,0,0,0"
                         Appearance="Primary"
                         Click="Save_Click"
-                        Content="Save" />
+                        Content="{loc:LocKey Section.Settings.Save}" />
                 </StackPanel>
             </Grid>
         </Border>
@@ -402,7 +403,7 @@
                         HorizontalAlignment="Center"
                         FontSize="13"
                         FontWeight="SemiBold"
-                        Text="Saving widget..." />
+                        Text="{loc:LocKey WidgetData.Saving}" />
                     <ui:ProgressRing
                         x:Name="SaveProgressRing"
                         Width="32"
@@ -416,7 +417,7 @@
                         HorizontalAlignment="Center"
                         FontSize="11"
                         Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="Working..."
+                        Text="{loc:LocKey WidgetData.Working}"
                         TextWrapping="Wrap" />
                 </StackPanel>
             </Border>

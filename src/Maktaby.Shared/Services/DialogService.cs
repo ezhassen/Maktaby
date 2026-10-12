@@ -1,5 +1,6 @@
 using Maktaby.Shared.Controls;
 using Maktaby.Shared.Interfaces;
+using Maktaby.Shared.Localization;
 using System.Windows;
 using Wpf.Ui.Controls;
 
@@ -40,7 +41,7 @@ public sealed class DialogService : IDialogService
         var merged = options with
         {
             Content = options.Content ?? message,
-            CloseButtonText = options.CloseButtonText ?? "OK"
+            CloseButtonText = options.CloseButtonText ?? SharedText.Get("Dialog.OK", "OK")
         };
         return ShowAsync(merged, owner, cancellationToken);
     }
@@ -51,8 +52,8 @@ public sealed class DialogService : IDialogService
         var merged = options with
         {
             Content = options.Content ?? message,
-            PrimaryButtonText = options.PrimaryButtonText ?? "OK",
-            CloseButtonText = options.CloseButtonText ?? "Cancel"
+            PrimaryButtonText = options.PrimaryButtonText ?? SharedText.Get("Dialog.OK", "OK"),
+            CloseButtonText = options.CloseButtonText ?? SharedText.Get("Dialog.Cancel", "Cancel")
         };
         var result = await ShowAsync(merged, owner, cancellationToken);
         return result == ContentDialogResult.Primary;

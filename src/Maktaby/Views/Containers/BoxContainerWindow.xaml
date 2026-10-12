@@ -5,6 +5,7 @@
     xmlns:containers="clr-namespace:Maktaby.Views.Containers"
     xmlns:controls="clr-namespace:Maktaby.Controls"
     xmlns:conv="clr-namespace:Maktaby.Converters"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
@@ -207,27 +208,27 @@
                             Cursor="Arrow"
                             DockPanel.Dock="Left"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="Menu">
+                            ToolTip="{loc:LocKey Box.Menu}">
                             <ui:SymbolIcon Symbol="Navigation24" />
                             <Button.ContextMenu>
                                 <ContextMenu x:Name="BoxMenu">
                                     <MenuItem
                                         x:Name="MenuLockItem"
                                         Click="MenuLock_Click"
-                                        Header="Lock"
+                                        Header="{loc:LocKey Box.MenuLock}"
                                         Icon="{StaticResource ItemIcon_UnLocked}"
                                         IsCheckable="True"
-                                        ToolTip="Toggle Locked state (Cannot Move or Resize the Window)" />
+                                        ToolTip="{loc:LocKey Box.MenuLockTooltip}" />
                                     <MenuItem
                                         x:Name="MenuHideItem"
                                         Click="MenuHide_Click"
-                                        Header="Hide"
+                                        Header="{loc:LocKey Box.MenuHide}"
                                         Icon="{StaticResource ItemIcon_HideBoxe}" />
                                     <MenuItem
                                         x:Name="MenuRenameItem"
                                         Click="MenuRename_Click"
-                                        Header="Rename"
-                                        ToolTip="Rename the active tab">
+                                        Header="{loc:LocKey Box.MenuRename}"
+                                        ToolTip="{loc:LocKey Box.MenuRenameTooltip}">
                                         <MenuItem.Icon>
                                             <ui:SymbolIcon Symbol="Edit24" />
                                         </MenuItem.Icon>
@@ -236,56 +237,56 @@
                                     <MenuItem
                                         x:Name="MenuAddTab"
                                         Click="AddTab_Click"
-                                        Header="Add Tab"
+                                        Header="{loc:LocKey Box.MenuAddTab}"
                                         Icon="{StaticResource ItemIcon_NewBox}" />
                                     <MenuItem
                                         x:Name="MenuAddFolderPortal"
                                         Click="AddFolderPortal_Click"
-                                        Header="Add Folder Portal"
+                                        Header="{loc:LocKey Box.MenuAddFolderPortal}"
                                         Icon="{StaticResource ItemIcon_FolderPortal}" />
                                     <MenuItem
                                         x:Name="MenuRemoveTab"
                                         Click="RemoveTab_Click"
                                         Foreground="OrangeRed"
-                                        Header="Remove Tab"
+                                        Header="{loc:LocKey Box.MenuRemoveTab}"
                                         Icon="{StaticResource ItemIcon_Remove}" />
                                     <Separator />
-                                    <MenuItem x:Name="MenuBoxType" Header="Box Type">
+                                    <MenuItem x:Name="MenuBoxType" Header="{loc:LocKey Box.MenuBoxType}">
                                         <MenuItem
                                             x:Name="MenuBoxTypeDesktop"
                                             Click="MenuBoxType_Click"
-                                            Header="Desktop Items"
+                                            Header="{loc:LocKey Box.MenuBoxTypeDesktop}"
                                             Icon="{StaticResource ItemIcon_NewBox}"
                                             IsCheckable="True"
                                             Tag="DesktopItems" />
                                         <MenuItem
                                             x:Name="MenuBoxTypeFolder"
                                             Click="MenuBoxType_Click"
-                                            Header="Folder Portal"
+                                            Header="{loc:LocKey Box.MenuBoxTypeFolder}"
                                             Icon="{StaticResource ItemIcon_FolderPortal}"
                                             IsCheckable="True"
                                             Tag="FolderPortal" />
                                     </MenuItem>
-                                    <MenuItem x:Name="MenuFolderView" Header="Folder View">
+                                    <MenuItem x:Name="MenuFolderView" Header="{loc:LocKey Box.MenuFolderView}">
                                         <MenuItem
                                             x:Name="MenuFolderViewIcons"
                                             Click="MenuFolderView_Click"
-                                            Header="Icons"
+                                            Header="{loc:LocKey Box.MenuFolderViewIcons}"
                                             IsCheckable="True"
                                             Tag="Icons" />
                                         <MenuItem
                                             x:Name="MenuFolderViewDetails"
                                             Click="MenuFolderView_Click"
-                                            Header="Details"
+                                            Header="{loc:LocKey Box.MenuFolderViewDetails}"
                                             IsCheckable="True"
                                             Tag="Details" />
                                     </MenuItem>
                                     <Separator />
-                                    <MenuItem x:Name="MenuRollDir" Header="Roll Direction">
+                                    <MenuItem x:Name="MenuRollDir" Header="{loc:LocKey Box.MenuRollDirection}">
                                         <MenuItem
                                             x:Name="MenuSetRollDirAuto"
                                             Click="MenuSetRollDir_Click"
-                                            Header="Auto (snap)"
+                                            Header="{loc:LocKey Box.MenuRollAuto}"
                                             Icon="{StaticResource ItemIcon_Roll_Auto}"
                                             IsCheckable="True"
                                             Tag="Auto" />
@@ -293,37 +294,37 @@
                                         <MenuItem
                                             x:Name="MenuSetRollDirTop"
                                             Click="MenuSetRollDir_Click"
-                                            Header="Top"
+                                            Header="{loc:LocKey Box.MenuRollTop}"
                                             Icon="{StaticResource ItemIcon_Roll_Up}"
                                             IsCheckable="True"
                                             Tag="Top" />
                                         <MenuItem
                                             x:Name="MenuSetRollDirBottom"
                                             Click="MenuSetRollDir_Click"
-                                            Header="Bottom"
+                                            Header="{loc:LocKey Box.MenuRollBottom}"
                                             Icon="{StaticResource ItemIcon_Roll_Down}"
                                             IsCheckable="True"
                                             Tag="Bottom" />
                                         <MenuItem
                                             x:Name="MenuSetRollDirLeft"
                                             Click="MenuSetRollDir_Click"
-                                            Header="Left"
+                                            Header="{loc:LocKey Box.MenuRollLeft}"
                                             Icon="{StaticResource ItemIcon_Roll_Left}"
                                             IsCheckable="True"
                                             Tag="Left" />
                                         <MenuItem
                                             x:Name="MenuSetRollDirRight"
                                             Click="MenuSetRollDir_Click"
-                                            Header="Right"
+                                            Header="{loc:LocKey Box.MenuRollRight}"
                                             Icon="{StaticResource ItemIcon_Roll_Right}"
                                             IsCheckable="True"
                                             Tag="Right" />
                                     </MenuItem>
-                                    <MenuItem x:Name="MenuIconSize" Header="Icon Size">
+                                    <MenuItem x:Name="MenuIconSize" Header="{loc:LocKey Box.MenuIconSize}">
                                         <MenuItem
                                             x:Name="MenuIconSizeAuto"
                                             Click="MenuSetIconSize_Click"
-                                            Header="Auto / Default"
+                                            Header="{loc:LocKey Box.MenuIconSizeAuto}"
                                             Icon="{StaticResource ItemIcon_Size_Small}"
                                             IsCheckable="True"
                                             Tag="Auto" />
@@ -331,19 +332,19 @@
                                         <MenuItem
                                             x:Name="MenuIconSizeSmall"
                                             Click="MenuSetIconSize_Click"
-                                            Header="Small"
+                                            Header="{loc:LocKey Box.MenuIconSizeSmall}"
                                             IsCheckable="True"
                                             Tag="Small" />
                                         <MenuItem
                                             x:Name="MenuIconSizeMid"
                                             Click="MenuSetIconSize_Click"
-                                            Header="Mid"
+                                            Header="{loc:LocKey Box.MenuIconSizeMid}"
                                             IsCheckable="True"
                                             Tag="Mid" />
                                         <MenuItem
                                             x:Name="MenuIconSizeLarge"
                                             Click="MenuSetIconSize_Click"
-                                            Header="Large"
+                                            Header="{loc:LocKey Box.MenuIconSizeLarge}"
                                             IsCheckable="True"
                                             Tag="Large" />
                                         <Separator />
@@ -381,7 +382,7 @@
                                     <MenuItem
                                         Click="MenuDelete_Click"
                                         Foreground="OrangeRed"
-                                        Header="Delete"
+                                        Header="{loc:LocKey Box.MenuDelete}"
                                         Icon="{StaticResource ItemIcon_Delete}" />
                                 </ContextMenu>
                             </Button.ContextMenu>
@@ -397,7 +398,7 @@
                             Click="LockButton_Click"
                             Cursor="Arrow"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="Toggle Locked state (Cannot Move or Resize the Window)">
+                            ToolTip="{loc:LocKey Box.MenuLockTooltip}">
                             <ui:SymbolIcon x:Name="LockIcon" Symbol="LockOpen24" />
                         </Button>
 
@@ -411,7 +412,7 @@
                             Click="RollButton_Click"
                             Cursor="Arrow"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="Roll up">
+                            ToolTip="{loc:LocKey Box.RollUp}">
                             <ui:SymbolIcon x:Name="RollIcon" Symbol="ChevronUp24" />
                         </Button>
                     </Grid>

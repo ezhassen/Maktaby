@@ -2,118 +2,119 @@
     x:Class="Maktaby.Controls.TrayIconUI"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:tray="http://schemas.lepo.co/wpfui/2022/xaml/tray"
     x:Name="AppTrayIcon"
     FocusOnLeftClick="False"
     LeftClick="AppTrayIcon_OnLeftClick"
     MenuOnRightClick="True"
-    TooltipText="Maktaby - Desktop Organizer">
+    TooltipText="{loc:LocKey Tray.Tooltip}">
     <tray:NotifyIcon.Menu>
         <ContextMenu x:Name="contextMenu" HasDropShadow="False">
             <!--  Icons are centrally defined in AppStyles.xaml (ItemIcon_*) and shared app-wide.  -->
             <MenuItem
                 Click="NewBox_Click"
-                Header="New Box"
+                Header="{loc:LocKey Tray.NewBox}"
                 Icon="{StaticResource ItemIcon_NewBox}" />
             <MenuItem
                 Click="NewBoxFolderPortal_Click"
-                Header="New Folder Portal"
+                Header="{loc:LocKey Tray.NewFolderPortal}"
                 Icon="{StaticResource ItemIcon_FolderPortal}" />
             <MenuItem
                 Click="NewWidget_Click"
-                Header="New Widget"
+                Header="{loc:LocKey Tray.NewWidget}"
                 Icon="{StaticResource ItemIcon_NewWidget}" />
             <MenuItem
                 Click="ManageWidgets_Click"
-                Header="Widgets Gallery"
+                Header="{loc:LocKey Tray.WidgetsGallery}"
                 Icon="{StaticResource ItemIcon_Gallery}" />
             <Separator />
             <MenuItem
                 x:Name="resetMenuItem"
                 Click="Reset_Click"
-                Header="Reset"
+                Header="{loc:LocKey Tray.Reset}"
                 Icon="{StaticResource ItemIcon_Reset}" />
             <MenuItem
                 x:Name="MenuToggleHideAll"
                 Click="ToggleHideAll_Click"
-                Header="Hide All Boxes"
+                Header="{loc:LocKey Tray.HideAllBoxes}"
                 Icon="{StaticResource ItemIcon_HideAllBoxes_Hide}"
                 IsCheckable="False"
-                ToolTip="Toggle Hide All" />
+                ToolTip="{loc:LocKey Tray.HideAllTooltip}" />
             <Separator />
             <MenuItem
                 x:Name="MenuToggleDisable"
                 Click="MenuToggleDisable_Click"
-                Header="Toggle Disable"
+                Header="{loc:LocKey Tray.ToggleDisable}"
                 Icon="{StaticResource ItemIcon_Enable}"
                 IsCheckable="False"
-                ToolTip="Toggle Disable. and show the desktop icons" />
+                ToolTip="{loc:LocKey Tray.ToggleDisableTooltip}" />
             <Separator />
             <Separator />
             <MenuItem
                 x:Name="menuSettings"
                 Click="Settings_Click"
-                Header="Settings"
+                Header="{loc:LocKey Tray.Settings}"
                 Icon="{StaticResource ItemIcon_Settings}" />
             <MenuItem
                 x:Name="menuPerformance"
                 Click="PerformanceMonitor_Click"
-                Header="Performance Monitor"
+                Header="{loc:LocKey Tray.PerformanceMonitor}"
                 Icon="{StaticResource ItemIcon_DebugTree}"
-                ToolTip="WebView2 CPU / memory, idle suspend" />
+                ToolTip="{loc:LocKey Tray.PerformanceMonitorTooltip}" />
             <MenuItem
                 Name="menuLiveWallpaper"
-                Header="Live Wallpaper"
+                Header="{loc:LocKey Tray.LiveWallpaper}"
                 Icon="{StaticResource ItemIcon_Gallery}">
                 <MenuItem
                     x:Name="menuLiveWallpaperEnable"
                     Click="LiveWallpaperEnable_Click"
-                    Header="Enable"
+                    Header="{loc:LocKey Tray.Enable}"
                     Icon="{StaticResource ItemIcon_Enable}"
                     IsCheckable="True"
                     StaysOpenOnClick="True" />
                 <MenuItem
                     x:Name="menuLiveWallpaperPlayPause"
                     Click="LiveWallpaperPlayPause_Click"
-                    Header="Pause"
+                    Header="{loc:LocKey Tray.Pause}"
                     Icon="{StaticResource ItemIcon_Play}"
                     StaysOpenOnClick="True" />
                 <Separator />
                 <MenuItem
                     x:Name="menuLiveWallpaperChange"
                     Click="LiveWallpaperChange_Click"
-                    Header="Change..."
+                    Header="{loc:LocKey Tray.Change}"
                     Icon="{StaticResource ItemIcon_FolderPortal}" />
                 <MenuItem
                     x:Name="menuLiveWallpaperRemove"
                     Click="LiveWallpaperRemove_Click"
                     Foreground="OrangeRed"
-                    Header="Remove"
+                    Header="{loc:LocKey Tray.Remove}"
                     Icon="{StaticResource ItemIcon_Delete}"
                     StaysOpenOnClick="True" />
             </MenuItem>
             <MenuItem
                 x:Name="menu_theme"
-                Header="Theme"
+                Header="{loc:LocKey Tray.Theme}"
                 Icon="{StaticResource ItemIcon_Theme}">
                 <MenuItem
                     x:Name="menu_theme_system"
                     Click="Theme_Click"
-                    Header="System"
+                    Header="{loc:LocKey Tray.ThemeSystem}"
                     Icon="{StaticResource ItemIcon_ThemeSystem}"
                     IsCheckable="True"
                     Tag="{x:Null}" />
                 <MenuItem
                     x:Name="menu_theme_dark"
                     Click="Theme_Click"
-                    Header="Dark"
+                    Header="{loc:LocKey Tray.ThemeDark}"
                     Icon="{StaticResource ItemIcon_ThemeDark}"
                     IsCheckable="True"
                     Tag="dark" />
                 <MenuItem
                     x:Name="menu_theme_light"
                     Click="Theme_Click"
-                    Header="Light"
+                    Header="{loc:LocKey Tray.ThemeLight}"
                     Icon="{StaticResource ItemIcon_ThemeLight}"
                     IsCheckable="True"
                     Tag="light" />
@@ -122,39 +123,39 @@
             <MenuItem
                 x:Name="ToggleDebugTree"
                 Click="DebugTree_Click"
-                Header="Debug Desktop Tree"
+                Header="{loc:LocKey Tray.DebugTree}"
                 Icon="{StaticResource ItemIcon_DebugTree}"
                 IsCheckable="True" />
             <MenuItem
                 x:Name="menuTest"
                 Click="Test_Click"
                 Foreground="OrangeRed"
-                Header="Test Button"
+                Header="{loc:LocKey Tray.TestButton}"
                 Icon="{StaticResource ItemIcon_Test}"
-                ToolTip="Used for tests" />
+                ToolTip="{loc:LocKey Tray.TestButtonTooltip}" />
             <MenuItem
                 x:Name="menuTestBackgroundUpdateCheck"
                 Click="TestBackgroundUpdateCheck_Click"
                 Foreground="OrangeRed"
-                Header="Test background update check"
+                Header="{loc:LocKey Tray.TestUpdateCheck}"
                 Icon="{StaticResource ItemIcon_Update}"
-                ToolTip="Runs the NON-interactive check: raises the update notification instead of opening the prompt" />
+                ToolTip="{loc:LocKey Tray.TestUpdateCheckTooltip}" />
             <MenuItem
                 x:Name="menuCheckForUpdates"
                 Click="CheckForUpdates_Click"
-                Header="Check for updates…"
+                Header="{loc:LocKey Tray.CheckForUpdates}"
                 Icon="{StaticResource ItemIcon_Update}"
-                ToolTip="Look for a newer Maktaby release on GitHub" />
+                ToolTip="{loc:LocKey Tray.CheckForUpdatesTooltip}" />
             <MenuItem
                 x:Name="menuAbout"
                 Click="About_Click"
-                Header="About"
+                Header="{loc:LocKey Tray.About}"
                 Icon="{StaticResource ItemIcon_About}" />
             <Separator />
             <MenuItem
                 x:Name="menuExit"
                 Click="Exit_Click"
-                Header="Exit"
+                Header="{loc:LocKey Tray.Exit}"
                 Icon="{StaticResource ItemIcon_Exit}" />
         </ContextMenu>
     </tray:NotifyIcon.Menu>

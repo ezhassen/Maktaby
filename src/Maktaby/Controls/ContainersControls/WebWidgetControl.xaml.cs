@@ -301,7 +301,7 @@ public partial class WebWidgetControl : WidgetControlBase
                 ErrorBar.IsOpen = false;
                 return;
             }
-            ErrorBar.Title = "WebView2 init failed";
+            ErrorBar.Title = Localization.Loc.Get("WidgetData.WebViewInitFailed");
             ErrorBar.Message = ex.Message.Contains("Edge") ? "Microsoft Edge WebView2 Runtime not found. Install Evergreen." : ex.Message;
             ErrorBar.IsOpen = true;
             PlaceholderText.Visibility = Visibility.Visible;

@@ -12,6 +12,7 @@ namespace Maktaby.Views
         public PerformanceMonitorWindow()
         {
             InitializeComponent();
+            Localization.Loc.ApplyTo(this);
             _vm = new PerformanceMonitorViewModel();
             DataContext = _vm;
             _vm.PropertyChanged += OnViewModelPropertyChanged;

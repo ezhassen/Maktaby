@@ -5,6 +5,7 @@ using System.Windows.Media;
 using Maktaby.Native;
 using Wpf.Ui.Controls;
 using Maktaby.Shared.Interfaces;
+using Maktaby.Shared.Localization;
 using Maktaby.Shared.Win32APIs;
 
 namespace Maktaby.Shared.Controls;
@@ -97,6 +98,10 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
         ConfigureButton(SecondaryButton, options.SecondaryButtonText, options.SecondaryButtonAppearance ?? ControlAppearance.Secondary);
         ConfigureButton(CloseButton, options.CloseButtonText, options.CloseButtonAppearance ?? ControlAppearance.Secondary);
 
+        // Content-level flow direction (LTR/RTL) from the active language. Applied to the
+        // content panel only — never the Window, whose chrome/title bar must stay LTR.
+        ApplyContentFlowDirection();
+
         // If only Close was requested but no explicit text, ensure we still show it
         // (DialogService already merges CloseButtonText = "OK" / "Cancel" for ShowMessage/ShowConfirm)
         // Buttons with empty text are collapsed so no empty button renders.
@@ -118,6 +123,23 @@ public partial class DialogMessageBox : Wpf.Ui.Controls.FluentWindow
         button.Visibility = Visibility.Visible;
         button.Content = text;
         button.Appearance = appearance;
+    }
+
+    /// <summary>Sets content flow direction (LTR/RTL) from the active language on the
+    /// dialog's content root only. The Window itself is pinned LTR so its chrome/title bar
+    /// never mirrors — only the content follows the language. The root panel's direction
+    /// cascades to its whole subtree via inheritance.</summary>
+    private void ApplyContentFlowDirection()
+    {
+        try
+        {
+            // Chrome always LTR; content follows the language.
+            FlowDirection = FlowDirection.LeftToRight;
+            RootPanel.FlowDirection = SharedText.RightToLeft ? FlowDirection.RightToLeft : FlowDirection.LeftToRight;
+            // The TitleBar lives inside RootPanel, so it would inherit RTL — pin it LTR.
+            TitleBar.FlowDirection = FlowDirection.LeftToRight;
+        }
+        catch { }
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)

@@ -36,6 +36,7 @@ public partial class WidgetDataWindow : AppWindows.AppFluentWindow
     public WidgetDataWindow(string? slug, bool isNew)
     {
         InitializeComponent();
+        Localization.Loc.ApplyTo(this);
         _vm = new ViewModels.WidgetDataViewModel();
         DataContext = _vm;
         // Designer: no services — display content comes from the design factory binding.
@@ -83,7 +84,7 @@ public partial class WidgetDataWindow : AppWindows.AppFluentWindow
             var info = _svc.TryGetWidget(_originalSlug!, WebWidgetSource.User);
             if (info is null)
             {
-                await _dialogs.ShowMessageAsync($"Widget '{_originalSlug}' not found.", "Error");
+                await _dialogs.ShowMessageAsync(Localization.Loc.Get("WidgetData.NotFound", _originalSlug), Localization.Loc.Get("Common.Error"));
                 Close();
                 return;
             }
@@ -98,7 +99,7 @@ public partial class WidgetDataWindow : AppWindows.AppFluentWindow
         }
         else
         {
-            Title = "New Widget";
+            Title = Localization.Loc.Get("WidgetData.NewWidget");
             _vm.LoadSampleData(blankIdentity: true);
         }
         // Edit mode: surface pre-existing name issues immediately; new mode stays quiet
@@ -212,7 +213,7 @@ public partial class WidgetDataWindow : AppWindows.AppFluentWindow
             try { issues = loaded ? _previewControl.GetRenderIssues() : new[] { "Preview did not finish loading within 10 seconds." }; } catch { }
             if (issues.Count > 0)
             {
-                try { await _dialogs.ShowMessageAsync("Cannot save — the preview has errors:\n• " + string.Join("\n• ", issues), "Preview errors"); } catch { }
+                try { await _dialogs.ShowMessageAsync(Localization.Loc.Get("WidgetData.PreviewErrors") + "\n• " + string.Join("\n• ", issues), Localization.Loc.Get("WidgetData.PreviewErrorsTitle")); } catch { }
                 EndSaving();
                 return;
             }
@@ -229,7 +230,7 @@ public partial class WidgetDataWindow : AppWindows.AppFluentWindow
         {
             if (_svc.UserWidgetExists(slug))
             {
-                await _dialogs.ShowMessageAsync($"A widget named '{slug}' already exists.", "Error");
+                await _dialogs.ShowMessageAsync(Localization.Loc.Get("WidgetData.AlreadyExists", slug), Localization.Loc.Get("Common.Error"));
                 EndSaving();
                 return;
             }

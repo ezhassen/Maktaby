@@ -75,6 +75,7 @@ public partial class WidgetsListWindow : AppWindows.AppFluentWindow, INotifyProp
     public WidgetsListWindow(bool selectMode, WidgetGalleryKind? selectKind = null)
     {
         InitializeComponent();
+        Localization.Loc.ApplyTo(this);
         IsSelectMode = selectMode;
         SelectKind = selectKind;
         // Designer: services don't exist — sample gallery rows so cards/thumbnails layout renders.
@@ -268,7 +269,7 @@ public partial class WidgetsListWindow : AppWindows.AppFluentWindow, INotifyProp
             }
             if (vm.Source == WebWidgetSource.App)
             {
-                await _dialogs.ShowMessageAsync("App widgets are read-only. Duplicate to edit.", "Widgets");
+                await _dialogs.ShowMessageAsync(Localization.Loc.Get("WidgetsList.ReadOnly"), Localization.Loc.Get("Common.Widgets"));
                 return;
             }
             var w = new WidgetDataWindow(vm.Slug, isNew: false);
@@ -305,10 +306,10 @@ public partial class WidgetsListWindow : AppWindows.AppFluentWindow, INotifyProp
             {
                 if (vm2.IsBuiltIn)
                 {
-                    await _dialogs.ShowMessageAsync("Cannot delete built-in widgets.", "Widgets");
+                    await _dialogs.ShowMessageAsync(Localization.Loc.Get("WidgetsList.CannotDeleteBuiltIn"), Localization.Loc.Get("Common.Widgets"));
                     return;
                 }
-                var confirmedNative = await _dialogs.ShowConfirmDeleteAsync($"Delete native widget '{vm2.Slug}'? This cannot be undone.");
+                var confirmedNative = await _dialogs.ShowConfirmDeleteAsync(Localization.Loc.Get("WidgetsList.DeleteNativeConfirm", vm2.Slug));
                 if (!confirmedNative) return;
                 try { _native.DeleteWidget(vm2.Slug); } catch (System.Exception ex) { await _dialogs.ShowMessageAsync(ex.Message, "Widgets"); return; }
                 Refresh();
@@ -316,10 +317,10 @@ public partial class WidgetsListWindow : AppWindows.AppFluentWindow, INotifyProp
             }
             if (vm2.Source == WebWidgetSource.App)
             {
-                await _dialogs.ShowMessageAsync("Cannot delete built-in widgets.", "Widgets");
+                await _dialogs.ShowMessageAsync(Localization.Loc.Get("WidgetsList.CannotDeleteBuiltIn"), Localization.Loc.Get("Common.Widgets"));
                 return;
             }
-            var confirmed = await _dialogs.ShowConfirmDeleteAsync($"Delete widget '{vm2.Slug}'? This cannot be undone.");
+            var confirmed = await _dialogs.ShowConfirmDeleteAsync(Localization.Loc.Get("WidgetsList.DeleteWebConfirm", vm2.Slug));
             if (!confirmed) return;
 
             _svc.DeleteUserWidget(vm2.Slug);
@@ -416,9 +417,9 @@ public partial class WidgetsListWindow : AppWindows.AppFluentWindow, INotifyProp
             $"Only proceed if you trust where it came from.\nFolder: {native.FolderPath}",
             new DialogOptions
             {
-                Title = "Trust this widget?",
-                PrimaryButtonText = "Trust & Place",
-                CloseButtonText = "Cancel",
+                Title = Localization.Loc.Get("WidgetsList.TrustTitle"),
+                PrimaryButtonText = Localization.Loc.Get("WidgetsList.TrustPlace"),
+                CloseButtonText = Localization.Loc.Get("Dialog.Cancel"),
             });
         if (!confirmed) return false;
         try { _native.Trust(native); }

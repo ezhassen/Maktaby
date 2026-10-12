@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="en">
+  <file id="en">
+
+    <!-- Reserved meta units -->
+    <unit id="meta.flowdirection"><segment><source>LeftToRight</source><target>LeftToRight</target></segment></unit>
+    <unit id="meta.name"><segment><source>English</source><target>English</target></segment></unit>
+
+    <!-- ===== Tray menu ===== -->
+    <unit id="Tray.Tooltip"><segment><source>Maktaby - Desktop Organizer</source><target>Maktaby - Desktop Organizer</target></segment></unit>
+    <unit id="Tray.NewBox"><segment><source>New Box</source><target>New Box</target></segment></unit>
+    <unit id="Tray.NewFolderPortal"><segment><source>New Folder Portal</source><target>New Folder Portal</target></segment></unit>
+    <unit id="Tray.NewWidget"><segment><source>New Widget</source><target>New Widget</target></segment></unit>
+    <unit id="Tray.WidgetsGallery"><segment><source>Widgets Gallery</source><target>Widgets Gallery</target></segment></unit>
+    <unit id="Tray.Reset"><segment><source>Reset</source><target>Reset</target></segment></unit>
+    <unit id="Tray.HideAllBoxes"><segment><source>Hide All Boxes</source><target>Hide All Boxes</target></segment></unit>
+    <unit id="Tray.ShowAllBoxes"><segment><source>Show All Boxes</source><target>Show All Boxes</target></segment></unit>
+    <unit id="Tray.HideAllTooltip"><segment><source>Toggle Hide All</source><target>Toggle Hide All</target></segment></unit>
+    <unit id="Tray.ToggleDisable"><segment><source>Toggle Disable</source><target>Toggle Disable</target></segment></unit>
+    <unit id="Tray.ToggleDisableTooltip"><segment><source>Toggle Disable. and show the desktop icons</source><target>Toggle Disable. and show the desktop icons</target></segment></unit>
+    <unit id="Tray.Settings"><segment><source>Settings</source><target>Settings</target></segment></unit>
+    <unit id="Tray.About"><segment><source>About</source><target>About</target></segment></unit>
+    <unit id="Tray.Exit"><segment><source>Exit</source><target>Exit</target></segment></unit>
+    <unit id="Tray.CheckForUpdates"><segment><source>Check for updates…</source><target>Check for updates…</target></segment></unit>
+    <unit id="Tray.CheckForUpdatesTooltip"><segment><source>Look for a newer Maktaby release on GitHub</source><target>Look for a newer Maktaby release on GitHub</target></segment></unit>
+    <unit id="Tray.PerformanceMonitor"><segment><source>Performance Monitor</source><target>Performance Monitor</target></segment></unit>
+    <unit id="Tray.PerformanceMonitorTooltip"><segment><source>WebView2 CPU / memory, idle suspend</source><target>WebView2 CPU / memory, idle suspend</target></segment></unit>
+    <unit id="Tray.LiveWallpaper"><segment><source>Live Wallpaper</source><target>Live Wallpaper</target></segment></unit>
+    <unit id="Tray.Enable"><segment><source>Enable</source><target>Enable</target></segment></unit>
+    <unit id="Tray.Pause"><segment><source>Pause</source><target>Pause</target></segment></unit>
+    <unit id="Tray.Change"><segment><source>Change…</source><target>Change…</target></segment></unit>
+    <unit id="Tray.Remove"><segment><source>Remove</source><target>Remove</target></segment></unit>
+    <unit id="Tray.Theme"><segment><source>Theme</source><target>Theme</target></segment></unit>
+    <unit id="Tray.ThemeSystem"><segment><source>System</source><target>System</target></segment></unit>
+    <unit id="Tray.ThemeDark"><segment><source>Dark</source><target>Dark</target></segment></unit>
+    <unit id="Tray.ThemeLight"><segment><source>Light</source><target>Light</target></segment></unit>
+    <unit id="Tray.DebugTree"><segment><source>Debug Desktop Tree</source><target>Debug Desktop Tree</target></segment></unit>
+    <unit id="Tray.TestButton"><segment><source>Test Button</source><target>Test Button</target></segment></unit>
+    <unit id="Tray.TestButtonTooltip"><segment><source>Used for tests</source><target>Used for tests</target></segment></unit>
+    <unit id="Tray.TestUpdateCheck"><segment><source>Test background update check</source><target>Test background update check</target></segment></unit>
+    <unit id="Tray.TestUpdateCheckTooltip"><segment><source>Runs the NON-interactive check: raises the update notification instead of opening the prompt</source><target>Runs the NON-interactive check: raises the update notification instead of opening the prompt</target></segment></unit>
+
+    <!-- ===== Dialogs (shared DialogMessageBox + DialogService) ===== -->
+    <unit id="Dialog.OK"><segment><source>OK</source><target>OK</target></segment></unit>
+    <unit id="Dialog.Cancel"><segment><source>Cancel</source><target>Cancel</target></segment></unit>
+    <unit id="Dialog.Yes"><segment><source>Yes</source><target>Yes</target></segment></unit>
+    <unit id="Dialog.Delete"><segment><source>Delete</source><target>Delete</target></segment></unit>
+    <unit id="Dialog.ConfirmDeleteTitle"><segment><source>Confirm Delete</source><target>Confirm Delete</target></segment></unit>
+    <unit id="Dialog.Message"><segment><source>Message</source><target>Message</target></segment></unit>
+
+    <!-- ===== Tray reset confirm (App.xaml.cs) ===== -->
+    <unit id="Tray.ResetConfirm"><segment><source>This will delete all the boxes and create default one, continue?</source><target>This will delete all the boxes and create default one, continue?</target></segment></unit>
+    <unit id="Tray.ResetConfirmTitle"><segment><source>Confirm delete</source><target>Confirm delete</target></segment></unit>
+    <unit id="Tray.ContainerHidden"><segment><source>Container hidden</source><target>Container hidden</target></segment></unit>
+
+    <!-- ===== Box context menu + window (Views/Containers — text only) ===== -->
+    <unit id="Box.Menu"><segment><source>Menu</source><target>Menu</target></segment></unit>
+    <unit id="Box.MenuLock"><segment><source>Lock</source><target>Lock</target></segment></unit>
+    <unit id="Box.MenuLockTooltip"><segment><source>Toggle Locked state (Cannot Move or Resize the Window)</source><target>Toggle Locked state (Cannot Move or Resize the Window)</target></segment></unit>
+    <unit id="Box.MenuHide"><segment><source>Hide</source><target>Hide</target></segment></unit>
+    <unit id="Box.MenuRename"><segment><source>Rename</source><target>Rename</target></segment></unit>
+    <unit id="Box.MenuRenameTooltip"><segment><source>Rename the active tab</source><target>Rename the active tab</target></segment></unit>
+    <unit id="Box.MenuAddTab"><segment><source>Add Tab</source><target>Add Tab</target></segment></unit>
+    <unit id="Box.MenuAddFolderPortal"><segment><source>Add Folder Portal</source><target>Add Folder Portal</target></segment></unit>
+    <unit id="Box.MenuRemoveTab"><segment><source>Remove Tab</source><target>Remove Tab</target></segment></unit>
+    <unit id="Box.MenuBoxType"><segment><source>Box Type</source><target>Box Type</target></segment></unit>
+    <unit id="Box.MenuBoxTypeDesktop"><segment><source>Desktop Items</source><target>Desktop Items</target></segment></unit>
+    <unit id="Box.MenuBoxTypeFolder"><segment><source>Folder Portal</source><target>Folder Portal</target></segment></unit>
+    <unit id="Box.MenuFolderView"><segment><source>Folder View</source><target>Folder View</target></segment></unit>
+    <unit id="Box.MenuFolderViewIcons"><segment><source>Icons</source><target>Icons</target></segment></unit>
+    <unit id="Box.MenuFolderViewDetails"><segment><source>Details</source><target>Details</target></segment></unit>
+    <unit id="Box.MenuRollDirection"><segment><source>Roll Direction</source><target>Roll Direction</target></segment></unit>
+    <unit id="Box.MenuRollAuto"><segment><source>Auto (snap)</source><target>Auto (snap)</target></segment></unit>
+    <unit id="Box.MenuRollTop"><segment><source>Top</source><target>Top</target></segment></unit>
+    <unit id="Box.MenuRollBottom"><segment><source>Bottom</source><target>Bottom</target></segment></unit>
+    <unit id="Box.MenuRollLeft"><segment><source>Left</source><target>Left</target></segment></unit>
+    <unit id="Box.MenuRollRight"><segment><source>Right</source><target>Right</target></segment></unit>
+    <unit id="Box.MenuIconSize"><segment><source>Icon Size</source><target>Icon Size</target></segment></unit>
+    <unit id="Box.MenuIconSizeAuto"><segment><source>Auto / Default</source><target>Auto / Default</target></segment></unit>
+    <unit id="Box.MenuIconSizeSmall"><segment><source>Small</source><target>Small</target></segment></unit>
+    <unit id="Box.MenuIconSizeMid"><segment><source>Mid</source><target>Mid</target></segment></unit>
+    <unit id="Box.MenuIconSizeLarge"><segment><source>Large</source><target>Large</target></segment></unit>
+    <unit id="Box.MenuDelete"><segment><source>Delete</source><target>Delete</target></segment></unit>
+    <unit id="Box.RollUp"><segment><source>Roll up</source><target>Roll up</target></segment></unit>
+    <unit id="Box.CannotDeleteDefault"><segment><source>The default box cannot be deleted.</source><target>The default box cannot be deleted.</target></segment></unit>
+    <unit id="Box.CannotDeleteDefaultTitle"><segment><source>Cannot delete</source><target>Cannot delete</target></segment></unit>
+    <unit id="Box.ConfirmDelete"><segment><source>Delete this box and all its items?</source><target>Delete this box and all its items?</target></segment></unit>
+    <unit id="Box.ConfirmSwitchTitle"><segment><source>Switch Box Type</source><target>Switch Box Type</target></segment></unit>
+    <unit id="Box.ConfirmSwitch"><segment><source>Switching box type will clear the current content. Continue?</source><target>Switching box type will clear the current content. Continue?</target></segment></unit>
+    <unit id="Box.Switch"><segment><source>Switch</source><target>Switch</target></segment></unit>
+
+    <!-- ===== Settings window ===== -->
+    <unit id="Section.Settings.Title"><segment><source>Settings</source><target>Settings</target></segment></unit>
+    <unit id="Section.Settings.Preview"><segment><source>Preview</source><target>Preview</target></segment></unit>
+    <unit id="Section.Settings.BoxTitle"><segment><source>Box Title</source><target>Box Title</target></segment></unit>
+    <unit id="Section.Settings.Appearance"><segment><source>Appearance</source><target>Appearance</target></segment></unit>
+    <unit id="Section.Settings.Boxes"><segment><source>Boxes</source><target>Boxes</target></segment></unit>
+    <unit id="Section.Settings.Widgets"><segment><source>Widgets</source><target>Widgets</target></segment></unit>
+    <unit id="Section.Settings.Containers"><segment><source>Containers</source><target>Containers</target></segment></unit>
+    <unit id="Section.Settings.LiveWallpaper"><segment><source>Live Wallpaper</source><target>Live Wallpaper</target></segment></unit>
+    <unit id="Section.Settings.Updates"><segment><source>Updates</source><target>Updates</target></segment></unit>
+    <unit id="Section.Settings.General"><segment><source>General</source><target>General</target></segment></unit>
+    <unit id="Section.Settings.Snapshot"><segment><source>Snapshot</source><target>Snapshot</target></segment></unit>
+    <unit id="Section.Settings.AppTheme"><segment><source>App theme</source><target>App theme</target></segment></unit>
+    <unit id="Section.Settings.AppThemeHint"><segment><source>System follows the Windows light/dark setting.</source><target>System follows the Windows light/dark setting.</target></segment></unit>
+    <unit id="Section.Settings.Language"><segment><source>Language</source><target>Language</target></segment></unit>
+    <unit id="Section.Settings.LanguageHint"><segment><source>Interface language. Applied immediately; content direction follows the language (LTR/RTL).</source><target>Interface language. Applied immediately; content direction follows the language (LTR/RTL).</target></segment></unit>
+    <unit id="Section.Settings.DefaultBoxTransparency"><segment><source>Default box transparency</source><target>Default box transparency</target></segment></unit>
+    <unit id="Section.Settings.DefaultBoxTransparencyHint"><segment><source>0 = opaque .. 1 = transparent.</source><target>0 = opaque .. 1 = transparent.</target></segment></unit>
+    <unit id="Section.Settings.DefaultBoxTheme"><segment><source>Default box theme</source><target>Default box theme</target></segment></unit>
+    <unit id="Section.Settings.DefaultBoxThemeHint"><segment><source>App = follow the app theme above.</source><target>App = follow the app theme above.</target></segment></unit>
+    <unit id="Section.Settings.DefaultBoxIconSize"><segment><source>Default box icon size</source><target>Default box icon size</target></segment></unit>
+    <unit id="Section.Settings.DefaultBoxIconSizeHint"><segment><source>Shortcut icon pixels inside boxes (16–128). Auto follows the desktop. Per-box override via Box.IconSize.</source><target>Shortcut icon pixels inside boxes (16–128). Auto follows the desktop. Per-box override via Box.IconSize.</target></segment></unit>
+    <unit id="Section.Settings.DefaultBoxColors"><segment><source>Default box colors (override theme when set)</source><target>Default box colors (override theme when set)</target></segment></unit>
+    <unit id="Section.Settings.Background"><segment><source>Background</source><target>Background</target></segment></unit>
+    <unit id="Section.Settings.Foreground"><segment><source>Foreground</source><target>Foreground</target></segment></unit>
+    <unit id="Section.Settings.Border"><segment><source>Border</source><target>Border</target></segment></unit>
+    <unit id="Section.Settings.PickColor"><segment><source>Pick color</source><target>Pick color</target></segment></unit>
+    <unit id="Section.Settings.ResetToDefault"><segment><source>Reset to default</source><target>Reset to default</target></segment></unit>
+    <unit id="Section.Settings.LiveWallpaperPreload"><segment><source>Live wallpaper preload</source><target>Live wallpaper preload</target></segment></unit>
+    <unit id="Section.Settings.LiveWallpaperPreloadHint"><segment><source>Max MB of video/GIF bytes kept in RAM and shared by all monitors showing the same file. Applied on Save without rebuilding playback. 0 disables preloading (stream from disk).</source><target>Max MB of video/GIF bytes kept in RAM and shared by all monitors showing the same file. Applied on Save without rebuilding playback. 0 disables preloading (stream from disk).</target></segment></unit>
+    <unit id="Section.Settings.MB"><segment><source>MB (0–1024)</source><target>MB (0–1024)</target></segment></unit>
+    <unit id="Section.Settings.UpdateChannel"><segment><source>Update channel</source><target>Update channel</target></segment></unit>
+    <unit id="Section.Settings.UpdateChannelHint"><segment><source>Auto follows the installed build: a pre-release install keeps getting pre-releases, a stable install keeps getting stable releases.</source><target>Auto follows the installed build: a pre-release install keeps getting pre-releases, a stable install keeps getting stable releases.</target></segment></unit>
+    <unit id="Section.Settings.CheckForUpdatesAuto"><segment><source>Check for updates automatically</source><target>Check for updates automatically</target></segment></unit>
+    <unit id="Section.Settings.CheckForUpdatesAutoHint"><segment><source>Maktaby checks every 6 hours and on startup. A found update opens a non-blocking window offering to install it; you can also check any time from the tray menu.</source><target>Maktaby checks every 6 hours and on startup. A found update opens a non-blocking window offering to install it; you can also check any time from the tray menu.</target></segment></unit>
+    <unit id="Section.Settings.CheckNow"><segment><source>Check now</source><target>Check now</target></segment></unit>
+    <unit id="Section.Settings.UpdatesNeedInternet"><segment><source>Updates are fetched from GitHub releases, so the check needs an internet connection.</source><target>Updates are fetched from GitHub releases, so the check needs an internet connection.</target></segment></unit>
+    <unit id="Section.Settings.LaunchOnStartup"><segment><source>Launch Maktaby on Windows startup</source><target>Launch Maktaby on Windows startup</target></segment></unit>
+    <unit id="Section.Settings.LogLevel"><segment><source>Log level</source><target>Log level</target></segment></unit>
+    <unit id="Section.Settings.LogLevelHint"><segment><source>Applied on Save. Verbose/Debug help diagnosing issues; Warning and above stay quiet.</source><target>Applied on Save. Verbose/Debug help diagnosing issues; Warning and above stay quiet.</target></segment></unit>
+    <unit id="Section.Settings.ViewLogs"><segment><source>View logs</source><target>View logs</target></segment></unit>
+    <unit id="Section.Settings.ViewLogsTooltip"><segment><source>Open the log viewer (one file per day)</source><target>Open the log viewer (one file per day)</target></segment></unit>
+    <unit id="Section.Settings.SnapshotHint"><segment><source>Back up or restore a .dbe1 bundle (layout, settings and UserWidgets), or permanently delete everything.</source><target>Back up or restore a .dbe1 bundle (layout, settings and UserWidgets), or permanently delete everything.</target></segment></unit>
+    <unit id="Section.Settings.Backup"><segment><source>Backup</source><target>Backup</target></segment></unit>
+    <unit id="Section.Settings.Restore"><segment><source>Restore</source><target>Restore</target></segment></unit>
+    <unit id="Section.Settings.ResetWarning"><segment><source>Reset is destructive: it deletes all boxes and rebuilds from scratch. This cannot be undone.</source><target>Reset is destructive: it deletes all boxes and rebuilds from scratch. This cannot be undone.</target></segment></unit>
+    <unit id="Section.Settings.ContainersVisibility"><segment><source>Containers visibility</source><target>Containers visibility</target></segment></unit>
+    <unit id="Section.Settings.ContainersVisibilityHint"><segment><source>Toggling takes effect immediately and does not save the snapshot.</source><target>Toggling takes effect immediately and does not save the snapshot.</target></segment></unit>
+    <unit id="Section.Settings.ColumnTitle"><segment><source>Title</source><target>Title</target></segment></unit>
+    <unit id="Section.Settings.ColumnType"><segment><source>Type</source><target>Type</target></segment></unit>
+    <unit id="Section.Settings.ColumnVisible"><segment><source>Visible</source><target>Visible</target></segment></unit>
+    <unit id="Section.Settings.Save"><segment><source>Save</source><target>Save</target></segment></unit>
+    <unit id="Section.Settings.Cancel"><segment><source>Cancel</source><target>Cancel</target></segment></unit>
+    <unit id="Section.Settings.BackupTitle"><segment><source>Back up</source><target>Back up</target></segment></unit>
+    <unit id="Section.Settings.RestoreTitle"><segment><source>Restore</source><target>Restore</target></segment></unit>
+
+    <!-- ===== About window ===== -->
+    <unit id="About.Title"><segment><source>About</source><target>About</target></segment></unit>
+    <unit id="About.Tagline"><segment><source>Boxes (for files and folders), live wallpapers and widgets for your Windows desktop.</source><target>Boxes (for files and folders), live wallpapers and widgets for your Windows desktop.</target></segment></unit>
+    <unit id="About.Version"><segment><source>Version</source><target>Version</target></segment></unit>
+    <unit id="About.GitHub"><segment><source>GitHub</source><target>GitHub</target></segment></unit>
+    <unit id="About.Close"><segment><source>Close</source><target>Close</target></segment></unit>
+
+    <!-- ===== Widgets list window ===== -->
+    <unit id="WidgetsList.Title"><segment><source>Widgets Gallery</source><target>Widgets Gallery</target></segment></unit>
+    <unit id="WidgetsList.Search"><segment><source>Search widgets…</source><target>Search widgets…</target></segment></unit>
+    <unit id="WidgetsList.Add"><segment><source>Add</source><target>Add</target></segment></unit>
+    <unit id="WidgetsList.Manage"><segment><source>Manage</source><target>Manage</target></segment></unit>
+    <unit id="WidgetsList.TrustTitle"><segment><source>Trust this widget?</source><target>Trust this widget?</target></segment></unit>
+    <unit id="WidgetsList.TrustBody"><segment><source>This widget runs arbitrary code from your machine. Only continue if you trust its source.</source><target>This widget runs arbitrary code from your machine. Only continue if you trust its source.</target></segment></unit>
+
+    <!-- ===== Widget data / settings windows ===== -->
+    <unit id="WidgetData.NewWidget"><segment><source>New Widget</source><target>New Widget</target></segment></unit>
+    <unit id="WidgetData.Save"><segment><source>Save</source><target>Save</target></segment></unit>
+    <unit id="WidgetData.WebViewInitFailed"><segment><source>WebView2 init failed</source><target>WebView2 init failed</target></segment></unit>
+    <unit id="WidgetSettings.Title"><segment><source>Widget Settings</source><target>Widget Settings</target></segment></unit>
+
+    <!-- ===== Update prompt / update UI ===== -->
+    <unit id="Update.UpdateAvailableTitle"><segment><source>Update available</source><target>Update available</target></segment></unit>
+    <unit id="Update.Install"><segment><source>Install</source><target>Install</target></segment></unit>
+    <unit id="Update.Later"><segment><source>Later</source><target>Later</target></segment></unit>
+    <unit id="Update.Skip"><segment><source>Skip this version</source><target>Skip this version</target></segment></unit>
+    <unit id="Update.InstalledTitle"><segment><source>Update installed</source><target>Update installed</target></segment></unit>
+    <unit id="Update.NoUpdateTitle"><segment><source>No update available</source><target>No update available</target></segment></unit>
+    <unit id="Update.CheckFailedTitle"><segment><source>Update check failed</source><target>Update check failed</target></segment></unit>
+    <unit id="Update.InvalidDataTitle"><segment><source>Invalid update data</source><target>Invalid update data</target></segment></unit>
+
+    <!-- ===== Exception window (Shared) ===== -->
+    <unit id="Exception.Title"><segment><source>Unexpected error</source><target>Unexpected error</target></segment></unit>
+    <unit id="Exception.Header"><segment><source>Something went wrong</source><target>Something went wrong</target></segment></unit>
+    <unit id="Exception.Description"><segment><source>An unexpected error occurred. The application state might be corrupted. You can continue at your own risk or exit now.</source><target>An unexpected error occurred. The application state might be corrupted. You can continue at your own risk or exit now.</target></segment></unit>
+    <unit id="Exception.Details"><segment><source>Exception details</source><target>Exception details</target></segment></unit>
+    <unit id="Exception.Continue"><segment><source>Continue</source><target>Continue</target></segment></unit>
+    <unit id="Exception.Exit"><segment><source>Exit Application</source><target>Exit Application</target></segment></unit>
+    <unit id="Exception.CopyDetails"><segment><source>Copy details</source><target>Copy details</target></segment></unit>
+
+    <!-- ===== Folder portal ===== -->
+    <unit id="FolderPortal.SelectFolder"><segment><source>Select Folder for Portal</source><target>Select Folder for Portal</target></segment></unit>
+
+    <!-- ===== Loading dialog ===== -->
+    <unit id="Loading.Loading"><segment><source>Loading Maktaby…</source><target>Loading Maktaby…</target></segment></unit>
+
+      <unit id="ColorPicker.Title"><segment><source>Pick color</source><target>Pick color</target></segment></unit>
+    <unit id="Section.Settings.TitleBarBack"><segment><source>Title bar back</source><target>Title bar back</target></segment></unit>
+    <unit id="Section.Settings.TitleBarFore"><segment><source>Title bar fore</source><target>Title bar fore</target></segment></unit>
+    <unit id="Section.Settings.BorderThickness"><segment><source>Border thickness</source><target>Border thickness</target></segment></unit>
+    <unit id="Section.Settings.TitleBarUsesBoxColors"><segment><source>Title bar uses box colors</source><target>Title bar uses box colors</target></segment></unit>
+    <unit id="Section.Settings.DefaultWidgetsTheme"><segment><source>Default Widgets theme</source><target>Default Widgets theme</target></segment></unit>
+    <unit id="Section.Settings.DefaultWidgetsThemeHint"><segment><source>App = follow app theme. Used when widget CanSwitchTheme is null (indeterminate).</source><target>App = follow app theme. Used when widget CanSwitchTheme is null (indeterminate).</target></segment></unit>
+    <unit id="Perf.Title"><segment><source>Performance Monitor</source><target>Performance Monitor</target></segment></unit>
+    <unit id="Perf.Overview"><segment><source>Overview</source><target>Overview</target></segment></unit>
+    <unit id="Perf.AppStatus"><segment><source>App Status</source><target>App Status</target></segment></unit>
+    <unit id="Perf.AppStatusTooltip"><segment><source>Idle when every container is hidden/suspended and no wallpaper is playing.</source><target>Idle when every container is hidden/suspended and no wallpaper is playing.</target></segment></unit>
+    <unit id="Perf.StatusLegend"><segment><source>Green Active: a container is visible or a wallpaper is playing. Amber Idle: everything hidden, suspended or paused.</source><target>Green Active: a container is visible or a wallpaper is playing. Amber Idle: everything hidden, suspended or paused.</target></segment></unit>
+    <unit id="Perf.AppProcess"><segment><source>APP PROCESS (main)</source><target>APP PROCESS (main)</target></segment></unit>
+    <unit id="Perf.PrivateWsTooltip"><segment><source>Resident RAM private to the process.</source><target>Resident RAM private to the process.</target></segment></unit>
+    <unit id="Perf.PrivateWsTooltip2"><segment><source>Private working set: resident RAM private to the process.</source><target>Private working set: resident RAM private to the process.</target></segment></unit>
+    <unit id="Perf.CpuTooltip"><segment><source>Share of total CPU time across all cores, sampled every second.</source><target>Share of total CPU time across all cores, sampled every second.</target></segment></unit>
+    <unit id="Perf.IOThumb"><segment><source>Disk, network and device throughput: read and write bytes per second.</source><target>Disk, network and device throughput: read and write bytes per second.</target></segment></unit>
+    <unit id="Perf.WorkingSetTooltip"><segment><source>Total working set: resident RAM including shared pages (.NET/WPF/Edge DLLs shared with other processes). Higher than private working set by the shared share.</source><target>Total working set: resident RAM including shared pages (.NET/WPF/Edge DLLs shared with other processes). Higher than private working set by the shared share.</target></segment></unit>
+    <unit id="Perf.CommitTooltip"><segment><source>Private bytes: committed virtual memory, including paged-out pages. Always the highest of the three.</source><target>Private bytes: committed virtual memory, including paged-out pages. Always the highest of the three.</target></segment></unit>
+    <unit id="Perf.HandlesTooltip"><segment><source>GDI / USER handle counts. Climbing GDI = handle leak; flat GDI + climbing memory = driver mappings or pools.</source><target>GDI / USER handle counts. Climbing GDI = handle leak; flat GDI + climbing memory = driver mappings or pools.</target></segment></unit>
+    <unit id="Perf.TierTooltip"><segment><source>WPF render tier: HW (tiers 1-2, GPU composition) vs SW fallback (tier 0 — everything rasterized through GDI: high CPU, GDI churn, GBs native). A post-resume drop to SW names the driver, not a handle leak.</source><target>WPF render tier: HW (tiers 1-2, GPU composition) vs SW fallback (tier 0 — everything rasterized through GDI: high CPU, GDI churn, GBs native). A post-resume drop to SW names the driver, not a handle leak.</target></segment></unit>
+    <unit id="Perf.WebView2"><segment><source>WEBVIEW2</source><target>WEBVIEW2</target></segment></unit>
+    <unit id="Perf.WebView2Tooltip"><segment><source>Memory and CPU of our msedgewebview2.exe processes (widgets and HTML wallpapers, including renderer and utility children).</source><target>Memory and CPU of our msedgewebview2.exe processes (widgets and HTML wallpapers, including renderer and utility children).</target></segment></unit>
+    <unit id="Perf.WebView2WsTooltip"><segment><source>Summed private working sets of our msedgewebview2 processes.</source><target>Summed private working sets of our msedgewebview2 processes.</target></segment></unit>
+    <unit id="Perf.WebView2CpuTooltip"><segment><source>Summed CPU share across all our WebView2 processes, sampled every second.</source><target>Summed CPU share across all our WebView2 processes, sampled every second.</target></segment></unit>
+    <unit id="Perf.BrowserVsChild"><segment><source>Browser = top-level process; Child = renderer, GPU or utility process (see breakdown below).</source><target>Browser = top-level process; Child = renderer, GPU or utility process (see breakdown below).</target></segment></unit>
+    <unit id="Perf.Group"><segment><source>GROUP</source><target>GROUP</target></segment></unit>
+    <unit id="Perf.GroupTooltip"><segment><source>Main + WebView2 roll-up for the whole app group.</source><target>Main + WebView2 roll-up for the whole app group.</target></segment></unit>
+    <unit id="Perf.GroupWsTooltip"><segment><source>Main + WebView2 private working sets for the whole app group.</source><target>Main + WebView2 private working sets for the whole app group.</target></segment></unit>
+    <unit id="Perf.GroupCpuTooltip"><segment><source>Main + WebView2 CPU for the whole app group.</source><target>Main + WebView2 CPU for the whole app group.</target></segment></unit>
+    <unit id="Perf.WebView2Processes"><segment><source>WebView2 processes</source><target>WebView2 processes</target></segment></unit>
+    <unit id="Perf.WebView2BreakdownHint"><segment><source>working set per msedgewebview2.exe · Browser = top-level, Child = renderer/GPU/utility</source><target>working set per msedgewebview2.exe · Browser = top-level, Child = renderer/GPU/utility</target></segment></unit>
+    <unit id="Perf.PID"><segment><source>PID</source><target>PID</target></segment></unit>
+    <unit id="Perf.Memory"><segment><source>Memory</source><target>Memory</target></segment></unit>
+    <unit id="Perf.CPU"><segment><source>CPU</source><target>CPU</target></segment></unit>
+    <unit id="Perf.WindowsWidgets"><segment><source>Windows / Widgets</source><target>Windows / Widgets</target></segment></unit>
+    <unit id="Perf.Suspend"><segment><source>Suspend</source><target>Suspend</target></segment></unit>
+    <unit id="Perf.SuspendTooltip"><segment><source>Suspend all container widgets (WebViews and native plugins)</source><target>Suspend all container widgets (WebViews and native plugins)</target></segment></unit>
+    <unit id="Perf.Resume"><segment><source>Resume</source><target>Resume</target></segment></unit>
+    <unit id="Perf.ResumeTooltip"><segment><source>Resume all container widgets (WebViews and native plugins)</source><target>Resume all container widgets (WebViews and native plugins)</target></segment></unit>
+    <unit id="Perf.RescaleTooltip"><segment><source>Rescale baseline vs live primary area: if they disagree with no recent pass, scheduling (not math) is the suspect.</source><target>Rescale baseline vs live primary area: if they disagree with no recent pass, scheduling (not math) is the suspect.</target></segment></unit>
+    <unit id="Perf.Hide"><segment><source>Hide</source><target>Hide</target></segment></unit>
+    <unit id="Perf.Show"><segment><source>Show</source><target>Show</target></segment></unit>
+    <unit id="Perf.Name"><segment><source>Name</source><target>Name</target></segment></unit>
+    <unit id="Perf.Status"><segment><source>Status</source><target>Status</target></segment></unit>
+    <unit id="Perf.ModelBounds"><segment><source>Model Bounds</source><target>Model Bounds</target></segment></unit>
+    <unit id="Perf.AppliedBounds"><segment><source>Applied Bounds</source><target>Applied Bounds</target></segment></unit>
+    <unit id="Perf.Disabled"><segment><source>Disabled — enable the app to show windows</source><target>Disabled — enable the app to show windows</target></segment></unit>
+    <unit id="Perf.PauseWallpaperTooltip"><segment><source>Pause all live wallpapers</source><target>Pause all live wallpapers</target></segment></unit>
+    <unit id="Perf.ResumeWallpaperTooltip"><segment><source>Resume all live wallpapers</source><target>Resume all live wallpapers</target></segment></unit>
+    <unit id="Perf.Monitor"><segment><source>Monitor</source><target>Monitor</target></segment></unit>
+    <unit id="Perf.Bounds"><segment><source>Bounds</source><target>Bounds</target></segment></unit>
+    <unit id="Perf.File"><segment><source>File</source><target>File</target></segment></unit>
+    <unit id="Perf.WebPID"><segment><source>Web PID</source><target>Web PID</target></segment></unit>
+    <unit id="Perf.Preloaded"><segment><source>Preloaded</source><target>Preloaded</target></segment></unit>
+    <unit id="Perf.PausedReason"><segment><source>Paused Reason</source><target>Paused Reason</target></segment></unit>
+    <unit id="Perf.WallpaperDisabled"><segment><source>Live wallpaper is disabled</source><target>Live wallpaper is disabled</target></segment></unit>
+    <unit id="Perf.FooterHint"><segment><source>Idle = all containers hidden/suspended and wallpapers paused: WebViews suspend, playback stops. Memory headline is private working set (resident, private); Working set adds shared pages, Commit adds paged-out.</source><target>Idle = all containers hidden/suspended and wallpapers paused: WebViews suspend, playback stops. Memory headline is private working set (resident, private); Working set adds shared pages, Commit adds paged-out.</target></segment></unit>
+    <unit id="WidgetData.Title"><segment><source>Widget Editor</source><target>Widget Editor</target></segment></unit>
+    <unit id="WidgetData.NameFolder"><segment><source>NAME (FOLDER)</source><target>NAME (FOLDER)</target></segment></unit>
+    <unit id="WidgetData.NamePlaceholder"><segment><source>MyWidget</source><target>MyWidget</target></segment></unit>
+    <unit id="WidgetData.Description"><segment><source>DESCRIPTION</source><target>DESCRIPTION</target></segment></unit>
+    <unit id="WidgetData.DescriptionPlaceholder"><segment><source>Description</source><target>Description</target></segment></unit>
+    <unit id="WidgetData.Version"><segment><source>VERSION</source><target>VERSION</target></segment></unit>
+    <unit id="WidgetData.Author"><segment><source>AUTHOR</source><target>AUTHOR</target></segment></unit>
+    <unit id="WidgetData.AuthorPlaceholder"><segment><source>Author</source><target>Author</target></segment></unit>
+    <unit id="WidgetData.Width"><segment><source>WIDTH</source><target>WIDTH</target></segment></unit>
+    <unit id="WidgetData.Height"><segment><source>HEIGHT</source><target>HEIGHT</target></segment></unit>
+    <unit id="WidgetData.Resizable"><segment><source>Resizable</source><target>Resizable</target></segment></unit>
+    <unit id="WidgetData.AllowNetwork"><segment><source>Allow network</source><target>Allow network</target></segment></unit>
+    <unit id="WidgetData.AllowNetworkTooltip"><segment><source>Allow fetch/XHR/WebSocket</source><target>Allow fetch/XHR/WebSocket</target></segment></unit>
+    <unit id="WidgetData.CanSwitchTheme"><segment><source>Can switch theme</source><target>Can switch theme</target></segment></unit>
+    <unit id="WidgetData.CanSwitchThemeTooltip"><segment><source>Widget adapts to Light/Dark app theme via data-theme (indeterminate = inherited / null)</source><target>Widget adapts to Light/Dark app theme via data-theme (indeterminate = inherited / null)</target></segment></unit>
+    <unit id="WidgetData.Cut"><segment><source>Cut</source><target>Cut</target></segment></unit>
+    <unit id="WidgetData.Copy"><segment><source>Copy</source><target>Copy</target></segment></unit>
+    <unit id="WidgetData.Paste"><segment><source>Paste</source><target>Paste</target></segment></unit>
+    <unit id="WidgetData.SelectAll"><segment><source>Select All</source><target>Select All</target></segment></unit>
+    <unit id="WidgetData.HTML"><segment><source>HTML</source><target>HTML</target></segment></unit>
+    <unit id="WidgetData.CSS"><segment><source>CSS</source><target>CSS</target></segment></unit>
+    <unit id="WidgetData.JavaScript"><segment><source>JavaScript</source><target>JavaScript</target></segment></unit>
+    <unit id="WidgetData.Preview"><segment><source>PREVIEW</source><target>PREVIEW</target></segment></unit>
+    <unit id="WidgetData.Refresh"><segment><source>Refresh</source><target>Refresh</target></segment></unit>
+    <unit id="WidgetData.StorageHint"><segment><source>User widgets stored in %LocalAppData%\Maktaby\UserWidgets</source><target>User widgets stored in %LocalAppData%\Maktaby\UserWidgets</target></segment></unit>
+    <unit id="WidgetData.Saving"><segment><source>Saving widget...</source><target>Saving widget...</target></segment></unit>
+    <unit id="WidgetData.Working"><segment><source>Working...</source><target>Working...</target></segment></unit>
+    <unit id="WidgetsList.Available"><segment><source>Available widgets</source><target>Available widgets</target></segment></unit>
+    <unit id="WidgetsList.NewWidget"><segment><source>New Widget</source><target>New Widget</target></segment></unit>
+    <unit id="WidgetsList.NoPreview"><segment><source>No preview</source><target>No preview</target></segment></unit>
+    <unit id="WidgetsList.Place"><segment><source>Place</source><target>Place</target></segment></unit>
+    <unit id="WidgetsList.Edit"><segment><source>Edit</source><target>Edit</target></segment></unit>
+    <unit id="WidgetsList.OpenFolder"><segment><source>Open widget folder</source><target>Open widget folder</target></segment></unit>
+    <unit id="WidgetsList.Duplicate"><segment><source>Duplicate</source><target>Duplicate</target></segment></unit>
+    <unit id="WidgetsList.RegenThumb"><segment><source>Regenerate Thumbnail</source><target>Regenerate Thumbnail</target></segment></unit>
+    <unit id="WidgetsList.Delete"><segment><source>Delete (user widgets only)</source><target>Delete (user widgets only)</target></segment></unit>
+    <unit id="WidgetsList.Close"><segment><source>Close</source><target>Close</target></segment></unit>
+    <unit id="About.Name"><segment><source>Maktaby</source><target>Maktaby</target></segment></unit>
+    <unit id="About.TaglineShort"><segment><source>Desktop Organizer</source><target>Desktop Organizer</target></segment></unit>
+    <unit id="About.GithubUrl"><segment><source>https://github.com/ezhassen/Maktaby</source><target>https://github.com/ezhassen/Maktaby</target></segment></unit>
+    <unit id="About.Github"><segment><source>Github</source><target>Github</target></segment></unit>
+    <unit id="Update.Title"><segment><source>Update available</source><target>Update available</target></segment></unit>
+    <unit id="Update.Retry"><segment><source>Retry</source><target>Retry</target></segment></unit>
+    <unit id="Update.Now"><segment><source>Update now</source><target>Update now</target></segment></unit>
+    <unit id="Logs.Title"><segment><source>Logs</source><target>Logs</target></segment></unit>
+    <unit id="Logs.File"><segment><source>Log file</source><target>Log file</target></segment></unit>
+    <unit id="Logs.FileTooltip"><segment><source>One file per day; numbered chunks (_001, …) are same-day size rolls</source><target>One file per day; numbered chunks (_001, …) are same-day size rolls</target></segment></unit>
+    <unit id="Logs.Reload"><segment><source>Reload</source><target>Reload</target></segment></unit>
+    <unit id="Logs.ReloadTooltip"><segment><source>Re-read the selected file from disk</source><target>Re-read the selected file from disk</target></segment></unit>
+    <unit id="Logs.FollowTail"><segment><source>Follow tail</source><target>Follow tail</target></segment></unit>
+    <unit id="Logs.FollowTailTooltip"><segment><source>Append new lines as they are written and keep the end visible</source><target>Append new lines as they are written and keep the end visible</target></segment></unit>
+    <unit id="Logs.OpenFolder"><segment><source>Open folder</source><target>Open folder</target></segment></unit>
+    <unit id="Logs.OpenFolderTooltip"><segment><source>Open the logs folder in Explorer</source><target>Open the logs folder in Explorer</target></segment></unit>
+    <unit id="Logs.None"><segment><source>No log file loaded</source><target>No log file loaded</target></segment></unit>
+    <unit id="ColorPicker.Hex"><segment><source>Hex</source><target>Hex</target></segment></unit>
+    <unit id="ColorPicker.InvalidHex"><segment><source>Invalid hex</source><target>Invalid hex</target></segment></unit>
+    <unit id="ColorPicker.R"><segment><source>R</source><target>R</target></segment></unit>
+    <unit id="ColorPicker.G"><segment><source>G</source><target>G</target></segment></unit>
+    <unit id="ColorPicker.B"><segment><source>B</source><target>B</target></segment></unit>
+    <unit id="ColorPicker.A"><segment><source>A</source><target>A</target></segment></unit>
+    <unit id="ColorPicker.Standard"><segment><source>Standard</source><target>Standard</target></segment></unit>
+    <unit id="ColorPicker.Recent"><segment><source>Recent</source><target>Recent</target></segment></unit>
+      <unit id="Tray.EnableApp"><segment><source>Enable Maktaby</source><target>Enable Maktaby</target></segment></unit>
+    <unit id="Tray.DisableApp"><segment><source>Disable Maktaby</source><target>Disable Maktaby</target></segment></unit>
+    <unit id="Tray.Play"><segment><source>Play</source><target>Play</target></segment></unit>
+      <unit id="WidgetMenu.ChangeWidget"><segment><source>Change Widget</source><target>Change Widget</target></segment></unit>
+    <unit id="WidgetMenu.Settings"><segment><source>Widget Settings…</source><target>Widget Settings…</target></segment></unit>
+      <unit id="Box.Roll"><segment><source>Roll</source><target>Roll</target></segment></unit>
+    <unit id="Box.Unroll"><segment><source>Unroll</source><target>Unroll</target></segment></unit>
+      <unit id="Settings.BackupCreated"><segment><source>Backup created.</source><target>Backup created.</target></segment></unit>
+    <unit id="Settings.BackupFailed"><segment><source>Backup failed: {0}</source><target>Backup failed: {0}</target></segment></unit>
+    <unit id="Settings.Restoring"><segment><source>Restoring snapshot…</source><target>Restoring snapshot…</target></segment></unit>
+    <unit id="Settings.RestoreCompleted"><segment><source>Restore completed.</source><target>Restore completed.</target></segment></unit>
+    <unit id="Settings.RestoreFailed"><segment><source>Restore failed: {0}</source><target>Restore failed: {0}</target></segment></unit>
+    <unit id="Settings.ConfirmReset"><segment><source>This will delete all boxes, reset the built-in widgets' settings to their defaults, and rebuild from scratch. Continue?</source><target>This will delete all boxes, reset the built-in widgets' settings to their defaults, and rebuild from scratch. Continue?</target></segment></unit>
+    <unit id="Settings.ConfirmResetTitle"><segment><source>Confirm reset</source><target>Confirm reset</target></segment></unit>
+    <unit id="Settings.SnapshotReset"><segment><source>Snapshot reset.</source><target>Snapshot reset.</target></segment></unit>
+    <unit id="Settings.ResetFailed"><segment><source>Reset failed: {0}</source><target>Reset failed: {0}</target></segment></unit>
+    <unit id="Hint.ContainerHiddenTitle"><segment><source>Container hidden</source><target>Container hidden</target></segment></unit>
+    <unit id="Hint.ContainerHiddenBody"><segment><source>This container is now hidden. To show it again, open Settings → Containers and tick its Visible checkbox.</source><target>This container is now hidden. To show it again, open Settings → Containers and tick its Visible checkbox.</target></segment></unit>
+    <unit id="Hint.DontShowAgain"><segment><source>Do not show this again</source><target>Do not show this again</target></segment></unit>
+    <unit id="WidgetData.NotFound"><segment><source>Widget '{0}' not found.</source><target>Widget '{0}' not found.</target></segment></unit>
+    <unit id="WidgetData.PreviewErrorsTitle"><segment><source>Preview errors</source><target>Preview errors</target></segment></unit>
+    <unit id="WidgetData.PreviewErrors"><segment><source>Cannot save — the preview has errors:</source><target>Cannot save — the preview has errors:</target></segment></unit>
+    <unit id="WidgetData.AlreadyExists"><segment><source>A widget named '{0}' already exists.</source><target>A widget named '{0}' already exists.</target></segment></unit>
+    <unit id="WidgetsList.DeleteNativeConfirm"><segment><source>Delete native widget '{0}'? This cannot be undone.</source><target>Delete native widget '{0}'? This cannot be undone.</target></segment></unit>
+    <unit id="WidgetsList.DeleteWebConfirm"><segment><source>Delete widget '{0}'? This cannot be undone.</source><target>Delete widget '{0}'? This cannot be undone.</target></segment></unit>
+    <unit id="WidgetsList.ReadOnly"><segment><source>App widgets are read-only. Duplicate to edit.</source><target>App widgets are read-only. Duplicate to edit.</target></segment></unit>
+    <unit id="WidgetsList.CannotDeleteBuiltIn"><segment><source>Cannot delete built-in widgets.</source><target>Cannot delete built-in widgets.</target></segment></unit>
+    <unit id="Update.UpdatedFrom"><segment><source>Maktaby was updated from {0} to {1}.</source><target>Maktaby was updated from {0} to {1}.</target></segment></unit>
+    <unit id="Update.UpToDate"><segment><source>Maktaby {0} is the latest version.</source><target>Maktaby {0} is the latest version.</target></segment></unit>
+    <unit id="Update.SkipConfirm"><segment><source>Stop offering Maktaby {0}? A newer release will still be suggested.</source><target>Stop offering Maktaby {0}? A newer release will still be suggested.</target></segment></unit>
+    <unit id="Update.VersionSkippedTitle"><segment><source>Version skipped</source><target>Version skipped</target></segment></unit>
+    <unit id="Update.AlreadySkipped"><segment><source>Maktaby {0} is already on your skip list. A newer release will still be suggested.</source><target>Maktaby {0} is already on your skip list. A newer release will still be suggested.</target></segment></unit>
+    <unit id="Update.CheckFailed"><segment><source>Maktaby could not reach GitHub to check for updates. Check your internet connection and try again.</source><target>Maktaby could not reach GitHub to check for updates. Check your internet connection and try again.</target></segment></unit>
+    <unit id="Common.Error"><segment><source>Error</source><target>Error</target></segment></unit>
+    <unit id="Common.Widgets"><segment><source>Widgets</source><target>Widgets</target></segment></unit>
+    <unit id="Common.No"><segment><source>No</source><target>No</target></segment></unit>
+      <unit id="DesktopSurface.CreateWidget"><segment><source>Create Widget</source><target>Create Widget</target></segment></unit>
+      <unit id="WidgetSettings.NoSettings"><segment><source>This widget has no settings.</source><target>This widget has no settings.</target></segment></unit>
+    <unit id="WidgetSettings.Enabled"><segment><source>Enabled</source><target>Enabled</target></segment></unit>
+    <unit id="WidgetSettings.Number"><segment><source>Number</source><target>Number</target></segment></unit>
+    <unit id="WidgetsList.TrustPlace"><segment><source>Trust &amp; Place</source><target>Trust &amp; Place</target></segment></unit>
+    <unit id="Box.CustomWidget"><segment><source>Custom Widget</source><target>Custom Widget</target></segment></unit>
+      <unit id="Update.InvalidData"><segment><source>Maktaby found a release it cannot display, please check for update manualy to get latest update:</source><target>Maktaby found a release it cannot display, please check for update manualy to get latest update:</target></segment></unit>
+  </file>
+</xliff>

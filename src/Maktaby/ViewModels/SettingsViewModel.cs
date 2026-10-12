@@ -154,6 +154,76 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         set => SetField(ref _selectedThemeOption, value);
     }
 
+    private string _languageOption = "English";
+    /// <summary>Display name of the active language, bound to the Settings language ComboBox.
+    /// Setting it applies the language immediately (live) and persists it — the picker must
+    /// not wait for Save. Named after the model property is not required here (it is a
+    /// display-name list, not the stored code), but <see cref="ResetToDefault"/> maps it
+    /// back to English like the other option properties.</summary>
+    public string LanguageOption
+    {
+        get => _languageOption;
+        set
+        {
+            if (SetField(ref _languageOption, value))
+                ApplyLanguage(value);
+        }
+    }
+
+    /// <summary>Language choices for the ComboBox: the display name of every discovered
+    /// language (from each file's meta.name), English first.</summary>
+    public IReadOnlyList<string> LanguageOptions { get; } = BuildLanguageOptions();
+
+    private static IReadOnlyList<string> BuildLanguageOptions()
+    {
+        try
+        {
+            var langs = Localization.Loc.AvailableLanguages;
+            if (langs.Count == 0) return new[] { "English" };
+            return langs.Select(l => l.DisplayName).ToList();
+        }
+        catch
+        {
+            return new[] { "English" };
+        }
+    }
+
+    /// <summary>Applies a language chosen in the Settings window immediately (live) and
+    /// persists the underlying culture code.</summary>
+    private void ApplyLanguage(string displayName)
+    {
+        try
+        {
+            var match = Localization.Loc.AvailableLanguages
+                .FirstOrDefault(l => string.Equals(l.DisplayName, displayName, StringComparison.OrdinalIgnoreCase));
+            var code = match?.Code ?? "en";
+            App.ApplyLanguage(code);
+        }
+        catch { }
+    }
+
+    /// <summary>Maps a stored culture code (or null = follow OS) to the display name shown
+    /// in the ComboBox. Falls back to the active language's own display name, then English.</summary>
+    private static string ResolveLanguageDisplayName(string? code)
+    {
+        try
+        {
+            var langs = Localization.Loc.AvailableLanguages;
+            if (!string.IsNullOrWhiteSpace(code))
+            {
+                var match = langs.FirstOrDefault(l => string.Equals(l.Code, code, StringComparison.OrdinalIgnoreCase));
+                if (match is not null) return match.DisplayName;
+            }
+            var active = Localization.Loc.Current;
+            if (active is not null) return active.DisplayName;
+            return "English";
+        }
+        catch
+        {
+            return "English";
+        }
+    }
+
     private string _defaultBoxThemeOption = "App";
     public string DefaultBoxThemeOption
     {
@@ -273,6 +343,9 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
             "light" => "Light",
             _ => "System"
         };
+        // Language: display name of the active language (from meta.name). The setter
+        // applies live, so priming it here must NOT re-apply — assign the backing field.
+        _languageOption = ResolveLanguageDisplayName(s.Language);
         DefaultBoxThemeOption = s.DefaultBoxTheme?.Trim().ToLowerInvariant() switch
         {
             "dark" => "Dark",
@@ -356,9 +429,24 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         foreach (var r in Containers) r.Dispose();
     }
 
+    /// <summary>Maps a display name to its stored culture code (English fallback).</summary>
+    private static string? ResolveLanguageCode(string displayName)
+    {
+        try
+        {
+            var match = Localization.Loc.AvailableLanguages
+                .FirstOrDefault(l => string.Equals(l.DisplayName, displayName, StringComparison.OrdinalIgnoreCase));
+            return match?.Code ?? "en";
+        }
+        catch
+        {
+            return "en";
+        }
+    }
+
     /// <summary>
     /// Resets the setting named by <paramref name="parameter"/> to the value declared on the matching
-    /// <see cref="UserSettings"/> property via <see cref="DefaultValueAttribute"/>. The two theme option
+    /// <see cref="UserSettings"/> property via <see cref="DefaultValueAttribute"/>. The theme option
     /// properties are special-cased ("System" / "App") because the model stores them as null.
     /// </summary>
     private void ResetToDefault(object? parameter)
@@ -371,6 +459,13 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         if (name == nameof(SelectedThemeOption))
         {
             SelectedThemeOption = "System";
+            return;
+        }
+
+        // Language reset: back to English (the source language). The setter applies live.
+        if (name == nameof(LanguageOption))
+        {
+            LanguageOption = "English";
             return;
         }
 
@@ -462,6 +557,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         DefaultBoxIconSize = _defaultBoxIconSize,
         UpdateChannel = _updateChannelOption,
         CheckForUpdatesOnStartup = _checkForUpdatesOnStartup,
+        Language = ResolveLanguageCode(_languageOption),
     };
 
     public void Save()
@@ -483,6 +579,10 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         _liveWallpaperPreloadMaxMB = s.LiveWallpaperPreloadMaxMB;
         s.UpdateChannel = _updateChannelOption;
         s.CheckForUpdatesOnStartup = _checkForUpdatesOnStartup;
+        // Language is applied live by the ComboBox setter (ApplyLanguage already persisted
+        // it); mirror it here so Save writes the current choice even if it was set before
+        // this window opened.
+        s.Language = ResolveLanguageCode(_languageOption);
         _settingsService.Save();
         // ApplyTheme applies the theme and registers the system-theme watcher; the boxes are
         // repainted by the ApplicationThemeManager.Changed handler.

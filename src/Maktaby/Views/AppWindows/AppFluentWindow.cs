@@ -45,6 +45,25 @@ public class AppFluentWindow : FluentWindow
             TitleBar.Icon = new ImageIcon { Source = s_appIcon };
         }
         TitleBar.SetBinding(TitleBar.TitleProperty, new Binding(nameof(Title)) { Source = this });
+
+        // Chrome stays LTR always. The content root is mirrored to the language (RTL for
+        // Arabic) by Localization.Loc.ApplyTo, and because the TitleBar is hosted inside that
+        // content tree it would inherit RTL — so pin its own FlowDirection to LTR once it is
+        // realized, and re-pin on every language switch. A local value beats inheritance.
+        Loaded += (_, _) =>
+        {
+            PinTitleBarLtr();
+            Maktaby.Localization.Loc.LanguageChanged += PinTitleBarLtr;
+        };
+        Unloaded += (_, _) => Maktaby.Localization.Loc.LanguageChanged -= PinTitleBarLtr;
+    }
+
+    /// <summary>Forces the title bar (window chrome) to LTR, overriding any RTL inherited
+    /// from a mirrored content root.</summary>
+    private void PinTitleBarLtr()
+    {
+        try { TitleBar.FlowDirection = System.Windows.FlowDirection.LeftToRight; }
+        catch { }
     }
 
 

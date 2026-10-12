@@ -670,13 +670,13 @@ public sealed partial class DesktopSurface : Window
     private void ShowCreateBoxMenu()
     {
         var menu = new ContextMenu();
-        var createItem = new MenuItem { Header = "Create New Box", Icon = Application.Current.FindResource("ItemIcon_NewBox") };
+        var createItem = new MenuItem { Header = Localization.Loc.Get("Tray.NewBox"), Icon = Application.Current.FindResource("ItemIcon_NewBox") };
         createItem.Click += (_, _) => CreateBoxFromMarquee();
         menu.Items.Add(createItem);
-        var createPortalItem = new MenuItem { Header = "Create Folder Portal", Icon = Application.Current.FindResource("ItemIcon_FolderPortal") };
+        var createPortalItem = new MenuItem { Header = Localization.Loc.Get("Tray.NewFolderPortal"), Icon = Application.Current.FindResource("ItemIcon_FolderPortal") };
         createPortalItem.Click += (_, _) => CreateFolderPortalFromMarquee();
         menu.Items.Add(createPortalItem);
-        var createWidgetItem = new MenuItem { Header = "Create Widget", Icon = Application.Current.FindResource("ItemIcon_NewWidget") };
+        var createWidgetItem = new MenuItem { Header = Localization.Loc.Get("DesktopSurface.CreateWidget"), Icon = Application.Current.FindResource("ItemIcon_NewWidget") };
         createWidgetItem.Click += (_, _) => CreateWidgetFromMarquee();
         menu.Items.Add(createWidgetItem);
         menu.Items.Add(new Separator());

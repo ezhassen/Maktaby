@@ -7,6 +7,7 @@
     xmlns:containersControls="clr-namespace:Maktaby.Controls.ContainersControls"
     xmlns:controls="clr-namespace:Maktaby.Controls"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
     Title="Widget"
     Width="300"
     Height="220"
@@ -22,7 +23,7 @@
     <Grid>
         <Grid.ContextMenu>
             <ContextMenu x:Name="WidgetMenu" Opened="WidgetMenu_Opened">
-                <MenuItem Click="Change_Click" Header="Change Widget">
+                <MenuItem Click="Change_Click" Header="{loc:LocKey WidgetMenu.ChangeWidget}">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="ArrowSwap24" />
                     </MenuItem.Icon>
@@ -30,13 +31,13 @@
                 <MenuItem
                     x:Name="WidgetMenuEdit"
                     Click="Edit_Click"
-                    Header="Edit">
+                    Header="{loc:LocKey WidgetsList.Edit}">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="Edit24" />
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator />
-                <MenuItem Click="Duplicate_Click" Header="Duplicate">
+                <MenuItem Click="Duplicate_Click" Header="{loc:LocKey WidgetsList.Duplicate}">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="Copy24" />
                     </MenuItem.Icon>
@@ -44,12 +45,12 @@
                 <MenuItem
                     x:Name="LockMenuItem"
                     Click="Lock_Click"
-                    Header="Lock"
+                    Header="{loc:LocKey Box.MenuLock}"
                     IsCheckable="True" />
                 <MenuItem
                     x:Name="HideMenuItem"
                     Click="Hide_Click"
-                    Header="Hide">
+                    Header="{loc:LocKey Box.MenuHide}">
                     <MenuItem.Icon>
                         <ui:SymbolIcon Symbol="EyeOff24" />
                     </MenuItem.Icon>
@@ -58,7 +59,7 @@
                 <MenuItem
                     Click="Delete_Click"
                     Foreground="OrangeRed"
-                    Header="Delete"
+                    Header="{loc:LocKey Box.MenuDelete}"
                     Icon="{StaticResource ItemIcon_Delete}" />
             </ContextMenu>
         </Grid.ContextMenu>
@@ -75,18 +76,18 @@
         <Grid>
             <Grid.ContextMenu>
                 <ContextMenu x:Name="WidgetMenu">
-                    <MenuItem Click="Edit_Click" Header="Edit">
+                    <MenuItem Click="Edit_Click" Header="{loc:LocKey WidgetsList.Edit}">
                         <MenuItem.Icon>
                             <ui:SymbolIcon Symbol="Edit24" />
                         </MenuItem.Icon>
                     </MenuItem>
-                    <MenuItem Click="Change_Click" Header="Change Widget">
+                    <MenuItem Click="Change_Click" Header="{loc:LocKey WidgetMenu.ChangeWidget}">
                         <MenuItem.Icon>
                             <ui:SymbolIcon Symbol="ArrowSwap24" />
                         </MenuItem.Icon>
                     </MenuItem>
                     <Separator />
-                    <MenuItem Click="Duplicate_Click" Header="Duplicate">
+                    <MenuItem Click="Duplicate_Click" Header="{loc:LocKey WidgetsList.Duplicate}">
                         <MenuItem.Icon>
                             <ui:SymbolIcon Symbol="Copy24" />
                         </MenuItem.Icon>
@@ -94,10 +95,10 @@
                     <MenuItem
                         x:Name="LockMenuItem"
                         Click="Lock_Click"
-                        Header="Lock"
+                        Header="{loc:LocKey Box.MenuLock}"
                         IsCheckable="True" />
                     <Separator />
-                    <MenuItem Click="Delete_Click" Header="Delete">
+                    <MenuItem Click="Delete_Click" Header="{loc:LocKey Box.MenuDelete}">
                         <MenuItem.Icon>
                             <ui:SymbolIcon Symbol="Delete24" />
                         </MenuItem.Icon>
