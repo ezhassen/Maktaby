@@ -1,6 +1,7 @@
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using Maktaby.Core.Services;
+using Maktaby.Helpers;
 using Maktaby.Native;
 using Maktaby.Native.Playback;
 using Maktaby.ViewModels;
@@ -16,6 +17,10 @@ using System.Collections.Specialized;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.Versioning;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Unicode;
 using System.Windows;
 using System.Windows.Interop;
 using static Maktaby.Native.Win32Constants;
@@ -1787,6 +1792,10 @@ public sealed class DesktopManager
         }
         _persistence.DeleteSnapshotFile();
 
+        // Before InitializeAsync: the folder is read when a plugin is attached, so clearing it
+        // first is what makes the rebuilt widgets come up on their declared defaults.
+        ResetWidgetSettings();
+
         _boxRegistry.Clear();
 
         await InitializeAsync();
@@ -2001,8 +2010,43 @@ public sealed class DesktopManager
     public void SaveAsyncFireAndForget() => _ = SaveAsync();
 
     /// <summary>
-    /// Creates a .dbe1 bundle (zip) containing boxes.snapshot.json, UserSettings.json and UserWidgets/
-    /// (the "Backup" action in Settings). The live snapshot is flushed first so the backup is up to date.
+    /// Folder holding per-widget settings for App-source (built-in) native widgets, which ship
+    /// next to the executable and so cannot keep a settings.json inside their own folder. Must stay
+    /// in step with NativeWidgetSettingsService.GetSettingsPath, the only other place this name
+    /// appears.
+    /// </summary>
+    private const string WidgetSettingsEntryPrefix = "WidgetSettings";
+
+    private static string WidgetSettingsDir(string appDataDir) =>
+        Path.Combine(appDataDir, WidgetSettingsEntryPrefix);
+
+    /// <summary>
+    /// Deletes the stored settings of the App-source (built-in) widgets so they fall back to their
+    /// declared defaults. Every file in that folder is derived state — it is only ever read when a
+    /// plugin is attached — so removing the folder is equivalent to clearing it file by file.
+    /// User-source widgets keep their own <c>settings.json</c> inside <c>UserWidgets/&lt;slug&gt;/</c>,
+    /// next to their source, and are deliberately left alone.
+    /// </summary>
+    private static void ResetWidgetSettings()
+    {
+        var dir = WidgetSettingsDir(SettingsService.AppDataDir);
+        if (!Directory.Exists(dir)) return;
+
+        try
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+        catch (Exception ex)
+        {
+            // Best effort: a locked file must not abort the reset of everything else.
+            Logging.Log.Warning("Reset: could not delete '{Path}': {Message}", dir, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Creates a .dbe1 bundle (zip) containing boxes.snapshot.json, UserSettings.json, UserWidgets/
+    /// and WidgetSettings/ (the "Backup" action in Settings). The live snapshot is flushed first so
+    /// the backup is up to date.
     /// </summary>
     public async Task BackupAsync(string destinationPath)
     {
@@ -2012,6 +2056,7 @@ public sealed class DesktopManager
         var snapshotPath = _persistence.SnapshotFilePath;
         var settingsPath = Path.Combine(appDataDir, "UserSettings.json");
         var userWidgetsRoot = Path.Combine(appDataDir, "UserWidgets");
+        var widgetSettingsRoot = WidgetSettingsDir(appDataDir);
 
         var dir = Path.GetDirectoryName(destinationPath);
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
@@ -2030,29 +2075,43 @@ public sealed class DesktopManager
             archive.CreateEntryFromFile(settingsPath, "UserSettings.json", CompressionLevel.Optimal);
         }
 
-        if (Directory.Exists(userWidgetsRoot))
+        AddFolderToArchive(archive, userWidgetsRoot, "UserWidgets");
+        AddFolderToArchive(archive, widgetSettingsRoot, WidgetSettingsEntryPrefix);
+    }
+
+    /// <summary>
+    /// Adds a folder's files under <paramref name="entryPrefix"/>. An existing but empty folder gets
+    /// a bare "<c>Name/</c>" marker entry, recording that the folder existed and was empty. Restore
+    /// overlays rather than replaces, so the marker is informational only.
+    /// </summary>
+    private static void AddFolderToArchive(ZipArchive archive, string root, string entryPrefix)
+    {
+        if (!Directory.Exists(root)) return;
+
+        var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories).ToList();
+        if (files.Count == 0)
         {
-            var files = Directory.EnumerateFiles(userWidgetsRoot, "*", SearchOption.AllDirectories).ToList();
-            if (files.Count == 0)
-            {
-                // Preserve empty folder so restore knows it existed
-                archive.CreateEntry("UserWidgets/");
-            }
-            else
-            {
-                foreach (var file in files)
-                {
-                    var relative = Path.GetRelativePath(userWidgetsRoot, file);
-                    var entryName = Path.Combine("UserWidgets", relative).Replace('\\', '/');
-                    archive.CreateEntryFromFile(file, entryName, CompressionLevel.Optimal);
-                }
-            }
+            archive.CreateEntry(entryPrefix + "/");
+            return;
+        }
+
+        foreach (var file in files)
+        {
+            var relative = Path.GetRelativePath(root, file);
+            var entryName = entryPrefix + "/" + relative.Replace('\\', '/');
+            archive.CreateEntryFromFile(file, entryName, CompressionLevel.Optimal);
         }
     }
 
     /// <summary>
     /// Restores from a .dbe1 bundle or a legacy JSON snapshot file, then re-initializes boxes.
-    /// Bundle restore replaces UserSettings.json and UserWidgets/ before reloading the snapshot.
+    /// <para>
+    /// Widgets and widget settings are overlaid: files in the bundle overwrite their live
+    /// counterparts, and anything the bundle does not mention is kept. Settings are merged key by
+    /// key for the same reason. The box layout is the exception - <c>boxes.snapshot.json</c> is the
+    /// whole desktop, so a bundle that carries one replaces the layout outright.
+    /// </para>
+    /// An already-open Settings window is refreshed so it cannot write the pre-restore values back.
     /// </summary>
     public async Task RestoreAsync(string sourcePath)
     {
@@ -2110,6 +2169,7 @@ public sealed class DesktopManager
         var snapshotPath = _persistence.SnapshotFilePath;
         var settingsPath = Path.Combine(appDataDir, "UserSettings.json");
         var userWidgetsRoot = Path.Combine(appDataDir, "UserWidgets");
+        var widgetSettingsRoot = WidgetSettingsDir(appDataDir);
 
         // Extract bundle to a temp directory first so we can validate before touching live files
         var tempDir = Path.Combine(Path.GetTempPath(), "MaktabyRestore_" + Guid.NewGuid().ToString("N"));
@@ -2134,7 +2194,8 @@ public sealed class DesktopManager
                     // Only allow known prefixes
                     bool allowed = fullName.Equals("boxes.snapshot.json", StringComparison.OrdinalIgnoreCase) ||
                                    fullName.Equals("UserSettings.json", StringComparison.OrdinalIgnoreCase) ||
-                                   fullName.StartsWith("UserWidgets/", StringComparison.OrdinalIgnoreCase);
+                                   fullName.StartsWith("UserWidgets/", StringComparison.OrdinalIgnoreCase) ||
+                                   fullName.StartsWith(WidgetSettingsEntryPrefix + "/", StringComparison.OrdinalIgnoreCase);
                     if (!allowed)
                         continue;
 
@@ -2155,6 +2216,7 @@ public sealed class DesktopManager
             var extractedSnapshot = Path.Combine(tempDir, "boxes.snapshot.json");
             var extractedSettings = Path.Combine(tempDir, "UserSettings.json");
             var extractedWidgets = Path.Combine(tempDir, "UserWidgets");
+            var extractedWidgetSettings = Path.Combine(tempDir, WidgetSettingsEntryPrefix);
 
             DesktopSnapshot? snapshot = null;
             if (File.Exists(extractedSnapshot))
@@ -2164,7 +2226,8 @@ public sealed class DesktopManager
 
             // If bundle has no snapshot we cannot proceed with layout restore,
             // but still restore settings/widgets if present
-            if (snapshot is null && !File.Exists(extractedSettings) && !Directory.Exists(extractedWidgets))
+            if (snapshot is null && !File.Exists(extractedSettings) && !Directory.Exists(extractedWidgets)
+                && !Directory.Exists(extractedWidgetSettings))
             {
                 return;
             }
@@ -2182,14 +2245,20 @@ public sealed class DesktopManager
                 await _persistence.SaveSnapshotAsync(snapshot);
             }
 
-            // Restore UserSettings.json
+            // Merge the bundle's settings over the live file. Copying the file wholesale
+            // would reset every key the bundle does not mention - a setting added
+            // since the backup was taken would snap back to its default.
             if (File.Exists(extractedSettings))
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)!);
-                File.Copy(extractedSettings, settingsPath, overwrite: true);
+                MergeSettingsJson(extractedSettings, settingsPath);
                 try
                 {
                     _settingsService.Load();
+                    // The open Settings window copied every field out of UserSettings when it was
+                    // constructed, and Save() writes those copies back — so without this it would
+                    // show, and then re-save, the pre-restore values.
+                    RefreshOpenSettingsWindow();
                     // Re-apply appearance/theme on UI thread
                     var app = Application.Current;
                     if (app is not null)
@@ -2214,30 +2283,14 @@ public sealed class DesktopManager
                 catch { }
             }
 
-            // Restore UserWidgets: replace entire folder if bundle contained it
-            bool hasWidgetEntries = Directory.Exists(extractedWidgets) &&
-                                    (Directory.EnumerateFileSystemEntries(extractedWidgets).Any() ||
-                                     Directory.Exists(Path.Combine(tempDir, "UserWidgets")));
-            // Also consider empty UserWidgets/ marker
-            if (Directory.Exists(extractedWidgets) || hasWidgetEntries)
-            {
-                try
-                {
-                    if (Directory.Exists(userWidgetsRoot))
-                        Directory.Delete(userWidgetsRoot, recursive: true);
-                }
-                catch { }
+            // Restore UserWidgets: overlay only. A widget present in the bundle is overwritten;
+            // a widget created since the backup was taken is left alone. Restore is a replay
+            // of the backup over current state, not a reset to it.
+            OverlayDirectory(extractedWidgets, userWidgetsRoot);
 
-                if (Directory.Exists(extractedWidgets))
-                {
-                    CopyDirectory(extractedWidgets, userWidgetsRoot);
-                }
-                else
-                {
-                    // Bundle had empty UserWidgets/ marker
-                    Directory.CreateDirectory(userWidgetsRoot);
-                }
-            }
+            // Same for the built-in widgets' settings folder. Absence in the bundle (an older
+            // bundle predating it) and an empty folder in the bundle both mean "nothing to apply".
+            OverlayDirectory(extractedWidgetSettings, widgetSettingsRoot);
 
             if (snapshot is not null)
             {
@@ -2250,6 +2303,121 @@ public sealed class DesktopManager
         }
     }
 
+    /// <summary>
+    /// Copies the bundle's files over the live ones without deleting anything that is not in the
+    /// bundle: a widget (or widget settings file) that only exists locally survives the restore,
+    /// and one that exists in both is overwritten by the bundle's copy.
+    /// </summary>
+    private static void OverlayDirectory(string extractedDir, string liveDir)
+    {
+        if (!Directory.Exists(extractedDir)) return;
+        CopyDirectory(extractedDir, liveDir);
+    }
+
+    /// <summary>
+    /// Applies the settings from a bundle on top of the live <c>UserSettings.json</c>: keys present
+    /// in <paramref name="bundleSettingsPath"/> win, keys absent from it keep their current live
+    /// value. Copying the bundle's file over the live one instead would silently revert every
+    /// setting added since the backup was taken to its default. <para>
+    /// Merges on the raw JSON rather than round-tripping through <c>UserSettings</c>, so unknown
+    /// keys (a newer build's settings, or hand-edits) survive untouched, and keys the bundle
+    /// omits are not resurrected as defaults. Key lookup is case-insensitive to match the
+    /// case-insensitive deserialization in <see cref="SettingsService"/>.
+    /// </para>
+    /// A bundle whose settings cannot be parsed is skipped rather than applied wholesale: we cannot
+    /// know which keys it meant to carry, so overwriting would be the less predictable outcome.
+    /// </summary>
+    private static void MergeSettingsJson(string bundleSettingsPath, string liveSettingsPath)
+    {
+        JsonObject? bundle;
+        try
+        {
+            bundle = JsonNode.Parse(File.ReadAllText(bundleSettingsPath)) as JsonObject;
+        }
+        catch (Exception ex)
+        {
+            Logging.Log.Warning("Restore: bundle UserSettings.json is not readable, leaving live settings alone ({Message})", ex.Message);
+            return;
+        }
+
+        if (bundle is null)
+        {
+            Logging.Log.Warning("Restore: bundle UserSettings.json is not a JSON object, leaving live settings alone");
+            return;
+        }
+
+        JsonObject merged;
+        try
+        {
+            merged = File.Exists(liveSettingsPath)
+                ? JsonNode.Parse(File.ReadAllText(liveSettingsPath)) as JsonObject ?? new JsonObject()
+                : new JsonObject();
+        }
+        catch (Exception ex)
+        {
+            // Unreadable live file: the bundle is then the only source of truth available.
+            Logging.Log.Warning("Restore: live UserSettings.json is unreadable, replacing it from the bundle ({Message})", ex.Message);
+            merged = new JsonObject();
+        }
+
+        foreach (var property in bundle.ToList())
+        {
+            var liveKey = FindKey(merged, property.Key);
+            if (liveKey is null) merged[property.Key] = property.Value?.DeepClone();
+            else merged[liveKey] = property.Value?.DeepClone();
+        }
+
+        File.WriteAllText(liveSettingsPath, merged.ToJsonString(new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+        }));
+    }
+
+    private static string? FindKey(JsonObject obj, string name)
+    {
+        if (obj.ContainsKey(name)) return name;
+        foreach (var key in obj.Select(p => p.Key))
+        {
+            if (string.Equals(key, name, StringComparison.OrdinalIgnoreCase)) return key;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Re-reads the settings fields into the open Settings window, if one exists. A bundle restore
+    /// replaces the <see cref="UserSettings"/> object wholesale, leaving an already-open window
+    /// holding the pre-restore values — and because its Save writes those straight back, a later Save
+    /// would silently undo the restore. Marshals to the UI thread itself.
+    /// </summary>
+    private static void RefreshOpenSettingsWindow()
+    {
+        try
+        {
+            var app = Application.Current;
+            if (app is null) return;
+
+            var windows = app.Windows.OfType<SettingsView>().ToList();
+            if (windows.Count == 0) return;
+
+            void Reload()
+            {
+                foreach (var window in windows)
+                    (window.DataContext as SettingsViewModel)?.ReloadFromSettings();
+            }
+
+            if (app.Dispatcher.CheckAccess()) Reload();
+            else app.Dispatcher.Invoke(Reload);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Copies every file under <paramref name="sourceDir"/> onto the matching path under
+    /// <paramref name="destDir"/>, creating directories as needed. Deliberately non-destructive:
+    /// files that exist only in <paramref name="destDir"/> are left alone, which is what makes a
+    /// bundle restore additive.
+    /// </summary>
     private static void CopyDirectory(string sourceDir, string destDir)
     {
         Directory.CreateDirectory(destDir);

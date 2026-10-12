@@ -250,52 +250,76 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         foreach (var c in _mainVm.Containers)
             Containers.Add(new ContainerVisibilityRow(c, _desktopManager));
         _mainVm.Containers.CollectionChanged += OnContainersChanged;
+
+        LoadFromCurrentState();
+
+        SaveCommand = new RelayCommand(_ => Save());
+        ResetToDefaultCommand = new RelayCommand(ResetToDefault);
+    }
+
+    /// <summary>
+    /// Primes every editable field from live state. Shared by the constructor and
+    /// <see cref="ReloadFromSettings"/>: assigning through the properties (rather than the backing
+    /// fields) makes this safe to call on a bound view-model, because the setters only raise
+    /// PropertyChanged when the value actually changed.
+    /// </summary>
+    private void LoadFromCurrentState()
+    {
         var s = _settingsService.UserSettings;
 
-        _selectedThemeOption = s.SelectedTheme?.Trim().ToLowerInvariant() switch
+        SelectedThemeOption = s.SelectedTheme?.Trim().ToLowerInvariant() switch
         {
             "dark" => "Dark",
             "light" => "Light",
             _ => "System"
         };
-        _defaultBoxThemeOption = s.DefaultBoxTheme?.Trim().ToLowerInvariant() switch
+        DefaultBoxThemeOption = s.DefaultBoxTheme?.Trim().ToLowerInvariant() switch
         {
             "dark" => "Dark",
             "light" => "Light",
             _ => "App"
         };
-        _defaultWebWidgetsThemeOption = s.DefaultWebWidgetsTheme?.Trim().ToLowerInvariant() switch
+        DefaultWebWidgetsThemeOption = s.DefaultWebWidgetsTheme?.Trim().ToLowerInvariant() switch
         {
             "dark" => "Dark",
             "light" => "Light",
             _ => "App"
         };
-        _updateChannelOption = s.UpdateChannel?.Trim() switch
+        UpdateChannel = s.UpdateChannel?.Trim() switch
         {
             "Stable" => "Stable",
             "Beta" => "Beta",
             _ => "Auto"
         };
-        _checkForUpdatesOnStartup = s.CheckForUpdatesOnStartup;
+        CheckForUpdatesOnStartup = s.CheckForUpdatesOnStartup;
 
-        _defaultBoxTransparencyValue = s.DefaultBoxTransparencyValue;
-        _defaultBoxBackColor = s.DefaultBoxBackColor;
-        _defaultBoxForeColor = s.DefaultBoxForeColor;
-        _defaultBoxBorderColor = s.DefaultBoxBorderColor;
-        _defaultBoxTitleBarBackColor = s.DefaultBoxTitleBarBackColor;
-        _defaultBoxTitleBarForeColor = s.DefaultBoxTitleBarForeColor;
-        _defaultBoxBorderThickness = s.DefaultBoxBorderThickness;
-        _defaultBoxTitleBarColorsSameAsBox = s.DefaultBoxTitleBarColorsSameAsBox;
-        _defaultBoxIconSize = s.DefaultBoxIconSize;
-        _liveWallpaperPreloadMaxMB = s.LiveWallpaperPreloadMaxMB;
+        DefaultBoxTransparencyValue = s.DefaultBoxTransparencyValue;
+        DefaultBoxBackColor = s.DefaultBoxBackColor;
+        DefaultBoxForeColor = s.DefaultBoxForeColor;
+        DefaultBoxBorderColor = s.DefaultBoxBorderColor;
+        DefaultBoxTitleBarBackColor = s.DefaultBoxTitleBarBackColor;
+        DefaultBoxTitleBarForeColor = s.DefaultBoxTitleBarForeColor;
+        DefaultBoxBorderThickness = s.DefaultBoxBorderThickness;
+        DefaultBoxTitleBarColorsSameAsBox = s.DefaultBoxTitleBarColorsSameAsBox;
+        DefaultBoxIconSize = s.DefaultBoxIconSize;
+        LiveWallpaperPreloadMaxMB = s.LiveWallpaperPreloadMaxMB;
 
-        _launchOnStartup = StartupManager.IsEnabled;
-
-        _selectedLogLevelOption = (AppJSettings.Instance.LogEventLevel ?? Logging.DefaultLogEventLevel).ToString();
-
-        SaveCommand = new RelayCommand(_ => Save());
-        ResetToDefaultCommand = new RelayCommand(ResetToDefault);
+        // Launch-on-startup and the log level do not live in UserSettings: the first is the real
+        // registry key (UserSettings is not the source of truth), the second is AppJSettings.json.
+        // Neither is carried by a .dbe1 bundle, so re-reading live state keeps the window truthful.
+        LaunchOnStartup = StartupManager.IsEnabled;
+        SelectedLogLevelOption = (AppJSettings.Instance.LogEventLevel ?? Logging.DefaultLogEventLevel).ToString();
     }
+
+    /// <summary>
+    /// Discards the edits staged in this window and re-reads every field from
+    /// <see cref="ISettingsService.UserSettings"/>. A bundle restore replaces the settings object
+    /// wholesale (<see cref="ISettingsService.Load"/>), so a window that was already open keeps
+    /// showing the pre-restore values — and because <see cref="Save"/> writes those fields straight
+    /// back, pressing Save afterwards would silently undo the restore. Must be called on the UI
+    /// thread.
+    /// </summary>
+    public void ReloadFromSettings() => LoadFromCurrentState();
 
     private void OnContainersChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

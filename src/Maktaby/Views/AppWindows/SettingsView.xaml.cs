@@ -662,7 +662,7 @@ public partial class SettingsView : AppWindows.AppFluentWindow
     private async void ResetSnapshot_Click(object sender, RoutedEventArgs e)
     {
         if (!await ShowConfirmAsync(
-            "This will delete all boxes and rebuild from scratch. Continue?",
+            "This will delete all boxes, reset the built-in widgets' settings to their defaults, and rebuild from scratch. Continue?",
             "Confirm reset",
             "Reset", primaryButtonAppearance: ControlAppearance.Danger))
         {
