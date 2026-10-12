@@ -174,6 +174,10 @@ public sealed class DesktopManager
         // so nothing visibly changes - the fix only stops the next save from cross-writing them.
         MigrateSharedWidgetSettings();
 
+        // Collect what no instance points at any more. After migration, never before: the names it
+        // just assigned are referenced, so they cannot be mistaken for orphans.
+        CleanupOrphanedWidgetSettings();
+
         // Build the container view-models off the UI thread (this also kicks off the per-item icon loads)
         // so the splash keeps animating, then add the already-built VMs on the UI thread. The
         // CollectionChanged handler is detached so we don't synchronously spin up windows during the load.
@@ -2030,6 +2034,37 @@ public sealed class DesktopManager
         catch (Exception ex)
         {
             Logging.Log.Warning("Widget settings: migration of shared instance files failed: {Message}", ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Drops per-instance widget settings files that no placed container references: the leftovers of
+    /// deleted instances and of plugins that are no longer installed.
+    /// <para>
+    /// Names are matched across every widget folder rather than per slug. A name collision between two
+    /// slugs therefore keeps a file rather than deleting one that is in use, which is the safe way to
+    /// be wrong here.
+    /// </para>
+    /// </summary>
+    private void CleanupOrphanedWidgetSettings()
+    {
+        try
+        {
+            var referenced = _containers.GetContainers()
+                .Where(c => c.Type == DesktopItemContainerType.NativeWidget && c.SettingsFileName is not null)
+                .Select(c => c.SettingsFileName!)
+                .ToList();
+
+            int removed = _widgetSettingsService.DeleteUnreferencedFiles(referenced);
+            if (removed > 0)
+            {
+                Logging.Log.Information(
+                    "Widget settings: removed {Count} settings file(s) with no instance on the desktop", removed);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logging.Log.Warning("Widget settings: cleanup of unreferenced files failed: {Message}", ex.Message);
         }
     }
 

@@ -65,25 +65,29 @@ public sealed class NativeWidgetSettingsService : INativeWidgetSettingsService
     /// trips through the snapshot file, so it is untrusted input on its way to becoming a path -
     /// anything carrying a separator, "..", or a rooted path falls back to the default file.
     /// </summary>
-    private static string? SanitizeSettingsFileName(string? settingsFileName)
+private static string? SanitizeSettingsFileName(string? settingsFileName)
     {
         if (string.IsNullOrWhiteSpace(settingsFileName)) return null;
+        return IsInstanceFileName(settingsFileName.Trim()) ? settingsFileName.Trim() : null;
+    }
 
-        var name = settingsFileName.Trim();
-        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return null;
-        if (name.Contains('/') || name.Contains('\\')) return null;
-        if (name.Contains("..", StringComparison.Ordinal)) return null;
-        if (!name.StartsWith(InstancePrefix, StringComparison.OrdinalIgnoreCase)) return null;
-        if (!name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return null;
+    /// <summary>True only for a bare generated <c>settings_{8 hex}.json</c> name.</summary>
+    private static bool IsInstanceFileName(string name)
+    {
+        if (name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0) return false;
+        if (name.Contains('/') || name.Contains('\\')) return false;
+        if (name.Contains("..", StringComparison.Ordinal)) return false;
+        if (!name.StartsWith(InstancePrefix, StringComparison.OrdinalIgnoreCase)) return false;
+        if (!name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return false;
 
         string token = name[InstancePrefix.Length..^".json".Length];
-        if (token.Length != InstanceTokenLength) return null;
+        if (token.Length != InstanceTokenLength) return false;
         foreach (char c in token)
         {
-            if (!char.IsAsciiDigit(c) && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F')) return null;
+            if (!char.IsAsciiDigit(c) && !(c >= 'a' && c <= 'f') && !(c >= 'A' && c <= 'F')) return false;
         }
 
-        return name;
+        return true;
     }
 
     public void LoadInto(NativeWidgetInfo info, IWidgetSettingsProvider provider, string? settingsFileName)
@@ -199,6 +203,49 @@ public sealed class NativeWidgetSettingsService : INativeWidgetSettingsService
         {
             // Best effort, same contract as Save.
         }
+    }
+
+    /// <summary>
+    /// Removes per-instance settings files no placed instance points at any more. Both roots are
+    /// scanned: the app-source <c>WidgetSettings/{slug}/</c> folders and the user-source
+    /// <c>UserWidgets/{slug}/</c> folders (in the latter only files matching the generated name
+    /// pattern are considered, so authored widget sources are never touched).
+    /// </summary>
+    public int DeleteUnreferencedFiles(IEnumerable<string> referencedFileNames)
+    {
+        var referenced = new HashSet<string>(referencedFileNames, StringComparer.OrdinalIgnoreCase);
+        int removed = 0;
+
+        foreach (string root in new[]
+                 {
+                     Path.Combine(SettingsService.AppDataDir, AppSettingsDirName),
+                     Path.Combine(SettingsService.AppDataDir, "UserWidgets"),
+                 })
+        {
+            if (!Directory.Exists(root)) continue;
+
+            try
+            {
+                foreach (string slugFolder in Directory.EnumerateDirectories(root))
+                {
+                    foreach (string file in Directory.EnumerateFiles(slugFolder, "settings_*.json"))
+                    {
+                        string name = Path.GetFileName(file);
+                        if (!IsInstanceFileName(name)) continue;
+                        if (referenced.Contains(name)) continue;
+
+                        try { File.Delete(file); removed++; }
+                        catch { /* a locked file stays until the next run */ }
+                    }
+                }
+            }
+            catch
+            {
+                // Best effort: one unreadable root must not stop the others.
+            }
+        }
+
+        return removed;
     }
 
     private static string SanitizeSlug(string slug)

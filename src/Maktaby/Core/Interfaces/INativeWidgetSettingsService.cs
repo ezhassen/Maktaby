@@ -32,4 +32,10 @@ public interface INativeWidgetSettingsService
     /// <summary>Copies one instance's settings file onto another. Used by the duplicate migration so
     /// existing instances keep the values they had been sharing.</summary>
     void CopySettings(NativeWidgetInfo info, string? fromFileName, string? toFileName);
+
+    /// <summary>Deletes per-instance settings files (<c>settings_{token}.json</c>) that no placed
+    /// instance references any more — the leftovers of removed instances and of plugins that are no
+    /// longer installed. The shared <c>settings.json</c> and every non-settings file in a widget
+    /// folder are left alone. Returns how many were removed.</summary>
+    int DeleteUnreferencedFiles(IEnumerable<string> referencedFileNames);
 }
