@@ -148,6 +148,11 @@ public partial class App : Application
         }
 
         BuildTrayAndMenuItems(Services);
+        // Vertically center every MenuItem's submenu on its row via a dynamic placement callback —
+        // a fixed VerticalOffset can't work in both drop directions (it detaches the submenu and
+        // kills hover when the menu opens upward). No-op when no submenu is present.
+        AttachedProperties.MenuItemSubmenuPlacement.Register();
+
         // Subscribe BEFORE the first ApplyTheme. ApplicationThemeManager.Changed is the single
         // place box appearance is applied, so the handler must already be attached when the
         // initial theme lands — otherwise the boxes come up unstyled for the whole session.
@@ -956,10 +961,10 @@ public partial class App : Application
         switch (selectedTheme?.Trim().ToLowerInvariant())
         {
             case "light":
-                ApplicationThemeManager.Apply(ApplicationTheme.Light);//, Wpf.Ui.Controls.WindowBackdropType.Mica
+                ApplicationThemeManager.Apply(ApplicationTheme.Light, backgroundEffect: Wpf.Ui.Controls.WindowBackdropType.Tabbed);//, Wpf.Ui.Controls.WindowBackdropType.Mica
                 break;
             case "dark":
-                ApplicationThemeManager.Apply(ApplicationTheme.Dark);//, Wpf.Ui.Controls.WindowBackdropType.Mica
+                ApplicationThemeManager.Apply(ApplicationTheme.Dark, Wpf.Ui.Controls.WindowBackdropType.Tabbed);//, Wpf.Ui.Controls.WindowBackdropType.Mica
                 break;
             default:
                 // NOT ApplicationThemeManager.ApplySystemTheme(): that resolves the wrong
@@ -971,7 +976,7 @@ public partial class App : Application
                 var systemTheme = Helpers.SystemThemeReader.ReadPreferredAppTheme();
                 if (systemTheme.HasValue)
                 {
-                    ApplicationThemeManager.Apply(systemTheme.Value);
+                    ApplicationThemeManager.Apply(systemTheme.Value, backgroundEffect: Wpf.Ui.Controls.WindowBackdropType.Tabbed);
                 }
                 else
                 {

@@ -305,52 +305,50 @@
     <ControlTemplate x:Key="FixedSubmenuItemTemplate" TargetType="MenuItem">
         <Border
             x:Name="Border"
-            Margin="4,2,4,2"
+            Margin="4,1,4,1"
             Background="Transparent"
-            CornerRadius="5">
-            <Grid Margin="8,7,8,7">
+            CornerRadius="4">
+            <Grid Margin="8,6,8,6">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="22" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
 
-                <!--  Modern check box: 16x16 rounded, bigger glyph, visible only when checked.  -->
-                <Grid
-                    x:Name="CheckContainer"
+                <!--
+                    Check box: 20x20 rounded, own column (never overlaps icon). Uses WPF-UI's
+                    themed CheckBoxBackground/CheckBoxBorderBrush (not hardcoded) so it matches
+                    the stock checkbox exactly. Visible only when IsCheckable.
+                -->
+                <Border
+                    x:Name="CheckBoxIconBorder"
                     Grid.Column="0"
-                    Width="16"
-                    Height="16"
+                    Width="20"
+                    Height="20"
                     Margin="0,0,6,0"
-                    HorizontalAlignment="Center"
                     VerticalAlignment="Center"
+                    Background="{DynamicResource CheckBoxBackground}"
+                    BorderBrush="{DynamicResource CheckBoxBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
                     Visibility="Collapsed">
-                    <Border
-                        x:Name="CheckBox"
-                        Background="#2B88D8"
-                        BorderBrush="#2B88D8"
-                        BorderThickness="1"
-                        CornerRadius="4" />
-                    <Path
-                        x:Name="CheckGlyph"
-                        Width="10"
-                        Height="8"
+                    <TextBlock
+                        x:Name="CheckBoxIcon"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Data="M1,4.8 L4.2,7.6 L9.2,1.2"
-                        Stretch="None"
-                        Stroke="White"
-                        StrokeEndLineCap="Round"
-                        StrokeStartLineCap="Round"
-                        StrokeThickness="1.7" />
-                </Grid>
+                        FontFamily="{DynamicResource FluentSystemIcons}"
+                        FontSize="16"
+                        Text=""
+                        TextAlignment="Center" />
+                </Border>
 
                 <ContentPresenter
-                    x:Name="IconPresenter"
+                    x:Name="Icon"
                     Grid.Column="1"
-                    Margin="0,0,7,0"
+                    Margin="0,0,6,0"
                     VerticalAlignment="Center"
-                    Content="{TemplateBinding Icon}" />
+                    Content="{TemplateBinding Icon}"
+                    KeyboardNavigation.IsTabStop="False" />
 
                 <ContentPresenter
                     x:Name="Header"
@@ -361,95 +359,87 @@
             </Grid>
         </Border>
         <ControlTemplate.Triggers>
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsMouseOver" Value="True" />
+                    <Condition Property="IsPressed" Value="False" />
+                </MultiTrigger.Conditions>
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuBarItemBackgroundSelected}" />
+            </MultiTrigger>
             <Trigger Property="IsHighlighted" Value="True">
                 <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuBarItemBackgroundSelected}" />
+            </Trigger>
+            <Trigger Property="Icon" Value="{x:Null}">
+                <Setter TargetName="Icon" Property="Visibility" Value="Collapsed" />
+            </Trigger>
+            <Trigger Property="IsCheckable" Value="True">
+                <Setter TargetName="CheckBoxIconBorder" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CheckBoxIcon" Property="Text" Value="&#xF294;" />
             </Trigger>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
             </Trigger>
-            <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="CheckContainer" Property="Visibility" Value="Visible" />
-            </Trigger>
-            <Trigger Property="Icon" Value="{x:Null}">
-                <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed" />
-                <Setter TargetName="IconPresenter" Property="Margin" Value="0" />
-            </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
+    <!--
+        Submenu header — WPF-UI's EXACT template (from its MenuItem.xaml source), with ONLY the
+        DropShadowEffect removed. The details that make it work and that I previously got wrong:
+        * two-row Grid, Border in Row 1, Popup in Row 1;
+        * Popup Placement="Right", PlacementTarget=MenuItemContent (the inner Grid, NOT Border),
+        VerticalOffset="-20";
+        * SubmenuBorder Margin="12,10,12,30" — those transparent margins are the HIT-TESTABLE
+        BRIDGE that keeps the submenu open as the cursor crosses from the parent item; without
+        them the submenu closes on hover. Padding 0,3,0,3, CornerRadius 8.
+        Do NOT "simplify" this into a single row or change the placement — it breaks hover.
+    -->
     <ControlTemplate x:Key="FixedSubmenuHeaderTemplate" TargetType="MenuItem">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
+
             <Border
                 x:Name="Border"
                 Grid.Row="1"
-                Margin="4,2,4,2"
+                Margin="4,1,4,1"
                 Background="Transparent"
-                CornerRadius="5">
-                <Grid Margin="8,7,8,7">
+                CornerRadius="4">
+                <Grid x:Name="MenuItemContent" Margin="8,6,8,6">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="22" />
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
-                    <Grid
-                        x:Name="CheckContainer"
-                        Grid.Column="0"
-                        Width="16"
-                        Height="16"
-                        Margin="0,0,6,0"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Visibility="Collapsed">
-                        <Border
-                            x:Name="CheckBox"
-                            Background="#2B88D8"
-                            BorderBrush="#2B88D8"
-                            BorderThickness="1"
-                            CornerRadius="4" />
-                        <Path
-                            x:Name="CheckGlyph"
-                            Width="10"
-                            Height="8"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Data="M1,4.8 L4.2,7.6 L9.2,1.2"
-                            Stretch="None"
-                            Stroke="White"
-                            StrokeEndLineCap="Round"
-                            StrokeStartLineCap="Round"
-                            StrokeThickness="1.7" />
-                    </Grid>
-
                     <ContentPresenter
-                        x:Name="IconPresenter"
-                        Grid.Column="1"
-                        Margin="0,0,7,0"
+                        x:Name="Icon"
+                        Grid.Column="0"
+                        Margin="0,0,6,0"
                         VerticalAlignment="Center"
-                        Content="{TemplateBinding Icon}" />
+                        Content="{TemplateBinding Icon}"
+                        KeyboardNavigation.IsTabStop="False" />
 
                     <ContentPresenter
                         x:Name="Header"
-                        Grid.Column="2"
+                        Grid.Column="1"
                         VerticalAlignment="Center"
                         ContentSource="Header"
                         RecognizesAccessKey="True" />
 
-                    <Path
-                        Grid.Column="3"
-                        Margin="10,0,0,0"
+                    <ui:SymbolIcon
+                        x:Name="Chevron"
+                        Grid.Column="2"
+                        Margin="6,0,0,0"
                         VerticalAlignment="Center"
-                        Data="M0,0 L5,4 L0,8 Z"
-                        Fill="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=Foreground}" />
+                        FontSize="{TemplateBinding FontSize}"
+                        Symbol="ChevronRight20" />
                 </Grid>
             </Border>
 
-            <!--  Anchored RIGHT of the parent row: fixes the bottom-open overlap bug. No DropShadowEffect.  -->
             <Popup
                 x:Name="Popup"
                 Grid.Row="1"
@@ -457,43 +447,154 @@
                 Focusable="False"
                 IsOpen="{TemplateBinding IsSubmenuOpen}"
                 Placement="Right"
-                PlacementTarget="{Binding ElementName=Border}"
+                PlacementTarget="{Binding ElementName=MenuItemContent}"
                 PopupAnimation="None">
-                <Border
-                    Padding="12,6,12,6"
-                    Background="{DynamicResource FlyoutBackground}"
-                    BorderBrush="{DynamicResource FlyoutBorderBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    SnapsToDevicePixels="True">
-                    <ScrollViewer CanContentScroll="True">
-                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
-                    </ScrollViewer>
-                </Border>
+                <!--
+                    Wrapper Grid carries the hit-testable transparent margin (Background=Transparent
+                    is hit-testable; a null background is click-through). This is the bridge that
+                    keeps the submenu open as the cursor crosses from the parent item — WPF-UI's
+                    original used a DropShadowEffect to fill this area, but the shadow also broke
+                    placement, so a transparent hit-testable surface replaces it. Vertical placement
+                    is set dynamically by MenuItemSubmenuPlacement (top-aligned, direction-safe).
+                -->
+                <Grid Margin="12,10,12,30" Background="Transparent">
+                    <Border
+                        x:Name="SubmenuBorder"
+                        Padding="0,3,0,3"
+                        Background="{DynamicResource FlyoutBackground}"
+                        BorderBrush="{DynamicResource FlyoutBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8"
+                        SnapsToDevicePixels="True">
+                        <ScrollViewer CanContentScroll="True">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </ScrollViewer>
+                    </Border>
+                </Grid>
             </Popup>
         </Grid>
         <ControlTemplate.Triggers>
+            <Trigger Property="Icon" Value="{x:Null}">
+                <Setter TargetName="Icon" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="Icon" Property="Margin" Value="0" />
+            </Trigger>
             <Trigger Property="IsHighlighted" Value="True">
                 <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuBarItemBackgroundSelected}" />
             </Trigger>
+            <MultiTrigger>
+                <MultiTrigger.Conditions>
+                    <Condition Property="IsMouseOver" Value="True" />
+                    <Condition Property="IsPressed" Value="False" />
+                </MultiTrigger.Conditions>
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource MenuBarItemBackgroundSelected}" />
+            </MultiTrigger>
             <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
-            </Trigger>
-            <Trigger Property="IsChecked" Value="True">
-                <Setter TargetName="CheckContainer" Property="Visibility" Value="Visible" />
-            </Trigger>
-            <Trigger Property="Icon" Value="{x:Null}">
-                <Setter TargetName="IconPresenter" Property="Visibility" Value="Collapsed" />
-                <Setter TargetName="IconPresenter" Property="Margin" Value="0" />
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
     <!--
-        Role-routed application of the fixed templates. Only Submenu* roles are replaced; top-level
-        roles keep the WPF-UI defaults (context menus never use them anyway).
+        Modern top-level MenuItem template.
+        
+        Stock WPF-UI leaves Role="TopLevelItem"/"TopLevelHeader" (the direct rows of a ContextMenu —
+        the box right-click menu, the tray menu) on its own templates, which are visually
+        inconsistent with the rounded, check-gutter submenu rows above (square corners, different
+        padding/hover). This template makes every level look identical: a rounded 5px hover pill,
+        a modern 16x16 check box, a leading icon gutter, and Win11 padding (8,7,8,7).
+        MUST be declared before the role-routed style below that references it via StaticResource
+        (StaticResource cannot forward-reference within a dictionary).
     -->
-    <Style TargetType="MenuItem">
+    <ControlTemplate x:Key="FixedTopLevelItemTemplate" TargetType="MenuItem">
+        <Border
+            x:Name="Border"
+            Margin="4,2"
+            Background="Transparent"
+            CornerRadius="4">
+            <Grid Margin="10,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!--
+                    Check box: 20x20 rounded, own column (never overlaps icon). WPF-UI's themed
+                    CheckBoxBackground/CheckBoxBorderBrush + Fluent checkmark glyph.
+                -->
+                <Border
+                    x:Name="CheckBoxIconBorder"
+                    Grid.Column="0"
+                    Width="20"
+                    Height="20"
+                    Margin="0,0,6,0"
+                    VerticalAlignment="Center"
+                    Background="{DynamicResource CheckBoxBackground}"
+                    BorderBrush="{DynamicResource CheckBoxBorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Visibility="Collapsed">
+                    <TextBlock
+                        x:Name="CheckBoxIcon"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontFamily="{DynamicResource FluentSystemIcons}"
+                        FontSize="16"
+                        Text=""
+                        TextAlignment="Center" />
+                </Border>
+
+                <!--  Leading icon (the app's ItemIcon_* SymbolIcons).  -->
+                <ContentPresenter
+                    x:Name="Icon"
+                    Grid.Column="1"
+                    Margin="0,0,6,0"
+                    VerticalAlignment="Center"
+                    Content="{TemplateBinding Icon}"
+                    KeyboardNavigation.IsTabStop="False" />
+
+                <ContentPresenter
+                    x:Name="Header"
+                    Grid.Column="2"
+                    VerticalAlignment="Center"
+                    ContentSource="Header"
+                    RecognizesAccessKey="True" />
+            </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+            <!--
+                Hover/pressed: theme-aware subtle fill (WPF-UI's own menu highlight), not a
+                hardcoded white wash — so it reads on both the dark and light flyout.
+            -->
+            <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource SubtleFillColorSecondary}" />
+            </Trigger>
+            <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="Border" Property="Background" Value="{DynamicResource SubtleFillColorTertiary}" />
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}" />
+            </Trigger>
+            <Trigger Property="IsCheckable" Value="True">
+                <Setter TargetName="CheckBoxIconBorder" Property="Visibility" Value="Visible" />
+            </Trigger>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CheckBoxIcon" Property="Text" Value="&#xF294;" />
+            </Trigger>
+            <Trigger Property="Icon" Value="{x:Null}">
+                <Setter TargetName="Icon" Property="Visibility" Value="Collapsed" />
+                <Setter TargetName="Icon" Property="Margin" Value="0" />
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!--
+        Role-routed application of the fixed templates. Submenu* roles get the anchored submenu
+        templates; the two top-level roles (TopLevelItem / TopLevelHeader — the direct rows of a
+        ContextMenu) get the modern templates so every level looks identical. NOTE: the WPF
+        MenuItemRole enum has NO "MenuItem" value — the plain clickable row is "TopLevelItem".
+    -->
+    <Style x:Key="MenuItemFix01" TargetType="MenuItem">
         <Style.Triggers>
             <Trigger Property="Role" Value="SubmenuHeader">
                 <Setter Property="Template" Value="{StaticResource FixedSubmenuHeaderTemplate}" />
@@ -501,7 +602,70 @@
             <Trigger Property="Role" Value="SubmenuItem">
                 <Setter Property="Template" Value="{StaticResource FixedSubmenuItemTemplate}" />
             </Trigger>
+            <Trigger Property="Role" Value="TopLevelItem">
+                <Setter Property="Template" Value="{StaticResource FixedTopLevelItemTemplate}" />
+            </Trigger>
+            <Trigger Property="Role" Value="TopLevelHeader">
+                <Setter Property="Template" Value="{StaticResource FixedSubmenuHeaderTemplate}" />
+            </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!--
+        Modern ContextMenu chrome (Win11 compact look).
+        
+        Rounded 8px corners, no hard border (the edge is defined by the flyout background against
+        its surroundings), app-theme background via FlyoutBackground. IMPORTANT: NO Effect/DropShadow
+        on this Border — a shadow here extends the hit-testable surface beyond the menu bounds,
+        which breaks the MenuItem submenu mouse-tracking (the submenu closes as the cursor crosses
+        the shadow on its way to the submenu). The menu stays flat; shadow is intentionally omitted.
+        Implicit, so every ContextMenu in the app (box menu, tray, editor menu, ...) picks it up.
+        Items keep their own per-role templates (routed above); this only styles the frame.
+    -->
+    <Style x:Key="ContextMenuFix01" TargetType="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource FlyoutBackground}" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="FontFamily" Value="Segoe UI" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}"
+                        CornerRadius="8"
+                        SnapsToDevicePixels="True">
+                        <ScrollViewer CanContentScroll="True">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle" />
+                        </ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        Separator between menu groups: a thin, inset hairline that matches the modern menu look
+        (stock WPF-UI separators are full-width and heavier).
+    -->
+    <Style TargetType="Separator">
+        <Setter Property="Margin" Value="10,4,10,4" />
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource FlyoutBorderBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Border Height="{TemplateBinding Height}" Background="{TemplateBinding Background}" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!--
