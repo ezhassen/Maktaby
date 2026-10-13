@@ -19,6 +19,13 @@ public class UserSettings
     [Category("Appearance"), DefaultValue(null)]
     public string? Language { get; set; }
 
+    /// <summary>
+    /// Window backdrop effect for app windows: "auto" (let WPF-UI decide per theme),
+    /// "none", "mica", "acrylic", or "tabbed". null/unknown = "auto".
+    /// </summary>
+    [Category("Appearance"), DefaultValue("mica")]
+    public string? WindowBackdropType { get; set; }
+
     public ApplicationTheme GetSelectedTheme()
     {
         switch (SelectedTheme?.Trim().ToLowerInvariant())
@@ -38,6 +45,23 @@ public class UserSettings
         {
             ApplicationTheme.Light or ApplicationTheme.Dark => false,
             _ => true
+        };
+    }
+
+    /// <summary>
+    /// Resolves <see cref="WindowBackdropType"/> to a WPF-UI backdrop. null/unknown → Mica (the
+    /// app default); explicit choices map to their enum value.
+    /// </summary>
+    public Wpf.Ui.Controls.WindowBackdropType GetWindowBackdropType()
+    {
+        return WindowBackdropType?.Trim().ToLowerInvariant() switch
+        {
+            "none" => Wpf.Ui.Controls.WindowBackdropType.None,
+            "mica" => Wpf.Ui.Controls.WindowBackdropType.Mica,
+            "acrylic" => Wpf.Ui.Controls.WindowBackdropType.Acrylic,
+            "tabbed" => Wpf.Ui.Controls.WindowBackdropType.Tabbed,
+            "auto" => Wpf.Ui.Controls.WindowBackdropType.Auto,
+            _ => Wpf.Ui.Controls.WindowBackdropType.Mica,
         };
     }
 

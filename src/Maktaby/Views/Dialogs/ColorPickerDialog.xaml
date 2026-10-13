@@ -13,7 +13,7 @@
     ExtendsContentIntoTitleBar="True"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
-    WindowBackdropType="Mica"
+    WindowBackdropType="Tabbed"
     WindowCornerPreference="Round"
     WindowStartupLocation="CenterOwner"
     WindowStyle="None">

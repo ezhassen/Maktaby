@@ -92,6 +92,10 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     // App theme: "System" follows the Windows light/dark setting (stored as null).
     public IReadOnlyList<string> AppThemeOptions { get; } = new[] { "System", "Dark", "Light" };
 
+    // Window backdrop effect: "Auto" lets WPF-UI pick per theme (stored as null); the rest map
+    // to their WPF-UI WindowBackdropType names.
+    public IReadOnlyList<string> WindowBackdropOptions { get; } = new[] { "Auto", "None", "Mica", "Acrylic", "Tabbed" };
+
     // Box theme: "App" inherits the app theme (stored as null); otherwise an explicit dark/light override.
     public IReadOnlyList<string> BoxThemeOptions { get; } = new[] { "App", "Dark", "Light" };
 
@@ -153,6 +157,41 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         get => _selectedThemeOption;
         set => SetField(ref _selectedThemeOption, value);
     }
+
+    private string _windowBackdropOption = "Mica";
+    /// <summary>Window backdrop effect, bound to the Settings ComboBox. Setting it re-applies the
+    /// theme live so already-open windows pick up the new backdrop immediately.</summary>
+    public string WindowBackdropOption
+    {
+        get => _windowBackdropOption;
+        set
+        {
+            if (SetField(ref _windowBackdropOption, value))
+            {
+                var s = _settingsService.UserSettings;
+                s.WindowBackdropType = OptionToBackdrop(value);
+                _settingsService.Save();
+                App.ApplyTheme(s.SelectedTheme);
+            }
+        }
+    }
+
+    /// <summary>Maps a backdrop display name to its stored value ("Auto" → "auto"; else lowercased).</summary>
+    private static string? OptionToBackdrop(string option)
+        => option?.Trim().ToLowerInvariant();
+
+    /// <summary>Maps a stored backdrop value to its display name (null → "Mica", the app default;
+    /// unknown → "Mica").</summary>
+    private static string BackdropToOption(string? stored)
+        => stored?.Trim().ToLowerInvariant() switch
+        {
+            "none" => "None",
+            "mica" => "Mica",
+            "acrylic" => "Acrylic",
+            "tabbed" => "Tabbed",
+            "auto" => "Auto",
+            _ => "Mica"
+        };
 
     private string _languageOption = "English";
     /// <summary>Display name of the active language, bound to the Settings language ComboBox.
@@ -350,6 +389,9 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
             "light" => "Light",
             _ => "System"
         };
+        // Backdrop: display name from the stored value. The setter applies live, so prime the
+        // backing field here (do NOT re-apply on load).
+        _windowBackdropOption = BackdropToOption(s.WindowBackdropType);
         // Language: display name of the active language (from meta.name). The setter
         // applies live, so priming it here must NOT re-apply — assign the backing field.
         _languageOption = ResolveLanguageDisplayName(s.Language);
@@ -472,6 +514,13 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // Backdrop reset: back to Mica (the app default). The setter applies live.
+        if (name == nameof(WindowBackdropOption))
+        {
+            WindowBackdropOption = "Mica";
+            return;
+        }
+
         // Language reset: back to System (follow the OS language). The setter applies live.
         if (name == nameof(LanguageOption))
         {
@@ -554,6 +603,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     public UserSettings ToUserSettings() => new UserSettings
     {
         SelectedTheme = OptionToStored(_selectedThemeOption),
+        WindowBackdropType = OptionToBackdrop(_windowBackdropOption),
         DefaultBoxTheme = OptionToStored(_defaultBoxThemeOption),
         DefaultWebWidgetsTheme = OptionToStored(_defaultWebWidgetsThemeOption),
         DefaultBoxTransparencyValue = _defaultBoxTransparencyValue,
@@ -574,6 +624,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     {
         var s = _settingsService.UserSettings;
         s.SelectedTheme = OptionToStored(_selectedThemeOption);
+        s.WindowBackdropType = OptionToBackdrop(_windowBackdropOption);
         s.DefaultBoxTheme = OptionToStored(_defaultBoxThemeOption);
         s.DefaultWebWidgetsTheme = OptionToStored(_defaultWebWidgetsThemeOption);
         s.DefaultBoxTransparencyValue = _defaultBoxTransparencyValue;

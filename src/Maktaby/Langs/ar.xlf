@@ -344,5 +344,7 @@
       <unit id="WidgetSettings.ResetToDefaults"><segment><source>Reset to defaults</source><target>إعادة التعيين إلى الافتراضي</target></segment></unit>
       <unit id="Loading.Title"><segment><source>Maktaby - Desktop Organizer</source><target>مكتبي - منظم سطح المكتب</target></segment></unit>
     <unit id="Loading.Cancel"><segment><source>Cancel</source><target>إلغاء</target></segment></unit>
+      <unit id="Section.Settings.WindowBackdrop"><segment><source>Window Backdrop</source><target>خلفية النافذة</target></segment></unit>
+    <unit id="Section.Settings.WindowBackdropHint"><segment><source>Window Backdrop</source><target>تأثير خلفية نوافذ التطبيق.</target></segment></unit>
   </file>
 </xliff>

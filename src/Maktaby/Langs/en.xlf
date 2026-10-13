@@ -357,5 +357,7 @@
       <unit id="WidgetSettings.ResetToDefaults"><segment><source>Reset to defaults</source><target>Reset to defaults</target></segment></unit>
       <unit id="Loading.Title"><segment><source>Maktaby - Desktop Organizer</source><target>Maktaby - Desktop Organizer</target></segment></unit>
     <unit id="Loading.Cancel"><segment><source>Cancel</source><target>Cancel</target></segment></unit>
+      <unit id="Section.Settings.WindowBackdrop"><segment><source>Window Backdrop</source><target>Window Backdrop</target></segment></unit>
+    <unit id="Section.Settings.WindowBackdropHint"><segment><source>Window background effect for app windows.</source><target>Window background effect for app windows.</target></segment></unit>
   </file>
 </xliff>

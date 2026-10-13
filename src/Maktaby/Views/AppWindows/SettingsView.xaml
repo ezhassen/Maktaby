@@ -174,6 +174,27 @@
                             </StackPanel>
 
                             <StackPanel Margin="0,0,0,12">
+                                <TextBlock FontWeight="Bold" Text="{loc:LocKey Section.Settings.WindowBackdrop}" />
+                                <TextBlock
+                                    Margin="0,0,0,4"
+                                    FontSize="11"
+                                    Foreground="#999999"
+                                    Text="{loc:LocKey Section.Settings.WindowBackdropHint}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <ComboBox
+                                        Width="200"
+                                        ItemsSource="{Binding WindowBackdropOptions}"
+                                        SelectedItem="{Binding WindowBackdropOption, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ui:Button
+                                        Command="{Binding ResetToDefaultCommand}"
+                                        CommandParameter="WindowBackdropOption"
+                                        Style="{StaticResource ResetButton}">
+                                        <ui:SymbolIcon Symbol="ArrowCounterclockwise24" />
+                                    </ui:Button>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Margin="0,0,0,12">
                                 <TextBlock FontWeight="Bold" Text="{loc:LocKey Section.Settings.DefaultBoxTransparency}" />
                                 <TextBlock
                                     Margin="0,0,0,4"

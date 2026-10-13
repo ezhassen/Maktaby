@@ -953,18 +953,20 @@ public partial class App : Application
     /// Applies the application theme (Dark / Light / System) to the whole app via WPF-UI's
     /// <see cref="ApplicationThemeManager"/>. <paramref name="selectedTheme"/> uses the same
     /// string convention as <see cref="Settings.UserSettings.SelectedTheme"/> ("dark", "light",
-    /// or <c>null</c>/anything else for the system theme).
+    /// or <c>null</c>/anything else for the system theme). The window backdrop follows
+    /// <see cref="Settings.UserSettings.WindowBackdropType"/> (default "mica").
     /// </summary>
     [SupportedOSPlatform("windows10.0.14393")]
     public static void ApplyTheme(string? selectedTheme)
     {
+        var backdrop = Services.GetRequiredService<ISettingsService>().UserSettings.GetWindowBackdropType();
         switch (selectedTheme?.Trim().ToLowerInvariant())
         {
             case "light":
-                ApplicationThemeManager.Apply(ApplicationTheme.Light, backgroundEffect: Wpf.Ui.Controls.WindowBackdropType.Tabbed);//, Wpf.Ui.Controls.WindowBackdropType.Mica
+                ApplicationThemeManager.Apply(ApplicationTheme.Light, backgroundEffect: backdrop);
                 break;
             case "dark":
-                ApplicationThemeManager.Apply(ApplicationTheme.Dark, Wpf.Ui.Controls.WindowBackdropType.Tabbed);//, Wpf.Ui.Controls.WindowBackdropType.Mica
+                ApplicationThemeManager.Apply(ApplicationTheme.Dark, backdrop);
                 break;
             default:
                 // NOT ApplicationThemeManager.ApplySystemTheme(): that resolves the wrong
@@ -976,10 +978,13 @@ public partial class App : Application
                 var systemTheme = Helpers.SystemThemeReader.ReadPreferredAppTheme();
                 if (systemTheme.HasValue)
                 {
-                    ApplicationThemeManager.Apply(systemTheme.Value, backgroundEffect: Wpf.Ui.Controls.WindowBackdropType.Tabbed);
+                    ApplicationThemeManager.Apply(systemTheme.Value, backgroundEffect: backdrop);
                 }
                 else
                 {
+                    // High contrast: ApplySystemTheme has no backdrop overload; the backdrop is
+                    // applied per-window by AppFluentWindow from the same setting, so new/opened
+                    // windows still get it.
                     ApplicationThemeManager.ApplySystemTheme();
                 }
                 break;

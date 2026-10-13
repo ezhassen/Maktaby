@@ -2,13 +2,15 @@ using System;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media.Imaging;
+using Microsoft.Extensions.DependencyInjection;
+using Maktaby.Core.Interfaces;
 using Wpf.Ui.Controls;
 
 namespace Maktaby.Views.AppWindows;
 
 /// <summary>
 /// Shared base for every <c>Views/AppWindows/</c> window. Applies the FluentWindow chrome
-/// contract — <c>Mica</c> backdrop, extended titlebar, round corners — which is required
+/// contract — <c>Acrylic</c> backdrop, extended titlebar, round corners — which is required
 /// for backgrounds/controls to follow live app-theme switches (without it an open window
 /// keeps the theme it was created with), plus the app icon.
 /// Provides a prebuilt <see cref="TitleBar"/> (app icon included, title synced from
@@ -26,7 +28,17 @@ public class AppFluentWindow : FluentWindow
     public AppFluentWindow()
     {
         ExtendsContentIntoTitleBar = true;
-        WindowBackdropType = WindowBackdropType.Mica;
+        // Backdrop follows the user's WindowBackdropType setting (default Mica). Falls back to
+        // Mica if the settings service isn't reachable (e.g. design-time).
+        try
+        {
+            WindowBackdropType = App.Services.GetRequiredService<ISettingsService>()
+                .UserSettings.GetWindowBackdropType();
+        }
+        catch
+        {
+            WindowBackdropType = WindowBackdropType.Mica;
+        }
         WindowCornerPreference = WindowCornerPreference.Round;
 
         s_appIcon ??= LoadAppIcon();
