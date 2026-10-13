@@ -341,5 +341,8 @@
     <unit id="WidgetsList.TrustPlace"><segment><source>Trust &amp; Place</source><target>ثقة ووضع</target></segment></unit>
     <unit id="Box.CustomWidget"><segment><source>Custom Widget</source><target>أداة مخصصة</target></segment></unit>
       <unit id="Update.InvalidData"><segment><source>Maktaby found a release it cannot display, please check for update manualy to get latest update:</source><target>وجد مكتبي إصدارًا لا يمكن عرضه، يُرجى التحقق من التحديث يدويًا للحصول على أحدث تحديث:</target></segment></unit>
+      <unit id="WidgetSettings.ResetToDefaults"><segment><source>Reset to defaults</source><target>إعادة التعيين إلى الافتراضي</target></segment></unit>
+      <unit id="Loading.Title"><segment><source>Maktaby - Desktop Organizer</source><target>مكتبي - منظم سطح المكتب</target></segment></unit>
+    <unit id="Loading.Cancel"><segment><source>Cancel</source><target>إلغاء</target></segment></unit>
   </file>
 </xliff>

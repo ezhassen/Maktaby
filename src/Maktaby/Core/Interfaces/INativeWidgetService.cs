@@ -84,4 +84,12 @@ public interface INativeWidgetService
     /// only — rendering executes plugin code. Must run on the UI thread (STA). Existing
     /// thumbnails are kept unless <paramref name="force"/>. Returns the saved path or null.</summary>
     Task<string?> GenerateThumbnailAsync(NativeWidgetInfo widget, int width = 480, int height = 270, bool force = false);
+
+    /// <summary>Loads the widget's own <c>langs/*.xlf</c> (Xliff 2.0) from
+    /// <see cref="NativeWidgetInfo.FolderPath"/> and returns a per-widget localization
+    /// resolved against <paramref name="activeLanguageCode"/> (the host app language).
+    /// A widget with no <c>langs/</c> still returns a usable instance (keys fall back to the
+    /// caller's default; flow direction follows <paramref name="hostRightToLeft"/>).
+    /// Never throws.</summary>
+    IWidgetLocalization LoadLocalization(NativeWidgetInfo widget, string? activeLanguageCode, bool hostRightToLeft);
 }

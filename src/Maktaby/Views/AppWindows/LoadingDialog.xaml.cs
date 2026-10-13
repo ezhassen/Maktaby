@@ -17,6 +17,9 @@ public partial class LoadingDialog : Window
     public LoadingDialog()
     {
         InitializeComponent();
+        // Content-level flow direction (LTR/RTL) from the active language. This is a plain
+        // Window (exempt from AppFluentWindow), so apply it to the content root directly.
+        ContentRoot.FlowDirection = Localization.Loc.CurrentFlowDirection;
         CenterOnPrimary();
         Closing += (_, e) =>
         {

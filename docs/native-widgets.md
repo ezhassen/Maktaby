@@ -24,6 +24,7 @@ UserWidgets\MyClock\          (or NativeWidgets\MyClock\ for built-ins)
   MyClock.dll      a single precompiled assembly
   icon.xaml        optional loose XAML (embedded automatically, see §5)
   thumbnail.png    optional gallery image
+  langs\           optional translations, one .xlf per language (see §9)
 ```
 
 `nwidget.json` for a native widget:
@@ -219,3 +220,82 @@ keyed on content identity:
 - Open windows keep their loaded version until closed; Refresh only affects new placements.
 - WebView2 inside a plugin is discouraged — its lifetime fights the host's teardown.
 - One UI thread for everything: all members run on it; heavy work belongs on your own threads.
+
+## 9. Localization
+
+A widget ships its own translations in a `langs/` subfolder — one Xliff 2.0 `.xlf` per
+language, named by culture code (`en.xlf`, `ar.xlf`, …). The host loads them and resolves
+strings against the **active app language** (Settings → Language), so a widget follows the
+same language the rest of the app uses. The format is identical to the host's own `Langs/`
+files — one format to learn.
+
+```text
+MyClock\
+  langs\
+    en.xlf      source / fallback (recommended, not required)
+    ar.xlf      Arabic, declares RightToLeft
+```
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="ar">
+  <file id="ar">
+    <!-- Reserved units -->
+    <unit id="meta.flowdirection"><segment><source>RightToLeft</source><target>RightToLeft</target></segment></unit>
+    <unit id="meta.name"><segment><source>Arabic</source><target>العربية</target></segment></unit>
+    <unit id="GoToToday"><segment><source>Go to today</source><target>الانتقال إلى اليوم</target></segment></unit>
+  </file>
+</xliff>
+```
+
+**Reserved units** — `meta.flowdirection` (`LeftToRight` | `RightToLeft`) sets the widget's
+content direction for that language; `meta.name` is the display name. `id` on each `<unit>`
+is the key.
+
+### Using it in code
+
+Derive `NativeWidgetControl` and call the protected helpers. **`Get` always takes a default
+value** — returned when the key is missing or no `langs/` is attached, so a widget never
+shows a blank or a `[key]`:
+
+```csharp
+_title.ToolTip = L("GoToToday", "Go to today");                 // args formatted with the current culture
+var n = LPlural("Items", count, "{0} items");                   // CLDR plural category for the active language
+```
+
+### Using it in loose XAML
+
+```xml
+<TextBlock Text="{sdk:Loc GoToToday}" />
+```
+
+Add `xmlns:sdk="clr-namespace:Maktaby.WidgetSdk;assembly=Maktaby.WidgetSdk"`. The extension
+resolves the widget's localized string and re-translates live when the app language changes.
+
+### FlowDirection (opt-in)
+
+`ContentFlowDirection` returns the widget's direction: its own `meta.flowdirection` when the
+active `.xlf` declares one, otherwise the host app language's direction. A widget that wants
+its content mirrored applies it to its root visual (the base class does this automatically
+for RTL languages). Widgets with no `langs/` simply follow the host language and show their
+built-in strings.
+
+### Re-applying code-built strings on a language switch
+
+Strings set in the constructor (tooltips, labels) are resolved once. To re-apply them when
+the language changes, override `OnLanguageChanged()`:
+
+```csharp
+protected override void OnLanguageChanged()
+{
+    _title.ToolTip = L("GoToToday", "Go to today");
+}
+```
+
+### Rules
+
+- Lookup: active language → the widget's `en.xlf` → your default value. A missing language
+  or key never blocks loading.
+- A widget with no `langs/` at all still loads and follows the host language.
+- Built-in reference: `NativeWidgets/CalendarWidget` (on-visual tooltips) and
+  `NativeWidgets/NativeClock` (settings labels).

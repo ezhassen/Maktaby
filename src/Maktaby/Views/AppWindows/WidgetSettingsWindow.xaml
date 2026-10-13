@@ -4,7 +4,8 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:appwin="clr-namespace:Maktaby.Views.AppWindows"
-    Title="Widget Settings"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
+    Title="{loc:LocKey WidgetSettings.Title}"
     Width="380"
     Height="480"
     MinWidth="320"
@@ -41,18 +42,18 @@
                         HorizontalAlignment="Left"
                         Appearance="Secondary"
                         Click="Reset_Click"
-                        Content="Reset to defaults" />
+                        Content="{loc:LocKey WidgetSettings.ResetToDefaults}" />
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
                     <ui:Button
                         Appearance="Secondary"
                         Click="Cancel_Click"
-                        Content="Cancel"
+                        Content="{loc:LocKey Section.Settings.Cancel}"
                         IsCancel="True" />
                     <ui:Button
                         Margin="8,0,0,0"
                         Appearance="Primary"
                         Click="Save_Click"
-                        Content="Save"
+                        Content="{loc:LocKey Section.Settings.Save}"
                         IsDefault="True" />
                 </StackPanel>
             </Grid>

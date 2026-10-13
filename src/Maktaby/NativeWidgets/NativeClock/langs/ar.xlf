@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="ar">
+  <file id="ar">
+    <unit id="meta.flowdirection"><segment><source>LeftToRight</source><target>LeftToRight</target></segment></unit>
+    <unit id="meta.name"><segment><source>Arabic</source><target>العربية</target></segment></unit>
+    <unit id="Second hand"><segment><source>Second hand</source><target>مؤشر الثواني</target></segment></unit>
+    <unit id="How the second hand behaves"><segment><source>How the second hand behaves</source><target>كيف يتحرك مؤشر الثواني</target></segment></unit>
+    <unit id="Tick marks"><segment><source>Tick marks</source><target>علامات التدرج</target></segment></unit>
+    <unit id="Which tick marks to show"><segment><source>Which tick marks to show</source><target>أي علامات تدرج تُعرض</target></segment></unit>
+    <unit id="Hour numbers"><segment><source>Hour numbers</source><target>أرقام الساعات</target></segment></unit>
+    <unit id="Which hour numbers to show"><segment><source>Which hour numbers to show</source><target>أي أرقام ساعات تُعرض</target></segment></unit>
+    <unit id="AM/PM"><segment><source>AM/PM</source><target>صباحًا/مساءً</target></segment></unit>
+    <unit id="Show AM/PM below the center"><segment><source>Show AM/PM below the center</source><target>إظهار صباحًا/مساءً أسفل الوسط</target></segment></unit>
+    <unit id="Short date"><segment><source>Short date</source><target>تاريخ مختصر</target></segment></unit>
+    <unit id="Show the short date below the center"><segment><source>Show the short date below the center</source><target>إظهار التاريخ المختصر أسفل الوسط</target></segment></unit>
+    <unit id="Hide"><segment><source>Hide</source><target>إخفاء</target></segment></unit>
+    <unit id="Show all"><segment><source>Show all</source><target>إظهار الكل</target></segment></unit>
+    <unit id="Quarters only"><segment><source>Quarters only</source><target>الأرباع فقط</target></segment></unit>
+    <unit id="Smooth sweep"><segment><source>Smooth sweep</source><target>حركة سلسة</target></segment></unit>
+    <unit id="Step once per second"><segment><source>Step once per second</source><target>خطوة كل ثانية</target></segment></unit>
+  </file>
+</xliff>

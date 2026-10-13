@@ -696,6 +696,24 @@ public sealed class NativeWidgetService : INativeWidgetService
         return string.IsNullOrWhiteSpace(s) ? "widget" : s;
     }
 
+    /// <summary>Loads the widget's own langs/*.xlf against the active app language.
+    /// See <see cref="INativeWidgetService.LoadLocalization"/>.</summary>
+    public IWidgetLocalization LoadLocalization(NativeWidgetInfo widget, string? activeLanguageCode, bool hostRightToLeft)
+    {
+        var loc = new WidgetLocalization();
+        try
+        {
+            var langsFolder = Path.Combine(widget.FolderPath, "langs");
+            loc.Initialize(langsFolder, activeLanguageCode ?? "en", hostRightToLeft);
+        }
+        catch
+        {
+            // Leave the instance in its default (empty) state: keys fall back to defaults,
+            // flow follows the host. A broken/missing langs/ must never block a widget.
+        }
+        return loc;
+    }
+
     /// <summary>Collectible per-plugin load context. Shared/host assemblies resolve from
     /// the default context first (unifying WidgetSdk + framework types); plugin-private
     /// DLLs resolve from the plugin folder.</summary>

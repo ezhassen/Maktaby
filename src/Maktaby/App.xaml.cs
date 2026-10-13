@@ -252,7 +252,7 @@ public partial class App : Application
         };
         await loading.ShowAsync(async report =>
         {
-            report("Loading Maktaby…");
+            report(Localization.Loc.Get("Loading.Loading"));
             // Let the splash paint and the dispatcher settle before the Shell enumeration /
             // Box creation work begins.
             await Task.Delay(800);

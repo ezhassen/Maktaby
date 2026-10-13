@@ -215,6 +215,9 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
             return;
         }
         ApplyThemeToPlugin();
+        // Localization: load the widget's own langs/*.xlf against the active app language and
+        // inject it, so {sdk:Loc …} targets resolve and the widget can re-translate live.
+        InjectLocalization(plugin);
         // Settings load after the visual exists: declared defaults show first, stored values
         // apply through ValueChanged (widgets cache them there).
         try
@@ -230,6 +233,53 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
         {
             try { plugin.Suspend(); } catch { }
         }
+    }
+
+    /// <summary>Attaches per-widget localization (the plugin's own langs/*.xlf resolved to the
+    /// active app language) and re-injects on every host language switch so the widget
+    /// re-translates live. Only <see cref="Maktaby.WidgetSdk.NativeWidgetControl"/> plugins
+    /// expose the seam; a bare <see cref="INativeWidget"/> simply gets no localization.</summary>
+    private void InjectLocalization(INativeWidget plugin)
+    {
+        if (_info is null) return;
+        try
+        {
+            if (plugin is not Maktaby.WidgetSdk.NativeWidgetControl nc) return;
+            nc.SetLocalization(BuildWidgetLocalization());
+            // Re-resolve against the new language on a host language switch. The widget's own
+            // LanguageChanged (subscribed inside SetLocalization) then re-translates its
+            // {sdk:Loc …} targets and re-applies flow direction. Detached on window close.
+            Localization.Loc.LanguageChanged += OnHostLanguageChanged;
+        }
+        catch { }
+    }
+
+    private Core.Services.WidgetLocalization? _widgetLoc;
+
+    private Core.Services.WidgetLocalization BuildWidgetLocalization()
+    {
+        _widgetLoc = (Core.Services.WidgetLocalization)_widgetService.LoadLocalization(
+            _info!,
+            Localization.Loc.Current?.Code,
+            Localization.Loc.CurrentFlowDirection == System.Windows.FlowDirection.RightToLeft);
+        return _widgetLoc;
+    }
+
+    private void OnHostLanguageChanged()
+    {
+        try
+        {
+            if (_plugin is Maktaby.WidgetSdk.NativeWidgetControl nc && _widgetLoc is not null)
+            {
+                _widgetLoc.SetActive(
+                    Localization.Loc.Current?.Code,
+                    Localization.Loc.CurrentFlowDirection == System.Windows.FlowDirection.RightToLeft);
+                // Re-point the control at the same instance so its LanguageChanged fires and
+                // re-resolves targets (SetActive raises the event the control subscribed to).
+                nc.SetLocalization(_widgetLoc);
+            }
+        }
+        catch { }
     }
 
     private void DetachPlugin()
@@ -487,7 +537,7 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
         try
         {
             var svc = App.Services.GetRequiredService<INativeWidgetSettingsService>();
-            var w = new Views.AppWindows.WidgetSettingsWindow(_info, provider, svc, _container.SettingsFileName) { Owner = this };
+            var w = new Views.AppWindows.WidgetSettingsWindow(_info, provider, svc, _container.SettingsFileName, _widgetLoc) { Owner = this };
             w.ShowDialog();
         }
         catch { }
@@ -593,6 +643,7 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
     {
         ShutdownPlugin();
         _chromeOverlay = null;
+        try { Localization.Loc.LanguageChanged -= OnHostLanguageChanged; } catch { }
         if (_layerHwnd != IntPtr.Zero) try { Win32Apis.UnregisterBoxWindow(_layerHwnd); } catch { }
         try { Detach(); } catch { }
         try { base.OnClosed(e); } catch { }

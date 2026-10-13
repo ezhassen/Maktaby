@@ -170,30 +170,37 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>Language choices for the ComboBox: the display name of every discovered
-    /// language (from each file's meta.name), English first.</summary>
+    /// <summary>Language choices for the ComboBox: "System" (follow the OS language) first,
+    /// then every discovered language by its display name (meta.name).</summary>
     public IReadOnlyList<string> LanguageOptions { get; } = BuildLanguageOptions();
+
+    /// <summary>Display name of the "follow the OS language" choice; the model stores it as null.</summary>
+    public const string SystemLanguage = "System";
 
     private static IReadOnlyList<string> BuildLanguageOptions()
     {
+        var list = new List<string> { SystemLanguage };
         try
         {
             var langs = Localization.Loc.AvailableLanguages;
-            if (langs.Count == 0) return new[] { "English" };
-            return langs.Select(l => l.DisplayName).ToList();
+            list.AddRange(langs.Select(l => l.DisplayName));
         }
-        catch
-        {
-            return new[] { "English" };
-        }
+        catch { }
+        if (list.Count == 1) list.Add("English");
+        return list;
     }
 
     /// <summary>Applies a language chosen in the Settings window immediately (live) and
-    /// persists the underlying culture code.</summary>
+    /// persists the underlying culture code. "System" persists null (follow the OS language).</summary>
     private void ApplyLanguage(string displayName)
     {
         try
         {
+            if (string.Equals(displayName, SystemLanguage, StringComparison.OrdinalIgnoreCase))
+            {
+                App.ApplyLanguage(null);
+                return;
+            }
             var match = Localization.Loc.AvailableLanguages
                 .FirstOrDefault(l => string.Equals(l.DisplayName, displayName, StringComparison.OrdinalIgnoreCase));
             var code = match?.Code ?? "en";
@@ -203,17 +210,17 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Maps a stored culture code (or null = follow OS) to the display name shown
-    /// in the ComboBox. Falls back to the active language's own display name, then English.</summary>
+    /// in the ComboBox. null → "System"; a code → that language's display name; otherwise the
+    /// active language's display name, then English.</summary>
     private static string ResolveLanguageDisplayName(string? code)
     {
         try
         {
             var langs = Localization.Loc.AvailableLanguages;
-            if (!string.IsNullOrWhiteSpace(code))
-            {
-                var match = langs.FirstOrDefault(l => string.Equals(l.Code, code, StringComparison.OrdinalIgnoreCase));
-                if (match is not null) return match.DisplayName;
-            }
+            if (string.IsNullOrWhiteSpace(code))
+                return SystemLanguage;
+            var match = langs.FirstOrDefault(l => string.Equals(l.Code, code, StringComparison.OrdinalIgnoreCase));
+            if (match is not null) return match.DisplayName;
             var active = Localization.Loc.Current;
             if (active is not null) return active.DisplayName;
             return "English";
@@ -429,11 +436,14 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         foreach (var r in Containers) r.Dispose();
     }
 
-    /// <summary>Maps a display name to its stored culture code (English fallback).</summary>
+    /// <summary>Maps a display name to its stored culture code. "System" → null (follow the OS
+    /// language); a language display name → its code; unknown → "en".</summary>
     private static string? ResolveLanguageCode(string displayName)
     {
         try
         {
+            if (string.Equals(displayName, SystemLanguage, StringComparison.OrdinalIgnoreCase))
+                return null;
             var match = Localization.Loc.AvailableLanguages
                 .FirstOrDefault(l => string.Equals(l.DisplayName, displayName, StringComparison.OrdinalIgnoreCase));
             return match?.Code ?? "en";
@@ -462,10 +472,10 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        // Language reset: back to English (the source language). The setter applies live.
+        // Language reset: back to System (follow the OS language). The setter applies live.
         if (name == nameof(LanguageOption))
         {
-            LanguageOption = "English";
+            LanguageOption = SystemLanguage;
             return;
         }
 

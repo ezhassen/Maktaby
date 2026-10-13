@@ -132,27 +132,6 @@
                         Header="{loc:LocKey Section.Settings.Appearance}">
                         <StackPanel Margin="8">
                             <StackPanel Margin="0,0,0,12">
-                                <TextBlock FontWeight="Bold" Text="{loc:LocKey Section.Settings.AppTheme}" />
-                                <TextBlock
-                                    Margin="0,0,0,4"
-                                    FontSize="11"
-                                    Foreground="#999999"
-                                    Text="{loc:LocKey Section.Settings.AppThemeHint}" />
-                                <StackPanel Orientation="Horizontal">
-                                    <ComboBox
-                                        Width="200"
-                                        ItemsSource="{Binding AppThemeOptions}"
-                                        SelectedItem="{Binding SelectedThemeOption, UpdateSourceTrigger=PropertyChanged}" />
-                                    <ui:Button
-                                        Command="{Binding ResetToDefaultCommand}"
-                                        CommandParameter="SelectedThemeOption"
-                                        Style="{StaticResource ResetButton}">
-                                        <ui:SymbolIcon Symbol="ArrowCounterclockwise24" />
-                                    </ui:Button>
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Margin="0,0,0,12">
                                 <TextBlock FontWeight="Bold" Text="{loc:LocKey Section.Settings.Language}" />
                                 <TextBlock
                                     Margin="0,0,0,4"
@@ -167,6 +146,27 @@
                                     <ui:Button
                                         Command="{Binding ResetToDefaultCommand}"
                                         CommandParameter="LanguageOption"
+                                        Style="{StaticResource ResetButton}">
+                                        <ui:SymbolIcon Symbol="ArrowCounterclockwise24" />
+                                    </ui:Button>
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Margin="0,0,0,12">
+                                <TextBlock FontWeight="Bold" Text="{loc:LocKey Section.Settings.AppTheme}" />
+                                <TextBlock
+                                    Margin="0,0,0,4"
+                                    FontSize="11"
+                                    Foreground="#999999"
+                                    Text="{loc:LocKey Section.Settings.AppThemeHint}" />
+                                <StackPanel Orientation="Horizontal">
+                                    <ComboBox
+                                        Width="200"
+                                        ItemsSource="{Binding AppThemeOptions}"
+                                        SelectedItem="{Binding SelectedThemeOption, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ui:Button
+                                        Command="{Binding ResetToDefaultCommand}"
+                                        CommandParameter="SelectedThemeOption"
                                         Style="{StaticResource ResetButton}">
                                         <ui:SymbolIcon Symbol="ArrowCounterclockwise24" />
                                     </ui:Button>

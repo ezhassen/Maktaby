@@ -81,17 +81,22 @@ public class LocKey : MarkupExtension
 
     internal void Push()
     {
-        var text = _plural ? Loc.Plural(Id!, _count, _args) : Loc.Get(Id!, _args);
-        if (_target is not null && _target.TryGetTarget(out var d) && _property is not null && d is not null)
+        // Target collected (its window/menu was torn down and GC'd): drop the subscription so
+        // the static event list doesn't grow with dead entries across a long session.
+        if (_target is null || !_target.TryGetTarget(out var dep) || dep is null || _property is null)
         {
-            if (d.Dispatcher.CheckAccess())
-                d.SetValue(_property, text);
-            else
-                d.Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try { d.SetValue(_property, text); } catch { }
-                }));
+            Unsubscribe();
+            return;
         }
+
+        var text = _plural ? Loc.Plural(Id!, _count, _args) : Loc.Get(Id!, _args);
+        if (dep.Dispatcher.CheckAccess())
+            dep.SetValue(_property, text);
+        else
+            dep.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { dep.SetValue(_property, text); } catch { }
+            }));
     }
 
     internal void SetPlural(bool plural, int count)
@@ -105,11 +110,19 @@ public class LocKey : MarkupExtension
         if (_subscribed) return;
         _subscribed = true;
         Loc.LanguageChanged += Push;
+        // Deliberately NOT unsubscribing on the element's Unloaded: a ContextMenu's items
+        // fire Unloaded every time the popup closes (they leave the visual tree while
+        // dismissed), which would silently stop live updates for a menu that is merely
+        // closed, not destroyed. Cleanup is driven by the weak target instead — when the
+        // owning window/menu is torn down and GC'd, Push self-unsubscribes on the next
+        // language change. The weak reference never roots the target, so it stays collectible.
+    }
 
-        // Self-unsubscribe when the target element goes away, so a closed window's
-        // extensions never accumulate on the static event.
-        if (target is FrameworkElement fe)
-            fe.Unloaded += (_, _) => Loc.LanguageChanged -= Push;
+    private void Unsubscribe()
+    {
+        if (!_subscribed) return;
+        _subscribed = false;
+        Loc.LanguageChanged -= Push;
     }
 }
 

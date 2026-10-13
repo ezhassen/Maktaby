@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="en">
+  <file id="en">
+    <unit id="meta.flowdirection"><segment><source>LeftToRight</source><target>LeftToRight</target></segment></unit>
+    <unit id="meta.name"><segment><source>English</source><target>English</target></segment></unit>
+    <unit id="GoToToday"><segment><source>Go to today</source><target>Go to today</target></segment></unit>
+    <unit id="PreviousYear"><segment><source>Previous year</source><target>Previous year</target></segment></unit>
+    <unit id="PreviousMonth"><segment><source>Previous month</source><target>Previous month</target></segment></unit>
+    <unit id="NextMonth"><segment><source>Next month</source><target>Next month</target></segment></unit>
+    <unit id="NextYear"><segment><source>Next year</source><target>Next year</target></segment></unit>
+  </file>
+</xliff>

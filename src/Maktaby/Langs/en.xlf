@@ -354,5 +354,8 @@
     <unit id="WidgetsList.TrustPlace"><segment><source>Trust &amp; Place</source><target>Trust &amp; Place</target></segment></unit>
     <unit id="Box.CustomWidget"><segment><source>Custom Widget</source><target>Custom Widget</target></segment></unit>
       <unit id="Update.InvalidData"><segment><source>Maktaby found a release it cannot display, please check for update manualy to get latest update:</source><target>Maktaby found a release it cannot display, please check for update manualy to get latest update:</target></segment></unit>
+      <unit id="WidgetSettings.ResetToDefaults"><segment><source>Reset to defaults</source><target>Reset to defaults</target></segment></unit>
+      <unit id="Loading.Title"><segment><source>Maktaby - Desktop Organizer</source><target>Maktaby - Desktop Organizer</target></segment></unit>
+    <unit id="Loading.Cancel"><segment><source>Cancel</source><target>Cancel</target></segment></unit>
   </file>
 </xliff>

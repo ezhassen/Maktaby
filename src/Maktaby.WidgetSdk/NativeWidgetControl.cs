@@ -124,8 +124,19 @@ public class NativeWidgetControl : UserControl, INativeWidget, IWidgetSettingsPr
         using var stream = assembly.GetManifestResourceStream(resourceName)
             ?? throw new InvalidOperationException($"XAML resource '{resourceName}' not found.");
         using var reader = new StreamReader(stream);
-        var root = (FrameworkElement)XamlReader.Load(reader.BaseStream);
-        Content = root;
+        // Mark this control as the {sdk:Loc …} target owner while its loose XAML parses, so
+        // extensions record against it. Restored in finally — nested loads can't happen here.
+        var prev = CurrentConstructing;
+        CurrentConstructing = this;
+        try
+        {
+            var root = (FrameworkElement)XamlReader.Load(reader.BaseStream);
+            Content = root;
+        }
+        finally
+        {
+            CurrentConstructing = prev;
+        }
     }
 
     public void Dispose()
@@ -143,5 +154,107 @@ public class NativeWidgetControl : UserControl, INativeWidget, IWidgetSettingsPr
                 item.Dispose();
             }
         }
+        if (disposing && _loc is not null)
+        {
+            _loc.LanguageChanged -= OnWidgetLanguageChanged;
+        }
     }
+
+    #region Localization
+
+    private IWidgetLocalization? _loc;
+
+    // Targets recorded by {sdk:Loc …} during XAML parse, resolved once _loc is attached.
+    private readonly List<(DependencyObject Target, DependencyProperty Property, string Key)> _locTargets = new();
+
+    /// <summary>
+    /// Called by the host right after construction to attach the widget's localization.
+    /// Resolves every <c>{sdk:Loc …}</c> target recorded during the constructor's XAML parse
+    /// and subscribes to <see cref="IWidgetLocalization.LanguageChanged"/> so a live app
+    /// language switch re-translates them. Idempotent; safe to call with null (detaches).
+    /// </summary>
+    internal void SetLocalization(IWidgetLocalization? loc)
+    {
+        if (_loc is not null)
+            _loc.LanguageChanged -= OnWidgetLanguageChanged;
+        _loc = loc;
+        if (loc is not null)
+            loc.LanguageChanged += OnWidgetLanguageChanged;
+        ResolveLocTargets();
+        ApplyContentFlowDirection();
+    }
+
+    /// <summary>Records a <c>{sdk:Loc …}</c> target for later resolution. Called by
+    /// <see cref="LocExtension"/> during parse; the owning control is the one whose
+    /// constructor is running, which is always <c>this</c> on the UI thread.</summary>
+    internal static void RegisterLocTarget(DependencyObject target, DependencyProperty property, string key)
+    {
+        // Resolve the control currently being constructed. During a plugin constructor the
+        // only NativeWidgetControl on the stack is the one building its visual, so a
+        // thread-static "current" set at the top of the base constructor is exact.
+        var current = CurrentConstructing;
+        current?._locTargets.Add((target, property, key));
+    }
+
+    // The control whose constructor is currently running (UI thread only).
+    [System.ThreadStatic] private static NativeWidgetControl? CurrentConstructing;
+
+    /// <summary>Localized text for <paramref name="key"/>. When no localization is attached
+    /// (or the key is missing) returns <paramref name="defaultValue"/>. <paramref name="args"/>
+    /// are formatted with the current culture.</summary>
+    protected string L(string key, string defaultValue, params object?[] args)
+        => _loc?.Get(key, defaultValue, args) ?? defaultValue;
+
+    /// <summary>Plural form of <paramref name="key"/> for <paramref name="count"/>, falling
+    /// back to <paramref name="defaultValue"/> when unresolved.</summary>
+    protected string LPlural(string key, int count, string defaultValue, params object?[] args)
+        => _loc?.Plural(key, count, defaultValue, args) ?? defaultValue;
+
+    /// <summary>Content flow direction for this widget: the widget's own direction when its
+    /// active xlf declares one, else the host app language's. Apply to the widget's root
+    /// visual if the plugin wants its content mirrored (opt-in per the widget's xlf).</summary>
+    protected FlowDirection ContentFlowDirection => _loc?.FlowDirection ?? FlowDirection.LeftToRight;
+
+    private void ResolveLocTargets()
+    {
+        if (_loc is null || _locTargets.Count == 0) return;
+        foreach (var (target, property, key) in _locTargets)
+        {
+            try
+            {
+                var text = _loc.Get(key, key);
+                if (target.Dispatcher.CheckAccess())
+                    target.SetValue(property, text);
+                else
+                    target.Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        try { target.SetValue(property, text); } catch { }
+                    }));
+            }
+            catch { }
+        }
+    }
+
+    private void ApplyContentFlowDirection()
+    {
+        // Opt-in: only mirror when the widget's active language actually declares RTL.
+        if (ContentFlowDirection == FlowDirection.RightToLeft)
+        {
+            try { FlowDirection = FlowDirection.RightToLeft; } catch { }
+        }
+    }
+
+    private void OnWidgetLanguageChanged()
+    {
+        ResolveLocTargets();
+        ApplyContentFlowDirection();
+        try { OnLanguageChanged(); } catch { }
+    }
+
+    /// <summary>Called after the active language changed (host switch or initial attach).
+    /// Override to re-apply strings the widget built in code (tooltips, labels) that are not
+    /// <c>{sdk:Loc …}</c> targets. Runs on the UI thread.</summary>
+    protected virtual void OnLanguageChanged() { }
+
+    #endregion
 }

@@ -19,6 +19,7 @@ public partial class WidgetSettingsWindow : AppFluentWindow
     private readonly INativeWidgetSettingsService _svc;
     private readonly string? _settingsFileName;
     private readonly Dictionary<string, object?> _initial = new();
+    private IWidgetLocalization? _loc;
 
     public string WindowTitle { get; }
 
@@ -46,12 +47,13 @@ public partial class WidgetSettingsWindow : AppFluentWindow
     }
 
     public WidgetSettingsWindow(NativeWidgetInfo info, IWidgetSettingsProvider provider, INativeWidgetSettingsService svc,
-        string? settingsFileName = null)
+        string? settingsFileName = null, IWidgetLocalization? localization = null)
     {
         _info = info;
         _provider = provider;
         _svc = svc;
         _settingsFileName = settingsFileName;
+        _loc = localization;
         WindowTitle = $"{(string.IsNullOrWhiteSpace(info.Manifest.Name) ? info.Slug : info.Manifest.Name)} Settings";
         InitializeComponent();
         Localization.Loc.ApplyTo(this);
@@ -61,13 +63,24 @@ public partial class WidgetSettingsWindow : AppFluentWindow
         TitleBar.ShowMinimize = false;
         TitleBar.SetBinding(Wpf.Ui.Controls.TitleBar.TitleProperty,
             new System.Windows.Data.Binding(nameof(WindowTitle)) { Source = this });
-        foreach (var setting in provider.Settings)
+        BuildSettings();
+
+        // Re-translate setting labels/options on a host language switch (the rows are built
+        // in code, not {loc:LocKey …} targets). Detached on close.
+        Localization.Loc.LanguageChanged += OnLanguageChanged;
+        Closed += (_, _) => Localization.Loc.LanguageChanged -= OnLanguageChanged;
+    }
+
+    private void BuildSettings()
+    {
+        SettingsHost.Children.Clear();
+        foreach (var setting in _provider.Settings)
         {
             _initial[setting.Name] = setting.Value;
             SettingsHost.Children.Add(BuildRow(setting));
         }
 
-        if (provider.Settings.Count == 0)
+        if (_provider.Settings.Count == 0)
         {
             SettingsHost.Children.Add(new TextBlock
             {
@@ -78,12 +91,23 @@ public partial class WidgetSettingsWindow : AppFluentWindow
         }
     }
 
-    private static FrameworkElement BuildRow(WidgetSetting setting)
+    private void OnLanguageChanged()
+    {
+        try { BuildSettings(); }
+        catch { }
+    }
+
+    /// <summary>Localizes a setting label/description through the widget's own langs/, falling
+    /// back to the plugin's English string. Key = the English string itself.</summary>
+    private string T(string? english)
+        => _loc?.Get(english ?? string.Empty, english ?? string.Empty) ?? (english ?? string.Empty);
+
+    private FrameworkElement BuildRow(WidgetSetting setting)
     {
         var panel = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 0, 0, 14) };
         var name = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(setting.DisplayName) ? setting.Name : setting.DisplayName,
+            Text = string.IsNullOrWhiteSpace(setting.DisplayName) ? setting.Name : T(setting.DisplayName),
             FontWeight = FontWeights.SemiBold,
             ToolTip = setting.Name,
         };
@@ -92,7 +116,7 @@ public partial class WidgetSettingsWindow : AppFluentWindow
         {
             panel.Children.Add(new TextBlock
             {
-                Text = setting.Description,
+                Text = T(setting.Description),
                 FontSize = 11,
                 Opacity = 0.7,
                 TextWrapping = TextWrapping.Wrap,
@@ -114,10 +138,15 @@ public partial class WidgetSettingsWindow : AppFluentWindow
                 panel.Children.Add(check);
                 break;
             case WidgetSettingKind.ListOfStrings:
+                // Project key→English-label into key→translated-label so the dropdown shows
+                // the active language while SelectedValuePath still binds the stable key.
+                var options = setting.ListOfAvailableStrings?
+                    .Select(kv => new KeyValuePair<string, string>(kv.Key, T(kv.Value)))
+                    .ToList();
                 var combo = new ComboBox
                 {
                     Margin = new Thickness(0, 2, 0, 0),
-                    ItemsSource = setting.ListOfAvailableStrings,
+                    ItemsSource = options,
                     DisplayMemberPath = "Value",
                     SelectedValuePath = "Key",
                     SelectedValue = setting.GetString(),

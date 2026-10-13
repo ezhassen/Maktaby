@@ -202,26 +202,30 @@ public sealed class CalendarWidget : NativeWidgetControl
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
         header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
 
-        header.Children.Add(NavButton("«", 0, () => MoveMonths(-12), "Previous year"));
-        header.Children.Add(NavButton("‹", 1, () => MoveMonths(-1), "Previous month"));
+        header.Children.Add(NavButton("«", 0, () => MoveMonths(-12), "PreviousYear"));
+        header.Children.Add(NavButton("‹", 1, () => MoveMonths(-1), "PreviousMonth"));
 
         _title.FontSize = 16;
         _title.FontWeight = FontWeights.SemiBold;
         _title.HorizontalAlignment = HorizontalAlignment.Center;
         _title.VerticalAlignment = VerticalAlignment.Center;
         _title.Cursor = Cursors.Hand;
-        _title.ToolTip = "Go to today";
+        _title.ToolTip = L("GoToToday", "Go to today");
         _title.PreviewMouseLeftButtonUp += (_, _) => GoToToday();
         Grid.SetColumn(_title, 2);
         header.Children.Add(_title);
 
-        header.Children.Add(NavButton("›", 3, () => MoveMonths(1), "Next month"));
-        header.Children.Add(NavButton("»", 4, () => MoveMonths(12), "Next year"));
+        header.Children.Add(NavButton("›", 3, () => MoveMonths(1), "NextMonth"));
+        header.Children.Add(NavButton("»", 4, () => MoveMonths(12), "NextYear"));
         Grid.SetRow(header, 0);
         return header;
     }
 
-    private Border NavButton(string text, int column, Action action, string tooltip)
+    // Nav buttons remember their localization key so a language switch can re-apply the
+    // translated tooltip (the visual is built once in the constructor).
+    private readonly List<(Border Button, string Key)> _navButtons = new();
+
+    private Border NavButton(string text, int column, Action action, string locKey)
     {
         var label = new TextBlock
         {
@@ -237,14 +241,24 @@ public sealed class CalendarWidget : NativeWidgetControl
             Child = label,
             CornerRadius = new CornerRadius(6),
             Background = Brushes.Transparent,
-            ToolTip = tooltip,
+            ToolTip = L(locKey, locKey),
             Cursor = Cursors.Hand,
         };
+        _navButtons.Add((border, locKey));
         border.MouseEnter += (_, _) => border.Background = _hoverFill;
         border.MouseLeave += (_, _) => border.Background = Brushes.Transparent;
         border.PreviewMouseLeftButtonUp += (_, _) => action();
         Grid.SetColumn(border, column);
         return border;
+    }
+
+    /// <summary>Re-applies localized tooltips built in code (not {sdk:Loc …} targets) after a
+    /// language switch.</summary>
+    protected override void OnLanguageChanged()
+    {
+        _title.ToolTip = L("GoToToday", "Go to today");
+        foreach (var (button, key) in _navButtons)
+            button.ToolTip = L(key, key);
     }
 
     private Grid BuildWeekdays()

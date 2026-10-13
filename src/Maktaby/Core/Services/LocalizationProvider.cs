@@ -81,11 +81,15 @@ public sealed class LocalizationProvider : ILocalizationProvider
                 };
             }
 
-            // OS UI culture when the user has not picked (and it has a translation).
+            // OS UI language when the user has not picked (and it has a translation).
+            // InstalledUICulture, NOT CurrentUICulture: the provider sets CurrentUICulture to
+            // the active language on every activation, so reading it back would resolve
+            // "System" to whatever language is currently active (e.g. ar → ar, a no-op).
+            // InstalledUICulture is the real OS-installed language and is never touched here.
             string? effective = code;
             if (string.IsNullOrWhiteSpace(effective))
             {
-                var os = CultureInfo.CurrentUICulture;
+                var os = CultureInfo.InstalledUICulture;
                 var candidate = os.TwoLetterISOLanguageName;
                 if (_languages.ContainsKey(candidate)) effective = candidate;
             }
@@ -95,6 +99,10 @@ public sealed class LocalizationProvider : ILocalizationProvider
 
             ActivateLocked(effective);
         }
+
+        // A re-initialize (e.g. Settings → Language → "System") re-resolves everything, so
+        // open windows must re-translate. Raise outside the lock (handlers re-read state).
+        RaiseLanguageChanged();
     }
 
     /// <summary>Switches the active language at runtime (Settings → Language, live apply).</summary>
@@ -198,6 +206,14 @@ public sealed class LocalizationProvider : ILocalizationProvider
         try { culture = CultureInfo.GetCultureInfo(code); }
         catch { culture = CultureInfo.InvariantCulture; }
 
+        // The language drives UI text + text direction, but number/date formats must follow
+        // the user's Windows regional settings, not the language's default culture. So start
+        // from the language culture and overlay the OS's current date/number formats (e.g.
+        // Arabic UI on an en-US machine keeps Gregorian dates and '.' decimals rather than
+        // Arabic-Indic digits and the Umm al-Qura calendar). Fall back to the OS culture's
+        // formats when the language culture is read-only/invariant.
+        culture = WithSystemFormats(culture);
+
         return new LanguageInfo
         {
             Code = code,
@@ -207,6 +223,33 @@ public sealed class LocalizationProvider : ILocalizationProvider
             FlowDirection = doc.FlowDirection ?? Interfaces.TextFlowDirection.LeftToRight,
             Culture = culture,
         };
+    }
+
+    /// <summary>Clones <paramref name="language"/> and replaces its date/number formats with
+    /// the OS's current ones, so formatting follows the user's regional settings rather than
+    /// the language's defaults. The invariant culture is returned unchanged (no OS formats to
+    /// mirror). Cached cultures from <c>GetCultureInfo</c> are read-only, so we always clone —
+    /// the clone is writable and lets us swap the formats safely.</summary>
+    private static CultureInfo WithSystemFormats(CultureInfo language)
+    {
+        try
+        {
+            if (language == CultureInfo.InvariantCulture)
+                return language;
+
+            var os = CultureInfo.CurrentCulture;
+            if (os == null || os == CultureInfo.InvariantCulture)
+                return language;
+
+            var clone = (CultureInfo)language.Clone();
+            clone.DateTimeFormat = (DateTimeFormatInfo)os.DateTimeFormat.Clone();
+            clone.NumberFormat = (NumberFormatInfo)os.NumberFormat.Clone();
+            return clone;
+        }
+        catch
+        {
+            return language;
+        }
     }
 
     /// <summary>Finds the document holding <paramref name="key"/>: current language first,

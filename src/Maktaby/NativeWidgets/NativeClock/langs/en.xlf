@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="en">
+  <file id="en">
+    <unit id="meta.flowdirection"><segment><source>LeftToRight</source><target>LeftToRight</target></segment></unit>
+    <unit id="meta.name"><segment><source>English</source><target>English</target></segment></unit>
+    <unit id="Second hand"><segment><source>Second hand</source><target>Second hand</target></segment></unit>
+    <unit id="How the second hand behaves"><segment><source>How the second hand behaves</source><target>How the second hand behaves</target></segment></unit>
+    <unit id="Tick marks"><segment><source>Tick marks</source><target>Tick marks</target></segment></unit>
+    <unit id="Which tick marks to show"><segment><source>Which tick marks to show</source><target>Which tick marks to show</target></segment></unit>
+    <unit id="Hour numbers"><segment><source>Hour numbers</source><target>Hour numbers</target></segment></unit>
+    <unit id="Which hour numbers to show"><segment><source>Which hour numbers to show</source><target>Which hour numbers to show</target></segment></unit>
+    <unit id="AM/PM"><segment><source>AM/PM</source><target>AM/PM</target></segment></unit>
+    <unit id="Show AM/PM below the center"><segment><source>Show AM/PM below the center</source><target>Show AM/PM below the center</target></segment></unit>
+    <unit id="Short date"><segment><source>Short date</source><target>Short date</target></segment></unit>
+    <unit id="Show the short date below the center"><segment><source>Show the short date below the center</source><target>Show the short date below the center</target></segment></unit>
+    <unit id="Hide"><segment><source>Hide</source><target>Hide</target></segment></unit>
+    <unit id="Show all"><segment><source>Show all</source><target>Show all</target></segment></unit>
+    <unit id="Quarters only"><segment><source>Quarters only</source><target>Quarters only</target></segment></unit>
+    <unit id="Smooth sweep"><segment><source>Smooth sweep</source><target>Smooth sweep</target></segment></unit>
+    <unit id="Step once per second"><segment><source>Step once per second</source><target>Step once per second</target></segment></unit>
+  </file>
+</xliff>
