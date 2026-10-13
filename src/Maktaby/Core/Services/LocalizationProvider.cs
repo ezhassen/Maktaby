@@ -76,6 +76,7 @@ public sealed class LocalizationProvider : ILocalizationProvider
                 {
                     Code = EnglishCode,
                     DisplayName = "English",
+                    EnglishName = "English",
                     FlowDirection = Interfaces.TextFlowDirection.LeftToRight,
                     Culture = inv,
                 };
@@ -143,6 +144,19 @@ public sealed class LocalizationProvider : ILocalizationProvider
             // A bad placeholder must not break a label: show the raw template.
             return text;
         }
+    }
+
+    /// <summary>English (source) text for <paramref name="key"/>, ignoring the active language.
+    /// Reads the English document directly; empty when the key is missing there.</summary>
+    public string GetEnglish(string key)
+    {
+        if (string.IsNullOrEmpty(key)) return string.Empty;
+        if (_documents.TryGetValue(EnglishCode, out var english)
+            && english.Entries.TryGetValue(key, out var text))
+        {
+            return text;
+        }
+        return string.Empty;
     }
 
     public string Plural(string key, int count, params object?[] args)
@@ -220,6 +234,7 @@ public sealed class LocalizationProvider : ILocalizationProvider
             DisplayName = !string.IsNullOrWhiteSpace(doc.MetaNameValue)
                 ? doc.MetaNameValue!
                 : culture.IsNeutralCulture ? culture.EnglishName : culture.NativeName,
+            EnglishName = culture.EnglishName,
             FlowDirection = doc.FlowDirection ?? Interfaces.TextFlowDirection.LeftToRight,
             Culture = culture,
         };

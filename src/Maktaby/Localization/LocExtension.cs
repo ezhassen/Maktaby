@@ -77,7 +77,7 @@ public class LocKey : MarkupExtension
         }
     }
 
-    internal string Resolve() => Loc.Get(Id!, _args);
+    internal virtual string Resolve() => Loc.Get(Id!, _args);
 
     internal void Push()
     {
@@ -89,7 +89,7 @@ public class LocKey : MarkupExtension
             return;
         }
 
-        var text = _plural ? Loc.Plural(Id!, _count, _args) : Loc.Get(Id!, _args);
+        var text = _plural ? Loc.Plural(Id!, _count, _args) : Resolve();
         if (dep.Dispatcher.CheckAccess())
             dep.SetValue(_property, text);
         else
@@ -149,5 +149,52 @@ public class LocPlural : LocKey
         Attach(serviceProvider);
         SetPlural(true, Value);
         return Loc.Plural(Id!, Value);
+    }
+}
+
+/// <summary>
+/// Bilingual markup extension: resolves a key in the active language and, when that language is
+/// NOT English, appends the English text in parentheses — e.g. Arabic shows "اللغة (Language)".
+/// When English is active it shows just the English text. Re-translates live on a language
+/// switch (inherits <see cref="LocKey"/>'s update machinery).
+/// <code>
+/// &lt;TextBlock Text="{loc:LocKeyBilingual Section.Settings.Language}" /&gt;
+/// </code>
+/// </summary>
+public class LocKeyBilingual : LocKey
+{
+    /// <summary>Creates a bilingual extension for <paramref name="key"/>.</summary>
+    public LocKeyBilingual(string key) : base(key) { }
+
+    /// <summary>Creates an empty bilingual extension (XAML parser property form).</summary>
+    public LocKeyBilingual() { }
+
+    public override object ProvideValue(IServiceProvider serviceProvider)
+    {
+        Attach(serviceProvider);
+        return Resolve();
+    }
+
+    internal override string Resolve() => Combine();
+
+    /// <summary>"&lt;localized&gt; (&lt;english&gt;)" when the active language isn't English and the
+    /// two differ; otherwise just the localized text. The parenthesis follows the localized
+    /// string's own direction, so it reads correctly in RTL too.</summary>
+    private string Combine()
+    {
+        var localized = Loc.Get(Id!);
+        if (IsEnglishActive()) return localized;
+
+        var english = Loc.GetEnglish(Id!);
+        if (string.IsNullOrEmpty(english) || string.Equals(english, localized, StringComparison.Ordinal))
+            return localized;
+
+        return $"{localized} ({english})";
+    }
+
+    private static bool IsEnglishActive()
+    {
+        var code = Loc.Current?.Code;
+        return string.IsNullOrEmpty(code) || string.Equals(code, "en", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -50,6 +50,12 @@ public static class Loc
     public static string Get(string key, params object?[] args)
         => Provider?.Get(key, args) ?? $"[{key}]";
 
+    /// <summary>The English text for <paramref name="key"/> (the source language), regardless of
+    /// the active language. Used for bilingual headers ("اللغة (Language)"). Returns empty when
+    /// there is no English text (or the key is missing).</summary>
+    public static string GetEnglish(string key)
+        => Provider?.GetEnglish(key) ?? string.Empty;
+
     /// <summary>Plural form of <paramref name="key"/> for <paramref name="count"/>.</summary>
     public static string Plural(string key, int count, params object?[] args)
         => Provider?.Plural(key, count, args) ?? $"[{key}]";

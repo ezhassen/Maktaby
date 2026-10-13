@@ -22,6 +22,10 @@ public sealed class LanguageInfo
     /// (e.g. "العربية"). Falls back to the culture's native name.</summary>
     public required string DisplayName { get; init; }
 
+    /// <summary>The language's English name (e.g. "Arabic"), from its culture. Used to build the
+    /// picker label "EnglishName - NativeName" (e.g. "Arabic - العربية").</summary>
+    public string EnglishName { get; init; } = "";
+
     /// <summary>Content flow direction for this language, from <c>meta.flowdirection</c>.
     /// Defaults to <see cref="TextFlowDirection.LeftToRight"/>.</summary>
     public TextFlowDirection FlowDirection { get; init; } = TextFlowDirection.LeftToRight;
@@ -52,6 +56,10 @@ public interface ILocalizationProvider
     /// <paramref name="args"/> are formatted with the current culture when non-empty.
     /// </summary>
     string Get(string key, params object?[] args);
+
+    /// <summary>The English (source) text for <paramref name="key"/>, regardless of the active
+    /// language. Used for bilingual headers ("اللغة (Language)"). Empty when missing.</summary>
+    string GetEnglish(string key);
 
     /// <summary>
     /// Plural form of <paramref name="key"/> for <paramref name="count"/>: the target segment
