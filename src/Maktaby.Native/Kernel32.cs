@@ -56,4 +56,21 @@ public static class Kernel32
 
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern bool Process32NextW(IntPtr hSnapshot, ref PROCESSENTRY32W lppe);
+
+    // ---- UI (display) language ------------------------------------------------
+    // These return a LANGID, and they are the ONLY authoritative answer to "which language
+    // is Windows displaying in". CultureInfo.InstalledUICulture is not: when the per-user
+    // language list (HKCU\Control Panel\Desktop\PreferredUILanguages) is empty, .NET falls
+    // back to the user's DEFAULT LOCALE - i.e. the regional *format* language. A machine set
+    // to English display + Arabic region then reports InstalledUICulture == "ar-EG" and any
+    // app that picks its UI language from it starts up in the wrong language.
+    //
+    // GetUserDefaultUILanguage: the per-user display language (HKCU), falls back to the
+    // installed system language when unset. This is the one to use.
+    // GetSystemDefaultUILanguage: the installed system display language (HKLM) - the fallback.
+    [DllImport("kernel32.dll")]
+    public static extern ushort GetUserDefaultUILanguage();
+
+    [DllImport("kernel32.dll")]
+    public static extern ushort GetSystemDefaultUILanguage();
 }

@@ -1729,4 +1729,34 @@ internal static class Win32Apis
         }
         catch { }
     }
+
+    /// <summary>
+    /// The LANGID of the language Windows is DISPLAYING in (per-user, falling back to the
+    /// installed system language). Distinct from the regional *format* locale: a machine can
+    /// display English while formatting dates, numbers and currency as Arabic.
+    /// </summary>
+    public static ushort GetUserDefaultUILanguage()
+    {
+        try
+        {
+            return Kernel32.GetUserDefaultUILanguage();
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>The LANGID of the installed system display language (the machine-wide fallback).</summary>
+    public static ushort GetSystemDefaultUILanguage()
+    {
+        try
+        {
+            return Kernel32.GetSystemDefaultUILanguage();
+        }
+        catch
+        {
+            return 0;
+        }
+    }
 }

@@ -23,9 +23,23 @@ public sealed class LocalizationProvider : ILocalizationProvider
     private readonly Dictionary<string, XlfDocument> _documents = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, LanguageInfo> _languages = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _gate = new();
+    private readonly ISystemLanguageResolver? _systemLanguage;
 
     private LanguageInfo? _current;
     private CultureInfo _culture = CultureInfo.InvariantCulture;
+
+    public LocalizationProvider()
+    {
+    }
+
+    /// <param name="systemLanguage">
+    /// Resolves the OS display language for "System" (follow the OS). Optional so the provider
+    /// stays constructible without a platform layer — see <see cref="ResolveSystemLanguage"/>.
+    /// </param>
+    public LocalizationProvider(ISystemLanguageResolver? systemLanguage)
+    {
+        _systemLanguage = systemLanguage;
+    }
 
     public LanguageInfo? Current => _current;
 
@@ -82,17 +96,24 @@ public sealed class LocalizationProvider : ILocalizationProvider
                 };
             }
 
-            // OS UI language when the user has not picked (and it has a translation).
-            // InstalledUICulture, NOT CurrentUICulture: the provider sets CurrentUICulture to
-            // the active language on every activation, so reading it back would resolve
-            // "System" to whatever language is currently active (e.g. ar → ar, a no-op).
-            // InstalledUICulture is the real OS-installed language and is never touched here.
+            // "System" means the OS DISPLAY language, never the regional format culture.
+            //
+            // Two traps, both of which used to be here:
+            //  1. CurrentUICulture is NOT readable here - ActivateLocked assigns it to the
+            //     active language on every switch, so "System" would resolve to whatever
+            //     language is currently active (ar -> ar), i.e. never follow the OS at all.
+            //  2. InstalledUICulture is not reliable either. It is documented as the OS UI
+            //     language, but with an empty per-user language list the runtime falls back
+            //     to the user's DEFAULT LOCALE - the regional FORMAT culture. Measured on
+            //     English-display + Arabic-region Windows: GetUserDefaultUILanguage() =
+            //     0x0409 (en) while InstalledUICulture = ar-EG, so this picked Arabic on an
+            //     English machine. The resolver is what actually asks Win32; the managed
+            //     fallback below is only for when no platform layer supplied one.
             string? effective = code;
             if (string.IsNullOrWhiteSpace(effective))
             {
-                var os = CultureInfo.InstalledUICulture;
-                var candidate = os.TwoLetterISOLanguageName;
-                if (_languages.ContainsKey(candidate)) effective = candidate;
+                var candidate = ResolveSystemLanguage();
+                if (candidate is not null && _languages.ContainsKey(candidate)) effective = candidate;
             }
 
             if (string.IsNullOrWhiteSpace(effective) || !_languages.ContainsKey(effective))
@@ -119,6 +140,40 @@ public sealed class LocalizationProvider : ILocalizationProvider
         // Raise OUTSIDE the lock: subscribers re-read Current/Culture and must never
         // deadlock against a handler that calls back into Get().
         RaiseLanguageChanged();
+    }
+
+    /// <summary>
+    /// The two-letter code of the OS display language, for "System".
+    /// </summary>
+    /// <remarks>
+    /// Prefers the injected <see cref="ISystemLanguageResolver"/> (which asks Win32). Falls back
+    /// to <see cref="CultureInfo.InstalledUICulture"/> only when no platform layer supplied one:
+    /// it is wrong on a machine whose display language and region disagree, but it is still
+    /// better than nothing, and this path only runs in a resolver-less context.
+    /// </remarks>
+    private string? ResolveSystemLanguage()
+    {
+        if (_systemLanguage is not null)
+        {
+            try
+            {
+                return _systemLanguage.DisplayLanguageCode;
+            }
+            catch
+            {
+                // Fall through to the managed guess.
+            }
+        }
+
+        try
+        {
+            var twoLetter = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
+            return string.IsNullOrWhiteSpace(twoLetter) ? null : twoLetter;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public string Get(string key, params object?[] args)

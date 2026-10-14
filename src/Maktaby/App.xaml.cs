@@ -369,7 +369,15 @@ public partial class App : Application
     {
         services.AddSingleton<ILogger, Logger>((serv) => Logging.Log);
         // Localization: runtime Xliff 2.0 provider (no resx). Langs/ next to the exe.
-        services.AddSingleton<ILocalizationProvider, LocalizationProvider>();
+        //
+        // The resolver is what makes "System" mean "the language Windows DISPLAYS" rather
+        // than "the region you format numbers in". It is a separate service because Core
+        // stays free of platform interop, and because CultureInfo cannot answer the question
+        // (InstalledUICulture reports the format locale when the per-user language list is
+        // empty - see SystemDisplayLanguageResolver).
+        services.AddSingleton<ISystemLanguageResolver, SystemDisplayLanguageResolver>();
+        services.AddSingleton<ILocalizationProvider, LocalizationProvider>(
+            (serv) => new LocalizationProvider(serv.GetRequiredService<ISystemLanguageResolver>()));
         //
 
         // Core (pure .NET, no platform dependencies)
