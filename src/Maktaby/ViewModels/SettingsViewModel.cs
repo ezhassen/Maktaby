@@ -228,6 +228,35 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
         return $"{en} - {native}";
     }
 
+    /// <summary>
+    /// The ONE place a picker label is matched back to a language.
+    /// </summary>
+    /// <remarks>
+    /// Both directions of the round trip go through here — <see cref="ResolveLanguageCode"/>
+    /// (label → code) and <see cref="ApplyLanguage"/> (label → code) — and they must match
+    /// on <see cref="LanguageLabel"/>, because the ComboBox stores that string.
+    /// <para>
+    /// This used to match on <see cref="LanguageInfo.DisplayName"/> (the native name, e.g.
+    /// "العربية") while the picker held <c>"Arabic - العربية"</c>. English masked it, because
+    /// its label collapses to its native name, so the round trip held for the one language
+    /// nobody reports bugs about — and quietly rewrote every other language to "en" on
+    /// Save. The app then kept running Arabic while the settings file said "en", so the next
+    /// Settings window opened showing the wrong pick and the next launch started in English.
+    /// </para>
+    /// </remarks>
+    private static LanguageInfo? FindLanguageByLabel(string label)
+    {
+        try
+        {
+            return Localization.Loc.AvailableLanguages
+                .FirstOrDefault(l => string.Equals(LanguageLabel(l), label, StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static IReadOnlyList<string> BuildLanguageOptions()
     {
         var list = new List<string> { SystemLanguage };
@@ -252,8 +281,7 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
                 App.ApplyLanguage(null);
                 return;
             }
-            var match = Localization.Loc.AvailableLanguages
-                .FirstOrDefault(l => string.Equals(LanguageLabel(l), displayName, StringComparison.OrdinalIgnoreCase));
+            var match = FindLanguageByLabel(displayName);
             var code = match?.Code ?? "en";
             App.ApplyLanguage(code);
         }
@@ -491,16 +519,28 @@ public sealed class SettingsViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Maps a display name to its stored culture code. "System" → null (follow the OS
-    /// language); a language display name → its code; unknown → "en".</summary>
+    /// language); a language picker label → its code; an unrecognised label → the code of
+    /// the language actually running.</summary>
+    /// <remarks>
+    /// Must stay the exact inverse of <see cref="ResolveLanguageDisplayName"/>, which is
+    /// what makes the ComboBox re-open showing the language you picked.
+    /// </remarks>
     private static string? ResolveLanguageCode(string displayName)
     {
+        if (string.Equals(displayName, SystemLanguage, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        var match = FindLanguageByLabel(displayName);
+        if (match is not null) return match.Code;
+
+        // Unrecognised label. Falling back to "en" here is what silently reverted a
+        // non-English install: the app kept running in the chosen language while the
+        // settings file said "en", so the next Settings window showed the wrong pick and
+        // the next launch came up in English. Persisting what is actually running cannot
+        // change the user's language behind their back.
         try
         {
-            if (string.Equals(displayName, SystemLanguage, StringComparison.OrdinalIgnoreCase))
-                return null;
-            var match = Localization.Loc.AvailableLanguages
-                .FirstOrDefault(l => string.Equals(l.DisplayName, displayName, StringComparison.OrdinalIgnoreCase));
-            return match?.Code ?? "en";
+            return Localization.Loc.Current?.Code ?? "en";
         }
         catch
         {
