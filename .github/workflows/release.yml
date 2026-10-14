@@ -1,8 +1,8 @@
-# Builds the Maktaby installer and publishes it as a GitHub release.
+# Builds the Maktaby installers and publishes them as a GitHub release.
 #
 # Releases are TAG-driven, not branch-driven. MinVer already derives the assembly
-# version from the nearest tag, so the tag is the single source of truth for both
-# the version number and the build input. Building on every push to develop would
+# version from the nearest tag, so the tag is the single source of truth for both the
+# version number and the build input. Building on every push to develop would
 # produce an artifact per commit and force us to invent a version for each.
 #
 #   git tag -a v1.0.33-beta.1 -m "1.0.33-beta.1"   # on develop
@@ -14,6 +14,18 @@
 # A tag with a prerelease label ("1.0.33-beta.1") is published as a pre-release;
 # a plain tag ("1.0.33") is published as a full release. Nothing else decides the
 # channel, so the tag name is always a truthful description of what shipped.
+#
+# One tag publishes FOUR installers - {x64, arm64} x {lean, full}:
+#
+#   Maktaby-<version>-x64-setup.exe         framework-dependent, needs .NET 10 Desktop Runtime (x64)
+#   Maktaby-<version>-x64-setup-full.exe    self-contained, no prerequisites
+#   Maktaby-<version>-arm64-setup.exe       framework-dependent, needs .NET 10 Desktop Runtime (ARM64)
+#   Maktaby-<version>-arm64-setup-full.exe  self-contained, no prerequisites
+#
+# The four are listed ONCE, in TARGETS_JSON, and consumed by both the build matrix and the
+# release-notes composer - so the table in the release notes cannot drift from what was
+# actually built. build.ps1 derives the file name it writes from the same target
+# (runtime + flavor), so a typo here fails loudly instead of shipping a misnamed asset.
 name: Release
 
 on:
@@ -36,12 +48,31 @@ concurrency:
   group: release-${{ github.event.inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
-jobs:
-  release:
-    name: Build installer & publish release
-    runs-on: windows-latest
-    timeout-minutes: 30
+env:
+  # Single definition of a release's contents. `matrix: target: ${{ fromJson(env.TARGETS_JSON) }}`
+  # turns each entry into a build leg; the notes job reads the same JSON.
+  #
+  #   rid     - .NET runtime identifier passed to build.ps1 -Runtime
+  #   arch    - the token in the asset name, and the one the in-app updater matches against
+  #             the running process (Core/Services/UpdateService.cs)
+  #   flavor  - lean (framework-dependent) or full (self-contained); also the asset suffix
+  TARGETS_JSON: >-
+    [{"rid":"win-x64","arch":"x64","flavor":"lean"},
+     {"rid":"win-x64","arch":"x64","flavor":"full"},
+     {"rid":"win-arm64","arch":"arm64","flavor":"lean"},
+     {"rid":"win-arm64","arch":"arm64","flavor":"full"}]
 
+jobs:
+  # Classification and the branch rule happen ONCE, before anything is built, so all four
+  # legs and the release notes agree on the version and cannot disagree about the channel.
+  validate:
+    name: Classify version & enforce branch policy
+    runs-on: windows-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
+      prerelease: ${{ steps.tag.outputs.prerelease }}
     steps:
       - name: Classify version
         id: tag
@@ -72,14 +103,12 @@ jobs:
       # Node 24 majors. The v4 generation of these actions targets Node 20, which
       # the runners force-upgrade and then warn about on every run. Note
       # upload-artifact@v5 advertises Node 24 support but still ran on Node 20 by
-      # default — v6 is the first release that genuinely moves the runtime, and it
+      # default - v6 is the first release that genuinely moves the runtime, and it
       # is otherwise identical to v4. Inputs are unchanged across all three.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ steps.tag.outputs.tag }}
-          # MinVer derives the assembly version from the nearest git tag. A shallow
-          # checkout has no tags, so without this every build would come out
-          # 0.0.0-alpha.0.1 and the installer would be misnamed.
+          # The branch policy below compares against origin/<branch>, which does not
+          # exist in a shallow checkout.
           fetch-depth: 0
 
       - name: Enforce branch policy
@@ -101,11 +130,32 @@ jobs:
           fi
           echo "OK: $TAG (${sha:0:8}) is reachable from '$EXPECTED_BRANCH'."
 
+  # One leg per target. Parallel, because a self-contained publish plus lzma2/max over a
+  # ~250 MB tree is the slow leg and four of them in series is a long release;
+  # fail-fast:false, so one broken target still reports the status of the other three.
+  build:
+    name: Build ${{ matrix.target.arch }} ${{ matrix.target.flavor }}
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(env.TARGETS_JSON) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
+          # MinVer derives the assembly version from the nearest git tag. A shallow
+          # checkout has no tags, so without this every build would come out
+          # 0.0.0-alpha.0.1 and the installer would be misnamed.
+          fetch-depth: 0
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
           # Central Package Management: versions live in Directory.Packages.props,
-          # not in a packages.lock.json, so point the cache key there.
+          # not in packages.lock.json, so point the cache key there.
           cache: true
           cache-dependency-path: '**/Directory.Packages.props'
 
@@ -132,104 +182,172 @@ jobs:
           }
           if (-not $iscc) { throw "Inno Setup compiler (ISCC.exe) is unavailable." }
 
+          # The installer is bilingual (English + Arabic) and pulls the Arabic wizard
+          # from the compiler's own Languages folder. Arabic.isl only ships with Inno
+          # Setup 6.5.0+, so an older compiler on the image - or on a dev machine -
+          # would fail at compile time with a bare "file not found". Check explicitly.
+          $arabic = Join-Path (Split-Path -Parent $iscc) 'Languages\Arabic.isl'
+          if (-not (Test-Path $arabic)) {
+            throw "Inno Setup at '$iscc' has no Languages\Arabic.isl. installer.iss declares an" +
+                  " Arabic setup wizard, which needs Inno Setup 6.5.0 or newer. Install a newer" +
+                  " Inno Setup, or vendor the translation as installer\languages\Arabic.isl and" +
+                  " point the [Languages] entry at it."
+          }
+
           Write-Host "Using ISCC: $iscc"
+          Write-Host "Arabic setup language available: $arabic"
           # build.ps1 resolves the compiler with Get-Command iscc, so its directory
           # has to be on PATH.
           Split-Path -Parent $iscc | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Publish and build installer
         shell: pwsh
-        run: ./build.ps1 -Action Publish -Configuration Release
+        run: >
+          ./build.ps1 -Action Publish -Configuration Release
+          -Runtime ${{ matrix.target.rid }} -Flavor ${{ matrix.target.flavor }}
 
       - name: Collect installer
         id: collect
         shell: pwsh
         env:
-          VERSION: ${{ steps.tag.outputs.version }}
+          VERSION: ${{ needs.validate.outputs.version }}
         run: |
-          # build.ps1 only WARNS and still exits 0 when iscc is missing, so a run
-          # that silently produced no installer must never be published as a
-          # successful release. Locate the file and fail loudly if it is absent.
-          $installer = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Recurse -File -Filter '*.exe' `
-            -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -like 'Maktaby *.exe' -and $_.FullName -notlike '*\src\*' } |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
+          # build.ps1 writes the installer under Installer\ with the release asset name
+          # baked in, so this is an exact-path lookup rather than a glob: a glob would
+          # happily pick up a leftover from a previous build.
+          #
+          # build.ps1 only WARNS and still exits 0 when iscc is missing, and a failed
+          # compile could in principle leave a differently-named file, so both cases
+          # are re-checked here and turned into a job failure.
+          $flavorSuffix = if ('${{ matrix.target.flavor }}' -eq 'full') { '-full' } else { '' }
+          $name = "Maktaby-$env:VERSION-${{ matrix.target.arch }}-setup$flavorSuffix.exe"
+          $installer = Join-Path $env:GITHUB_WORKSPACE "Installer\$name"
 
-          if (-not $installer) {
-            Write-Host "::error::No installer found under $env:GITHUB_WORKSPACE."
-            Write-Host "::error::Expected 'Maktaby <version>.exe' outside the src/ tree (see OutputDir in installer.iss)."
+          if (-not (Test-Path $installer)) {
+            Write-Host "::error::Expected '$installer' and it does not exist."
             if (Get-Command iscc -ErrorAction SilentlyContinue) {
-              Write-Host "::error::iscc IS on PATH, so this is an OutputDir problem."
+              Write-Host "::error::iscc IS on PATH, so this is an OutputDir or naming problem."
             } else {
               Write-Host "::error::iscc is NOT on PATH, so the installer step never ran."
             }
+            Write-Host "::error::Installer\ now contains:"
+            Get-ChildItem (Join-Path $env:GITHUB_WORKSPACE 'Installer') -ErrorAction SilentlyContinue |
+              ForEach-Object { Write-Host "::error::  $($_.Name)" }
             exit 1
           }
 
-          Write-Host "Found installer: $($installer.FullName) ($([math]::Round($installer.Length / 1MB, 2)) MB)"
+          $sizeBytes = (Get-Item $installer).Length
+          $sha256 = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 
-          $sizeBytes = $installer.Length
-          $sha256 = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-
-          # Spaces in the release asset name make /releases/latest/download/ URLs
-          # need percent-encoding, so the uploaded asset uses the conventional
-          # "-x64-setup" suffix instead.
+          # Already the final asset name - no spaces, no rename step. A space in a release
+          # asset name makes /releases/latest/download/ URLs need percent-encoding, which
+          # is why build.ps1 names installers this way in the first place.
           $assetDir = Join-Path $env:GITHUB_WORKSPACE 'artifacts'
           New-Item -ItemType Directory -Path $assetDir -Force | Out-Null
-          $assetName = "Maktaby-$env:VERSION-x64-setup.exe"
-          $assetPath = Join-Path $assetDir $assetName
-          Copy-Item -LiteralPath $installer.FullName -Destination $assetPath -Force
+          $assetPath = Join-Path $assetDir $name
+          Copy-Item -LiteralPath $installer -Destination $assetPath -Force
 
-          # Byte-identical copy under a version-less name. /releases/latest/download/
-          # resolves to the newest NON-prerelease release, so a stable "always give me
-          # the current build" URL works for the README and for winget-style scripts.
-          $stableName = 'Maktaby-latest-x64-setup.exe'
-          $stablePath = Join-Path $assetDir $stableName
-          Copy-Item -LiteralPath $installer.FullName -Destination $stablePath -Force
-
-          "asset=$assetPath"         >> $env:GITHUB_OUTPUT
-          "asset_name=$assetName"    >> $env:GITHUB_OUTPUT
-          "stable_path=$stablePath"  >> $env:GITHUB_OUTPUT
+          # Backslashes: the release job runs bash, where a backslash inside a quoted
+          # string is an escape character. Re-emit with forward slashes.
+          "path=$($assetPath -replace '\\','/')"  >> $env:GITHUB_OUTPUT
+          "name=$name"                            >> $env:GITHUB_OUTPUT
           "size_mb=$([math]::Round($sizeBytes / 1MB, 2))" >> $env:GITHUB_OUTPUT
-          "sha256=$sha256"           >> $env:GITHUB_OUTPUT
-          Write-Host "Asset ready: $assetName ($([math]::Round($sizeBytes/1MB,2)) MB)"
+          "sha256=$sha256"                        >> $env:GITHUB_OUTPUT
 
-      - name: Normalise asset paths for bash
-        id: paths
-        shell: bash
-        env:
-          ASSET: ${{ steps.collect.outputs.asset }}
-          STABLE: ${{ steps.collect.outputs.stable_path }}
-        run: |
-          # These paths were produced by PowerShell, so they are Windows-style with
-          # backslashes. The release step consumes them in bash, where a backslash
-          # inside a quoted string is an escape character. Re-emit them with forward
-          # slashes: Git Bash on the runner resolves those identically.
-          {
-            echo "asset=${ASSET//\\//}"
-            echo "stable=${STABLE//\\//}"
-          } >> "$GITHUB_OUTPUT"
-          echo "asset=$(echo ${ASSET//\\//})"
+          Write-Host "Asset ready: $name ($([math]::Round($sizeBytes/1MB,2)) MB)"
 
       - name: Keep the installer for this run
         uses: actions/upload-artifact@v6
         with:
-          name: maktaby-installer
+          name: maktaby-installer-${{ matrix.target.arch }}-${{ matrix.target.flavor }}
           path: artifacts/*.exe
           retention-days: 30
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download the four installers
+        uses: actions/download-artifact@v6
+        with:
+          # One flat directory: the notes job reads exactly the four expected file names
+          # out of it and fails if any is missing, so a partial build can never be
+          # published as a complete release.
+          pattern: maktaby-installer-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Verify all four targets produced an installer
+        shell: bash
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+        run: |
+          # The notes step must never describe a release that is missing an installer.
+          # Both steps derive the expected name from TARGETS_JSON with the same rule, so
+          # a rename in build.ps1 fails here rather than shipping a mismatched table.
+          # (The `while` runs in this shell, not a subshell: <(...) keeps `missing` alive.)
+          missing=0
+          while read -r arch flavor; do
+            suffix=""
+            [ "$flavor" = "full" ] && suffix="-full"
+            name="Maktaby-${VERSION}-${arch}-setup${suffix}.exe"
+            if [ -f "artifacts/$name" ]; then
+              echo "OK   $name"
+            else
+              echo "MISS $name"
+              missing=1
+            fi
+          done < <(echo "$TARGETS_JSON" | jq -r '.[] | "\(.arch) \(.flavor)"')
+
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::At least one target produced no installer; nothing was published."
+            exit 1
+          fi
 
       - name: Compose release notes
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
-          VERSION: ${{ steps.tag.outputs.version }}
-          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
-          SIZE_MB: ${{ steps.collect.outputs.size_mb }}
-          SHA256: ${{ steps.collect.outputs.sha256 }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
         run: |
+          # Sizes and hashes are computed here from the downloaded artifacts rather than
+          # threaded through matrix job outputs: they are a property of the bytes, and
+          # reading them off the files rules out a mismatch between what was published
+          # and what the notes claim.
+          rows=""
+          hashes=""
+          while read -r arch flavor; do
+            suffix=""
+            [ "$flavor" = "full" ] && suffix="-full"
+            name="Maktaby-${VERSION}-${arch}-setup${suffix}.exe"
+
+            mb=$(awk -v b="$(stat -c%s "artifacts/$name")" 'BEGIN{printf "%.1f", b/1048576}')
+
+            if [ "$flavor" = "full" ]; then
+              need="nothing - the runtime is bundled"
+            elif [ "$arch" = "arm64" ]; then
+              need=".NET 10 Desktop Runtime (ARM64)"
+            else
+              need=".NET 10 Desktop Runtime (x64)"
+            fi
+
+            if [ "$arch" = "arm64" ]; then
+              machine="ARM64"
+            else
+              machine="x64 (also installs on ARM64 via emulation)"
+            fi
+
+            # $'\n' rather than a literal newline: a line starting at column 0 would
+            # terminate this YAML block scalar.
+            rows+="$(printf '| `%s` | %s MB | %s | %s |\n' "$name" "$mb" "$machine" "$need")"
+            hashes+="$(sha256sum "artifacts/${name}" | cut -d' ' -f1)  ${name}"$'\n'
+          done < <(echo "$TARGETS_JSON" | jq -r '.[] | "\(.arch) \(.flavor)"')
+
           {
             echo "### Maktaby $VERSION"
             echo
@@ -239,21 +357,22 @@ jobs:
               echo "Stable release - built from \`main\`."
             fi
             echo
-            echo "**Download:** \`Maktaby-$VERSION-x64-setup.exe\` ($SIZE_MB MB)"
+            echo "**Download**"
+            echo
+            echo "| Asset | Size | Architecture | Requires |"
+            echo "| --- | --- | --- | --- |"
+            echo "$rows"
+            echo "\`-full\` builds bundle the runtime, so they install and run on a machine with no .NET installed. The lean builds are a fraction of the size, but need the .NET Desktop Runtime first."
             echo
             echo "**SHA-256**"
             echo
             echo '```'
-            echo "$SHA256  Maktaby-$VERSION-x64-setup.exe"
+            echo "$hashes"
             echo '```'
             echo
-            if [ "$PRERELEASE" = "false" ]; then
-              echo "A copy is also published under the version-less name \`Maktaby-latest-x64-setup.exe\`, so the download URL below always resolves to the newest stable build:"
-              echo
-              echo "https://github.com/$GITHUB_REPOSITORY/releases/latest/download/Maktaby-latest-x64-setup.exe"
-              echo
-            fi
-            echo "**Requirements** - Windows 10 (2004, build 19041) or later or Windows 11, 64-bit. The [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) must be installed. Web widgets and HTML wallpapers additionally need the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/), which is already present on most Windows installations."
+            echo "**Requirements** - Windows 10 (2004, build 19041) or later or Windows 11, on x64 or ARM64. Web widgets and HTML wallpapers additionally need the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/), which is already present on most Windows installations."
+            echo
+            echo "**Languages** - the setup wizard speaks English and Arabic. Maktaby itself ships in English and Arabic (Settings - Appearance - Language), including a right-to-left interface."
             echo
             echo "Run the installer and accept the UAC prompt - Maktaby lives in the system tray, there is no main window."
             echo
@@ -274,23 +393,23 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ steps.tag.outputs.tag }}
-          VERSION: ${{ steps.tag.outputs.version }}
-          PRERELEASE: ${{ steps.tag.outputs.prerelease }}
+          TAG: ${{ needs.validate.outputs.tag }}
+          VERSION: ${{ needs.validate.outputs.version }}
+          PRERELEASE: ${{ needs.validate.outputs.prerelease }}
         run: |
           # --verify-tag makes gh confirm the tag really exists in the repo before it
           # creates the release, so a typo'd input fails instead of orphaning a
           # release that points at nothing.
           #
-          # The version-less alias is attached to STABLE releases only: GitHub's
-          # /releases/latest/download/ points at the newest non-prerelease, so
-          # publishing it on a beta would make the alias resolve to an older build
-          # than a user's explicitly chosen one. Pre-releases stay addressable by
-          # their version only.
-          assets=("${{ steps.paths.outputs.asset }}")
-          if [ "$PRERELEASE" = "false" ]; then
-            assets+=("${{ steps.paths.outputs.stable }}")
-          fi
+          # No version-less "latest" alias is published. GitHub's
+          # /releases/latest/download/ path resolves to the newest NON-prerelease
+          # release, so a stable-only alias was misleading during a beta series, and a
+          # copy attached to a beta pointed at an older build than the user asked for.
+          # Download from the release page, or let Maktaby's in-app updater handle it -
+          # it picks the installer matching your architecture and your build type.
+          mapfile -t assets < <(ls artifacts/*.exe)
+          echo "Publishing ${#assets[@]} assets:"
+          printf '  %s\n' "${assets[@]}"
 
           gh release create "$TAG" \
             --verify-tag \

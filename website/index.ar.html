@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>مكتبي — صناديق وأدوات وخلفية متحركة لويندوز</title>
+<meta name="description" content="يحوّل مكتبي سطح مكتب ويندوز المزدحم إلى مساحة عمل تحبّ العودة إليها: صناديق قابلة لتغيير الحجم والتثبيت، وأدوات HTML/CSS/JS وأدوات C#/WPF أصلية، وخلفية متحركة فيديو أو GIF — كل ذلك من شريط النظام." />
+<meta name="theme-color" content="#070C16" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="#F6F8FC" media="(prefers-color-scheme: light)" />
+<meta name="color-scheme" content="dark light" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Maktaby" />
+<meta property="og:title" content="مكتبي — صناديق وأدوات وخلفية متحركة لويندوز" />
+<meta property="og:description" content="صناديق قابلة لتغيير الحجم والتثبيت، وأدوات تكتبها بنفسك، وخلفيات متحركة — فوق سطح مكتب ويندوز يعمل كالمعتاد." />
+<meta property="og:url" content="https://ezhassen.github.io/Maktaby/index.ar.html" />
+<meta property="og:image" content="https://ezhassen.github.io/Maktaby/assets/img/social-card.png" />
+<meta property="og:image:type" content="image/png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="مكتبي — صناديق وأدوات وخلفيات متحركة لويندوز 10 و11" />
+<meta property="og:locale" content="ar_AR" />
+<meta property="og:locale:alternate" content="en_US" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:image" content="https://ezhassen.github.io/Maktaby/assets/img/social-card.png" />
+
+<link rel="canonical" href="https://ezhassen.github.io/Maktaby/index.ar.html" />
+<link rel="icon" type="image/svg+xml" href="img/app_icon_svg.svg" />
+<link rel="apple-touch-icon" href="img/app_icon_svg.svg" />
+<link rel="alternate" type="application/rss+xml" title="إصدارات Maktaby" href="https://github.com/ezhassen/Maktaby/releases.atom" />
+<!-- Language alternates. Both pages declare both, and each is its own canonical.
+     x-default points at English: it is what a visitor with no language
+     preference, or a crawler that cannot match, should be sent to. -->
+<link rel="alternate" hreflang="en" href="https://ezhassen.github.io/Maktaby/" />
+<link rel="alternate" hreflang="ar" href="https://ezhassen.github.io/Maktaby/index.ar.html" />
+<link rel="alternate" hreflang="x-default" href="https://ezhassen.github.io/Maktaby/" />
+<link rel="preconnect" href="https://api.github.com" crossorigin />
+<link rel="stylesheet" href="assets/css/styles.css" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Maktaby",
+  "alternateName": "Maktaby — منظم سطح مكتب ويندوز",
+  "description": "يجمع الاختصارات والمجلدات والملفات في صناديق قابلة لتغيير الحجم والتثبيت تطفو فوق سطح مكتب ويندوز، ويضيف أدوات HTML/CSS/JS وأدوات C#/WPF أصلية وخلفيات متحركة فيديو أو GIF. يعمل من شريط النظام، ويحفظ التخطيط بين الجلسات، ويخفي كل الصناديق بنقرة مزدوجة على سطح المكتب الفارغ.",
+  "url": "https://ezhassen.github.io/Maktaby/index.ar.html",
+  "image": "https://ezhassen.github.io/Maktaby/assets/img/social-card.png",
+  "screenshot": "https://ezhassen.github.io/Maktaby/img/Screenshot-Dark.webp",
+  "downloadUrl": "https://github.com/ezhassen/Maktaby/releases/latest",
+  "applicationCategory": "UtilitiesApplication",
+  "applicationSubCategory": "منظم سطح المكتب",
+  "operatingSystem": "Windows 10 نسخة 2004 (بناء 19041) أو أحدث، أو Windows 11",
+  "softwareRequirements": "Windows 10 نسخة 2004 (بناء 19041) أو أحدث، أو Windows 11؛ بنية x64 أو ARM64؛ .NET 10 Desktop Runtime لنسخ lean فقط؛ Microsoft Edge WebView2 Evergreen Runtime لأدوات الويب والخلفيات المكتوبة بـ HTML؛ صلاحيات المدير للتثبيت",
+  "processorRequirements": "x64, arm64",
+  "inLanguage": ["ar", "en"],
+  "permissions": "يعمل محليًا فقط. بلا حساب وبلا تتبع. أدوات المستخدم هي شيفرة .NET عشوائية، ويطلب التطبيق موافقتك مرة واحدة لكل بصمة محتوى قبل تشغيلها.",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "codeRepository": "https://github.com/ezhassen/Maktaby",
+  "issueTracker": "https://github.com/ezhassen/Maktaby/issues",
+  "releaseNotes": "https://github.com/ezhassen/Maktaby/releases",
+  "author": { "@type": "Organization", "name": "Maktaby", "url": "https://github.com/ezhassen" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "featureList": [
+    "صناديق قابلة لتغيير الحجم والتثبيت تطفو فوق سطح مكتب ويندوز",
+    "إنشاء الصناديق بالسحب والإفلات من مستكشف الملفات أو قائمة ابدأ أو من صندوق آخر",
+    "حاويات قابلة للطي وصناديق متعددة علامات التبويب",
+    "شفافية وخلفية ولون إطار ولون شريط عنوان لكل صندوق على حدة",
+    "أدوات ويب مبنية بـ HTML و CSS و JavaScript على WebView2",
+    "أدوات C# و WPF أصلية تُصرَّف عند التحميل عبر Roslyn أو تُضاف كملف DLL",
+    "محرر أدوات مدمج مع معاينة فورية",
+    "خلفيات متحركة من فيديو أو GIF متحرك أو صور ثابتة، لكل شاشة",
+    "إيقاف مؤقت تلقائي للخلفية المتحركة عند عدم ظهور شيء",
+    "يعمل من شريط النظام: بلا نافذة رئيسية، ونسخة واحدة فقط",
+    "نقرة مزدوجة على سطح المكتب الفارغ لإظهار أو إخفاء كل الصناديق",
+    "مظهر داكن وفاتح، يتبع النظام افتراضيًا",
+    "تحديثات داخل التطبيق من إصدارات GitHub مع التحقق عبر SHA-256",
+    "مراقب أداء وسجلات يومية متدرجة",
+    "نسخ احتياطي واستعادة للتخطيط في حزمة .dbe1 واحدة"
+  ]
+}
+</script>
+
+<!-- يُطبَّق قبل أول رسم حتى لا يرى زائر المظهر الفاتح ومضة داكنة.
+     مقصود أن يبقى صغيرًا ومضمَّنًا هنا؛ ويعيد main.js تطبيق القيمة نفسها عند الإقلاع. -->
+<script>
+  (function () {
+    try {
+      var stored = localStorage.getItem('maktaby-theme');
+      document.documentElement.setAttribute('data-theme',
+        stored === 'dark' || stored === 'light'
+          ? stored
+          : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'));
+    } catch (e) { /* وضع التصفح الخاص: يبقى الإعداد الافتراضي */ }
+  })();
+</script>
+</head>
+<body>
+<a class="skip-link" href="#main">تخطَّ إلى المحتوى</a>
+
+<!-- خلفية زخرفية فقط، مخفية عن قارئات الشاشة. -->
+<div class="bg-grid" aria-hidden="true"></div>
+<div class="bg-glow bg-glow--one" aria-hidden="true"></div>
+<div class="bg-glow bg-glow--two" aria-hidden="true"></div>
+
+<header class="site-header" id="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="#top" aria-label="الصفحة الرئيسية لمكتبي">
+      <img class="brand-mark" src="img/app_icon_svg.svg" alt="" width="34" height="34" />
+      <span class="brand-name">Maktaby</span>
+    </a>
+
+    <nav class="site-nav" id="site-nav" aria-label="التنقل الرئيسي">
+      <a href="#features">المزايا</a>
+      <a href="#screenshots">لقطات الشاشة</a>
+      <a href="#how">كيف يعمل</a>
+      <a href="#install">التثبيت</a>
+      <a href="#faq">أسئلة شائعة</a>
+    </nav>
+
+    <div class="header-actions">
+      <!-- رابط نصّي عادي لا مفتاح لغات: لا بدّ أن يعمل بلا جافاسكربت، ولكل صفحة
+           عنوان مباشر. ووسوم hreflang في <head> تخبر محركات البحث أن الصفحتين
+           ترجمتان لبعضهما. -->
+      <a class="lang-switch" id="lang-switch"
+         href="index.html" hreflang="en" lang="en" dir="ltr"
+         title="English">English</a>
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="التبديل إلى المظهر الفاتح" title="تبديل المظهر">
+        <svg class="icon icon--sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><g stroke-linecap="round"><path d="M12 2.6v2.2M12 19.2v2.2M2.6 12h2.2M19.2 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M18.7 5.3l-1.6 1.6M6.9 17.1l-1.6 1.6"/></g></svg>
+        <svg class="icon icon--moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1Z"/></svg>
+      </button>
+      <a class="btn btn--ghost btn--sm hide-md" href="https://github.com/ezhassen/Maktaby" target="_blank" rel="noopener">
+        <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+        GitHub
+        <span class="count-badge" id="stars-badge" hidden>
+          <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" stroke="none" d="M8 .8l2.2 4.45 4.9.71-3.55 3.46.84 4.88L8 11.85 3.61 14.3l.84-4.88L.9 5.96l4.9-.71z"/></svg>
+          <span data-field="stars">—</span>
+        </span>
+      </a>
+      <button class="icon-btn nav-toggle" id="nav-toggle" type="button" aria-label="فتح القائمة" aria-expanded="false" aria-controls="site-nav">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <span id="top"></span>
+
+  <!-- ============================ البطل ============================ -->
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow reveal">
+          <span class="pill"><span class="dot"></span> Windows 10 / 11 · x64 و ARM64 · Apache-2.0</span>
+        </p>
+
+        <h1 class="reveal" data-reveal-delay="1">
+          سطح مكتبك،<br />
+          <span class="grad">منظَّم كما تفكّر.</span>
+        </h1>
+
+        <p class="lede reveal" data-reveal-delay="2">
+          يجمع مكتبي اختصاراتك ومجلداتك وملفاتك في <strong>صناديق قابلة لتغيير الحجم والتثبيت</strong> تطفو
+          <em>فوق</em> سطح مكتب ويندوز بدل أن تضيع في داخله — ثم يضيف الأمرين اللذين لا يوفّرهما أي منظم سطح مكتب
+          عادي: <strong>أدوات تكتبها بنفسك</strong> و<strong>خلفيات متحركة</strong>.
+        </p>
+
+        <div class="hero-cta reveal" data-reveal-delay="3">
+          <a class="btn btn--primary btn--lg" id="download-stable"
+             href="https://github.com/ezhassen/Maktaby/releases/latest"
+             target="_blank" rel="noopener"
+             data-release="stable">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3.5v11m0 0 4.2-4.2M12 14.5 7.8 10.3M4.5 17v2.2A1.8 1.8 0 0 0 6.3 21h11.4a1.8 1.8 0 0 0 1.8-1.8V17"/></svg>
+            <span class="btn-label">حمّله لويندوز</span>
+          </a>
+          <a class="btn btn--outline btn--lg" id="download-beta"
+             href="https://github.com/ezhassen/Maktaby/releases"
+             target="_blank" rel="noopener"
+             data-release="beta">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3.5v11m0 0 4.2-4.2M12 14.5 7.8 10.3M4.5 17v2.2A1.8 1.8 0 0 0 6.3 21h11.4a1.8 1.8 0 0 0 1.8-1.8V17"/></svg>
+            <span class="btn-label">حمّل النسخة التجريبية</span>
+          </a>
+        </div>
+
+        <p class="hero-meta reveal" data-reveal-delay="4">
+          <span id="stable-version" class="meta-item" data-slot="version">
+            <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none"/><path stroke-linecap="round" d="M8 7.2v4M8 5.1v.9"/></svg>
+            <span>الأحدث:</span> <span data-field="tag">—</span>
+          </span>
+          <span class="meta-item" id="stable-size" hidden>
+            <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke-linecap="round" d="M2.5 4.8h11a1 1 0 0 1 1 1v6.4a1 1 0 0 1-1 1H8.2L5 15.6v-2.4H2.5a1 1 0 0 1-1-1V5.8a1 1 0 0 1 1-1Z"/></svg>
+            <span data-field="size">—</span>
+          </span>
+          <span class="meta-item" id="stable-note" hidden>
+            <svg class="icon icon--sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none"/><path stroke-linecap="round" d="M8 7.2v4M8 5.1v.9"/></svg>
+            <span data-field="note">لا يوجد إصدار مستقر بعد — الإصدار التجريبي هو التنزيل الوحيد</span>
+          </span>
+          <span class="meta-item" id="beta-version" hidden>
+            <span>تجريبي:</span> <span data-field="tag">—</span>
+          </span>
+        </p>
+
+        <p class="hero-note reveal" data-reveal-delay="4">
+          نسختان: نسخة صغيرة تحتاج
+          <a href="https://dotnet.microsoft.com/download/dotnet/10.0" target="_blank" rel="noopener">.NET 10 Desktop Runtime</a>،
+          ونسخة <em>كاملة</em> أكبر تحمل بيئة التشغيل معها ولا تحتاج أي تثبيت مسبق.
+          أما أدوات الويب فتحتاج إضافة
+          <a href="https://developer.microsoft.com/microsoft-edge/webview2/" target="_blank" rel="noopener">WebView2 Runtime</a>.
+        </p>
+      </div>
+
+      <div class="hero-visual reveal" data-reveal-delay="2">
+        <div class="shot-frame">
+          <div class="shot-frame-bar">
+            <span class="tl"><i></i><i></i><i></i></span>
+            <span class="shot-frame-title">مكتبي — سطح المكتب</span>
+          </div>
+          <button class="shot-frame-body" type="button" data-lightbox="img/Screenshot-Dark.webp"
+                  data-caption="صناديق وأداة ساعة، فوق خلفية متحركة." aria-label="افتح لقطة الشاشة بحجم أكبر">
+            <img src="img/Screenshot-Dark.webp" alt="صناديق مكتبي تحمل اختصارات التطبيقات على سطح مكتب ويندوز، مع أداة ساعة" width="1920" height="1080" fetchpriority="high" decoding="sync" />
+            <span class="shot-zoom" aria-hidden="true">
+              <svg class="icon" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 9V4h5M20 15v5h-5M20 9V4h-5M4 15v5h5"/></svg>
+            </span>
+          </button>
+        </div>
+        <p class="shot-caption">صناديق وعلامات تبويب وأدوات وخلفية متحركة — كل ذلك فوق سطح مكتب ما زال يعمل كما ينبغي.</p>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="stat-row reveal" data-reveal-delay="5">
+        <div class="stat"><strong>صفر</strong><span>أيقونات نُقلت على القرص</span></div>
+        <div class="stat"><strong>من شريط النظام</strong><span>بلا نافذة رئيسية</span></div>
+        <div class="stat"><strong>نقرة واحدة</strong><span>لإخفاء كل شيء</span></div>
+        <div class="stat"><strong>HTML + C#</strong><span>اكتب أدواتك بنفسك</span></div>
+        <div class="stat"><strong>SHA-256</strong><span>تنزيلات موثّقة</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ المزايا ============================ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <header class="section-head reveal">
+        <p class="kicker">المزايا</p>
+        <h2>كل ما كان ينبغي لمنظم سطح المكتب أن يفعله منذ سنوات</h2>
+        <p class="section-sub">
+          الصناديق تبقى في مواضعها تمامًا. والأدوات والخلفيات تُرسم خلف أيقونات ويندوز، لكل شاشة على حدة.
+          وحين تريد سطح المكتب من جديد، نقرة مزدوجة تعيده إليك.
+        </p>
+      </header>
+
+      <div class="feature-grid">
+        <article class="card card--wide reveal">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">📦</span>
+            <h3>الصناديق</h3>
+            <p>اجمع الاختصارات والملفات والمجلدات في حاويات قابلة لتغيير الحجم تجلس فوق سطح المكتب.</p>
+            <ul class="ticks">
+              <li>إنشاء بالسحب والإفلات — من مستكشف الملفات أو قائمة ابدأ أو من صندوق آخر</li>
+              <li>التثبيت على الصناديق وحواف الشاشة مع خطوط إرشاد فورية</li>
+              <li>الطي إلى الأعلى أو الأسفل أو اليمين أو اليسار لاستعادة المساحة</li>
+              <li>حاويات متعددة علامات التبويب للمجموعات الكبيرة</li>
+              <li>شفافية وألوان وإطار وشريط عنوان لكل صندوق</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="1">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🧩</span>
+            <h3>أدوات الويب</h3>
+            <p>أدوات HTML / CSS / JS مكتفية بذاتها، كل واحدة في نسختها الخاصة من WebView2 — تعمل كليًا على جهازك.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="2">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🖥️</span>
+            <h3>أدوات أصلية</h3>
+            <p>إضافات C# / WPF تُصرَّف عند التحميل عبر Roslyn، أو تُضاف كملف DLL. WPF و WinForms و HWND خام و D3D11 و SkiaSharp.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="3">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🎬</span>
+            <h3>خلفية متحركة</h3>
+            <p>أي صورة أو GIF متحرك أو فيديو خلف أيقوناتك، موزعًا على كل الشاشات — مع إيقاف مؤقت تلقائي عند عدم ظهور شيء.</p>
+          </div>
+        </article>
+
+        <article class="card card--wide reveal" data-reveal-delay="1">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🔒</span>
+            <h3>نموذج ثقة يعلن عن نفسه بوضوح</h3>
+            <p>
+              الأدوات الأصلية شيفرة .NET عشوائية تعمل بصلاحياتك، لذلك يطلب مكتبي موافقتك مرة واحدة لكل بصمة محتوى
+              قبل تشغيل أي شيء كتبته أو أضفته — ويرفض التشغيل فورًا بمجرد تعديله. أما الأدوات المدمجة فموثوقة ضمنًا.
+              وكل ما عدا ذلك محلي أولًا: تخطيطك وإعداداتك وأدواتك تبقى في <code>%LocalAppData%\Maktaby</code>.
+            </p>
+            <p class="card-foot">
+              <a class="link" href="https://github.com/ezhassen/Maktaby/blob/develop/docs/native-widgets.md" target="_blank" rel="noopener">اقرأ دليل الإضافات ←</a>
+            </p>
+          </div>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🌗</span>
+            <h3>داكن وفاتح</h3>
+            <p>اتبع مظهر النظام أو اختر واحدًا. مظهر التطبيق ومظهر الأدوات والتخصيص لكل صندوق أمور مستقلة.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="1">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">🔄</span>
+            <h3>تحديثات داخل التطبيق</h3>
+            <p>يفحص إصدارات GitHub عند الإقلاع وكل 6 ساعات أو عند الطلب — ينزّل، ويتحقق عبر SHA-256، ويثبّت.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="2">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">📊</span>
+            <h3>مراقب الأداء</h3>
+            <p>الذاكرة والمعالج والمقابض ومستوى التصيير وعمليات WebView2 وحالة كل أداة — مع زر إيقاف فوري.</p>
+          </div>
+        </article>
+
+        <article class="card reveal" data-reveal-delay="3">
+          <div class="card-body">
+            <span class="card-icon" aria-hidden="true">💾</span>
+            <h3>النسخ الاحتياطية</h3>
+            <p>صدّر تخطيطك وإعداداتك وأدواتك في حزمة <code>.dbe1</code> واحدة واستعدها لاحقًا.</p>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ لقطات الشاشة ============================ -->
+  <section class="section section--alt" id="screenshots">
+    <div class="wrap">
+      <header class="section-head reveal">
+        <p class="kicker">لقطات الشاشة</p>
+        <h2>يبدو كسطح مكتبك، لأنه سطح مكتبك</h2>
+        <p class="section-sub">لقطات حقيقية — اضغط أي صورة لفتحها بالحجم الكامل.</p>
+      </header>
+
+      <div class="gallery">
+        <figure class="shot shot--feature reveal">
+          <button class="shot-open" type="button" data-lightbox="img/Screenshot-Dark.webp"
+                  data-caption="المظهر الداكن — سطح مكتب يعمل بثمانية صناديق وعلامات تبويب وأداة ساعة.">
+            <img src="img/Screenshot-Dark.webp" alt="المظهر الداكن: عدة صناديق من مكتبي تحمل اختصارات، وأداة ساعة، وخلفية متحركة" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>صناديق على سطح مكتب حقيقي</strong>
+            علامات تبويب وطي وتخصيص لكل صندوق وأداة ساعة — مع شريط مهام ويندوز كما هو تمامًا.
+          </figcaption>
+        </figure>
+
+        <div class="gallery-masonry">
+        <figure class="shot reveal" data-reveal-delay="1">
+          <button class="shot-open" type="button" data-lightbox="img/Screenshot-Light.webp"
+                  data-caption="المظهر الفاتح — التخطيط نفسه بواجهة فاتحة.">
+            <img src="img/Screenshot-Light.webp" alt="المظهر الفاتح: صناديق مكتبي فوق سطح مكتب فاتح" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>المظهر الفاتح</strong>
+            التخطيط نفسه بواجهة فاتحة. ويمكن للأدوات أن تتبع مظهر التطبيق بشكل مستقل.
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal">
+          <button class="shot-open" type="button" data-lightbox="img/boxes.webp"
+                  data-caption="صندوق بوابة مجلدات — صندوق يفتح مجلدًا تختاره في مستكشف الملفات.">
+            <img src="img/boxes.webp" alt="صندوق من مكتبي بجوار بوابة مجلدات تعرض تفاصيل الملفات" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>بوابات المجلدات</strong>
+            صندوق يفتح مجلدًا في مستكشف الملفات — بأيقونات أو بعرض التفاصيل.
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal" data-reveal-delay="1">
+          <button class="shot-open" type="button" data-lightbox="img/screenshot-settings.webp"
+                  data-caption="الإعدادات — معاينة المظهر ومظهر الصندوق والشفافية.">
+            <img src="img/screenshot-settings.webp" alt="نافذة إعدادات مكتبي مع تبويب المظهر ومعاينة فورية" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>إعدادات مع معاينة فورية</strong>
+            كل تغيير يظهر في لوحة المعاينة قبل أن تحفظ.
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal">
+          <button class="shot-open" type="button" data-lightbox="img/screenshot-marquee.webp"
+                  data-caption="سحب مستطيل على مساحة فارغة من سطح المكتب يعرض خيار إنشاء صندوق جديد.">
+            <img src="img/screenshot-marquee.webp" alt="تحديد مستطيل على سطح المكتب مع قائمة إنشاء صندوق جديد" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>تحديد ← صندوق جديد</strong>
+            حدّد مساحة فارغة فتعرض لك قائمة إنشاء صندوق جديد.
+          </figcaption>
+        </figure>
+
+        <figure class="shot reveal" data-reveal-delay="1">
+          <button class="shot-open" type="button" data-lightbox="img/screenshot-tray.webp"
+                  data-caption="قائمة شريط النظام — حيث يقيم التطبيق كله.">
+            <img src="img/screenshot-tray.webp" alt="قائمة أيقونة مكتبي في شريط النظام تعرض أوامر التطبيق" loading="lazy" decoding="async" />
+          </button>
+          <figcaption>
+            <strong>كل شيء في شريط النظام</strong>
+            صندوق جديد، الأدوات، الخلفية، الإعدادات، إخفاء الكل، خروج.
+          </figcaption>
+        </figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ كيف يعمل ============================ -->
+  <section class="section" id="how">
+    <div class="wrap">
+      <header class="section-head reveal">
+        <p class="kicker">كيف يعمل</p>
+        <h2>ثلاث خطوات، ثم يختفي عن طريقك</h2>
+      </header>
+
+      <ol class="steps">
+        <li class="step reveal">
+          <span class="step-num">1</span>
+          <h3>ثبِّت</h3>
+          <p>شغّل المُثبِّت واقبل طلب الصلاحيات. وهو يغلق نسخة قيد التشغيل قبل التحديث ويعيد فتحها بعده.</p>
+        </li>
+        <li class="step reveal" data-reveal-delay="1">
+          <span class="step-num">2</span>
+          <h3>رتِّب</h3>
+          <p>أفلت الملفات على مساحة فارغة من سطح المكتب لإنشاء صندوق. اسحب، غيّر الحجم، ثبّت الحواف، أضف علامات تبويب، وأفلت أداة فوقه.</p>
+        </li>
+        <li class="step reveal" data-reveal-delay="2">
+          <span class="step-num">3</span>
+          <h3>استعده متى شئت</h3>
+          <p>انقر نقرًا مزدوجًا على سطح المكتب الفارغ لإخفاء كل الصناديق وإظهار شاشة نظيفة. وكرّر النقر لإعادتها جميعًا.</p>
+        </li>
+      </ol>
+
+      <div class="shortcut-table reveal" data-reveal-delay="3">
+        <h3 class="shortcut-title">الإيماءات والاختصارات</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>الإيماءة</th><th>النتيجة</th></tr></thead>
+            <tbody>
+              <tr><td><kbd>نقرة مزدوجة</kbd> على سطح المكتب الفارغ</td><td>إظهار أو إخفاء كل الصناديق</td></tr>
+              <tr><td><kbd>Ctrl</kbd> + <kbd>عجلة الفأرة</kbd> على سطح المكتب</td><td>تغيير حجم الأيقونات</td></tr>
+              <tr><td><kbd>نقرة يمين</kbd> على شريط صندوق</td><td>قائمة الصندوق — حذف، إخفاء، قفل، طي، علامات تبويب</td></tr>
+              <tr><td><kbd>Alt</kbd> + <kbd>Enter</kbd> على عنصر</td><td>عرض الخصائص</td></tr>
+              <tr><td>السحب إلى مساحة فارغة</td><td>مستطيل تحديد ← <em>صندوق جديد</em></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ التثبيت ============================ -->
+  <section class="section section--alt" id="install">
+    <div class="wrap install-grid">
+      <div class="install-copy">
+        <p class="kicker">التثبيت</p>
+        <h2>حمِّل، شغِّل، انتهى</h2>
+        <p class="section-sub">
+          يصدر مكتبي أربعة مُثبِّتين — بنية x64 وبنية ARM64، ولكلٍّ منهما نسخة خفيفة ونسخة مستقلة. وكلها
+          تُثبَّت في <code>%ProgramFiles%\Maktaby</code>، وتطلب الصلاحيات مرة واحدة، ثم تقيم في شريط النظام.
+        </p>
+
+        <!-- يملؤها main.js من واجهة إصدارات GitHub: روابط حقيقية وأحجام حقيقية،
+             صف لكل نسخة. وهذا هو البديل بلا جافاسكربت — الصفوف التي لا تُحل
+             روابطها تبقى معطّلة بدل أن تكون روابط ميتة. -->
+        <div class="installer-list" id="install-assets">
+          <p class="installer-note" id="install-detected">جارٍ تحميل أحدث إصدار…</p>
+
+          <div class="installer-row" data-installer-row data-installer-arch="x64" data-installer-flavor="lean">
+            <a class="installer-link is-disabled" aria-disabled="true">
+              <span class="installer-name">x64 · خفيفة</span>
+              <span class="installer-req">تحتاج .NET 10 Desktop Runtime</span>
+            </a>
+            <span class="installer-size" data-installer-size>—</span>
+          </div>
+
+          <div class="installer-row" data-installer-row data-installer-arch="x64" data-installer-flavor="full">
+            <a class="installer-link is-disabled" aria-disabled="true">
+              <span class="installer-name">x64 · كاملة</span>
+              <span class="installer-req">مستقلة — لا تحتاج أي تثبيت مسبق</span>
+            </a>
+            <span class="installer-size" data-installer-size>—</span>
+          </div>
+
+          <div class="installer-row" data-installer-row data-installer-arch="arm64" data-installer-flavor="lean">
+            <a class="installer-link is-disabled" aria-disabled="true">
+              <span class="installer-name">ARM64 · خفيفة</span>
+              <span class="installer-req">تحتاج .NET 10 Desktop Runtime (ARM64)</span>
+            </a>
+            <span class="installer-size" data-installer-size>—</span>
+          </div>
+
+          <div class="installer-row" data-installer-row data-installer-arch="arm64" data-installer-flavor="full">
+            <a class="installer-link is-disabled" aria-disabled="true">
+              <span class="installer-name">ARM64 · كاملة</span>
+              <span class="installer-req">مستقلة — لا تحتاج أي تثبيت مسبق</span>
+            </a>
+            <span class="installer-size" data-installer-size>—</span>
+          </div>
+
+          <p class="installer-fallback">
+            لا تعرف أيّها تحتاج؟ خُذ
+            <a href="https://github.com/ezhassen/Maktaby/releases" target="_blank" rel="noopener">صفحة الإصدارات</a> —
+            فيها كل النسخ مع أحجامها وبصمة التحقق.
+          </p>
+        </div>
+
+        <ol class="install-steps">
+          <li>حمِّل المُثبِّت من الأعلى — النسخة المميّزة لجهازك هي الخيار الصحيح.</li>
+          <li>شغِّله واقبل طلب الصلاحيات.</li>
+          <li>في الصفحة الأخيرة اختر هل تريد تشغيل مكتبي وهل تريد تشغيله مع بدء ويندوز (كلاهما محدَّد افتراضيًا).</li>
+          <li>تظهر أيقونة شريط النظام عند أول تشغيل. لا توجد نافذة رئيسية.</li>
+        </ol>
+
+        <p class="install-aside">
+          يتحدّث مُثبِّت اللغة الإنجليزية والعربية، ويسأل أيّهما تريد. وينشر كل إصدار بصمة
+          SHA-256 على صفحة الإصدار. أما النسخ المثبَّتة فتحدّث نفسها من
+          <strong>الإعدادات ← التحديثات</strong> أو من <em>البحث عن تحديثات…</em> في شريط النظام — ويقدّم
+          التحديث دائمًا النسخة المطابقة لبنية جهازك ونوع نسختك.
+        </p>
+      </div>
+
+      <div class="install-card reveal" data-reveal-delay="1">
+        <h3 class="install-card-title">المتطلبات</h3>
+        <ul class="reqs">
+          <li>
+            <span class="req-label">نظام التشغيل</span>
+            <span>Windows 10 نسخة 2004 (بناء 19041) أو أحدث، أو Windows 11</span>
+          </li>
+          <li>
+            <span class="req-label">البنية</span>
+            <span>x64 أو ARM64 — اختر ما يبلّغ عنه جهازك؛ ونسخة x64 تعمل أيضًا على ويندوز على ARM عبر المحاكاة</span>
+          </li>
+          <li>
+            <span class="req-label">بيئة التشغيل</span>
+            <span>
+              <a href="https://dotnet.microsoft.com/download/dotnet/10.0" target="_blank" rel="noopener">.NET 10 Desktop Runtime</a>
+              — مطلوبة للنسخ <em>الخفيفة</em> فقط؛ أما النسخ <em>الكاملة</em> ف تحملها معها
+            </span>
+          </li>
+          <li>
+            <span class="req-label">WebView2</span>
+            <span>
+              <a href="https://developer.microsoft.com/microsoft-edge/webview2/" target="_blank" rel="noopener">Edge WebView2 Evergreen Runtime</a>
+              — لأدوات الويب والخلفيات المكتوبة بـ HTML فقط؛ مثبَّتة مسبقًا على Windows 11 ومعظم أجهزة Windows 10
+            </span>
+          </li>
+          <li>
+            <span class="req-label">الصلاحيات</span>
+            <span>تُطلب مرة واحدة، للتثبيت داخل Program Files</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ أسئلة شائعة ============================ -->
+  <section class="section" id="faq">
+    <div class="wrap wrap--narrow">
+      <header class="section-head reveal">
+        <p class="kicker">أسئلة شائعة</p>
+        <h2>أسئلة منطقية</h2>
+      </header>
+
+      <div class="faq">
+        <details class="reveal">
+          <summary>هل يستبدل مكتبي سطح مكتب ويندوز أو يعدّله؟</summary>
+          <p>
+            لا. هو يرسم نوافذه <em>فوق</em> سطح المكتب والخلفية. يظل مستكشف الملفات يعمل، وتبقى أيقوناتك
+            كما هي، ولا يُكتب شيء في ملفاتك أو في السجل خارج مفتاح بدء التشغيل الاختياري.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="1">
+          <summary>هل هو مجاني؟</summary>
+          <p>
+            نعم — برخصة Apache-2.0. يمكنك استخدامه وتعديله وإعادة توزيعه، حتى تجاريًا، ما دلت على الرخصة
+            الرخصة وذكرت تغييراتك. ولا يأتي مع أي ضمان.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="2">
+          <summary>ما الفرق بين المستقر والتجريبي؟</summary>
+          <p>
+            المستقر يُوسَم من <code>main</code>؛ والتجريبي إصدار مُسبق يُوسَم من <code>develop</code>.
+            وتتبع النسخ المثبَّتة قناة البناء الذي تعمل عليه، أو يمكنك تثبيت قناة تلقائي أو مستقر أو تجريبي في
+            <strong>الإعدادات ← التحديثات</strong>. أما النسخ المحمولة فتتخطى التحديثات الداخلية — إذ لا يوجد ما يُحدَّث.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="3">
+          <summary>هل أدوات آمنة التثبيت؟</summary>
+          <p>
+            الأداة الأصلية شيفرة .NET عشوائية تعمل داخل التطبيق بصلاحياتك. يطلب مكتبي موافقتك مرة واحدة لكل
+            بصمة محتوى قبل تشغيل أداة كتبتها، ويرفض تشغيل أداة عدّلتها منذ ذلك الحين — لكن لا تثبّت إلا من مجلدات
+            تثق بها. ويشرح
+            <a href="https://github.com/ezhassen/Maktaby/blob/develop/docs/native-widgets.md" target="_blank" rel="noopener">دليل الإضافات</a>
+            هذا النموذج كاملًا.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="4">
+          <summary>أين تُحفظ بياناتي؟</summary>
+          <p>
+            محليًا، تحت <code>%LocalAppData%\Maktaby</code> — التخطيط والإعدادات ومجلد
+            <code>UserWidgets</code> وسجل واحد لكل يوم. لا تتبع ولا حساب.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="5">
+          <summary>هل يعمل على أكثر من شاشة؟</summary>
+          <p>
+            الأدوات والحاويات وسطح المكتب الحالي تستهدف الشاشة الأساسية فقط، بينما تُرسم الخلفيات المتحركة
+            على كل الشاشات مع تتبّع للتخطيط لكل شاشة. أما وضع الأدوات على شاشات متعددة فغير موجود بعد —
+            افتح مشكلة إن كنت تحتاجه.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="6">
+          <summary>كيف أبنيه من المصدر؟</summary>
+          <p>
+            انسخ المستودع وشغّل <code>dotnet run --project src/Maktaby</code> على حزمة تطوير .NET 10.
+            ولن إنتاج مُثبِّت تحتاج Inno Setup 6 والأمر <code>./build.ps1 -Action Publish</code>.
+            والإصدارات تُشغَّل بالوسوم — انظر
+            <a href="https://github.com/ezhassen/Maktaby/blob/develop/docs/releasing.md" target="_blank" rel="noopener">docs/releasing.md</a>.
+          </p>
+        </details>
+
+        <details class="reveal" data-reveal-delay="7">
+          <summary>هل واجهة البرنامج بالعربية؟</summary>
+          <p>
+            نعم. يختار التطبيق اللغة من <strong>الإعدادات ← المظهر ← اللغة</strong>، ويتبع اتجاه الكتابة
+            لغة الاختيار: من اليمين إلى اليسار للعربية. وصناعة الملفات نفسها متاحة بالعربية أيضًا،
+            وتُثبَّت ضمن البرنامج — والمُثبِّت نفسه يسأل إن كنت تفضّل العربية.
+          </p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================ نداء الختام ============================ -->
+  <section class="section section--cta">
+    <div class="wrap cta-inner reveal">
+      <h2>امنح سطح المكتب وظيفة ثانية.</h2>
+      <p>مجاني ومفتوح المصدر، وفي طريقه إلى حذف نهائي من مجلد التنزيلات.</p>
+      <div class="cta-actions">
+        <a class="btn btn--primary btn--lg" id="download-stable-2" href="https://github.com/ezhassen/Maktaby/releases/latest" target="_blank" rel="noopener">
+          <span class="btn-label">حمّله لويندوز</span>
+        </a>
+        <a class="btn btn--outline btn--lg" href="https://github.com/ezhassen/Maktaby" target="_blank" rel="noopener">
+          <svg class="icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          ادعمه بنجمة على GitHub
+        </a>
+      </div>
+      <p class="cta-meta">
+        <span id="downloads-total" hidden>
+          <span data-field="count">—</span> <span data-field="count-label">عملية تنزيل على إصدارات GitHub</span>
+        </span>
+        <span id="stars-total" hidden>
+          <span data-field="stars">—</span> <span data-field="stars-label">نجوم GitHub</span>
+        </span>
+        <span>Windows 10 / 11 · x64 و ARM64 · Apache-2.0</span>
+      </p>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div class="footer-brand">
+      <img class="brand-mark" src="img/app_icon_svg.svg" alt="" width="28" height="28" />
+      <div>
+        <p class="footer-name">Maktaby</p>
+        <p class="footer-tag">منظم سطح مكتب ويندوز</p>
+      </div>
+    </div>
+
+    <nav class="footer-links" aria-label="تذييل الصفحة">
+      <div class="footer-col">
+        <h4>المنتج</h4>
+        <a href="#features">المزايا</a>
+        <a href="#screenshots">لقطات الشاشة</a>
+        <a href="#install">التثبيت</a>
+        <a href="https://github.com/ezhassen/Maktaby/releases" target="_blank" rel="noopener">الإصدارات</a>
+      </div>
+      <div class="footer-col">
+        <h4>المشروع</h4>
+        <a href="https://github.com/ezhassen/Maktaby" target="_blank" rel="noopener">الشيفرة المصدرية</a>
+        < <a href="https://github.com/ezhassen/Maktaby/issues" target="_blank" rel="noopener">أبلغ عن مشكلة</a>
+        <a href="https://github.com/ezhassen/Maktaby/blob/develop/docs/native-widgets.md" target="_blank" rel="noopener">دليل أدوات العرض</a>
+        <a href="https://github.com/ezhassen/Maktaby/blob/develop/docs/releasing.md" target="_blank" rel="noopener">الإصدارات</a>
+      </div>
+      <div class="footer-col">
+        <h4>قانوني</h4>
+        <a href="https://github.com/ezhassen/Maktaby/blob/main/LICENSE.txt" target="_blank" rel="noopener">رخصة Apache-2.0</a>
+        <a href="https://www.apache.org/licenses/LICENSE-2.0" target="_blank" rel="noopener">شروط الرخصة</a>
+      </div>
+    </nav>
+  </div>
+
+  <div class="wrap footer-bottom">
+    <p>&copy; <span data-year>2026</span> Maktaby · Windows و .NET و WebView2 علامات تجارية لأصحابها. مكتبي غير تابع لشركة Microsoft.</p>
+  </div>
+</footer>
+
+<!-- عارض لقطات الشاشة -->
+<div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="عارض لقطات الشاشة" hidden>
+  <button class="lightbox-close" id="lightbox-close" type="button" aria-label="إغلاق العارض">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/></svg>
+  </button>
+  <button class="lightbox-nav lightbox-nav--prev" id="lightbox-prev" type="button" aria-label="الصورة السابقة">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14.5 4.5 7.5 12l7 7.5"/></svg>
+  </button>
+  <button class="lightbox-nav lightbox-nav--next" id="lightbox-next" type="button" aria-label="الصورة التالية">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9.5 4.5 16.5 12l-7 7.5"/></svg>
+  </button>
+  <figure class="lightbox-figure">
+    <img id="lightbox-img" src="" alt="" />
+    <figcaption>
+      <span id="lightbox-caption"></span>
+      <span class="lightbox-count" id="lightbox-count"></span>
+    </figcaption>
+  </figure>
+  <p class="lightbox-hint" aria-hidden="true">&larr; &rarr; للتنقل · Esc للإغلاق</p>
+</div>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>

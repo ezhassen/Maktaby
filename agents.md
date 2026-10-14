@@ -114,6 +114,43 @@ Follow it to keep the architecture clean and the build green.
  6. Reference `Maktaby.Native` from the consuming `.csproj` (`Maktaby`,
     `Maktaby.LiveWallpaper` and `Maktaby.Shared` already do).
 
+## Release artifacts
+
+One tag publishes **four** installers — `{x64, arm64} × {lean, full}` — and the build
+script, the installer script, the release workflow, the in-app updater and the website all
+have to agree on their names. One spelling, one place:
+
+```
+Maktaby-<version>-<arch>-setup.exe        lean  (framework-dependent, needs .NET)
+Maktaby-<version>-<arch>-setup-full.exe   full  (self-contained, ~250 MB publish tree)
+```
+
+- **`<arch>` is `x64` or `arm64`** — the token the updater matches against the running
+  process (`UpdateService.s_archTokens`), so it is *derived* from the RID in `build.ps1`
+  (`win-x64` → `x64`), never typed per target.
+- **`build.ps1` owns the name.** `-Runtime win-x64|win-arm64` × `-Flavor lean|full`
+  publishes into `src/Maktaby/bin/Publish/<runtime>-<flavor>` (they must not share a
+  folder) and writes the whole target into a generated, git-ignored `BuildTarget.inc`.
+  `installer.iss` reads only that file; nothing in it hard-codes a name. The include is
+  ASCII and generated because `/D` command-line defines are quoted differently by
+  Windows PowerShell 5.1 and pwsh 7.
+- **`release.yml` declares the four targets once**, in `TARGETS_JSON`, and both the build
+  matrix and the release-notes composer read it — so the notes table cannot drift from
+  what was built. It looks each installer up by exact path (not a glob) and refuses to
+  publish unless all four are present.
+- **There is no `latest` alias.** `/releases/latest/download/` resolves to the newest
+  *non-prerelease*, so during a beta series it pointed at an older build than the user
+  had chosen. Don't reintroduce it.
+- **Two Inno arch identifiers, not one.** `x64compatible` (the x64 setup) also matches
+  Windows 11 on ARM running the build under emulation; `arm64` (the arm64 setup) does not.
+  Plain `x64` is deprecated in Inno 6.3+ and means "x64 Windows only".
+- **The installer is bilingual** (English + Arabic) via `installer.iss` `[Languages]`,
+  which needs Inno Setup **6.5.0+** for `Arabic.isl`. Our own runtime-built strings live
+  in `installer/languages/*Custom.isl` and are referenced through `{#MyRepoRoot}` — a
+  relative `MessagesFile` resolves against `SourceDir`, not against the script.
+  The script's own `[CustomMessages]` section overrides message files for every language,
+  so it stays empty.
+
 ## Verifying changes
 
 After editing:

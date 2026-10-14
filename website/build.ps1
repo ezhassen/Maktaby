@@ -3,17 +3,23 @@
     Stages the Maktaby landing page into website/dist for publishing.
 
 .DESCRIPTION
-    The site source lives in website/ (index.html + robots.txt + sitemap.xml +
-    assets/css + assets/js + assets/img). Every screenshot is referenced from
-    .github/assets instead of being duplicated, so the README and the website can
-    never show different captures of the same build. This script merges the two
-    into a single self-contained dist/ folder:
+    The site source lives in website/ (index.html + index.ar.html + robots.txt
+    + sitemap.xml + assets/css + assets/js + assets/img). Every screenshot is
+    referenced from .github/assets instead of being duplicated, so the README and the
+    website can never show different captures of the same build. This script merges the
+    two into a single self-contained dist/ folder:
 
-        website/dist/index.html          <- website/index.html
+        website/dist/index.html          <- website/index.html       (English, /)
+        website/dist/index.ar.html       <- website/index.ar.html    (Arabic, RTL)
         website/dist/robots.txt          <- website/robots.txt
         website/dist/sitemap.xml         <- website/sitemap.xml
         website/dist/assets/**           <- website/assets/**
         website/dist/img/**              <- .github/assets/**
+
+    One page per language rather than one page with a client-side dictionary: the Arabic
+    copy is then real HTML that crawlers and link previews can read, and a reader gets
+    the whole page at once instead of a flash of English followed by a swap. Both pages
+    link to each other with hreflang, and both share assets/js/main.js.
 
     The same script runs locally (to preview) and in .github/workflows/pages.yml
     (to publish), so the published output is whatever this script produced.
@@ -44,9 +50,14 @@ if (Test-Path -LiteralPath $OutDir) {
 }
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 
-# 1. The hand-written site: index.html, robots.txt, sitemap.xml and assets/** (css, js, img).
+# 1. The hand-written site: the pages, robots.txt, sitemap.xml and assets/** (css, js, img).
 #    Listed explicitly so build.ps1 and dist/.gitignore never end up in the output.
-foreach ($file in @('index.html', 'robots.txt', 'sitemap.xml')) {
+#
+#    Every published page must be added HERE. This is an allow-list, not a glob, and a new
+#    page that is not on it simply does not ship - silently, with no build error. That is
+#    why index.ar.html is named explicitly rather than picked up by a wildcard.
+$sitePages = @('index.html', 'index.ar.html', 'robots.txt', 'sitemap.xml')
+foreach ($file in $sitePages) {
     $src = Join-Path $siteRoot $file
     if (-not (Test-Path -LiteralPath $src)) { throw "Missing site file: $src" }
     Copy-Item -LiteralPath $src -Destination $OutDir -Force

@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows;
 
 namespace Maktaby.Helpers;
 
@@ -264,10 +265,37 @@ internal static class UpdateInstaller
         {
             // /NORESTART: we relaunch ourselves. /SP- skips the "this will close Maktaby"
             // prompt that would otherwise sit there unanswered in a silent install.
-            psi.Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-";
+            //
+            // /MAKTABY-UPDATE tells the installer this run is an update, not a fresh
+            // install. Without it the setup would apply its post-install defaults, which
+            // means re-enabling the Windows startup entry on every update - including for
+            // a user who had deliberately turned it off. See IsUpdateRun in installer.iss.
+            psi.Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /MAKTABY-UPDATE"
+                          + InstallerLanguageArgument();
         }
 
         System.Diagnostics.Process.Start(psi);
+    }
+
+    /// <summary>
+    /// The installer is multilingual (English + Arabic), so a silent run on an Arabic machine
+    /// would otherwise be pinned to English. The value is the .isl name, which for us is the
+    /// language code; an installer that has no such language falls back to its own default
+    /// rather than failing, so this is safe to always append.
+    /// </summary>
+    private static string InstallerLanguageArgument()
+    {
+        try
+        {
+            return Localization.Loc.Current?.Code == "ar"
+                ? " /LANG=ar"
+                : " /LANG=en";
+        }
+        catch
+        {
+            // Loc has no provider before DI is up; the installer picks its own default.
+            return string.Empty;
+        }
     }
 
     private static void TryDelete(string path)

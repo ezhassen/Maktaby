@@ -28,7 +28,7 @@ On top of that it adds the two things a plain desktop organizer never has:
 
 Everything runs from the system tray, persists your layout between sessions, and stays out of the way: one double-click on the empty desktop hides every box and gives you a completely clean screen.
 
-> Windows 10 (2004 / build 19041) or later, 64-bit · [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) required · **Windows-only, x64**
+> Windows 10 (2004 / build 19041) or later · **Windows-only, x64 & ARM64** · [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0) required by the lean installer (the *full* one bundles it) · English & Arabic interface
 
 ---
 
@@ -140,23 +140,33 @@ Everything runs from the system tray, persists your layout between sessions, and
 ### Prerequisites
 
  Requirement | Details
-| --- | --- |
+ --- | --- |
  **Operating system** | Windows 10 version 2004 (build 19041) or later, or Windows 11. The app targets `net10.0-windows10.0.19041.0`.
- **Architecture** | **x64 only.** The installer is published as `win-x64`; there is no x86 or ARM64 build. (For now. Open issue and tell me if you want it or build from source)
- **.NET Desktop Runtime** | **.NET 10 Desktop Runtime (x64)** must be installed. The official installer is *framework-dependent*, not self-contained — without it Maktaby will not start. <br>[Download .NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0)
+ **Architecture** | **x64 and ARM64.** Native builds for both. The x64 installer also runs on Windows on ARM under emulation. There is no x86 build.
+ **.NET Desktop Runtime** | **Required by the *lean* installers only.** These are framework-dependent, and without the runtime Maktaby will not start — pick the build matching your architecture: <br>[Download .NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0)
+ **The *full* installer** | **No prerequisites at all.** It bundles the runtime, so it installs and runs on a machine with nothing preinstalled — at roughly four times the download size.
  **WebView2 Runtime** | **Microsoft Edge WebView2 Evergreen Runtime** is required for web widgets and HTML-based live wallpapers. It ships preinstalled on Windows 11 and on most Windows 10 machines via Edge — if you have removed Edge, install it separately: <br>[Download WebView2 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)
  **Administrator rights** | The setup installs to `%ProgramFiles%\Maktaby` and requests elevation.
 
 ### Install
 
-1. Download the latest `Maktaby-<version>-x64-setup.exe` from the [releases page](../../releases).
-2. Run it and accept the UAC prompt.
+Each release publishes **four** installers — one per architecture and build type. Pick the row that matches your machine:
+
+ Asset | Size | Architecture | Needs .NET installed?
+ --- | --- | --- | ---
+ `Maktaby-<version>-x64-setup.exe` | ~15 MB | x64 (and ARM64 via emulation) | yes, .NET 10 Desktop Runtime (x64)
+ `Maktaby-<version>-x64-setup-full.exe` | ~64 MB | x64 | no
+ `Maktaby-<version>-arm64-setup.exe` | ~15 MB | ARM64 | yes, .NET 10 Desktop Runtime (ARM64)
+ `Maktaby-<version>-arm64-setup-full.exe` | ~58 MB | ARM64 | no
+
+1. Download the right one from the [releases page](../../releases).
+2. Run it and accept the UAC prompt. The wizard speaks **English and Arabic** — it detects your Windows display language and offers a language picker on first run.
 3. On the final page, choose whether to **launch Maktaby** and whether to **start it on Windows startup** (both are ticked by default). The installer closes a running instance before updating and reopens it afterwards.
 4. The tray icon appears on first launch — that is where the app lives. There is no main window.
 
-Each release also publishes a SHA-256 checksum on the release page.
+Each release also publishes a SHA-256 checksum for every installer on the release page.
 
-Installed copies can update themselves: **Settings → Updates**, or **Check for updates…** in the tray menu, checks GitHub Releases on demand, and the same check also runs at startup and every 6 hours. When a newer build is found you get the option to download and install it — the download is verified against the release's SHA-256 before the installer runs. The update channel (**Auto**, **Stable** or **Beta**) is in Settings → Updates; *Auto* follows the kind of build you are running. A **portable** copy — one you run straight from a folder, with no installer — does not offer updates, because there is no installation to update: replace the folder instead.
+Installed copies can update themselves: **Settings → Updates**, or **Check for updates…** in the tray menu, checks GitHub Releases on demand, and the same check also runs at startup and every 6 hours. When a newer build is found you get the option to download and install it — the download is verified against the release's SHA-256 before the installer runs, and the installer it picks always matches **your architecture and your build type**, so a lean install is never silently replaced by the self-contained one. The update channel (**Auto**, **Stable** or **Beta**) is in Settings → Updates; *Auto* follows the kind of build you are running. A **portable** copy — one you run straight from a folder, with no installer — does not offer updates, because there is no installation to update: replace the folder instead.
 
 To uninstall, use **Settings → Apps → Installed apps → Maktaby**. Uninstallation closes any running instance, removes the files, and cleans up the Windows startup entry.
 
@@ -184,13 +194,16 @@ dotnet run --project src/Maktaby
 ```powershell
 # Publish + build installer (requires Inno Setup 6 in PATH)
 .\build.ps1 -Action Publish
+
+# One of four targets: -Runtime win-x64|win-arm64  x  -Flavor lean|full
+.\build.ps1 -Action Publish -Runtime win-arm64 -Flavor full
 ```
 
-Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) first. The script publishes the app to `src/Maktaby/bin/Publish` and compiles `installer.iss` into `Installer/Maktaby <version>.exe`.
+Install [Inno Setup 6](https://jrsoftware.org/isinfo.php) first — **6.5.0 or newer**, which is where the official Arabic setup translation lives. The script publishes the app to `src/Maktaby/bin/Publish/<runtime>-<flavor>` and compiles `installer.iss` into `Installer/Maktaby-<version>-<arch>-setup[-full].exe`, writing the whole target into a generated `BuildTarget.inc` so the script and the release workflow cannot spell a name differently.
 
 ### Releasing
 
-Releases are tag-driven: push a `v1.0.33-beta.1` tag from `develop` for a pre-release, or a `v1.0.33` tag from `main` for a stable one. GitHub Actions builds the installer and publishes the release.
+Releases are tag-driven: push a `v1.0.33-beta.1` tag from `develop` for a pre-release, or a `v1.0.33` tag from `main` for a stable one. GitHub Actions builds all four installers and publishes the release.
 
 `.\build_publish.ps1` does that for you — it verifies the tree is clean, pushes the branch, works out the next version from the last tag, tags and pushes it, and then asks whether to build a local copy of the installer too (the tag push already triggers CI, so the answer defaults to no). Use `-BuildInstaller` or `-SkipInstaller` to answer up front, and `-DryRun` to print the plan without doing anything.
 

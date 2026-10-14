@@ -363,8 +363,17 @@ MigrationBackup/
 FodyWeavers.xsd
 icon/*.*
 tools/make-icon.ps1
+# Installer build output. installer.iss writes here, and the output name is
+# derived from the build target, so a pattern listing the extensions would break
+# the moment a build emits something new.
 Installer/*.*
-BuildVersion.inc
+# ...but Installer\languages\ is SOURCE, not output: the per-language setup
+# strings the bilingual installer reads (installer.iss [Languages]). Windows
+# treats Installer\ and installer\ as one directory, so it lives inside the
+# ignored folder and has to be re-included explicitly.
+!Installer/languages/
+!Installer/languages/*.isl
+BuildTarget.inc
 /.cpmigrate_backup
 
 # AI agent working files (local todos, notes, scratch — never commit)

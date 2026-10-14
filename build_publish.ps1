@@ -48,10 +48,8 @@ param(
     [string]$Runtime = "win-x64",
 
     [Parameter(Mandatory = $false)]
-    [string]$Framework = "net10.0-windows10.0.19041.0",
-
-    [Parameter(Mandatory = $false)]
-    [bool]$SelfContained = $false,
+    [ValidateSet("lean", "full")]
+    [string]$Flavor = "lean",
 
     # Build the local installer without being asked.
     [Parameter(Mandatory = $false)]
@@ -112,11 +110,10 @@ function Show-Help
                                    e.g. -Version 1.1.0
    -BuildInstaller                 build the installer without asking
    -SkipInstaller                  tag + push only, never ask
-   -Configuration  <Debug|Release>
-   -Runtime        <rid>
-   -Framework      <tfm>
-   -SelfContained  <true|false>
-   -DryRun                         print plan, execute nothing
+-Configuration  <Debug|Release>
+    -Runtime        <win-x64|win-arm64>
+    -Flavor         <lean|full>
+    -DryRun                         print plan, execute nothing
 "@
 }
 
@@ -444,8 +441,7 @@ Write-Host "`nPublishing installer for $tagName ..." -ForegroundColor Cyan
 & "$PSScriptRoot\build.ps1" -Action Publish `
     -Configuration $Configuration `
     -Runtime $Runtime `
-    -Framework $Framework `
-    -SelfContained $SelfContained
+    -Flavor $Flavor
 
 if ($LASTEXITCODE -ne 0)
 {

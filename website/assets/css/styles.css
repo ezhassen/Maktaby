@@ -129,7 +129,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 
 .skip-link {
   position: fixed;
-  top: 10px; left: 10px;
+  top: 10px; inset-inline-start: 10px;
   z-index: 200;
   padding: 10px 16px;
   border-radius: 8px;
@@ -183,7 +183,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 .brand-mark { border-radius: 8px; }
 .brand-name { font-size: 1.06rem; }
 
-.site-nav { display: flex; gap: 4px; margin-left: auto; }
+.site-nav { display: flex; gap: 4px; margin-inline-start: auto; }
 .site-nav a {
   color: var(--text-2);
   padding: 8px 12px;
@@ -194,7 +194,7 @@ ul, ol { margin: 0; padding: 0; list-style: none; }
 }
 .site-nav a:hover { color: var(--text); background: var(--surface); text-decoration: none; }
 
-.header-actions { display: flex; align-items: center; gap: 8px; margin-left: 8px; }
+.header-actions { display: flex; align-items: center; gap: 8px; margin-inline-start: 8px; }
 .icon-btn {
   width: 38px; height: 38px;
   display: grid; place-items: center;
@@ -379,7 +379,7 @@ html[data-theme="light"] .grad { background-image: linear-gradient(100deg, #156F
 .shot-frame-body img { width: 100%; height: auto; }
 .shot-zoom {
   position: absolute;
-  right: 12px; bottom: 12px;
+  inset-inline-end: 12px; bottom: 12px;
   display: grid; place-items: center;
   width: 38px; height: 38px;
   border-radius: 10px;
@@ -478,14 +478,14 @@ html[data-theme="light"] .section--alt { background: var(--surface); }
 .ticks { margin-top: 14px; display: grid; gap: 8px; }
 .ticks li {
   position: relative;
-  padding-left: 24px;
+  padding-inline-start: 24px;
   font-size: .93rem;
   color: var(--text-2);
 }
 .ticks li::before {
   content: "";
   position: absolute;
-  left: 3px; top: .52em;
+  inset-inline-start: 3px; top: .52em;
   width: 9px; height: 9px;
   border-radius: 3px;
   background: var(--accent);
@@ -579,7 +579,7 @@ html[data-theme="light"] .section--alt { background: var(--surface); }
   background: var(--surface);
 }
 table { width: 100%; border-collapse: collapse; font-size: .94rem; }
-th, td { padding: 12px 18px; text-align: left; }
+th, td { padding: 12px 18px; text-align: start; }
 thead th {
   font-size: .78rem;
   text-transform: uppercase;
@@ -618,14 +618,14 @@ kbd {
 .install-steps li {
   counter-increment: istep;
   position: relative;
-  padding-left: 40px;
+  padding-inline-start: 40px;
   color: var(--text-2);
   font-size: .98rem;
 }
 .install-steps li::before {
   content: counter(istep);
   position: absolute;
-  left: 0; top: 0;
+  inset-inline-start: 0; top: 0;
   display: grid;
   place-items: center;
   width: 26px; height: 26px;
@@ -639,7 +639,7 @@ kbd {
 .install-aside {
   padding: 16px 18px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border-inline-start: 3px solid var(--accent);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--text-2);
@@ -810,7 +810,7 @@ kbd {
 .lightbox-hint {
   position: absolute;
   bottom: 12px;
-  left: 0; right: 0;
+  inset-inline: 0;
   text-align: center;
   color: rgba(198, 210, 226, .45);
   font-size: .76rem;
@@ -832,7 +832,7 @@ kbd {
 .lightbox-nav:hover { background: rgba(255, 255, 255, .2); }
 .lightbox-close:active,
 .lightbox-nav:active { transform: scale(.94); }
-.lightbox-close { top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 11px; z-index: 2; }
+.lightbox-close { top: 16px; inset-inline-end: 16px; width: 42px; height: 42px; border-radius: 11px; z-index: 2; }
 .lightbox-close .icon { width: 18px; height: 18px; }
 
 .lightbox-nav {
@@ -842,8 +842,8 @@ kbd {
   border-radius: 50%;
 }
 .lightbox-nav .icon { width: 20px; height: 20px; }
-.lightbox-nav--prev { left: 10px; }
-.lightbox-nav--next { right: 10px; }
+.lightbox-nav--prev { inset-inline-start: 10px; }
+.lightbox-nav--next { inset-inline-end: 10px; }
 .lightbox-nav[hidden] { display: none; }
 
 body.no-scroll { overflow: hidden; }
@@ -870,11 +870,11 @@ body.no-scroll { overflow: hidden; }
   .nav-toggle { display: grid; }
   /* The nav leaves the flow (it becomes the drop-down panel), so it can no
      longer be what pushes the actions to the right edge. */
-  .header-actions { margin-left: auto; }
+  .header-actions { margin-inline-start: auto; }
   .site-nav {
     position: absolute;
-    top: calc(var(--header-h) - 1px);
-    left: 0; right: 0;
+top: calc(var(--header-h) - 1px);
+      inset-inline: 0;
     flex-direction: column;
     gap: 2px;
     padding: 10px 22px 16px;
@@ -915,3 +915,129 @@ body.no-scroll { overflow: hidden; }
   .reveal { opacity: 1; transform: none; }
   .shot-frame { transform: none; }
 }
+/* ==========================================================================
+   RIGHT-TO-LEFT (Arabic)
+   Everything above is written with CSS logical properties (inset-inline-*,
+   padding-inline-*, text-align: start), so it mirrors for free. What is left
+   here is only what no logical property can express: the direction a glyph
+   points, and text that must stay left-to-right inside a right-to-left page.
+
+   Scoped to [dir="rtl"] on <html> rather than a .rtl class: the direction is a
+   document-level fact, and the whole page should follow it.
+   ========================================================================== */
+
+/* The FAQ disclosure chevron is drawn from border-right + border-bottom and
+   rotated 45deg, which points down-right in LTR. Mirrored it must point
+   down-left, so the rotation flips sign. */
+[dir="rtl"] .faq summary::after {
+  transform: rotate(-45deg) translate(-2px, -2px);
+}
+[dir="rtl"] .faq details[open] summary::after {
+  transform: rotate(135deg) translate(-3px, -3px);
+}
+
+/* Icons that encode a direction: the download arrow (down, but drawn with a
+   left-leaning stroke) and the lightbox's previous/next chevrons. The markup
+   order is unchanged, so 'prev' is mirrored rather than swapped. */
+[dir="rtl"] .hero-cta .btn .icon,
+[dir="rtl"] .lightbox-nav .icon {
+  transform: scaleX(-1);
+}
+[dir="rtl"] .shot-zoom .icon {
+  transform: scaleX(-1);
+}
+
+/* Code, file names and identifiers read left-to-right in every language. Without
+   this, a name like Maktaby-1.0.33-x64-setup-full.exe inside an Arabic sentence
+   gets its punctuation and dashes reordered by the bidi algorithm, and the copy
+   becomes wrong rather than merely mirrored. */
+[dir="rtl"] :is(code, kbd, samp, pre) {
+  direction: ltr;
+  unicode-bidi: embed;
+  text-align: left;
+}
+/* ...but a code span inside a line of Arabic still sits on the right edge of its
+   box, which is where the reading flow reaches it. */
+[dir="rtl"] p > code,
+[dir="rtl"] li > code {
+  display: inline-block;
+}
+
+/* ==========================================================================
+   LANGUAGE SWITCH
+   A text link, not a flag pair or a dropdown: it has to work with JavaScript
+   off, and a flag says nothing to a reader who cannot see it.
+   ========================================================================== */
+.lang-switch {
+  font-size: .82rem;
+  font-weight: 600;
+  color: var(--text-2);
+  text-decoration: none;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  white-space: nowrap;
+  transition: color .18s var(--ease), border-color .18s var(--ease), background-color .18s var(--ease);
+}
+.lang-switch:hover,
+.lang-switch:focus-visible {
+  color: var(--text-1);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+/* ==========================================================================
+   INSTALLER LIST (see #install-assets in the markup)
+   Four rows, one per build. The one matching the visitor's machine is marked;
+   the rest are still ordinary links, because a reader on ARM who is told "not
+   for you" should still be able to reach the ARM build from an x64-keyboard
+   laptop, and because a wrong guess must never be the only way through.
+   ========================================================================== */
+.installer-list {
+  margin: 20px 0 24px;
+  display: grid;
+  gap: 8px;
+}
+.installer-note {
+  margin: 0 0 2px;
+  font-size: .82rem;
+  color: var(--text-3);
+}
+.installer-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  transition: border-color .18s var(--ease), background-color .18s var(--ease);
+}
+.installer-row:hover { border-color: var(--accent); }
+.installer-row.is-recommended {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.installer-link {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-1);
+  text-decoration: none;
+}
+.installer-link.is-disabled { pointer-events: none; opacity: .45; }
+.installer-name { font-weight: 600; font-size: .95rem; }
+.installer-req { font-size: .82rem; color: var(--text-3); }
+.installer-size {
+  flex: none;
+  font-size: .86rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+.installer-fallback {
+  margin: 4px 0 0;
+  font-size: .86rem;
+  color: var(--text-3);
+}
+.installer-fallback a { color: var(--accent); }

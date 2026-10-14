@@ -36,10 +36,18 @@ public sealed class UpdateService : IUpdateService, IDisposable
     private const int ReleasesToFetch = 10;
 
     /// <summary>Asset naming convention the release workflow publishes:
-    /// <c>Maktaby-&lt;version&gt;-&lt;arch&gt;-setup.exe</c>. The architecture token is NOT
-    /// hard-coded - it is matched against the running process, so adding an arm64 or x86
-    /// release to the same tag needs no change here.</summary>
-    private const string InstallerAssetSuffix = "-setup.exe";
+    /// <c>Maktaby-&lt;version&gt;-&lt;arch&gt;-setup.exe</c> for a framework-dependent build and
+    /// <c>…-setup-full.exe</c> for a self-contained one. Neither the architecture token nor
+    /// the flavor suffix is hard-coded here - both are matched against the running process,
+    /// so adding an arm64 or a full release to the same tag needs no change beyond what
+    /// <see cref="InstallFlavorInfo"/> already knows.</summary>
+    /// <remarks>
+    /// Living on the class rather than on a constant is deliberate: the suffix moved into
+    /// <see cref="InstallFlavorInfo"/> when self-contained builds shipped, and a private copy
+    /// here is how the updater would have kept offering the wrong flavor.
+    /// </remarks>
+    private static string InstallerAssetSuffix(Architecture architecture, InstallFlavor flavor) =>
+        $"{ArchitectureToken(architecture)}{InstallFlavorInfo.AssetSuffix(flavor)}";
 
     /// <summary>Architecture token in a release asset name -> the process architecture it
     /// serves. Extended (not replaced) as new runtimes ship: an unknown token simply matches
@@ -149,7 +157,10 @@ public sealed class UpdateService : IUpdateService, IDisposable
             var asset = SelectInstaller(release.Assets);
             if (asset is null)
             {
-                return Fail($"Release {release.TagName} has no '{InstallerAssetSuffix}' asset.");
+                // Name what was actually looked for: "no installer" and "no installer for a
+                // self-contained copy of an x64 build" are different bugs to go looking for.
+                var running = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture;
+                return Fail($"Release {release.TagName} has no '{InstallerAssetSuffix(running, InstallFlavorInfo.Current)}' asset.");
             }
 
             if (!string.IsNullOrWhiteSpace(skippedVersion) &&
@@ -198,16 +209,19 @@ public sealed class UpdateService : IUpdateService, IDisposable
     }
 
     /// <summary>
-    /// Picks the installer for the architecture this process is running on.
+    /// Picks the installer for the architecture AND the flavor this process is running on.
     /// </summary>
     /// <remarks>
     /// Ordered by decreasing confidence, because picking the wrong one is worse than picking
     /// none - a user would be offered an arm64 setup on an x64 machine and it would fail
     /// mid-install:
     /// <list type="number">
-    ///   <item><description>the exact <c>-&lt;arch&gt;-setup.exe</c> the workflow publishes;</description></item>
-    ///   <item><description>any other arch-tagged <c>.exe</c> for this architecture (covers the
-    ///   older <c>Maktaby.1.0.32-beta-x64.exe</c> naming);</description></item>
+    ///   <item><description>the exact <c>-&lt;arch&gt;-setup[-full].exe</c> this build needs;</description></item>
+    ///   <item><description>the same architecture, the other flavor (a release that ships
+    ///   only one of the two - upgrading to it is a real change, but it is never offered
+    ///   while the exact one exists);</description></item>
+    ///   <item><description>any other arch-tagged <c>.exe</c> for this architecture, preferring
+    ///   an un-flavored name (covers the older <c>Maktaby.1.0.32-beta-x64.exe</c> naming);</description></item>
     ///   <item><description>a single un-tagged <c>.exe</c>, only when it is unambiguously the
     ///   only one;</description></item>
     ///   <item><description>nothing - several candidates, or none for this architecture.</description></item>
@@ -218,22 +232,34 @@ public sealed class UpdateService : IUpdateService, IDisposable
         if (assets is null || assets.Length == 0) { return null; }
 
         var running = System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture;
+        var flavor = InstallFlavorInfo.Current;
 
-        // 1. The conventional name for this architecture.
+        // 1. The conventional name for this architecture and this build type.
+        var wanted = InstallerAssetSuffix(running, flavor);
         var exact = assets.FirstOrDefault(a =>
             a.Name is not null
-            && a.Name.EndsWith($"{ArchitectureToken(running)}{InstallerAssetSuffix}", StringComparison.OrdinalIgnoreCase));
+            && a.Name.EndsWith(wanted, StringComparison.OrdinalIgnoreCase));
         if (exact is not null) { return exact; }
 
         var executables = assets
             .Where(a => !string.IsNullOrEmpty(a.Name) && a.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
             .ToArray();
 
-        // 2. Any arch-tagged executable that matches the running process.
-        var tagged = executables.FirstOrDefault(a => TokenFor(a.Name!) == running);
+        // 2. Right architecture, the other flavor.
+        var otherFlavor = executables.FirstOrDefault(a =>
+            TokenFor(a.Name!) == running && InstallFlavorInfo.FlavorFromAssetName(a.Name) is not null);
+        if (otherFlavor is not null) { return otherFlavor; }
+
+        // 3. Any arch-tagged executable that matches the running process. Un-flavored names
+        //    first: a legacy asset is "whatever you already have", whereas a flavored one is
+        //    explicitly a different build type and belongs in step 2, not here.
+        var tagged = executables
+            .Where(a => TokenFor(a.Name!) == running)
+            .OrderBy(a => InstallFlavorInfo.FlavorFromAssetName(a.Name) is not null ? 1 : 0)
+            .FirstOrDefault();
         if (tagged is not null) { return tagged; }
 
-        // 3. A lone untagged executable is safe only when there is exactly one; two or more
+        // 4. A lone untagged executable is safe only when there is exactly one; two or more
         //    would be a guess between architectures.
         var untagged = executables.Where(a => TokenFor(a.Name!) is null).ToArray();
         if (untagged.Length == 1) { return untagged[0]; }

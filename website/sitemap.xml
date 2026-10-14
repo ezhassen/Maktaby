@@ -1,7 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<!-- The xhtml namespace carries the hreflang alternates: two documents that are
+     translations of each other, declared as such from both sides so a crawler
+     matches them either way it arrives. x-default points at English. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://ezhassen.github.io/Maktaby/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://ezhassen.github.io/Maktaby/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ezhassen.github.io/Maktaby/index.ar.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ezhassen.github.io/Maktaby/"/>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://ezhassen.github.io/Maktaby/index.ar.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://ezhassen.github.io/Maktaby/"/>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://ezhassen.github.io/Maktaby/index.ar.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://ezhassen.github.io/Maktaby/"/>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>

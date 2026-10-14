@@ -81,26 +81,41 @@ Two details worth knowing:
 
 ## 3. What the release workflow does
 
-`.github/workflows/release.yml`, on a `v*` tag push:
+`.github/workflows/release.yml`, on a `v*` tag push, in three jobs:
 
-1. **Classifies the tag** into a channel (`-beta.N` → pre-release, plain → stable) and derives the expected branch.
-2. **Checks out the tag with full history** (`fetch-depth: 0`). MinVer needs the tags — without them every build reports `0.0.0-alpha.0.1`.
-3. **Enforces the branch policy** via `git merge-base --is-ancestor`.
-4. **Installs the toolchain**: .NET 10 SDK, and Inno Setup (preinstalled on the GitHub Windows images, with a Chocolatey fallback so a runner-image change cannot break a release).
-5. **Runs `build.ps1 -Action Publish`**, which publishes `src/Maktaby/Maktaby.csproj` and compiles `installer.iss`.
-6. **Collects the installer**, renames it to `Maktaby-<version>-x64-setup.exe`, and computes its SHA-256.
-7. **Publishes the GitHub release** with auto-generated changelog notes and the runtime requirements.
+**`validate`** — classifies the tag into a channel (`-beta.N` → pre-release, plain → stable), derives the expected branch, and enforces the branch policy via `git merge-base --is-ancestor`. It runs **once**, before anything is built, so all four build legs and the release notes cannot disagree about the version or the channel.
 
-### Two safeguards worth knowing about
+**`build`** — a four-way matrix, one leg per target:
 
-- **The job fails if no installer was produced.** `build.ps1` only *warns* when `iscc` is missing and still exits `0`, so a silent "success" with no artifact would otherwise ship an empty release page. The workflow asserts the file exists and reports whether the problem was a missing compiler or an `OutputDir` mismatch.
-- **Stable releases carry a version-less alias.** Each non-prerelease also publishes `Maktaby-latest-x64-setup.exe` (byte-identical), giving a permanent always-current URL:
+| Target | Asset | Publish |
+| --- | --- | --- |
+| `win-x64` · lean | `Maktaby-<version>-x64-setup.exe` | `--self-contained false` |
+| `win-x64` · full | `Maktaby-<version>-x64-setup-full.exe` | `--self-contained true` |
+| `win-arm64` · lean | `Maktaby-<version>-arm64-setup.exe` | `--self-contained false` |
+| `win-arm64` · full | `Maktaby-<version>-arm64-setup-full.exe` | `--self-contained true` |
 
-  ```
-  https://github.com/ezhassen/Maktaby/releases/latest/download/Maktaby-latest-x64-setup.exe
-  ```
+Each leg installs the toolchain (.NET 10 SDK; Inno Setup with a Chocolatey fallback), runs `build.ps1 -Action Publish -Runtime <rid> -Flavor <flavor>`, and uploads its installer as an artifact. `fail-fast: false`, so one broken target still reports the status of the other three.
 
-  Pre-releases do **not** get the alias, because that endpoint resolves to the newest non-prerelease — publishing it on a beta would make the URL serve an *older* build than the one the user just picked.
+**`release`** — downloads all four artifacts, refuses to publish if any is missing, composes the notes (a download table with real sizes, a SHA-256 block for all four, requirements), merges the auto-generated changelog, and creates the release with `gh release create`.
+
+The four targets are declared **once**, in `TARGETS_JSON` at the top of the workflow. The build matrix and the notes composer both read it, so the table in the release notes cannot drift from what was actually built.
+
+### Two flavours, and why both
+
+`lean` is the framework-dependent publish: a fraction of the download size, but the machine needs the matching .NET Desktop Runtime. `full` is self-contained — roughly four times the size and nothing to install first. The lean asset keeps its original name, so existing download links, the site's older cached markup and the parked winget manifests all keep resolving.
+
+The **in-app updater** has to know which one a user is running, because silently upgrading a lean install to the full one would replace a working setup with an 80 MB one the user never chose. `Core/Services/InstallFlavorInfo` detects it from how the process was published (whether `System.Private.CoreLib` was loaded from beside the app, falling back to `includedFrameworks` in the `.runtimeconfig.json`), and `UpdateService.SelectInstaller` prefers the matching arch **and** flavour, falling back to the other flavour only when the release ships just one.
+
+### Three safeguards worth knowing about
+
+- **The job fails if no installer was produced.** `build.ps1` only *warns* when `iscc` is missing and still exits `0`, so a silent "success" with no artifact would otherwise ship an empty release page. Each leg asserts the exact expected filename exists and reports whether the problem was a missing compiler, an `OutputDir` mismatch or a rename. `build.ps1` itself also checks `iscc`'s exit code *and* that the file it claims to have written is there.
+- **The release is all-or-nothing.** `build.ps1` writes the release asset name into the file name itself, so the workflow looks the installer up by exact path rather than globbing "the newest `.exe`" — which on a reused runner could pick up a previous build. The release job then re-checks that all four expected names are present before it publishes anything.
+- **There is no version-less `latest` alias.** Earlier releases also published `Maktaby-latest-x64-setup.exe`; it is gone. `/releases/latest/download/` resolves to the newest *non-prerelease*, so during a beta series the alias pointed at an older build than the one the user had deliberately chosen. Download from the release page, or let the in-app updater pick — it already knows the visitor's architecture and flavour.
+
+### If a release job fails
+
+- **One matrix leg failed.** The other three still report. Re-run the workflow with `workflow_dispatch` and the same tag; nothing is published until all four succeed, so a failed run leaves no partial release.
+- **`iscc` is missing or too old.** The workflow fails with an explicit message. The bilingual installer needs `Languages\Arabic.isl`, which ships with **Inno Setup 6.5.0+**. On a dev machine, upgrade Inno Setup, or vendor the translation as `installer\languages\Arabic.isl` and point the `[Languages]` entry at it.
 
 ---
 
@@ -108,7 +123,10 @@ Two details worth knowing:
 
 `.github/workflows/ci.yml` runs on every push and pull request to `main` and `develop`. It only **compiles** — no installer, no release — so a broken branch is caught long before you try to tag it.
 
-It builds `src/Maktaby/Maktaby.csproj` rather than the whole solution. Building a project automatically builds its `ProjectReference` closure, so `Maktaby`, `Maktaby.LiveWallpaper`, `Maktaby.WidgetSdk`, `Maktaby.Native` and `Maktaby.Shared` all still compile. Only `Maktaby.WidgetsCreator` — the standalone widget-editor tool, not on the app's runtime path — is skipped.
+It has two jobs:
+
+- **`build`** — `src/Maktaby/Maktaby.csproj`, default RID. Building a project automatically builds its `ProjectReference` closure, so `Maktaby`, `Maktaby.LiveWallpaper`, `Maktaby.WidgetSdk`, `Maktaby.Native` and `Maktaby.Shared` all still compile. Only `Maktaby.WidgetsCreator` — the standalone widget-editor tool, not on the app's runtime path — is skipped.
+- **`build-arm64`** — the same project with `--runtime win-arm64`. Each RID is a separate restore with its own runtime pack and its own resolved native assets, so a plain build only exercises x64; an ARM64-specific break would otherwise first appear on a tag, where it is most expensive.
 
 Because CI checks the same project the release publishes, a green CI genuinely means the tag will build.
 
@@ -117,3 +135,25 @@ Because CI checks the same project the release publishes, a green CI genuinely m
 ## 5. Before the first public release
 
 The installers are currently **unsigned**, which is what triggers most SmartScreen "unrecognized app" warnings on a freshly published setup. `installer.iss` has a `SignTool` line ready to uncomment, and a comment there documents the one-time configuration. Worth doing before the repo goes public.
+
+---
+
+## 6. The installer is bilingual
+
+`installer.iss` declares a `[Languages]` section:
+
+```ini
+Name: "en"; MessagesFile: "compiler:Default.isl,{#MyRepoRoot}\installer\languages\EnglishCustom.isl"
+Name: "ar"; MessagesFile: "compiler:Languages\Arabic.isl,{#MyRepoRoot}\installer\languages\ArabicCustom.isl"
+```
+
+English is listed first and stays the default when nothing matches the user's UI language; `Arabic.isl` is Inno Setup's own official translation and already carries `RightToLeft=yes`, so the whole wizard mirrors without extra work. The two files next to it supply the strings the wizard cannot translate itself — the "Launch Maktaby" and "Start Maktaby on Windows startup" checkboxes are built in `[Code]` with `TNewCheckBox` and pull their caption from `{cm:...}`.
+
+Two traps worth knowing before editing this:
+
+- **A relative `MessagesFile` resolves against `SourceDir`, not against `installer.iss`.** That is why the paths go through `{#MyRepoRoot}` from the generated include.
+- **Anything in the script's own `[CustomMessages]` section overrides the message files**, for every language. That section is deliberately empty so it cannot silently undo the Arabic translations.
+
+### Silent installs and the Windows startup entry
+
+The in-app updater runs the installer with `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /MAKTABY-UPDATE`. The `/MAKTABY-UPDATE` flag matters: **Inno Setup 6 calls `InitializeWizard` for silent installs too**, so the same two checkboxes exist with their defaults, and the startup checkbox is ticked. Without the flag, every update would re-run `--enable-startup` and switch Windows startup back on for a user who had deliberately turned it off — silently, through a path they never chose. `IsUpdateRun` in `installer.iss` is what suppresses it.

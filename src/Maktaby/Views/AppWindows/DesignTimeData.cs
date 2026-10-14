@@ -103,7 +103,7 @@ public static class DesignTimeData
                     {
                         Version = "1.0.33-beta.1",
                         TagName = "v1.0.33-beta.1",
-                        DownloadUrl = "https://localhost.invalid/Maktaby-1.0.33-beta.1-x64-setup.exe",
+                        DownloadUrl = "https://localhost.invalid/Maktaby-1.0.33-beta.1-x64-setup-full.exe",
                         Sha256 = new string('0', 64),
                         SizeBytes = 15 * 1024 * 1024,
                         IsPreRelease = true,

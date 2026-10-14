@@ -741,7 +741,7 @@ public sealed class UpdateManager : IDisposable
     {
         Version = "99.0.0-simulated",
         TagName = "v99.0.0-simulated",
-        DownloadUrl = "https://localhost.invalid/Maktaby-99.0.0-simulated-x64-setup.exe",
+        DownloadUrl = "https://localhost.invalid/Maktaby-99.0.0-simulated-x64-setup-full.exe",
         Sha256 = new string('0', 64),
         SizeBytes = 15 * 1024 * 1024,
         IsPreRelease = true,
