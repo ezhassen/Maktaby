@@ -361,7 +361,19 @@ public sealed class NativeWidgetService : INativeWidgetService
             Feed(File.ReadAllBytes(xaml));
             Feed([(byte)0]);
         }
-        Feed(Encoding.UTF8.GetBytes("sdk:" + typeof(INativeWidget).Assembly.GetName().Version));
+        // The SDK's ModuleVersionId, NOT its assembly version. The version comes from
+        // MinVer/git tags, so it does not change for an uncommitted SDK edit: a rebuilt SDK
+        // with different IL kept the same key and the cache served plugin DLLs compiled
+        // against the previous ABI, which then failed at load with MissingMethodException.
+        // With deterministic builds (the SDK default) the MVID is a content hash of the
+        // compilation — stable across identical rebuilds, different the moment the SDK's IL
+        // changes — which is exactly the identity a compile cache wants. Empty for dynamic
+        // modules, hence the fallback.
+        var sdkAssembly = typeof(INativeWidget).Assembly;
+        var sdkId = sdkAssembly.ManifestModule.ModuleVersionId;
+        Feed(Encoding.UTF8.GetBytes(sdkId == Guid.Empty
+            ? "sdk:" + sdkAssembly.GetName().Version
+            : "sdk:" + sdkId));
         sha.TransformFinalBlock([], 0, 0);
         return Convert.ToHexStringLower(sha.Hash!);
     }
@@ -417,8 +429,70 @@ public sealed class NativeWidgetService : INativeWidgetService
         }
         catch (Exception ex)
         {
-            Serilog.Log.Warning(ex, $"Native widget load failed: {widget.Slug}");
+            if (IsAbiMismatch(ex))
+            {
+                EvictStaleBuild(assemblyPath, widget, ex);
+                Serilog.Log.Warning(
+                    $"Native widget '{widget.Slug}' was built against a different WidgetSdk and its cached " +
+                    $"compile has been discarded; the next load rebuilds it from source. This is a cache-key " +
+                    "miss, not a bug in the widget.");
+            }
+            else
+            {
+                Serilog.Log.Warning(ex, $"Native widget load failed: {widget.Slug}");
+            }
             throw new NativeWidgetLoadException(widget.Slug, ex.Message, ex);
+        }
+    }
+
+    /// <summary>True for the failure shapes that mean "this DLL was compiled against a
+    /// different WidgetSdk", as opposed to the widget itself throwing. These are the CLR's
+    /// late-binding failures, so they surface at the first call the new SDK no longer offers
+    /// — typically inside the plugin constructor. See the cached-clock incident: a rebuilt SDK
+    /// with an unchanged assembly version kept the old cache key and the widget died with
+    /// <c>MissingMethodException</c> naming the overload that had changed shape.</summary>
+    private static bool IsAbiMismatch(Exception ex)
+    {
+        // Scan the whole wrapper chain: the failure usually arrives wrapped in a
+        // TargetInvocationException from the plugin constructor, which is where the first
+        // call into the changed overload happens. Depth-capped so a self-referencing chain
+        // cannot spin.
+        int depth = 0;
+        for (Exception? e = ex; e is not null && depth < 16; e = e.InnerException, depth++)
+        {
+            if (e is MissingMethodException or MissingFieldException
+                       or TypeLoadException or FileLoadException) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Drops a cached build that cannot bind to the current SDK: unload its collectible
+    /// context and delete the dll/pdb, so the next <see cref="GetAssemblyPath"/> recompiles from
+    /// source instead of serving the same broken bytes forever. Best-effort — a failure here is
+    /// not worth masking the original load error.</summary>
+    private void EvictStaleBuild(string assemblyPath, NativeWidgetInfo widget, Exception cause)
+    {
+        try
+        {
+            UnloadLocked(widget.Slug);
+            string? dir = Path.GetDirectoryName(assemblyPath);
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return;
+
+            // Belt and braces: make sure this really is a cache directory we own before
+            // deleting anything under it.
+            var root = Path.GetFullPath(NativeCacheRoot);
+            if (!Path.GetFullPath(dir).StartsWith(root, StringComparison.OrdinalIgnoreCase)) return;
+
+            foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly))
+            {
+                try { File.Delete(file); } catch { }
+            }
+            try { Directory.Delete(dir, recursive: true); } catch { }
+            Serilog.Log.Information($"Native widget cache evicted: {widget.Slug} ({cause.GetType().Name})");
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Debug(ex, $"Native widget cache eviction failed: {widget.Slug}");
         }
     }
 
@@ -628,7 +702,35 @@ public sealed class NativeWidgetService : INativeWidgetService
             throw new NativeWidgetLoadException(widget.Slug, "Compile failed: " + string.Join(" | ", errors));
         }
         Serilog.Log.Information($"Native widget compiled: {widget.Slug} -> {dllPath}");
+        PruneStaleBuilds(widget.Slug, dir);
         return dllPath;
+    }
+
+    /// <summary>Deletes sibling hash directories for a widget once it has just compiled.
+    /// A key change (SDK rebuild, source edit) leaves the previous build behind forever,
+    /// because nothing else ever revisits it. Age-guarded so a compile running concurrently
+    /// for another target cannot have its half-written directory deleted out from under it —
+    /// compiles take seconds, so anything older than a few minutes is certainly orphaned.</summary>
+    private void PruneStaleBuilds(string slug, string currentDir)
+    {
+        try
+        {
+            string root = Path.Combine(NativeCacheRoot, slug);
+            if (!Directory.Exists(root)) return;
+            var cutoff = DateTime.UtcNow.AddMinutes(-5);
+            foreach (var dir in Directory.EnumerateDirectories(root))
+            {
+                if (string.Equals(dir, currentDir, StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    if (Directory.GetLastWriteTimeUtc(dir) > cutoff) continue;
+                    Directory.Delete(dir, recursive: true);
+                    Serilog.Log.Debug($"Native widget cache pruned: {slug}/{Path.GetFileName(dir)}");
+                }
+                catch { }
+            }
+        }
+        catch { }
     }
 
     private static List<MetadataReference> TrustedReferences(string pluginFolder)

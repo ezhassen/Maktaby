@@ -3,7 +3,10 @@ using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Markup;
+using System.Windows.Media;
 
 namespace Maktaby.WidgetSdk;
 
@@ -13,24 +16,137 @@ namespace Maktaby.WidgetSdk;
 /// call the <c>Raise*</c> methods for the interaction events the host cannot see
 /// (e.g. content hosted through an HWND airspace). For pure WPF visuals the host
 /// detects mouse/focus itself — raising events is then optional.</summary>
-public class NativeWidgetControl : UserControl, INativeWidget, IWidgetSettingsProvider
-{
-    public FrameworkElement Visual => this;
+    public class NativeWidgetControl : UserControl, INativeWidget, IWidgetSettingsProvider
+    {
+        public FrameworkElement Visual => this;
 
-    public bool IsSuspended { get; private set; }
+        public bool IsSuspended { get; private set; }
 
-    private readonly List<WidgetSetting> _settings = new();
+        /// <summary>Tag value marking a subtree that must never start a window drag. Set
+        /// <c>Tag="no-drag"</c> on a button, tab or handle inside a widget whose own layout
+        /// is clickable but whose background is draggable. Recognised on the pressed
+        /// element and every ancestor up to this control.</summary>
+        public const string NoDragTag = "no-drag";
+
+        private Action<MouseButtonEventArgs>? _moveWindow;
+        private bool _hostEngaged;
+
+        /// <summary>Whether the user is currently engaging with this widget. The host pushes
+        /// this whenever the picture changes; widgets use it to hide their own controls until
+        /// the user is actually interacting (a weather widget showing nothing but its data is
+        /// the common case). Starts false.
+        ///
+        /// This is deliberately NOT the same as "my window is active". The host's title bar
+        /// and resize edges live in a SEPARATE chrome-overlay window, so dragging or resizing
+        /// the widget leaves this window inactive while the user is plainly interacting with
+        /// it. The host therefore treats chrome-visible as engaged too, and the controls stay
+        /// up for the whole gesture instead of vanishing the moment a drag begins.</summary>
+        protected bool IsHostEngaged => _hostEngaged;
+
+        /// <summary>Called after <see cref="IsHostEngaged"/> changes, so a widget can show or
+        /// hide interactive affordances without polling. Runs on the UI thread.</summary>
+        protected virtual void OnHostInteractionChanged() { }
+
+        internal void SetHostEngaged(bool engaged)
+        {
+            if (_hostEngaged == engaged) return;
+            _hostEngaged = engaged;
+            try { OnHostInteractionChanged(); } catch { }
+        }
+
+        /// <summary>Whether a left press on non-interactive content starts a window move.
+        /// True by default, which is what makes a widget movable now that the host no longer
+        /// needs a title bar for it. Set to false to take the decision over entirely, then
+        /// call <see cref="MoveWindowOnMouseDown"/> from your own handler — useful when the
+        /// widget knows better which regions are drag surfaces.</summary>
+        protected bool MoveWindowOnMouseDownEnabled { get; set; } = true;
+
+        public NativeWidgetControl()
+        {
+            // Declared here, in the BASE constructor, so it is always the first row in the
+            // settings dialog and a derived widget cannot forget it or push it down. The host
+            // renders it only when the manifest sets supportsTheme, and resolves it into the
+            // theme pushed through ApplyTheme. "" (follow app) is the default, so existing
+            // widgets keep behaving exactly as before until the user picks something.
+            try
+            {
+                DefineSetting(ThemeSettingName, "Theme",
+                    "Widget theme. Follow app uses the app or system theme.",
+                    WidgetSettingKind.Theme, () => { }, defaultValue: ThemeKeys.FollowApp);
+            }
+            catch { }
+
+            // On the control itself (== Visual), so a press is caught before any child control
+            // can mark it handled, and OriginalSource still identifies what was pressed.
+            PreviewMouseLeftButtonDown += OnPreviewMouseLeftButtonDownForMove;
+        }
+
+        /// <summary>Name of the automatic theme setting declared by this class. The host looks
+        /// it up by kind, but this is public so a widget can read its own value.</summary>
+        public const string ThemeSettingName = "theme";
+
+        /// <summary>The widget's own theme choice: <c>""</c> to follow the app, or one of
+        /// <see cref="ThemeKeys"/>. Reading it is rarely necessary — the host pushes the
+        /// resolved theme to <c>OnApplyTheme</c> — but it is exposed for widgets that want to
+        /// know whether the user has pinned a theme.</summary>
+        protected string ThemeSettingValue =>
+            (FindSetting(ThemeSettingName)?.Value as string) ?? ThemeKeys.FollowApp;
+
+        private void OnPreviewMouseLeftButtonDownForMove(object sender, MouseButtonEventArgs e)
+        {
+            if (!MoveWindowOnMouseDownEnabled || IsSuspended) return;
+            // Right-click is the host's widget menu, never a move.
+            if (e.ChangedButton != MouseButton.Left) return;
+            if (IsDragBlocked(e.OriginalSource as DependencyObject)) return;
+            MoveWindowOnMouseDown(e);
+        }
+
+        /// <summary>True when the press landed on something the user means to press rather
+        /// than a drag surface: an interactive control, or a subtree tagged
+        /// <see cref="NoDragTag"/>. Walks the whole ancestor chain, because the press usually
+        /// targets the label inside the button rather than the button itself.
+        ///
+        /// Elements that are visually transparent but hit-testable report themselves as the
+        /// source; they are NOT treated as blocking, because "transparent" describes how they
+        /// paint, not whether they are meant to be pressed.</summary>
+        private static bool IsDragBlocked(DependencyObject? source)
+        {
+            for (DependencyObject? node = source; node is not null; node = VisualTreeHelper.GetParent(node))
+            {
+                if (node is ButtonBase or TextBoxBase or RangeBase or ComboBox) return true;
+                if (node is FrameworkElement fe && ReferenceEquals(fe.Tag, NoDragTag)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Starts moving the window hosting this widget. The host drives the gesture
+        /// itself from here (mouse capture, a movement threshold, snapping to screen edges
+        /// and to other containers, and committing the new bounds to the model), which is why
+        /// this is a request rather than a <c>DragMove</c> call: the native caption loop would
+        /// snap to nothing and would let a double-click maximize the widget. A no-op when the
+        /// widget is not hosted (a gallery preview, for instance).</summary>
+        protected void MoveWindowOnMouseDown(MouseButtonEventArgs e)
+        {
+            try { _moveWindow?.Invoke(e); } catch { }
+        }
+
+        /// <summary>Host seam supplying <see cref="MoveWindowOnMouseDown(MouseButtonEventArgs)"/>;
+        /// internal so a plugin cannot fake one. Null when running unhosted.</summary>
+        internal void SetWindowMover(Action<MouseButtonEventArgs>? moveWindow) => _moveWindow = moveWindow;
+
+        private readonly List<WidgetSetting> _settings = new();
+
 
     /// <summary>Settings declared via <see cref="DefineSetting"/> (empty by default).
     /// The host renders one editor per entry and writes back through
     /// <see cref="WidgetSetting.Value"/>.</summary>
     IReadOnlyList<WidgetSetting> IWidgetSettingsProvider.Settings => _settings;
 
-    protected WidgetSetting DefineSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvailableStrings = null)
+    protected WidgetSetting DefineSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvailableStrings = null, double? minimum = null, double? maximum = null)
     {
         if (_settings.Exists(s => s.Name == name)) throw new System.ArgumentException($"Duplicate widget setting '{name}'.", nameof(WidgetSetting));
 
-        var setting = new WidgetSetting(name, displayName, description, kind, onValueChanged, defaultValue: defaultValue, listOfAvailableStrings: listOfAvailableStrings);
+        var setting = new WidgetSetting(name, displayName, description, kind, onValueChanged, defaultValue: defaultValue, listOfAvailableStrings: listOfAvailableStrings, minimum: minimum, maximum: maximum);
         _settings.Add(setting);
         return setting;
     }
@@ -147,6 +263,11 @@ public class NativeWidgetControl : UserControl, INativeWidget, IWidgetSettingsPr
 
     protected virtual void Dispose(bool disposing)
     {
+        // Unhook everything that roots this instance: hide/show destroys and recreates the
+        // host window every toggle, so a leaked handler pins the visual tree and the
+        // collectible AssemblyLoadContext for the life of the process.
+        try { PreviewMouseLeftButtonDown -= OnPreviewMouseLeftButtonDownForMove; } catch { }
+        _moveWindow = null;
         if (_settings?.Any() == true)
         {
             foreach (var item in _settings)

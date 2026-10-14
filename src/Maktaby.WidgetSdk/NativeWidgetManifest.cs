@@ -27,6 +27,24 @@ public sealed class NativeWidgetManifest
     public bool SupportsTheme { get; set; } = true;
     public string? Thumbnail { get; set; }
 
+    /// <summary>Opt in to the host's title bar drawn over the top of the widget (title text,
+    /// lock toggle, menu button). Defaults to <c>false</c>: a widget that draws its own
+    /// header would otherwise have it covered, and the host already supplies the affordances
+    /// a title bar provides — click-to-focus, right-click menu, and
+    /// <see cref="NativeWidgetControl.MoveWindowOnMouseDown"/> for dragging.
+    ///
+    /// Collapsing it does NOT remove the chrome overlay: that window keeps owning the
+    /// resize edges and the selection border. Set this only if the widget genuinely has
+    /// no content in its top ~28px.</summary>
+    public bool ShowTitleBar { get; set; }
+
+    /// <summary>Offer an extra "Auto" option in the automatic theme setting, in addition to
+    /// follow-app / light / dark. The host passes <c>auto</c> through to
+    /// <c>INativeWidget.ApplyTheme</c> untouched, so the widget decides what it means —
+    /// typically deriving light or dark from its own background colour, which is only sensible
+    /// for a widget that draws one. Ignored unless <see cref="SupportsTheme"/> is also true.</summary>
+    public bool AutoTheme { get; set; }
+
     public static NativeWidgetManifest DefaultFor(string slug) => new() { Name = slug };
 
     /// <summary>Parses and clamps; never throws (errors out via <paramref name="error"/>).</summary>

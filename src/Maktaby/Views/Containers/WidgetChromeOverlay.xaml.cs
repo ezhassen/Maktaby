@@ -48,6 +48,29 @@ public partial class WidgetChromeOverlay : Window
     /// shown again.</summary>
     internal bool SyncSuppressed { get; set; }
 
+    private bool _showTitleBar = true;
+
+    /// <summary>Whether the 28px header strip (title, lock and menu buttons) is drawn.
+    /// Defaults to true so an owner that never sets it keeps today's behaviour; native
+    /// widget windows pass the manifest's opt-in flag instead.
+    ///
+    /// Setting it false collapses ONLY the header — the overlay window itself stays up,
+    /// because its <c>WM_NCHITTEST</c> hook is the sole provider of the resize edges and
+    /// its border is the selection affordance. Hiding the whole overlay would silently
+    /// disable drag-resize. <see cref="OnWndProc"/> must keep its hit-test band in step:
+    /// a collapsed header has to occupy zero pixels of hit-test area, not 28.</summary>
+    public bool ShowTitleBar
+    {
+        get => _showTitleBar;
+        set
+        {
+            if (_showTitleBar == value) return;
+            _showTitleBar = value;
+            try { HeaderBorder.Visibility = value ? Visibility.Visible : Visibility.Collapsed; }
+            catch { }
+        }
+    }
+
     /// <summary>
     /// Re-inserts the overlay directly above its owner (no move/size/activate). Called after the
     /// owner is shown or reactivated: those operations insert the owner at the top and would
@@ -328,8 +351,16 @@ public partial class WidgetChromeOverlay : Window
                 double scale = 1.0;
                 try { scale = App.Services.GetRequiredService<Core.Interfaces.IDpiService>().GetDpiForWindow(hwnd) / 96.0; } catch { }
                 int edge = (int)Math.Max(4, 8 * scale);
-                double headerH = 28 * scale;
-                try { headerH = HeaderBorder.ActualHeight * scale; if (headerH < 1) headerH = 28 * scale; } catch { }
+                // A collapsed title bar must occupy ZERO hit-test band. The 28px fallback
+                // covers a header that exists but has not been laid out yet; applying it to
+                // a collapsed header would keep an invisible drag strip over the widget's
+                // own top row and swallow presses aimed at it.
+                double headerH = 0;
+                if (_showTitleBar)
+                {
+                    headerH = 28 * scale;
+                    try { headerH = HeaderBorder.ActualHeight * scale; if (headerH < 1) headerH = 28 * scale; } catch { }
+                }
                 bool canResize = _ownerWidget.Window.ResizeMode != ResizeMode.NoResize
                                  && _ownerWidget.Window.ResizeMode != ResizeMode.CanMinimize
                                  && !_ownerWidget.ContainerViewModel.IsLocked;

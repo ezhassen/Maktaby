@@ -14,13 +14,16 @@
     MinWidth="120"
     MinHeight="80"
     AllowsTransparency="True"
-    Background="Transparent"
+    Background="#01000000"
     ResizeMode="CanResize"
     ShowActivated="False"
     ShowInTaskbar="False"
     Topmost="False"
     WindowStyle="None">
-    <Grid>
+    <!--  Alpha 1/255: still visually transparent, but a fully transparent background makes
+         the window click-through, so presses on empty widget space never reached it (no
+         click-to-focus, no right-click context menu). Same trick as DesktopSurface.xaml.  -->
+    <Grid Background="#01000000">
         <Grid.ContextMenu>
             <ContextMenu x:Name="WidgetMenu" Opened="WidgetMenu_Opened">
                 <MenuItem Click="Change_Click" Header="{loc:LocKey WidgetMenu.ChangeWidget}">

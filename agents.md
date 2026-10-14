@@ -76,10 +76,35 @@ Follow it to keep the architecture clean and the build green.
   manifest, folder-kind helper). BCL + WPF framework, no packages. Plugin authors reference
   the built DLL; never move host logic here.
 - **Core/Services/NativeWidgetService** — native widget discovery/compile/load (Roslyn +
-  collectible ALC, hashed cache). `UserWidgets/<slug>` folders are shared with CSS widgets;
+  collectible ALC, hashed cache). The compile-cache key hashes the plugin sources **and the
+  WidgetSdk's ModuleVersionId, never its assembly version**: the version comes from
+  MinVer/git tags and does not move for an uncommitted SDK edit, so a rebuilt SDK kept the
+  same key and served plugin DLLs compiled against the previous ABI — which then died at
+  construction with `MissingMethodException` on the changed overload (this actually happened;
+  the log line names the missing signature). With deterministic builds the MVID is a content
+  hash, so it is stable across identical rebuilds and changes the moment the SDK's IL does.
+  That is a *backstop*, not the safety net: `CreateInstance` also self-heals, treating
+  `MissingMethodException`/`MissingFieldException`/`TypeLoadException`/`FileLoadException`
+  anywhere in the chain as "built against another SDK" and evicting the cached build (unload
+  the ALC, delete the dll/pdb) so the next load recompiles. Prune sibling hash dirs after a
+  successful compile (age-guarded 5 min) so a key change does not orphan builds forever.
+  `UserWidgets/<slug>` folders are shared with CSS widgets;
   `WidgetFolder.PeekKind` (WidgetSdk) decides ownership without loading code — keep it so.
 - **Views/Containers/NativeWidgetWindow** — native plugin host; shares `WidgetChromeOverlay`
   via `IWidgetChromeOwner` (implement the interface for new chrome owners, don't fork the overlay).
+  Its window background is `#01000000` and the overlay's title bar is **collapsed unless the
+  manifest opts in** (`showTitleBar`, default false) — a widget draws its own top row, and a
+  fully transparent window is click-through, which costs click-to-focus and the right-click
+  menu on empty space. Drag-to-move therefore comes from the widget body, not a title bar:
+  the host injects a mover into `NativeWidgetControl` (`SetWindowMover`, internal +
+  `InternalsVisibleTo`), which calls it on mouse-down unless the press is on an interactive
+  control or a subtree tagged `NativeWidgetControl.NoDragTag` (`"no-drag"`); a widget can set
+  `MoveWindowOnMouseDownEnabled = false` and drive it itself. Collapsing the title bar must
+  **not** hide the overlay window: its `WM_NCHITTEST` hook is the only provider of the resize
+  edges and the 1px border is the selection affordance — so `ShowTitleBar` collapses the
+  header strip and zeroes its hit-test band (`WidgetChromeOverlay` `OnWndProc`), and leaving
+  the 28px fallback active for a collapsed header would park an invisible drag strip over the
+  widget's top row. Web widgets are unaffected: their title bar is still always on.
 - **NativeWidgets/** (`NativeClock`, `CalendarWidget`) — built-in plugins; `NativeClock` doubles as
   the reference implementation (settings, suspend/resume, theming).
 - **docs/** — user-facing guides (`native-widgets.md` = plugin authoring reference).

@@ -1,0 +1,11 @@
+{
+  "name": "Weather",
+  "author": "Maktaby",
+  "description": "Current conditions, hourly and 4-day forecast from Open-Meteo (native widget).",
+  "version": "1.0",
+  "width": 340,
+  "height": 260,
+  "resizable": true,
+  "supportsTheme": true,
+  "autoTheme": true
+}

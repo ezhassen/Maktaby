@@ -351,6 +351,8 @@
       <unit id="WidgetSettings.NoSettings"><segment><source>This widget has no settings.</source><target>This widget has no settings.</target></segment></unit>
     <unit id="WidgetSettings.Enabled"><segment><source>Enabled</source><target>Enabled</target></segment></unit>
     <unit id="WidgetSettings.Number"><segment><source>Number</source><target>Number</target></segment></unit>
+  <unit id="WidgetSettings.Color"><segment><source>Colour</source><target>Colour</target></segment></unit>
+  <unit id="WidgetSettings.ColorHint"><segment><source>Enter a hex colour, for example #A61A1C1E (alpha first).</source><target>Enter a hex colour, for example #A61A1C1E (alpha first).</target></segment></unit>
     <unit id="WidgetsList.TrustPlace"><segment><source>Trust &amp; Place</source><target>Trust &amp; Place</target></segment></unit>
     <unit id="Box.CustomWidget"><segment><source>Custom Widget</source><target>Custom Widget</target></segment></unit>
       <unit id="Update.InvalidData"><segment><source>Maktaby found a release it cannot display, please check for update manualy to get latest update:</source><target>Maktaby found a release it cannot display, please check for update manualy to get latest update:</target></segment></unit>
@@ -359,5 +361,15 @@
     <unit id="Loading.Cancel"><segment><source>Cancel</source><target>Cancel</target></segment></unit>
       <unit id="Section.Settings.WindowBackdrop"><segment><source>Window Backdrop</source><target>Window Backdrop</target></segment></unit>
     <unit id="Section.Settings.WindowBackdropHint"><segment><source>Window background effect for app windows.</source><target>Window background effect for app windows.</target></segment></unit>
+  <unit id="WidgetSettings.Reset"><segment><source>Reset</source><target>Reset</target></segment></unit>
+  <unit id="WidgetSettings.ResetColor"><segment><source>Use the theme default</source><target>Use the theme default</target></segment></unit>
+  <unit id="WidgetSettings.ThemeDefault"><segment><source>Theme default</source><target>Theme default</target></segment></unit>
+  <unit id="WidgetSettings.PickColor"><segment><source>Pick a colour</source><target>Pick a colour</target></segment></unit>
+  <unit id="WidgetSettings.Theme"><segment><source>Theme</source><target>Theme</target></segment></unit>
+  <unit id="WidgetSettings.ThemeDescription"><segment><source>Widget theme. Follow app uses the app or system theme.</source><target>Widget theme. Follow app uses the app or system theme.</target></segment></unit>
+  <unit id="WidgetSettings.FollowApp"><segment><source>Follow app</source><target>Follow app</target></segment></unit>
+  <unit id="WidgetSettings.Light"><segment><source>Light</source><target>Light</target></segment></unit>
+  <unit id="WidgetSettings.Dark"><segment><source>Dark</source><target>Dark</target></segment></unit>
+  <unit id="WidgetSettings.AutoBackground"><segment><source>Auto (from background)</source><target>Auto (from background)</target></segment></unit>
   </file>
 </xliff>

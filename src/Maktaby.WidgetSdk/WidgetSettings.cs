@@ -10,7 +10,42 @@ public enum WidgetSettingKind
     String,
     Number,
     Boolean,
-    ListOfStrings
+    ListOfStrings,
+
+    /// <summary>A colour stored as an <c>#AARRGGBB</c> hex string (alpha first). A separate kind
+    /// rather than <see cref="String"/> so the host can render a colour picker instead of a
+    /// text box, and so a malformed value can be rejected on write rather than silently
+    /// round-tripping as text. Serializes as a string either way, so persistence is unchanged.
+    /// </summary>
+    ColorH,
+
+    /// <summary>Widget theme. Value is one of the <see cref="ThemeKeys"/>; the host resolves
+    /// it and pushes the result through <c>INativeWidget.ApplyTheme</c>. Declared automatically
+    /// by <see cref="NativeWidgetControl"/> (first in the list) and rendered only when the
+    /// manifest sets <c>supportsTheme</c>, so a widget never has to declare it by hand.</summary>
+    Theme,
+}
+
+/// <summary>Valid values for a <see cref="WidgetSettingKind.Theme"/> setting. The empty
+/// string means "follow the app" and is the default.</summary>
+public static class ThemeKeys
+{
+    public const string FollowApp = "";
+    public const string Light = "light";
+    public const string Dark = "dark";
+    /// <summary>"Derive it from my own background". Only meaningful for a widget that paints a
+    /// user-choosable background. The host does NOT push this string through as a theme: it
+    /// resolves the app theme as usual and the widget overrides it in <c>ApplyTheme</c> when
+    /// (and only when) it has a user colour to derive from — otherwise the derivation is
+    /// circular, because the unset background is itself theme-derived.</summary>
+    public const string Auto = "auto";
+
+    public static bool IsValid(string? key)
+        => key is FollowApp or Light or Dark or Auto;
+
+    /// <summary>True when the key names a concrete theme, i.e. the host should not override it.</summary>
+    public static bool IsExplicit(string? key)
+        => key is Light or Dark or Auto;
 }
 
 /// <summary>A single user-editable setting of a native widget: a <see cref="Name"/>d value with a
@@ -21,7 +56,7 @@ public sealed class WidgetSetting : IDisposable
 {
     private object? _value;
 
-    public WidgetSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvailableStrings = null)
+    public WidgetSetting(string name, string displayName, string description, WidgetSettingKind kind, Action onValueChanged, object? defaultValue = null, Dictionary<string, string>? listOfAvailableStrings = null, double? minimum = null, double? maximum = null)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -37,10 +72,27 @@ public sealed class WidgetSetting : IDisposable
         Kind = kind;
         DisplayName = string.IsNullOrWhiteSpace(displayName) ? name : displayName;
         ListOfAvailableStrings = listOfAvailableStrings;
+        Minimum = minimum;
+        Maximum = maximum;
         DefaultValue = Coerce(defaultValue, kind, nameof(defaultValue), listOfAvailableStrings);
         _value = DefaultValue;
         if (onValueChanged is not null) this.ValueChanged += (_, _) => { onValueChanged(); };
     }
+
+    /// <summary>Optional inclusive lower bound of a <see cref="WidgetSettingKind.Number"/> setting.
+    /// Null by default: with no range the host renders a numeric field, and only when BOTH
+    /// bounds are supplied does it render a slider. Ignored by other kinds.</summary>
+    public double? Minimum { get; }
+
+    /// <summary>Optional inclusive upper bound of a <see cref="WidgetSettingKind.Number"/> setting.
+    /// Slider only when set together with <see cref="Minimum"/>; otherwise numeric field.
+    /// Ignored by other kinds.</summary>
+    public double? Maximum { get; }
+
+    /// <summary>True when both bounds are present and ordered, i.e. the host should offer a
+    /// slider. A range with only one bound (or inverted) is treated as no range.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasRange => Minimum.HasValue && Maximum.HasValue && Maximum.Value > Minimum.Value;
 
     /// <summary>Stable identifier (key). Immutable. Persisted to disk under this name.</summary>
     public string Name { get; }
@@ -53,8 +105,23 @@ public sealed class WidgetSetting : IDisposable
 
     public WidgetSettingKind Kind { get; }
 
-    /// <summary>Value at declaration time. Used by host "reset to defaults".</summary>
-    public object? DefaultValue { get; }
+    /// <summary>Value at declaration time. Used by host "reset to defaults". The host may replace
+    /// it via <see cref="OverrideDefault"/> when the manifest changes what the sensible
+    /// default is (e.g. enabling the Auto theme).</summary>
+    public object? DefaultValue { get; private set; }
+
+    /// <summary>Replaces the declared default. The current value moves with it when it still
+    /// equals the OLD default — so a widget that has never been configured picks up the new
+    /// default, while a value the user actually chose is left alone. This is what lets the
+    /// host make "Auto" the default for a widget that opted into it without ever overwriting
+    /// an explicit choice.</summary>
+    public void OverrideDefault(object? newDefault)
+    {
+        object? previous = DefaultValue;
+        var coerced = Coerce(newDefault, Kind, nameof(newDefault), ListOfAvailableStrings);
+        DefaultValue = coerced;
+        if (Equals(Value, previous)) Value = coerced;
+    }
 
     /// <summary>Current value (<see cref="string"/> (also for <see cref="WidgetSettingKind.ListOfStrings"/>),
     /// <see cref="double"/> or <see cref="bool"/> per <see cref="Kind"/>; <c>null</c> only when the
@@ -98,6 +165,51 @@ public sealed class WidgetSetting : IDisposable
         return System.Convert.ToBoolean(Value, System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    /// <summary>The colour as <c>#AARRGGBB</c> (alpha first, uppercase). Falls back to
+    /// <paramref name="fallback"/> when the value is not a valid hex colour. Handy because
+    /// <see cref="WidgetSettingKind.ColorH"/> stores its value as a string — parse it once
+    /// per frame rather than re-validating on every write.</summary>
+    public string GetColorHex(string fallback = "#00000000")
+    {
+        string s = Value as string ?? "";
+        return TryNormalizeColorHex(s, out string normalized) ? normalized : fallback;
+    }
+
+    /// <summary>Normalizes a colour to <c>#AARRGGBB</c> (alpha first, uppercase). Accepts
+    /// <c>#RGB</c>, <c>#ARGB</c>, <c>#RRGGBB</c> and <c>#AARRGGBB</c>, with or without the
+    /// leading <c>#</c>, and anything <see cref="System.Drawing.ColorTranslator"/> understands
+    /// for the named forms. Alpha defaults to FF when the input carries none.</summary>
+    public static bool TryNormalizeColorHex(string? text, out string normalized)
+    {
+        normalized = "#00000000";
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        string s = text.Trim();
+
+        // Named colours ("Red") and #RGB / #RRGGBB go through ColorTranslator, which also
+        // covers the alpha-less forms by returning an opaque colour.
+        try
+        {
+            var named = System.Drawing.ColorTranslator.FromHtml(s.StartsWith("#", StringComparison.Ordinal) ? s : "#" + s);
+            if (named.A != 0 || string.Equals(s, "#000000", StringComparison.OrdinalIgnoreCase))
+            {
+                normalized = $"#{named.A:X2}{named.R:X2}{named.G:X2}{named.B:X2}";
+                return true;
+            }
+        }
+        catch { }
+
+        // Explicit ARGB, possibly without '#'.
+        string digits = s.StartsWith("#", StringComparison.Ordinal) ? s.Substring(1) : s;
+        if (digits.Length == 8
+            && uint.TryParse(digits, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out uint argb))
+        {
+            normalized = $"#{argb:X8}";
+            return true;
+        }
+        return false;
+    }
+
     public override string ToString() => $"{Name}={Value ?? "<null>"}";
 
     private static object? Coerce(object? value, WidgetSettingKind kind, string paramName, Dictionary<string, string>? options)
@@ -117,6 +229,17 @@ public sealed class WidgetSetting : IDisposable
                     : System.Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture),
                 WidgetSettingKind.Boolean => value is bool b ? b
                     : System.Convert.ToBoolean(value, System.Globalization.CultureInfo.InvariantCulture),
+                // Rejected rather than stored verbatim: a colour that is not a colour would
+                // otherwise survive a round-trip and fail much later, at paint time.
+                WidgetSettingKind.ColorH => TryNormalizeColorHex(value as string, out string hex)
+                    ? hex
+                    : throw new System.ArgumentException(
+                        $"'{value}' is not a valid colour; expected #AARRGGBB.", paramName),
+                WidgetSettingKind.Theme => value is string t && ThemeKeys.IsValid(t)
+                    ? t
+                    : throw new System.ArgumentException(
+                        $"'{value}' is not a valid theme; expected one of {ThemeKeys.FollowApp}, " +
+                        $"{ThemeKeys.Light}, {ThemeKeys.Dark}, {ThemeKeys.Auto}.", paramName),
                 WidgetSettingKind.ListOfStrings => value is string s
                     && (options is null || options.ContainsKey(s)) ? s
                     : throw new System.ArgumentException(

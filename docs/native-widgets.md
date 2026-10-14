@@ -6,7 +6,7 @@ They live side by side with web widgets in `%LocalAppData%\Maktaby\UserWidgets\<
 `nwidget.json` belongs to the native loader, anything else to the web loader; detection
 never loads code. Built-in widgets ship next to the app in `NativeWidgets/` and appear in
 the gallery with an `App` badge. The gallery lists all kinds with a `Web` / `Native`
-badge; placement, chrome (move/resize/title/lock/menu), fullscreen auto-suspend and theme
+badge; placement, chrome (move/resize/lock/menu), fullscreen auto-suspend and theme
 switching work the same for all.
 
 > **Full trust, explicit consent.** A plugin is arbitrary .NET code running inside the app
@@ -38,7 +38,8 @@ UserWidgets\MyClock\          (or NativeWidgets\MyClock\ for built-ins)
   "width": 300,
   "height": 300,
   "resizable": true,
-  "supportsTheme": true
+  "supportsTheme": true,
+  "showTitleBar": false
 }
 ```
 
@@ -49,8 +50,93 @@ Optional disambiguation keys (omit when unambiguous):
 | `assembly` | DLL file name. Default: the single `*.dll` in the folder. Required when several exist. Ignored in source mode. |
 | `type` | Full type name implementing `INativeWidget`. Default: the single such type found. Required when zero (error) or several exist. |
 | `thumbnail` | Image file. Default `thumbnail.png`. |
+| `showTitleBar` | `false` (default) hides the host's title bar over the widget. Opt in only if the widget draws nothing in its top ~28px — the host already supplies everything that bar provided. See §1a. |
+| `autoTheme` | `false` (default). Adds an **Auto** option to the automatic theme setting *and* makes it the default. Only meaningful for a widget that paints a user-choosable background and can derive light/dark from it. Requires `supportsTheme`. |
 
 How the host decides, in order: explicit `assembly` → any `*.cs` sources (compile) → single `*.dll` → error. Folders starting with `.` (e.g. caches) are skipped by both loaders.
+
+## 1a. Chrome: no title bar, drag the widget body
+
+The widget body is the drag surface and the widget fills its own window, so a title bar
+drawn over the top would just cover the first row of content. Accordingly:
+
+- **The title bar is collapsed by default** (`showTitleBar: false`). The chrome overlay
+  window itself stays up regardless — it owns the resize edges and the selection border —
+  only its 28px header strip is collapsed. Resize and the selected-state outline are
+  unaffected.
+- **The host window background is `#01000000`**, not transparent. Fully transparent
+  windows are click-through, which would mean no click-to-focus and no right-click widget
+  menu on empty space. Alpha 1/255 is visually identical.
+- **A left press on the widget body moves the window.** The host drives the same
+  `WindowDragController` the box windows use, so body-drag snaps to screen edges and to other
+  containers, commits the new bounds, and — unlike a native `WM_NCLBUTTONDOWN`/caption move —
+  **cannot be turned into a double-click maximize**. The host provides this to
+  `NativeWidgetControl`; a bare `INativeWidget` implementation does not get it.
+
+If your widget has clickable things in the drag area, keep them out of the drag by tagging
+them `no-drag` — checked on the pressed element and every ancestor up to the widget root:
+
+```csharp
+tab.Tag = NoDragTag;        // NativeWidgetControl.NoDragTag == "no-drag"
+```
+
+WPF's own interactive controls (`Button`, `TextBox`, `Slider`, `ComboBox`) are excluded
+automatically, so only hand-built `Border`/`TextBlock` hit targets need the tag. If your
+layout has drag surfaces and press targets interleaved in a way tags cannot express, take
+over the decision:
+
+```csharp
+public MyWidget() => MoveWindowOnMouseDownEnabled = false;   // opt out of the automatic move
+
+private void OnRootMouseDown(object sender, MouseButtonEventArgs e)
+{
+    if (e.OriginalSource == _root) MoveWindowOnMouseDown(e);  // then call it yourself
+}
+```
+
+### Knowing whether the widget is being used
+
+`IsHostEngaged` (with the `OnHostInteractionChanged()` override) is pushed by the host whenever
+the user starts or stops engaging with the widget. It is the hook for hiding your own chrome
+until they are actually interacting, which is usually what you want on a desktop widget: the
+resting state should be the data, not the controls.
+
+```csharp
+protected override void OnHostInteractionChanged()
+    => _controls.Visibility = IsHostEngaged ? Visibility.Visible : Visibility.Collapsed;
+```
+
+**"Engaged" is deliberately not "my window is active".** The host's title bar and resize edges
+live in a separate chrome-overlay window, so dragging or resizing the widget leaves the widget
+window inactive while the user is plainly interacting with it. The host counts chrome-visible
+and an in-flight drag or resize as engaged too — without that, your controls would vanish the
+instant a drag began, which is exactly when they are being aimed at.
+
+A click anywhere on the widget engages it, so the controls come back on the same press that
+the user would have used to click them.
+
+### Theme
+
+`NativeWidgetControl` declares a `theme` setting (`WidgetSettingKind.Theme`) in its **base**
+constructor, so it is always the first row and cannot be forgotten. The host renders it only
+when the manifest sets `supportsTheme`, and never asks the widget to declare it.
+
+| value | meaning |
+|---|---|
+| `""` | Follow the app / system theme (the declared default). |
+| `light` / `dark` | Pinned. |
+| `auto` | Offered (and made the default) when the manifest sets `autoTheme`. The host resolves the app theme as usual and the widget overrides it in `OnApplyTheme` when — and only when — it has a user colour to derive from. |
+
+That last row is the subtle one. The host deliberately does **not** push `auto` through as a
+theme string: with no user colour the widget's background is itself theme-derived, so deriving
+the theme from it would read back the previously painted card and get stuck on one side
+forever. In that case `auto` simply follows the app theme. A widget overrides in
+`OnApplyTheme` by checking `ThemeSettingValue` and reading its own background — see
+`WeatherWidget.OnApplyTheme`.
+
+`WidgetSetting.OverrideDefault` is how the host promotes `auto` to the default: it moves the
+current value only when it still equals the old default, so an explicit user choice is never
+overwritten and **Reset** returns to `auto`.
 
 ## 2. Assembly mode (single DLL)
 
@@ -115,6 +201,7 @@ One instance is created per placed container, on the UI thread:
 | `ApplyTheme(theme)` | `"dark"`, `"light"` or `null`. Only called when `supportsTheme` is true: after load, on app-theme change, on resume. |
 | `Dispose()` | Unsubscribe, stop timers, release. Called before the window closes. |
 | `Entered/Left/Clicked/Pressed/Focused/Unfocused` | **Optional** interaction events for content the host cannot see (HWND airspace). Pure WPF visuals need none of these — the host detects mouse/focus itself and merges both sources. |
+| *(no member)* | Moving the window, the title bar and the right-click menu are **not** part of the interface. The first two are host-side policy; drag-to-move reaches a `NativeWidgetControl` through a private seam and is documented in §1a. A bare `INativeWidget` gets focus, menu and resize, but not body-drag. |
 
 Throwing from any member disables that instance (logged with full stack) but never
 the host. Keep handlers fast; never block the UI thread (compile/load already happens
@@ -148,10 +235,28 @@ private void UpdateHands()
 }
 ```
 
-`WidgetSettingKind` is `String` (`string`), `Number` (`double`), `Boolean` (`bool`) or
-`ListOfStrings` (`string` key from `listOfAvailableStrings`, rendered as a combo box);
-mismatched writes throw `ArgumentException`. `ValueChanged` fires on the UI thread for host
-edits too; `Reset()` restores `DefaultValue`. Raw `INativeWidget` implementations (not deriving
+`WidgetSettingKind` is `String` (`string`), `Number` (`double`), `Boolean` (`bool`),
+`ListOfStrings` (`string` key from `listOfAvailableStrings`, rendered as a combo box) or
+`ColorH` (`string`, rendered as a colour picker and stored as `#AARRGGBB` — alpha first);
+mismatched writes throw `ArgumentException`.
+
+A `Number` setting picks its own editor: supply **both** `minimum` and `maximum` and the host
+renders a slider over that range; supply neither and it renders a numeric field with spin
+buttons. Supplying only one bound is treated as no range — a single bound would pin the
+control to a half-range the plugin never asked for. Leave both `null` (the default) for a
+free number like a font size, and set them for an ordinal amount like an opacity.
+
+```csharp
+DefineSetting("opacity", "Background opacity", "0-100%",
+    WidgetSettingKind.Number, OnChanged, defaultValue: 100, minimum: 0, maximum: 100);   // slider
+DefineSetting("fontSize", "Font size", "Points",
+    WidgetSettingKind.Number, OnChanged, defaultValue: 12);                              // numeric field
+```
+
+`ValueChanged` fires on the UI thread for host
+edits too; `Reset()` restores `DefaultValue`. `GetColorHex()` normalises a `ColorH` value for
+painting, and `WidgetSetting.TryNormalizeColorHex` accepts `#RGB`, `#RRGGBB`, `#ARGB`,
+`#AARRGGBB` and named colours. Raw `INativeWidget` implementations (not deriving
 from the base) can implement `IWidgetSettingsProvider` directly with their own list.
 
 ## 5. Hosting other UI stacks (anything that is a `FrameworkElement`)
@@ -216,7 +321,10 @@ keyed on content identity:
 
 ## 8. Limits (v1)
 
-- No per-widget persisted settings yet (use the folder for static assets).
+- Per-widget persisted settings exist (see §4): declare them with `DefineSetting` and the
+  host renders the editor. They are stored per placed instance, not globally.
+- Drag-to-move is a `NativeWidgetControl` feature, not an `INativeWidget` one (§1a), and a
+  bare `INativeWidget` has no way to request it.
 - Open windows keep their loaded version until closed; Refresh only affects new placements.
 - WebView2 inside a plugin is discouraged — its lifetime fights the host's teardown.
 - One UI thread for everything: all members run on it; heavy work belongs on your own threads.

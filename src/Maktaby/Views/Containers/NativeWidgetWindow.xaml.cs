@@ -37,6 +37,7 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private NativeWidgetInfo? _info;
     private int _loadGeneration;
     private WidgetChromeOverlay? _chromeOverlay;
+    private WindowDragController? _drag;
     private IntPtr _layerHwnd = IntPtr.Zero;
     private HwndSource? _hwndSource;
     private HwndSourceHook? _layerHook;
@@ -83,6 +84,12 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         Loaded += OnLoaded;
         IsVisibleChanged += OnIsVisibleChanged;
         StateChanged += OnStateChanged;
+        // Body-drag phases live on the WINDOW, not on the plugin visual: TitleDrag captures
+        // the mouse here once the 4px threshold is crossed, so from that moment move/up are
+        // delivered to this window and never reach the plugin.
+        PreviewMouseMove += OnHostMouseMove;
+        PreviewMouseLeftButtonUp += OnHostMouseUp;
+        LostMouseCapture += OnHostLostMouseCapture;
         try { ApplicationThemeManager.Changed += OnAppThemeChanged; } catch { }
         this.LockMenuItem.IsChecked = vm.IsLocked;
         Activated += (_, _) => { _isActive = true; UpdateChrome(); try { _chromeOverlay?.EnsureAboveOwner(); } catch { } };
@@ -214,24 +221,60 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
             _plugin = null;
             return;
         }
-        ApplyThemeToPlugin();
-        // Localization: load the widget's own langs/*.xlf against the active app language and
-        // inject it, so {sdk:Loc …} targets resolve and the widget can re-translate live.
-        InjectLocalization(plugin);
-        // Settings load after the visual exists: declared defaults show first, stored values
+// Settings load after the visual exists: declared defaults show first, stored values
         // apply through ValueChanged (widgets cache them there).
         try
         {
-if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != null)
+            if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != null)
+            {
+                // Subscribe to the theme BEFORE loading. LoadInto assigns stored values
+                // synchronously, so subscribing afterwards would miss the one assignment that
+                // matters most — a persisted theme choice would silently never apply.
+                foreach (var setting in provider.Settings)
                 {
-                    App.Services.GetRequiredService<INativeWidgetSettingsService>()
-                        .LoadInto(_info, provider, _container.SettingsFileName);
+                    if (setting.Kind == Maktaby.WidgetSdk.WidgetSettingKind.Theme)
+                    {
+                        setting.ValueChanged += OnPluginThemeSettingChanged;
+                        break;
+                    }
                 }
+                ApplyAutoThemeDefault(provider);
+                App.Services.GetRequiredService<INativeWidgetSettingsService>()
+                    .LoadInto(_info, provider, _container.SettingsFileName);
+            }
         }
         catch { }
+        // Theme resolves AFTER the stored values are in, otherwise the first paint always uses
+        // defaults and ignores what the user chose.
+        ApplyThemeToPlugin();
+        // Drag affordance: with the title bar collapsed by default the widget body is the
+        // drag surface, so the base control needs a way to move this window.
+        InjectWindowMover(plugin);
+        // Localization: load the widget's own langs/*.xlf against the active app language and
+        // inject it, so {sdk:Loc …} targets resolve and the widget can re-translate live.
+        InjectLocalization(plugin);
         if (!IsVisible || WindowState == WindowState.Minimized)
         {
             try { plugin.Suspend(); } catch { }
+        }
+    }
+
+    /// <summary>When the manifest opts into <c>autoTheme</c>, "Auto" becomes the default choice
+    /// instead of "Follow app": a widget that paints its own background has a better opinion
+    /// about its own legibility than the app-wide theme does. Applied to the DECLARED default
+    /// before stored values load, so an explicit user choice is never overwritten and Reset
+    /// returns here.</summary>
+    private void ApplyAutoThemeDefault(Maktaby.WidgetSdk.IWidgetSettingsProvider provider)
+    {
+        if (_info?.Manifest.AutoTheme != true) return;
+        foreach (var setting in provider.Settings)
+        {
+            if (setting.Kind != Maktaby.WidgetSdk.WidgetSettingKind.Theme) continue;
+            if (setting.GetString() == Maktaby.WidgetSdk.ThemeKeys.FollowApp)
+            {
+                try { setting.OverrideDefault(Maktaby.WidgetSdk.ThemeKeys.Auto); } catch { }
+            }
+            break;
         }
     }
 
@@ -282,6 +325,65 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
         catch { }
     }
 
+    /// <summary>Gives a <see cref="Maktaby.WidgetSdk.NativeWidgetControl"/> the ability to move
+    /// this window from its own mouse handling. Drives the same <see cref="WindowDragController"/>
+    /// the box windows use, so body-drag snaps to screen edges and to other containers, commits
+    /// the new bounds to the model, and — unlike the native caption loop — cannot be turned
+    /// into a double-click maximize. Refused while the container is locked, which is the same
+    /// rule the title-bar drag honours.</summary>
+    private void InjectWindowMover(INativeWidget plugin)
+    {
+        if (plugin is not Maktaby.WidgetSdk.NativeWidgetControl nc) return;
+        try
+        {
+            nc.SetWindowMover(e =>
+            {
+                if (_container.IsLocked) return;
+                try { Activate(); } catch { }
+                try { _drag?.BeginTitleDrag(e); } catch { }
+            });
+        }
+        catch { }
+    }
+
+    private void OnHostMouseMove(object? sender, MouseEventArgs e)
+    {
+        try { _drag?.TitleDrag(e); } catch { }
+    }
+
+    private void OnHostMouseUp(object? sender, MouseButtonEventArgs e)
+    {
+        try { _drag?.EndTitleDrag(e); } catch { }
+    }
+
+    /// <summary>Last-resort end for a drag that never sees its mouse-up. TitleDrag captures
+    /// the mouse on THIS window, so after the threshold is crossed the move/up phases are
+    /// delivered here rather than to the plugin visual — which is exactly why these handlers
+    /// are on the window and not on the plugin. Losing capture (deactivation, another window
+    /// taking the press) leaves the controller dragging forever otherwise.</summary>
+    private void OnHostLostMouseCapture(object? sender, MouseEventArgs e)
+    {
+        try { _drag?.CancelDrag(); } catch { }
+    }
+
+    /// <summary>Pushes "the user is engaging with this widget" into the plugin so it can hide its
+    /// controls until then. Idempotent, and safe before a plugin is attached.
+    ///
+    /// The chrome overlay is a SEPARATE window, so this deliberately follows THAT window's
+    /// visibility rather than this window's activation state: dragging or resizing the widget
+    /// deactivates it while the user is plainly interacting. The drag/resize terms are a
+    /// backstop for the window between starting the gesture and the overlay reporting it.</summary>
+    private void PushHostEngaged()
+    {
+        var plugin = _plugin;
+        if (plugin is not Maktaby.WidgetSdk.NativeWidgetControl nc) return;
+        bool engaged = HeaderIsShown()
+                       || (_drag?.IsDragging ?? false)
+                       || (_chromeOverlay?.IsDragging ?? false)
+                       || (_chromeOverlay?.IsResizing ?? false);
+        try { nc.SetHostEngaged(engaged); } catch { }
+    }
+
     private void DetachPlugin()
     {
         // A dropped cache mode belongs to the visual that owned it. Forget the record with
@@ -290,6 +392,13 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
         _softwareFallback.ForgetCaches();
         var plugin = Interlocked.Exchange(ref _plugin, null);
         if (plugin is null) return;
+        try
+        {
+            // Drop the mover first: it closes over this window, and a disposed plugin must
+            // not be able to drag a window it is no longer attached to.
+            if (plugin is Maktaby.WidgetSdk.NativeWidgetControl nc) nc.SetWindowMover(null);
+        }
+        catch { }
         try
         {
             FrameworkElement? visual = null;
@@ -321,6 +430,9 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
         if (_chromeOverlay is not null)
         {
             _chromeOverlay.ResizeMode = ResizeMode;
+            // Opt-in only: the overlay stays up for its resize edges and selection border
+            // either way, so this collapses the header rather than hiding the window.
+            _chromeOverlay.ShowTitleBar = manifest?.ShowTitleBar == true;
         }
     }
 
@@ -333,6 +445,26 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
 
     private string? ResolveTheme()
     {
+        // The widget's own theme setting wins over everything. "" means follow the app. "auto" is
+        // NOT short-circuited to a literal: the host resolves the app theme as usual and the
+        // widget decides whether to override it from its own background. Pushing "auto"
+        // verbatim would hand the widget no theme to fall back on, and a widget whose
+        // background is itself theme-derived would then derive a theme from a card painted
+        // with the previous theme — stuck dark, or stuck light, forever.
+        string? key = null;
+        try
+        {
+            if (_plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider)
+            {
+                key = provider.Settings
+                    .FirstOrDefault(s => s.Kind == Maktaby.WidgetSdk.WidgetSettingKind.Theme)?
+                    .GetString();
+            }
+        }
+        catch { }
+        if (key == Maktaby.WidgetSdk.ThemeKeys.Light) return "light";
+        if (key == Maktaby.WidgetSdk.ThemeKeys.Dark) return "dark";
+
         string? global = null;
         try { global = App.Services.GetRequiredService<ISettingsService>().UserSettings.DefaultWebWidgetsTheme?.Trim().ToLowerInvariant(); } catch { }
         if (global == "dark") return "dark";
@@ -345,6 +477,11 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
             return ApplicationThemeManager.GetSystemTheme() == SystemTheme.Dark ? "dark" : "light";
         }
         catch { return null; }
+    }
+
+    private void OnPluginThemeSettingChanged(object? sender, EventArgs e)
+    {
+        try { Dispatcher.BeginInvoke(ApplyThemeToPlugin); } catch { }
     }
 
     private void OnAppThemeChanged(ApplicationTheme current, System.Windows.Media.Color systemAccent)
@@ -380,12 +517,57 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
                 catch { return IntPtr.Zero; }
             },
         });
+        EnsureDragController();
         _attached = true;
+    }
+
+    /// <summary>Body-drag controller, created once the handle exists (Attach runs on Loaded).
+    /// <c>handleHitTest: false</c> on purpose: the resize edges come from the chrome overlay's
+    /// own WM_NCHITTEST hook, and this controller must not claim the top band for a title drag
+    /// that no longer exists. <c>getHeaderHeight</c> is 0 for the same reason.</summary>
+    private void EnsureDragController()
+    {
+        if (_drag != null) return;
+        try
+        {
+            var monitor = App.Services.GetRequiredService<Core.Interfaces.IMonitorService>();
+            var dpi = App.Services.GetRequiredService<Core.Interfaces.IDpiService>();
+            var snapping = App.Services.GetRequiredService<Core.Interfaces.IWindowSnappingService>();
+            var positioning = App.Services.GetRequiredService<Core.Interfaces.IWindowPositioningService>();
+            var containers = App.Services.GetRequiredService<Core.Interfaces.IContainerService>();
+            var drag = new WindowDragController(
+                this, monitor, dpi, snapping, positioning,
+                r => { try { Left = r.X; Top = r.Y; Width = r.Width; Height = r.Height; } catch { } },
+                others =>
+                {
+                    try
+                    {
+                        foreach (var c in containers.GetContainers())
+                        {
+                            if (c.Id != ContainerViewModel.Id && c.IsVisible) others.Add(c.Bounds);
+                        }
+                    }
+                    catch { }
+                },
+                () => { try { App.Services.GetRequiredService<DesktopManager>().SaveAsyncFireAndForget(); } catch { } },
+                () => 0,
+                getIsLocked: () => _container.IsLocked,
+                handleHitTest: false);
+            drag.Attach();
+            _drag = drag;
+        }
+        catch { }
     }
 
     private void Detach()
     {
         _attached = false;
+        try { _drag?.CancelDrag(); } catch { }
+        try { _drag?.Detach(); } catch { }
+        _drag = null;
+        PreviewMouseMove -= OnHostMouseMove;
+        PreviewMouseLeftButtonUp -= OnHostMouseUp;
+        LostMouseCapture -= OnHostLostMouseCapture;
         DesktopLayer.Detach(_hwndSource, _layerHook);
         _layerHook = null;
         _hwndSource = null;
@@ -455,6 +637,16 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
     public override void UpdateChrome()
     {
         EnsureChromeOverlay();
+        // Plugins hide their controls when the user is not engaging. This runs LAST, after the
+        // overlay has been shown or hidden, so it observes the chrome window's real state —
+        // pushing it earlier read the PREVIOUS overlay visibility and left the widget's
+        // controls visible after the chrome had gone. In the early-out paths below the
+        // overlay is deliberately left as-is, so the previously pushed value still holds.
+        try { FinishUpdateChrome(); } catch { }
+    }
+
+    private void FinishUpdateChrome()
+    {
         if (_chromeOverlay!.IsDragging || _chromeOverlay.IsResizing) return;
         // Tier 0: the overlay is frozen hidden. Every early-out below must respect that —
         // otherwise the next hover/activation event re-shows it and we are back to
@@ -489,6 +681,11 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
                 _chromeOverlay.SyncFromOwner();
             }
         }
+
+        // Engagement follows the chrome window's visibility, now that it has been updated.
+        // The drag/resize terms keep the widget's controls up for the whole gesture: a drag
+        // deactivates this window, so activation state alone would hide them mid-move.
+        PushHostEngaged();
     }
 
     private void EnsureChromeOverlay()
@@ -497,6 +694,9 @@ if (plugin is Maktaby.WidgetSdk.IWidgetSettingsProvider provider && _info != nul
         _chromeOverlay = new WidgetChromeOverlay(this);
         _chromeOverlay.UpdateTitle(Title);
         _chromeOverlay.ResizeMode = ResizeMode;
+        // Read the manifest here too: ApplyManifest runs before the overlay exists (it is
+        // created lazily on the first UpdateChrome), so the flag would otherwise be missed.
+        _chromeOverlay.ShowTitleBar = _info?.Manifest.ShowTitleBar == true;
         _chromeOverlay.Deactivated += _chromeOverlay_Deactivated;
     }
 

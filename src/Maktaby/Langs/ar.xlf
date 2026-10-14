@@ -338,6 +338,8 @@
       <unit id="WidgetSettings.NoSettings"><segment><source>This widget has no settings.</source><target>لا توجد إعدادات لهذه الأداة.</target></segment></unit>
     <unit id="WidgetSettings.Enabled"><segment><source>Enabled</source><target>مُمكَّن</target></segment></unit>
     <unit id="WidgetSettings.Number"><segment><source>Number</source><target>رقم</target></segment></unit>
+  <unit id="WidgetSettings.Color"><segment><source>Colour</source><target>اللون</target></segment></unit>
+  <unit id="WidgetSettings.ColorHint"><segment><source>Enter a hex colour, for example #A61A1C1E (alpha first).</source><target>أدخل لونًا بالنظام الست عشري، مثل #A61A1C1E (الشفافية أولًا).</target></segment></unit>
     <unit id="WidgetsList.TrustPlace"><segment><source>Trust &amp; Place</source><target>ثقة ووضع</target></segment></unit>
     <unit id="Box.CustomWidget"><segment><source>Custom Widget</source><target>أداة مخصصة</target></segment></unit>
       <unit id="Update.InvalidData"><segment><source>Maktaby found a release it cannot display, please check for update manualy to get latest update:</source><target>وجد مكتبي إصدارًا لا يمكن عرضه، يُرجى التحقق من التحديث يدويًا للحصول على أحدث تحديث:</target></segment></unit>
@@ -346,5 +348,15 @@
     <unit id="Loading.Cancel"><segment><source>Cancel</source><target>إلغاء</target></segment></unit>
       <unit id="Section.Settings.WindowBackdrop"><segment><source>Window Backdrop</source><target>خلفية النافذة</target></segment></unit>
     <unit id="Section.Settings.WindowBackdropHint"><segment><source>Window Backdrop</source><target>تأثير خلفية نوافذ التطبيق.</target></segment></unit>
+  <unit id="WidgetSettings.Reset"><segment><source>Reset</source><target>إعادة تعيين</target></segment></unit>
+  <unit id="WidgetSettings.ResetColor"><segment><source>Use the theme default</source><target>استخدام افتراضي السمة</target></segment></unit>
+  <unit id="WidgetSettings.ThemeDefault"><segment><source>Theme default</source><target>افتراضي السمة</target></segment></unit>
+  <unit id="WidgetSettings.PickColor"><segment><source>Pick a colour</source><target>اختر لونًا</target></segment></unit>
+  <unit id="WidgetSettings.Theme"><segment><source>Theme</source><target>السمة</target></segment></unit>
+  <unit id="WidgetSettings.ThemeDescription"><segment><source>Widget theme. Follow app uses the app or system theme.</source><target>سمة الأداة. الخيار "تطبيق تلقائي" يستخدم سمة التطبيق أو النظام.</target></segment></unit>
+  <unit id="WidgetSettings.FollowApp"><segment><source>Follow app</source><target>تطبيق تلقائي</target></segment></unit>
+  <unit id="WidgetSettings.Light"><segment><source>Light</source><target>فاتح</target></segment></unit>
+  <unit id="WidgetSettings.Dark"><segment><source>Dark</source><target>داكن</target></segment></unit>
+  <unit id="WidgetSettings.AutoBackground"><segment><source>Auto (from background)</source><target>تلقائي (من الخلفية)</target></segment></unit>
   </file>
 </xliff>

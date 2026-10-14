@@ -561,7 +561,7 @@ internal sealed class WindowDragController
         ShowGuides(result.Guides, hwnd);
     }
 
-    public void EndTitleDrag(MouseButtonEventArgs e)
+    public void EndTitleDrag(MouseButtonEventArgs? e)
     {
         _dragPending = false;
 
@@ -582,6 +582,11 @@ internal sealed class WindowDragController
         (src as WidgetWindow)?.UpdateChrome();
         (_window as WidgetWindow)?.UpdateChrome();
     }
+
+    /// <summary>Force-ends an armed or in-progress drag for callers that never see the mouse-up
+    /// (capture stolen, window deactivated, pointer left the desktop). No-ops when idle, so it
+    /// is safe to call speculatively from a capture-lost handler.</summary>
+    public void CancelDrag() => EndTitleDrag(null);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NcRect
