@@ -381,4 +381,6 @@ BuildTarget.inc
 
 # Staged landing-page output (rebuilt by website/build.ps1, published by pages.yml)
 website/dist/
+# Private installer-artwork generator: local design tooling, never a build input.
+# The generated installer-assets\*.ico / *.bmp ARE committed; this script must not be.
 /tools/make-installer-assets.ps1

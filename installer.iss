@@ -77,6 +77,46 @@ SolidCompression=yes
 WizardStyle=modern dynamic
 SourceDir={#MyPublishDir}
 
+; ---- Branding ---------------------------------------------------------------
+; setup.ico and uninstall.ico are the product mark plus an action badge - a down arrow
+; into a tray for install, a trash bin for uninstall. Shipping the bare app logo here
+; would tell the user nothing about what clicking the file does, and in Apps & Features an
+; uninstaller indistinguishable from the app itself is a support ticket.
+;
+; The uninstaller icon is a RUNTIME path, not a build-time one. UninstallDisplayIcon is
+; written verbatim into the Add/Remove Programs DisplayIcon value, so pointing it at a
+; repo path would leave every installed machine referencing a file that only exists on
+; the build server. Hence the [Files] entry below copying it to {app} first.
+;
+; Everything in installer-assets\ is committed as FINISHED artwork: a CI runner compiles
+; this script without ever running a design tool, so nothing here may depend on a local
+; generator. Treat installer-assets\ as the source of truth and re-derive any change from
+; it by hand.
+SetupIconFile={#MyRepoRoot}\installer-assets\setup.ico
+; Add/Remove Programs: a RUNTIME path, written verbatim into the DisplayIcon registry value.
+; It must therefore be a file that exists on the INSTALLED machine - a repo path here would
+; leave every install referencing a file that only exists on the build server. Hence the
+; [Files] entry below copying it into {app}.
+UninstallDisplayIcon={app}\uninstall.ico,0
+; There is deliberately no separate icon for unins000.exe itself. Inno compiles one icon
+; resource into BOTH executables (SetupIconFile is documented as "the icon for Setup/
+; Uninstall"), and the old per-uninstaller directive is gone:
+;   UninstallIconFile = "obsolete and ignored in this version of Inno Setup"
+; so specifying it only earns a build warning. What a user actually sees as the uninstaller
+; is the Apps & Features entry, which UninstallDisplayIcon above controls.
+
+; Wizard artwork, light and dark. The *_DynamicDark pair exists because "modern dynamic"
+; picks it when Windows is in dark mode; without them the dark wizard would show the light
+; banner. Sizes are Inno's: 164x314 and 55x58.
+;
+; The banner carries no descriptive sentence on purpose: Inno cannot swap WizardImageFile
+; per [Languages] entry, so English text here would greet an Arabic install in English.
+; "Maktaby" is a brand name and stays Latin in both.
+WizardImageFile={#MyRepoRoot}\installer-assets\wizard.bmp
+WizardSmallImageFile={#MyRepoRoot}\installer-assets\wizard-small.bmp
+WizardImageFileDynamicDark={#MyRepoRoot}\installer-assets\wizard-dark.bmp
+WizardSmallImageFileDynamicDark={#MyRepoRoot}\installer-assets\wizard-small-dark.bmp
+
 [Languages]
 ; English first, so it stays the default when nothing matches the user's UI language.
 ; Arabic.isl is an OFFICIAL Inno Setup translation (6.5.0+) and already declares
@@ -110,6 +150,13 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 [Files]
 ; Include everything from the publish folder
 Source: "*.*"; Excludes: "*.pdb,*.xml,*.log, createdump.exe"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; The uninstaller's Add/Remove Programs icon has to be a file that EXISTS on the installed
+; machine (see UninstallDisplayIcon above), so it ships with the app rather than pointing
+; back at the build tree. uninstallonly.txt removes it if the uninstall is ever run from an
+; installer directory, keeping {app} exactly as it was found.
+Source: "{#MyRepoRoot}\installer-assets\uninstall.ico"; DestDir: "{app}"; \
+    Flags: ignoreversion
 
 [Icons]
 Name: "{group}\Maktaby"; Filename: "{app}\{#MyAppExe}"; WorkingDir: "{app}"
