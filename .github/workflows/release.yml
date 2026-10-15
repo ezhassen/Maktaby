@@ -464,6 +464,12 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job deliberately has no actions/checkout (it only needs the downloaded
+          # artifacts), so there is no .git for gh to read a remote from. Without this,
+          # gh tries `git remote get-url origin`, dies with "failed to run git: fatal: not
+          # a git repository", and the release is never created. Naming the repo outright
+          # skips the lookup entirely.
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ needs.validate.outputs.tag }}
           VERSION: ${{ needs.validate.outputs.version }}
           PRERELEASE: ${{ needs.validate.outputs.prerelease }}
