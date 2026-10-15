@@ -53,6 +53,11 @@ public sealed class WeatherWidget : NativeWidgetControl
     // Slack on the measured temperature width. Measuring alone lands a pixel or two short
     // (sub-pixel rounding in the TextBlock), which is exactly enough to trigger an ellipsis.
     private const double TempWidthSlack = 1.05;
+    // Fraction of the hero row the weather art occupies. Now that every glyph's ink really does
+    // fill its box (see NormaliseToOrigin), 1.0 makes it swamp the temperature and crowd the
+    // panel edge; 0.8 leaves an even margin on all sides and matches the proportion the fog art
+    // was already approved at.
+    private const double IconFill = 0.8;
 
     // How far the canvas may follow the window's aspect before letterboxing is preferable.
     private const double MinAspect = 0.70;
@@ -500,24 +505,30 @@ private void BuildVisual()
             // (instead of Star) is what guarantees the two can never overlap: total is
             // heroH + metricsH <= available by construction.
             double metricsH = 8 + Math.Ceiling(10 * scale * 1.4) + Math.Ceiling(15 * scale * 1.4);
-            double heroH = Math.Max(40, available - metricsH);
+            double heroMax = Math.Max(40, available - metricsH);
+            double heroH = heroMax;
 
             // A tall icon in a wide column is capped by WIDTH, which leaves a dead band at the
             // top of the hero row - the exact gap being reported. Cap the row at the height the
             // column's width can actually show, so the art fills its row at every aspect.
+            // FLOORED at what the temperature stack needs, though: the low cloud glyph is only
+            // 43 units tall against 64 wide, so byWidth came out 100px against 122px of text
+            // and pushed "H 28 L 17" out of the row and under the metrics row.
+            double textsNeeded = (46 + 14 + 13) * scale * 1.35;
             var bounds = _nowIcon?.Data?.Bounds ?? default;
-            if (bounds.Height > 0)
+            if (bounds.Height > 0 && bounds.Width > 0)
             {
                 double iconCol = InnerWidth() * (IconColWeight / (IconColWeight + TextColWeight));
                 double byWidth = iconCol * (bounds.Height / bounds.Width);
-                if (byWidth > 0) heroH = Math.Min(heroH, byWidth);
+                if (byWidth > 0) heroH = Math.Min(heroH, Math.Max(byWidth, textsNeeded));
             }
+            heroH = Math.Max(40, heroH);
 
             _heroRowDef.Height = new GridLength(heroH);
             _metricsRowDef.Height = GridLength.Auto;
 
             // Explicit height, width follows the column: Uniform then fits the art to the row.
-            _nowIconBox.Height = heroH;
+            _nowIconBox.Height = heroH * IconFill;
             _nowIconBox.Width = double.NaN;
 
             _tempText.FontSize = 46 * scale;
@@ -1959,49 +1970,57 @@ private void OnLoaded(object sender, RoutedEventArgs e)
         }
         g.Freeze();
         GeometryCache[key] = g;
-        var centred = CentreInBox(g);
-        GeometryCache[key] = centred;
-        return centred;
+        var normalised = NormaliseToOrigin(g);
+        GeometryCache[key] = normalised;
+        return normalised;
     }
 
-    /// <summary>Re-centres a glyph so its optical centre sits at (50,50) of the 100-unit box.
-    /// Several silhouettes are asymmetric — the crescent most of all, since subtracting the
-    /// bite leaves the remaining shape biased up and to the left — which made the icon read
-    /// as nudged sideways even though its geometry was correct. Returns the same instance when
-    /// it is already centred.</summary>
-    private static Geometry CentreInBox(GeometryGroup g)
+    /// <summary>Moves a glyph so its ink starts at the origin, so WPF measures the ink and the
+    /// Viewbox can centre it. See the body for why "centre it at (50,50)" was not enough.
+    /// Returns the same instance when the ink already starts at the origin.</summary>
+    private static Geometry NormaliseToOrigin(GeometryGroup g)
     {
         try
         {
             var b = g.Bounds;
             if (b.IsEmpty || b.Width <= 0 || b.Height <= 0) return g;
-            double dx = 50 - (b.X + b.Width / 2);
-            double dy = 50 - (b.Y + b.Height / 2);
+            // Move the INK's top-left to (0,0) - not its centre to (50,50).
+            //
+            // WPF measures a Path from the geometry's ORIGIN, not from its ink: DesiredSize comes
+            // out as Bounds.X + Bounds.Width, not Bounds.Width. A glyph left centred at (50,50) of
+            // the 100-unit design box therefore reported a 69.4 slot for 38.7 units of crescent,
+            // and the Viewbox dutifully scaled by 149/69.4 and drew the ink flush to the box's
+            // BOTTOM-RIGHT corner. It looked fine for glyphs whose ink already sat near the
+            // origin ("mainly clear", bounds.X = 7) and was glaring for the ones that did not
+            // (the moon, bounds.X = 30.6 -> 31px right and 32px low). With the ink at the origin,
+            // DesiredSize is the true ink size and the Viewbox centres it properly.
+            double dx = -b.X;
+            double dy = -b.Y;
             if (Math.Abs(dx) < 0.01 && Math.Abs(dy) < 0.01) return g;
 
-            var centred = new GeometryGroup { FillRule = FillRule.Nonzero };
+            var moved = new GeometryGroup { FillRule = FillRule.Nonzero };
             foreach (Geometry child in g.Children)
             {
-                var moved = child.Clone();
+                var copy = child.Clone();
                 // COMPOSE with any transform the child already has, never replace it. The sun's
                 // rays carry a per-ray RotateTransform; assigning here silently collapsed all
                 // eight back to a single unrotated bar on top of the disc.
                 Transform existing = child.Transform!;
                 if (existing is null)
                 {
-                    moved.Transform = new TranslateTransform(dx, dy);
+                    copy.Transform = new TranslateTransform(dx, dy);
                 }
                 else
                 {
                     var group = new TransformGroup();
                     group.Children.Add(existing);
                     group.Children.Add(new TranslateTransform(dx, dy));
-                    moved.Transform = group;
+                    copy.Transform = group;
                 }
-                centred.Children.Add(moved);
+                moved.Children.Add(copy);
             }
-            centred.Freeze();
-            return centred;
+            moved.Freeze();
+            return moved;
         }
         catch { return g; }
     }

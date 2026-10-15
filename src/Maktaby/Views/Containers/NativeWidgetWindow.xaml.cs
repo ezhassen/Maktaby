@@ -35,6 +35,12 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private readonly INativeWidgetService _widgetService;
     private INativeWidget? _plugin;
     private NativeWidgetInfo? _info;
+    // Settings the widget writes on its own - the weather tab bar persists the chosen view
+    // straight from a click, without the Settings dialog ever opening. Without this the value
+    // lives only in memory and the next launch silently reverts to the stored file.
+    private Maktaby.WidgetSdk.IWidgetSettingsProvider? _pluginProvider;
+    private readonly List<EventHandler> _settingsSaveHooks = new();
+    private System.Windows.Threading.DispatcherTimer? _settingsSaveTimer;
     private int _loadGeneration;
     private WidgetChromeOverlay? _chromeOverlay;
     private WindowDragController? _drag;
@@ -241,6 +247,9 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
                 ApplyAutoThemeDefault(provider);
                 App.Services.GetRequiredService<INativeWidgetSettingsService>()
                     .LoadInto(_info, provider, _container.SettingsFileName);
+                // Hook AFTER the load, so replaying the stored values does not schedule a
+                // redundant write-back of the file we just read.
+                HookSettingsAutosave(provider);
             }
         }
         catch { }
@@ -390,6 +399,9 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
         // the plugin so a later recovery never writes a CacheMode into a detached visual
         // (which would resurrect it and pin its collectible ALC).
         _softwareFallback.ForgetCaches();
+        // Flush and unhook BEFORE the plugin goes away: the hooks hold this window, and a
+        // pending change would otherwise be dropped on close.
+        UnhookSettingsAutosave();
         var plugin = Interlocked.Exchange(ref _plugin, null);
         if (plugin is null) return;
         try
@@ -482,6 +494,88 @@ public partial class NativeWidgetWindow : WidgetWindow, IWidgetChromeOwner
     private void OnPluginThemeSettingChanged(object? sender, EventArgs e)
     {
         try { Dispatcher.BeginInvoke(ApplyThemeToPlugin); } catch { }
+    }
+
+    /// <summary>Persists every setting the widget changes by itself. A widget owns its own UI
+    /// (the weather tab bar is the case that motivated this), so a click can change a value
+    /// with no dialog in sight; the only writer used to be the Settings dialog, which meant the
+    /// choice survived until the window was rebuilt and then reverted to whatever the file
+    /// happened to say.</summary>
+    private void HookSettingsAutosave(Maktaby.WidgetSdk.IWidgetSettingsProvider provider)
+    {
+        _pluginProvider = provider;
+        foreach (var setting in provider.Settings)
+        {
+            EventHandler hook = (_, _) => ScheduleSettingsSave();
+            setting.ValueChanged += hook;
+            _settingsSaveHooks.Add(hook);
+        }
+    }
+
+    /// <summary>Debounced: a text setting fires once per keystroke, and the widget may be
+    /// writing several settings in one gesture (switching view also re-renders).</summary>
+    private void ScheduleSettingsSave()
+    {
+        try
+        {
+            if (_settingsSaveTimer is null)
+            {
+                _settingsSaveTimer = new System.Windows.Threading.DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(600),
+                };
+                _settingsSaveTimer.Tick += (_, _) =>
+                {
+                    _settingsSaveTimer.Stop();
+                    SavePluginSettings();
+                };
+            }
+            _settingsSaveTimer.Stop();
+            _settingsSaveTimer.Start();
+        }
+        catch { }
+    }
+
+    private void SavePluginSettings()
+    {
+        try
+        {
+            if (_pluginProvider is null || _info is null) return;
+            App.Services.GetRequiredService<INativeWidgetSettingsService>()
+                .Save(_info, _pluginProvider, _container.SettingsFileName);
+        }
+        catch
+        {
+            // Best effort, exactly as the service itself documents: a failed write must never
+            // take the widget down.
+        }
+    }
+
+    /// <summary>Unhooks the autosave and flushes anything still pending. Called before the
+    /// plugin is disposed so a change made moments before close is not lost.</summary>
+    private void UnhookSettingsAutosave()
+    {
+        try
+        {
+            if (_settingsSaveTimer is not null && _settingsSaveTimer.IsEnabled)
+            {
+                _settingsSaveTimer.Stop();
+                SavePluginSettings();
+            }
+        }
+        catch { }
+        try
+        {
+            if (_pluginProvider is not null)
+            {
+                foreach (var setting in _pluginProvider.Settings)
+                    foreach (var hook in _settingsSaveHooks)
+                        setting.ValueChanged -= hook;
+            }
+        }
+        catch { }
+        _settingsSaveHooks.Clear();
+        _pluginProvider = null;
     }
 
     private void OnAppThemeChanged(ApplicationTheme current, System.Windows.Media.Color systemAccent)
