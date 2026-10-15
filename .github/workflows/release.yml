@@ -415,7 +415,14 @@ jobs:
 
             # $'\n' rather than a literal newline: a line starting at column 0 would
             # terminate this YAML block scalar.
-            rows+="$(printf '| `%s` | %s MB | %s | %s |\n' "$name" "$mb" "$machine" "$need")"
+            #
+            # The newline must sit OUTSIDE the command substitution. $( ) strips trailing
+            # newlines, so appending "$(printf '...\n')" glued every row onto the previous one
+            # and GitHub rendered all four assets as a single malformed row. `rows` therefore
+            # accumulates one line at a time, newline included, and the asset name is a link so
+            # the table downloads straight from the release page.
+            url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${name}"
+            rows+="$(printf '| [%s](%s) | %s MB | %s | %s |' "$name" "$url" "$mb" "$machine" "$need")"$'\n'
             hashes+="$(sha256sum "artifacts/${name}" | cut -d' ' -f1)  ${name}"$'\n'
           done < <(echo "$TARGETS_JSON" | jq -r '.[] | "\(.arch) \(.flavor)"')
 
@@ -438,12 +445,11 @@ jobs:
             echo "**SHA-256**"
             echo
             echo '```'
-            echo "$hashes"
+            # %s strips the trailing newline `hashes` carries, so the fence sits tight.
+            printf '%s' "$hashes"
             echo '```'
             echo
-            echo "**Requirements** - Windows 10 (2004, build 19041) or later or Windows 11, on x64 or ARM64. Web widgets and HTML wallpapers additionally need the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/), which is already present on most Windows installations."
-            echo
-            echo "**Languages** - the setup wizard speaks English and Arabic. Maktaby itself ships in English and Arabic (Settings - Appearance - Language), including a right-to-left interface."
+            echo "**Requirements** - Windows 10 (2004, build 19041) or later or Windows 11, on x64 or ARM64. Web widgets and HTML wallpapers additionally need the [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/webview2/), which is already present on most Windows installations."
             echo
             echo "Run the installer and accept the UAC prompt - Maktaby lives in the system tray, there is no main window."
             echo
@@ -451,11 +457,76 @@ jobs:
             echo
           } > NOTES.md
 
-          # Auto-generated notes (merged PRs and commits since the previous tag).
-          # Empty output is fine for the very first release, so never fail on it.
-          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
-            -f tag_name="$TAG" -q .body >> NOTES.md 2>/dev/null \
-            || echo "_No changelog entries recorded for this release._" >> NOTES.md
+          # Previous tag from the API, not from git: this job has no checkout and no remote.
+          prev=$(gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" -q '.[].name' 2>/dev/null \
+                 | grep -E '^v[0-9]' | grep -vxF "$TAG" | sort -V | tail -n1)
+          # Two forms, deliberately: the API path is repos/OWNER/REPO/..., the web path is
+          # github.com/OWNER/REPO/... Prefix one with the other and the link 404s.
+          api_compare="repos/$GITHUB_REPOSITORY/compare/${prev}...${TAG}"
+          web_compare="https://github.com/$GITHUB_REPOSITORY/compare/${prev}...${TAG}"
+          if [ -n "$prev" ]; then
+            gh api "$api_compare" -q '.commits' 2>/dev/null \
+              | jq -r '.[].commit.message | split("\n")[0]' > /tmp/maktaby-subjects.txt || true
+          else
+            # No earlier tag: this is the first release, so there is nothing to compare against.
+            : > /tmp/maktaby-subjects.txt
+          fi
+
+          # Subject lines arrive with whatever whitespace the message had, and a leading space
+          # is enough to defeat every prefix test below - so trim first, then classify.
+          # A "chore/ignore/bump"-shaped subject and a bare branch name (a squashed merge) say
+          # nothing on a download page, so both are dropped. Anything unrecognised is kept
+          # under Other rather than silently lost.
+          # Character classes are written [ \t] and [ ] on purpose: `[: ]` is a POSIX character
+          # CLASS, not "colon or space", and mawk (what ubuntu-latest ships) reads it as one.
+          CLASSIFY='
+            {
+              s = $0
+              sub(/^[ \t\r]+/, "", s)
+              sub(/[ \t\r]+$/, "", s)
+              if (s == "") next
+              # A squashed merge whose subject is only a branch name tells a reader nothing.
+              if (s ~ /^[a-z0-9]+(\/[a-z0-9._-]+)+[!?]?$/ && length(s) < 60) next
+              low = tolower(s)
+              # A conventional-commit prefix is the strongest signal there is, so it decides
+              # on its own; only a subject without one falls through to verb matching.
+              if (low ~ /^feat(\([^)]*\))?:[ ]/) { print "highlights\t" s; next }
+              if (low ~ /^fix(\([^)]*\))?:[ ]/)   { print "fixes\t" s; next }
+              if (low ~ /^(refactor|chore|ci|build|style|docs|test)(\([^)]*\))?:[ ]/) { print "internal\t" s; next }
+              sub(/^[a-z]+(\([^)]*\))?:[ ]+/, "", low)
+              if (low ~ /^(add|added|implement|introduc|support|new|update|updated|upgrade)[ ]/) { print "highlights\t" s; next }
+              if (low ~ /^(fix|fixed|repair|resolve|correct|prevent)[ ]/) { print "fixes\t" s; next }
+              if (low ~ /^(refactor|clean|simplify|rename|remove|move|extract|dedup|persist|guard|ignore|bump|drop)[ ]/) { print "internal\t" s; next }
+              print "other\t" s
+            }'
+          echo "$CLASSIFY" | awk -f - /tmp/maktaby-subjects.txt > /tmp/maktaby-classified.txt
+
+          emit() {
+            # Strip the bucket column by cutting at the tab. Assigning $1 = "" instead would
+            # rebuild the record with OFS and leave a leading space on every bullet.
+            section=$(awk -F'\t' -v k="$1" 'index($0, k "\t") == 1 { print substr($0, length(k) + 2) }' /tmp/maktaby-classified.txt)
+            [ -n "$section" ] || return 0
+            echo "**$2**"
+            echo
+            printf '%s\n' "$section" | sed 's/^/- /'
+            echo
+          }
+
+          # Everything from here on is APPENDED: the block above wrote the header with `>`.
+          {
+            emit highlights "Highlights"
+            emit fixes "Fixed"
+            emit internal "Internal"
+            emit other "Other"
+
+            if [ ! -s /tmp/maktaby-classified.txt ]; then
+              echo "_No commits recorded for this release._"
+              echo
+            elif [ -n "$prev" ]; then
+              echo "[Compare with ${prev}](${web_compare})"
+              echo
+            fi
+          } >> NOTES.md
 
           echo "--- notes.md ---"
           cat NOTES.md
