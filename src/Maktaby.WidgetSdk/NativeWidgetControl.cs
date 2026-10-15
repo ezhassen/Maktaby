@@ -358,11 +358,13 @@ namespace Maktaby.WidgetSdk;
 
     private void ApplyContentFlowDirection()
     {
-        // Opt-in: only mirror when the widget's active language actually declares RTL.
-        if (ContentFlowDirection == FlowDirection.RightToLeft)
-        {
-            try { FlowDirection = FlowDirection.RightToLeft; } catch { }
-        }
+        // Assign whenever a localization is attached — unconditionally, not only when it says
+        // RTL. Guarding on "is RTL" makes this a one-way latch: switching back to an
+        // LTR language left the widget mirrored forever, because nothing ever reset the
+        // property. With no localization attached the direction is the widget's own business
+        // and is left alone.
+        if (_loc is null) return;
+        try { FlowDirection = ContentFlowDirection; } catch { }
     }
 
     private void OnWidgetLanguageChanged()

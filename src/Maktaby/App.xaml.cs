@@ -286,6 +286,15 @@ public partial class App : Application
 
         //StartHealthSnapshots, when logging
         if (GlobalFeaturesSwitches.EnableHealthSnapshots) StartHealthSnapshots();
+
+        // Publish the dev-only widget data hook once, at startup. A native widget that talks
+        // to a live service can then serve generated data instead of refetching on every
+        // window open, every resume and every refresh tick. Off in release.
+        Maktaby.WidgetSdk.WidgetDev.SimulateData = GlobalFeaturesSwitches.SimulateNativeWidgetData;
+        if (Maktaby.WidgetSdk.WidgetDev.SimulateData)
+        {
+            Log.Warning("Native widget data simulation is ON: widgets may serve generated data instead of calling live services.");
+        }
     }
 
     #endregion

@@ -105,6 +105,12 @@ Follow it to keep the architecture clean and the build green.
   header strip and zeroes its hit-test band (`WidgetChromeOverlay` `OnWndProc`), and leaving
   the 28px fallback active for a collapsed header would park an invisible drag strip over the
   widget's top row. Web widgets are unaffected: their title bar is still always on.
+- **WidgetSdk/WidgetDev** — `WidgetDev.SimulateData` is a **debug-only** hook so a native
+  widget that calls a live service can serve generated data instead of refetching on every
+  window open, resume and refresh tick. The host publishes it once at startup from
+  `GlobalFeaturesSwitches.SimulateNativeWidgetData` (false in release). A widget must still
+  check the flag itself before skipping its own I/O, and must check it BEFORE any staleness
+  logic — otherwise the network is still reached on the "is it stale?" path.
 - **NativeWidgets/** (`NativeClock`, `CalendarWidget`) — built-in plugins; `NativeClock` doubles as
   the reference implementation (settings, suspend/resume, theming).
 - **docs/** — user-facing guides (`native-widgets.md` = plugin authoring reference).

@@ -36,6 +36,28 @@ public sealed class WeatherWidget : NativeWidgetControl
     private const double DesignW = 340;
     private const double DesignH = 260;
 
+    // Chrome row heights. The header and status rows collapse to 0 while the widget is not
+    // engaged, so the data gets the full height the user sized the window to.
+    private const double HeaderH = 30;
+    private const double TabsH = 26;
+    private const double StatusH = 18;
+    // Content height when the chrome is shown; the scale baseline for ApplyContentScale.
+    private const double BaseContentH = 186;
+
+    // Star weights for the Now hero row. Both columns share the row so the icon yields to the
+    // numbers, and the numbers are weighted wider because the weather art is tall: a column
+    // too narrow caps the icon by WIDTH and leaves a dead band at the top of the hero row,
+    // while the temperature is the one thing that must never be ellipsized.
+    private const double IconColWeight = 1.0;
+    private const double TextColWeight = 1.12;
+    // Slack on the measured temperature width. Measuring alone lands a pixel or two short
+    // (sub-pixel rounding in the TextBlock), which is exactly enough to trigger an ellipsis.
+    private const double TempWidthSlack = 1.05;
+
+    // How far the canvas may follow the window's aspect before letterboxing is preferable.
+    private const double MinAspect = 0.70;
+    private const double MaxAspect = 2.60;
+
     // Theme-matched default cards, used while the user has not chosen a colour of their own.
     private const string DarkCard = "#B3161A1E";
     private const string LightCard = "#E3E7EC";
@@ -74,6 +96,7 @@ public sealed class WeatherWidget : NativeWidgetControl
     private string _units = "metric";
     private string _city = "";
     private bool _resolvedThemeIsLight;
+    private int? _simConditionOverride;
     private string? _lastHostTheme;
 
     private Snapshot? _snapshot;
@@ -82,6 +105,20 @@ public sealed class WeatherWidget : NativeWidgetControl
 
     // ---- visuals ----
     private readonly Border _background = new() { CornerRadius = new CornerRadius(10) };
+    private Grid _canvas = null!;
+    private RowDefinition _headerRow = null!;
+    private RowDefinition _tabsRow = null!;
+private RowDefinition _statusRow = null!;
+    private double _canvasW = DesignW;
+
+    // Elements whose size follows the available content height (see ApplyContentScale).
+    private Viewbox _nowIconBox = null!;
+    private RowDefinition _heroRowDef = null!;
+    private Grid _metricsRow = null!;
+    private RowDefinition _metricsRowDef = null!;
+    private RowDefinition _sparkRow = null!;
+    private readonly List<Viewbox> _hourIconBoxes = new();
+    private readonly List<Viewbox> _dayIconBoxes = new();
     private StackPanel _headerButtons = null!;
     private StackPanel _tabPanel = null!;
     private readonly TextBlock _locationText = new();
@@ -145,6 +182,7 @@ public sealed class WeatherWidget : NativeWidgetControl
 
         // Start on load, never in the ctor: the gallery preview host constructs widgets it
         // never shows, and a constructed-but-unloaded widget must not hit the network.
+        SizeChanged += OnWidgetSizeChanged;
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
     }
@@ -213,6 +251,66 @@ public sealed class WeatherWidget : NativeWidgetControl
         catch { return _resolvedThemeIsLight; }
     }
 
+        /// <summary>Builds a snapshot locally, touching no network. Deterministic from the clock so
+    /// consecutive runs look the same, but it still cycles conditions and a slow temperature
+    /// drift so the hourly sparkline and the condition art are all reachable while testing
+    /// layout — a fixed sample would hide half the states.
+    ///
+    /// Only reachable when <see cref="WidgetDev.SimulateData"/> is on, which the host wires
+    /// from a debug-only switch.</summary>
+    private void ApplySimulated()
+    {
+        try
+        {
+            var now = DateTime.Now;
+            // Advances once a minute so consecutive runs are stable but the state still
+            // moves, and the sparkline keeps a believable shape.
+            int phase = (int)(now.Ticks / TimeSpan.TicksPerMinute) % Codes.Length;
+            int code = _simConditionOverride ?? Codes[phase];
+
+            var snap = new Snapshot
+            {
+                LocationName = "Amsterdam",
+                Lat = 52.37, Lng = 4.90,
+                TempC = 14 + (phase - Codes.Length / 2) * 0.7,
+                FeelsC = 13 + (phase - Codes.Length / 2) * 0.7,
+                Humidity = 45 + (phase * 3) % 40,
+                WindKph = 4 + (phase * 2) % 18,
+                Code = code,
+                IsDay = now.Hour is >= 7 and < 20,
+                UtcOffsetSeconds = TimeZoneInfo.Local.GetUtcOffset(now).TotalSeconds,
+            };
+            for (int h = 0; h < 24; h++)
+            {
+                snap.Hours.Add(new HourPoint
+                {
+                    LocalTime = now.Date.AddHours(now.Hour + h),
+                    TempC = snap.TempC + Math.Sin((h + phase) * Math.PI / 8) * 3.2,
+                    Code = (h + phase) % 5 == 0 ? 61 : code,
+                    PrecipProbability = (h + phase) % 4 == 0 ? 40 + (h % 30) : 0,
+                });
+            }
+            snap.MaxC = snap.Hours.Max(h => h.TempC);
+            snap.MinC = snap.Hours.Min(h => h.TempC);
+            for (int d = 1; d <= 4; d++)
+            {
+                snap.Days.Add(new DayPoint
+                {
+                    Date = now.Date.AddDays(d),
+                    Code = DayCodes[d % DayCodes.Length],
+                    MaxC = snap.TempC + 2 + d,
+                    MinC = snap.TempC - 3 - d,
+                });
+            }
+
+            _snapshot = snap;
+            _fetchedUtc = DateTimeOffset.UtcNow;
+            _hasData = true;
+            Render();
+        }
+        catch { }
+    }
+
     private void OnBackgroundChanged()
     {
         ApplyBackground();
@@ -266,11 +364,28 @@ public sealed class WeatherWidget : NativeWidgetControl
     {
         try
         {
-            var v = IsHostEngaged ? Visibility.Visible : Visibility.Collapsed;
+            var engaged = IsHostEngaged;
+            var v = engaged ? Visibility.Visible : Visibility.Collapsed;
             _tabPanel.Visibility = v;
             _headerButtons.Visibility = v;
             _locationText.Visibility = v;
             _statusPill.Visibility = v;
+
+            // Collapse the chrome ROWS too, not just their contents. Keeping a 30px header
+            // and 18px status row while their contents are hidden left an empty band top and
+            // bottom: the data could not use the space and resizing the window could not
+            // reclaim it, which read as a layout bug rather than a deliberate clean state.
+            _headerRow.Height = new GridLength(engaged ? HeaderH : 0);
+            _statusRow.Height = new GridLength(engaged ? StatusH : 0);
+
+            // Content grows into the reclaimed space, so re-measure the canvas and redraw the
+            // sparkline against its new width.
+            _canvas?.UpdateLayout();
+            double before = _canvasW;
+            UpdateCanvasSize();
+            ApplyContentScale();
+            if (_snapshot is not null && _snapshot.Hours.Count > 1) BuildSparkline(_snapshot.Hours);
+            Render();
         }
         catch { }
     }
@@ -297,27 +412,203 @@ public sealed class WeatherWidget : NativeWidgetControl
 
     #region Visual construction
 
-    private void BuildVisual()
+private void BuildVisual()
     {
-        var root = new Grid { Width = DesignW, Height = DesignH };
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(30) });   // header
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(26) });   // tabs
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(186) });  // content
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(18) });   // status
+        // A Grid does NOT clip its children: any panel whose content outgrows its row paints
+        // straight over the neighbouring row, which is how the status line came to overlap
+        // the header. Clipping makes overlap impossible by construction — if the content
+        // cannot fit, it is cut off instead of covering the chrome.
+        _canvas = new Grid { Width = DesignW, Height = DesignH, ClipToBounds = true };
+        _canvasW = DesignW;
+        // Header and status collapse to zero height when the user is not engaged (see
+        // ApplyInteractiveVisibility), so the data uses the whole widget instead of leaving a
+        // dead band the user cannot fill by resizing.
+        _headerRow = new RowDefinition { Height = new GridLength(HeaderH) };
+        _tabsRow = new RowDefinition { Height = new GridLength(TabsH) };
+        _statusRow = new RowDefinition { Height = new GridLength(StatusH) };
+        _canvas.RowDefinitions.Add(_headerRow);
+        _canvas.RowDefinitions.Add(_tabsRow);
+        _canvas.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });  // content
+        _canvas.RowDefinitions.Add(_statusRow);
 
-        // First child = painted behind everything. Also the hit-test surface for the whole
-        // canvas, so drag and right-click work on any pixel even at zero opacity.
-        root.Children.Add(BuildHeader());
-        root.Children.Add(BuildTabs());
-        root.Children.Add(BuildContent());
-        root.Children.Add(BuildStatus());
+        // The background is the hit-test surface for the whole control, so drag and
+        // right-click work on any pixel even at zero opacity.
+        _canvas.Children.Add(BuildHeader());
+        _canvas.Children.Add(BuildTabs());
+        _canvas.Children.Add(BuildContent());
+        _canvas.Children.Add(BuildStatus());
 
         // The background wraps the Viewbox rather than living inside the design canvas: the
-        // canvas is a fixed 340x260 centred by Stretch.Uniform, so a background painted
-        // inside it leaves letterbox bands transparent whenever the window is a different
-        // aspect ratio. Out here it covers the whole control at any size.
-        _background.Child = new Viewbox { Stretch = Stretch.Uniform, Child = root };
+        // canvas is letterboxed by Stretch.Uniform, so a background painted inside it leaves
+        // transparent bands whenever the window is a different aspect ratio. Out here it
+        // covers the whole control at any size.
+        _background.Child = new Viewbox { Stretch = Stretch.Uniform, Child = _canvas };
         Content = _background;
+    }
+
+    /// <summary>Resizes the design canvas to the control's aspect ratio so the Viewbox scales
+    /// it to fill exactly. With a fixed canvas, Stretch.Uniform letterboxes and the widget
+    /// shows empty bands that dragging the window edge cannot remove — the canvas has to
+    /// follow the window, not the other way round. Height is the fixed design budget and
+    /// width follows the aspect, clamped to a sane range so a very wide or very tall window
+    /// cannot produce an absurd layout (outside that range it letterboxes again, which is the
+    /// lesser evil).</summary>
+    private void UpdateCanvasSize()
+    {
+        try
+        {
+            if (_canvas is null) return;
+            double w = ActualWidth, h = ActualHeight;
+            if (w <= 1 || h <= 1) return;
+            double aspect = Math.Max(MinAspect, Math.Min(MaxAspect, w / h));
+            _canvasW = DesignH * aspect;
+            _canvas.Width = _canvasW;
+            _canvas.Height = DesignH;
+        }
+        catch { }
+    }
+
+        /// <summary>Scales the content to the height actually available. With the chrome collapsed
+    /// the content row grows by the header+status height, and without this the Now view just
+    /// re-centred inside the extra room — the same "empty band" problem the user resized the
+    /// window to get rid of. Scaling the type and icons keeps the resting view filling the
+    /// space instead of floating in it.</summary>
+    private void ApplyContentScale()
+    {
+        try
+        {
+            if (_canvas is null) return;
+            // Chrome visible leaves BaseContentH; collapsed leaves the full canvas height.
+            double chrome = (_headerRow?.Height.Value ?? 0) + (_statusRow?.Height.Value ?? 0);
+            double available = Math.Max(60, DesignH - chrome - TabsH);
+            double scale = Math.Max(1.0, Math.Min(1.75, available / BaseContentH));
+
+            // Height alone is not enough. On a tall window the canvas is aspect-clamped and gets
+            // NARROWER (352x384 yields a ~238px canvas), so a height-derived 46pt temperature
+            // outgrew its column and was clipped at the canvas edge. Measure the temperature's
+            // natural width at the design size once and scale by whatever its column can hold.
+            double tempNatural = MeasureNaturalWidth(_tempText, 46);
+            double textCol = InnerWidth() * (TextColWeight / (IconColWeight + TextColWeight));
+            if (tempNatural > 1)
+            {
+                scale = Math.Min(scale, (textCol - 10) / (tempNatural * TempWidthSlack));
+            }
+            scale = Math.Max(0.6, Math.Min(1.75, scale));
+
+            // The metrics row is Height=Auto, so it wants its content height; reserve that much
+            // up front and give the hero row the rest. Sizing the hero row from what is LEFT OVER
+            // (instead of Star) is what guarantees the two can never overlap: total is
+            // heroH + metricsH <= available by construction.
+            double metricsH = 8 + Math.Ceiling(10 * scale * 1.4) + Math.Ceiling(15 * scale * 1.4);
+            double heroH = Math.Max(40, available - metricsH);
+
+            // A tall icon in a wide column is capped by WIDTH, which leaves a dead band at the
+            // top of the hero row - the exact gap being reported. Cap the row at the height the
+            // column's width can actually show, so the art fills its row at every aspect.
+            var bounds = _nowIcon?.Data?.Bounds ?? default;
+            if (bounds.Height > 0)
+            {
+                double iconCol = InnerWidth() * (IconColWeight / (IconColWeight + TextColWeight));
+                double byWidth = iconCol * (bounds.Height / bounds.Width);
+                if (byWidth > 0) heroH = Math.Min(heroH, byWidth);
+            }
+
+            _heroRowDef.Height = new GridLength(heroH);
+            _metricsRowDef.Height = GridLength.Auto;
+
+            // Explicit height, width follows the column: Uniform then fits the art to the row.
+            _nowIconBox.Height = heroH;
+            _nowIconBox.Width = double.NaN;
+
+            _tempText.FontSize = 46 * scale;
+            _condText.FontSize = 14 * scale;
+            _hiloText.FontSize = 13 * scale;
+            foreach (var t in _metricLabels) t.FontSize = 10 * scale;
+            foreach (var t in _metricValues) t.FontSize = 15 * scale;
+
+            _sparkRow.Height = new GridLength(78 * scale);
+
+            // Hourly: 8 equal columns, daily: 4. Each strip's type is additionally capped so
+            // the widest label fits its own column - otherwise the labels spill sideways, the
+            // columns stop reading as an evenly spaced horizontal row, and the first/last cell
+            // is clipped by the canvas edge. The label decides the cap; everything else in the
+            // cell follows so the rows stay on one baseline.
+            double hourFit = FitToColumn(_hourLabels, 9.5, InnerWidth() / 8.0 - 2);
+            double hourScale = Math.Min(scale, hourFit);
+            foreach (var v in _hourIconBoxes) { v.Width = 26 * hourScale; v.Height = 26 * hourScale; }
+            foreach (var t in _hourLabels) t.FontSize = 9.5 * hourScale;
+            foreach (var t in _hourTemps) t.FontSize = 12 * hourScale;
+            foreach (var t in _hourPrecip) t.FontSize = 8.5 * hourScale;
+
+            double dayFit = FitToColumn(_dayLabels, 11, InnerWidth() / 4.0 - 2);
+            double dayScale = Math.Min(scale, dayFit);
+            foreach (var v in _dayIconBoxes) { v.Width = 40 * dayScale; v.Height = 40 * dayScale; }
+            foreach (var t in _dayLabels) t.FontSize = 11 * dayScale;
+            foreach (var t in _dayHi) t.FontSize = 13 * dayScale;
+            foreach (var t in _dayLo) t.FontSize = 11 * dayScale;
+            foreach (var t in _dayPrecip) t.FontSize = 8.5 * dayScale;
+        }
+        catch { }
+    }
+
+    /// <summary>Canvas width minus the 12px side margins the content panels use.</summary>
+    private double InnerWidth()
+    {
+        double w = _canvasW > 0 ? _canvasW : DesignW;
+        return Math.Max(60, w - 24);
+    }
+
+    /// <summary>
+    /// Width of <paramref name="tb"/> at <paramref name="designSize"/> with no width
+    /// constraint. Used to derive how much type scale the temperature's column can hold
+    /// without clipping, without hardcoding a font metric that changes with DPI/font.
+    /// </summary>
+    private static double MeasureNaturalWidth(TextBlock tb, double designSize)
+    {
+        try
+        {
+            double keep = tb.FontSize;
+            tb.FontSize = designSize;
+            tb.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            double w = tb.DesiredSize.Width;
+            tb.FontSize = keep;
+            return w;
+        }
+        catch
+        {
+            return 0;
+        }
+    }
+
+    /// <summary>
+    /// Largest multiplier on <paramref name="designSize"/> at which the widest of
+    /// <paramref name="blocks"/> still fits <paramref name="available"/>. The hourly and daily
+    /// strips are equal-width columns, so a label wider than its own column spills into its
+    /// neighbours: the columns stop reading as an evenly spaced horizontal row and the outer
+    /// ones clip at the canvas edge.
+    /// </summary>
+    private static double FitToColumn(List<TextBlock> blocks, double designSize, double available)
+    {
+        double natural = 0;
+        foreach (var t in blocks)
+        {
+            double w = MeasureNaturalWidth(t, designSize);
+            if (w > natural) natural = w;
+        }
+        if (natural <= 1 || available <= 0) return double.PositiveInfinity;
+        return available / natural;
+    }
+
+    private void OnWidgetSizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        double before = _canvasW;
+        UpdateCanvasSize();
+        ApplyContentScale();
+        // The sparkline is drawn in absolute coordinates against the previous canvas width.
+        if (Math.Abs(_canvasW - before) > 0.5 && _snapshot is not null && _snapshot.Hours.Count > 1)
+        {
+            BuildSparkline(_snapshot.Hours);
+        }
     }
 
     private UIElement BuildHeader()
@@ -338,8 +629,16 @@ public sealed class WeatherWidget : NativeWidgetControl
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh now"), OnRefreshClicked));
+buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh now"), OnRefreshClicked));
         buttons.Children.Add(MakeIconButton(LocateGeometry(), L("Detect my location", "Detect my location"), OnDetectClicked));
+        // Debug-only condition picker, shown only when the host published the simulation
+        // hook. Cycling through conditions on a timer means you cannot hold a given one on
+        // screen long enough to judge the art; this pins one so every icon, label and hourly
+        // variant can be inspected on demand.
+        if (WidgetDev.SimulateData)
+        {
+            buttons.Children.Add(MakeConditionPicker());
+        }
         _headerButtons = buttons;
         Grid.SetColumn(buttons, 1);
         grid.Children.Add(buttons);
@@ -382,52 +681,75 @@ public sealed class WeatherWidget : NativeWidgetControl
     private Grid BuildNowPanel()
     {
         var panel = new Grid();
-        panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(34) }); // metrics
+        _heroRowDef = new RowDefinition { Height = new GridLength(1, GridUnitType.Star) };
+        panel.RowDefinitions.Add(_heroRowDef);
+        // Auto, not a computed height: a label + value pair needs more than the 34 units a
+        // fixed row allowed, and with VerticalAlignment=Bottom the oversized row grew
+        // UPWARD into the hero row, so "H 30 L 17" landed on top of "Humidity". Letting the
+        // row fit its content makes that overlap impossible at any font size or scale.
+        _metricsRowDef = new RowDefinition { Height = GridLength.Auto };
+        panel.RowDefinitions.Add(_metricsRowDef); // metrics
 
         var top = new Grid();
-        top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(78) });
-        top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        // Both columns Star (see IconColWeight). An Auto column for the icon let a Viewbox
+        // swallow the row, and on a tall window (aspect-clamped to ~238px) that left the
+        // temperature column too narrow for the text, which spilled past the canvas edge.
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(IconColWeight, GridUnitType.Star) });
+        top.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(TextColWeight, GridUnitType.Star) });
 
+        // The hero row is sized EXPLICITLY in ApplyContentScale. An unsized Viewbox returns a
+        // SCALED desired size from MeasureOverride, and a Star row fed that inflated desire
+        // took the whole content area and squeezed the Auto metrics row below it to zero, so
+        // the metrics drew outside the canvas. Explicit Height keeps the row honest.
         var iconBox = new Viewbox
         {
-            Width = 74,
-            Height = 74,
             Stretch = Stretch.Uniform,
             VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Left,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
         };
         _nowIcon.Data = BuildWeatherGeometry(0, true);
         iconBox.Child = _nowIcon;
+        _nowIconBox = iconBox;
         Grid.SetColumn(iconBox, 0);
         top.Children.Add(iconBox);
 
         var texts = new StackPanel
         {
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(2, 0, 0, 0),
+            Margin = new Thickness(10, 0, 0, 0),
         };
-        _tempText.FontSize = 42;
+        _tempText.FontSize = 46;
         _tempText.FontWeight = FontWeights.Bold;
         _tempText.Text = "--";
-        _condText.FontSize = 13;
+        // Belt and braces: ApplyContentScale also scales the type by the canvas WIDTH, which
+        // keeps the temperature inside its column at every aspect. Trimming guarantees it even
+        // if a font change outgrows that budget.
+        _tempText.TextTrimming = TextTrimming.CharacterEllipsis;
+        _condText.FontSize = 14;
         _condText.TextTrimming = TextTrimming.CharacterEllipsis;
-        _hiloText.FontSize = 12;
+        _hiloText.FontSize = 13;
+        _hiloText.TextTrimming = TextTrimming.CharacterEllipsis;
         texts.Children.Add(_tempText);
         texts.Children.Add(_condText);
         texts.Children.Add(_hiloText);
         Grid.SetColumn(texts, 1);
         top.Children.Add(texts);
 
+        // Rows must be assigned explicitly: both children default to row 0, and a metrics
+        // grid left in row 0 bottom-aligns INSIDE the hero row, printing its labels straight
+        // over the weather art. Row 1's Auto height is what reserves its space.
+        Grid.SetRow(top, 0);
         panel.Children.Add(top);
 
-        var metrics = new Grid { VerticalAlignment = VerticalAlignment.Bottom };
+        var metrics = new Grid { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 8, 0, 0) };
+        _metricsRow = metrics;
         metrics.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         metrics.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         metrics.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         metrics.Children.Add(MakeMetric(0, "Feels like", "Feels like"));
         metrics.Children.Add(MakeMetric(1, "Humidity", "Humidity"));
         metrics.Children.Add(MakeMetric(2, "Wind", "Wind"));
+        Grid.SetRow(metrics, 1);
         panel.Children.Add(metrics);
 
         return panel;
@@ -436,8 +758,8 @@ public sealed class WeatherWidget : NativeWidgetControl
     private UIElement MakeMetric(int column, string labelKey, string labelDefault)
     {
         var stack = new StackPanel();
-        var label = new TextBlock { FontSize = 9.5, Text = L(labelKey, labelDefault) };
-        var value = new TextBlock { FontSize = 14, FontWeight = FontWeights.SemiBold, Text = "--" };
+        var label = new TextBlock { FontSize = 10, Text = L(labelKey, labelDefault) };
+        var value = new TextBlock { FontSize = 15, FontWeight = FontWeights.SemiBold, Text = "--" };
         _metricLabels.Add(label);
         _metricValues.Add(value);
         stack.Children.Add(label);
@@ -449,7 +771,8 @@ public sealed class WeatherWidget : NativeWidgetControl
     private Grid BuildHourPanel()
     {
         var panel = new Grid();
-        panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(78) });  // sparkline
+        _sparkRow = new RowDefinition { Height = new GridLength(78) };
+        panel.RowDefinitions.Add(_sparkRow);  // sparkline
         panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // cells
 
         var chart = new Grid();
@@ -471,13 +794,17 @@ public sealed class WeatherWidget : NativeWidgetControl
         {
             var cell = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
 
-            var hour = new TextBlock { FontSize = 9.5, Text = "--" };
+            // HorizontalAlignment matters: inside a vertical StackPanel a child defaults to
+            // Stretch, so the text renders against the cell's LEFT edge while the icon above it
+            // is centred — the labels and numbers end up visibly out of line with their icons.
+            var hour = new TextBlock { FontSize = 9.5, Text = "--", HorizontalAlignment = HorizontalAlignment.Center };
             var icon = new Viewbox { Width = 26, Height = 26, Stretch = Stretch.Uniform, Margin = new Thickness(0, 2, 0, 2) };
+            _hourIconBoxes.Add(icon);
             var path = new Path { Data = BuildWeatherGeometry(0, true) };
             icon.Child = path;
             _smallIcons.Add(path);
-            var temp = new TextBlock { FontSize = 12, FontWeight = FontWeights.SemiBold, Text = "--" };
-            var precip = new TextBlock { FontSize = 8.5, Text = "" };
+            var temp = new TextBlock { FontSize = 12, FontWeight = FontWeights.SemiBold, Text = "--", HorizontalAlignment = HorizontalAlignment.Center };
+            var precip = new TextBlock { FontSize = 8.5, Text = "", HorizontalAlignment = HorizontalAlignment.Center };
 
             cell.Children.Add(hour);
             cell.Children.Add(icon);
@@ -511,6 +838,7 @@ public sealed class WeatherWidget : NativeWidgetControl
 
             var day = new TextBlock { FontSize = 11, FontWeight = FontWeights.SemiBold, Text = "--", HorizontalAlignment = HorizontalAlignment.Center };
             var icon = new Viewbox { Width = 40, Height = 40, Stretch = Stretch.Uniform, Margin = new Thickness(0, 4, 0, 4) };
+            _dayIconBoxes.Add(icon);
             var path = new Path { Data = BuildWeatherGeometry(0, true) };
             icon.Child = path;
             _smallIcons.Add(path);
@@ -554,6 +882,58 @@ public sealed class WeatherWidget : NativeWidgetControl
         };
         Grid.SetRow(_statusPill, 3);
         return _statusPill;
+    }
+
+        /// <summary>Every WMO code the icon set and the condition labels both understand, so the
+    /// picker only offers codes that actually produce a distinct icon.</summary>
+    private static readonly int[] SupportedCodes =
+    {
+        0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67,
+        71, 73, 75, 77, 80, 81, 82, 85, 86, 95, 96, 99,
+    };
+
+    private ComboBox? _conditionPicker;
+
+    private ComboBox MakeConditionPicker()
+    {
+        var items = new List<KeyValuePair<string, string>>
+        {
+            new("auto", L("Auto (cycle)", "Auto (cycle)")),
+        };
+        foreach (int code in SupportedCodes)
+        {
+            var condition = ConditionOf(code);
+            items.Add(new KeyValuePair<string, string>(
+                code.ToString(CultureInfo.InvariantCulture),
+                $"{code} · {L(condition.Key, condition.Text)}"));
+        }
+
+        var combo = new ComboBox
+        {
+            Width = 168,
+            Height = 26,
+            Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 10.5,
+            ItemsSource = items,
+            DisplayMemberPath = "Value",
+            SelectedValuePath = "Key",
+            SelectedValue = (_simConditionOverride?.ToString(CultureInfo.InvariantCulture)) ?? "auto",
+            ToolTip = L("Pick a condition to preview its artwork", "Pick a condition to preview its artwork"),
+            Tag = NoDragTag,
+        };
+        combo.SelectionChanged += (_, _) =>
+        {
+            try
+            {
+                _simConditionOverride = combo.SelectedValue is string s && int.TryParse(
+                    s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int code) ? code : null;
+                ApplySimulated();
+            }
+            catch { }
+        };
+        _conditionPicker = combo;
+        return combo;
     }
 
     private Border MakeIconButton(Geometry geometry, string tooltip, Action onClick)
@@ -617,6 +997,11 @@ public sealed class WeatherWidget : NativeWidgetControl
     #endregion
 
     #region Data
+
+    // Simulated samples cycle through these so every condition and the rain/snow/fog art are
+    // reachable while testing layout, instead of a single fixed state.
+    private static readonly int[] Codes = { 0, 2, 3, 61, 80, 95, 71, 45, 1, 63, 3, 0 };
+    private static readonly int[] DayCodes = { 0, 2, 3, 61, 95 };
 
     private sealed class HourPoint
     {
@@ -901,6 +1286,16 @@ public sealed class WeatherWidget : NativeWidgetControl
     {
         if (_disposed || IsSuspended) return;
         if (_isFetching) return;
+        // Anything else is an ordinal amount (opacity, opacity of X, a radius), where a
+        // free-typed number is both worse UX and a chance to persist something out of range.
+        // Simulation short-circuits BEFORE the staleness check: the point of it is that no
+        // window open, resume or 30-minute tick reaches the network.
+        if (WidgetDev.SimulateData)
+        {
+            if (_hasData) { SetFreshness(); return; }
+            ApplySimulated();
+            return;
+        }
         // Anything older than a full interval is stale; a forced pull refreshes regardless.
         if (!force && _hasData && DateTimeOffset.UtcNow - _fetchedUtc < RefreshInterval) return;
 
@@ -944,6 +1339,7 @@ public sealed class WeatherWidget : NativeWidgetControl
     private async Task DetectLocationAsync()
     {
         if (_disposed || IsSuspended || _isFetching) return;
+        if (WidgetDev.SimulateData) { ApplySimulated(); return; }
 
         var token = CancelInFlight();
         var cts = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -1001,9 +1397,13 @@ public sealed class WeatherWidget : NativeWidgetControl
         _ = RefreshAsync(force: true);
     }
 
-    private void OnLoaded(object sender, RoutedEventArgs e)
+private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (IsSuspended) return;
+        // ActualWidth is 0 during construction, so the canvas can only be fitted to the real
+        // window once it is measured.
+        UpdateCanvasSize();
+        ApplyContentScale();
         _ = RefreshAsync(force: true);
         try { _timer.Start(); } catch { }
     }
@@ -1141,6 +1541,9 @@ public sealed class WeatherWidget : NativeWidgetControl
             }
 
             SetFreshness();
+            // The strip labels only hold real text now ("06:00 م", "الجمعة"), so the column fit
+            // has to be re-derived; measuring "--" would leave the widest label overflowing.
+            ApplyContentScale();
         }
         catch { }
     }
@@ -1183,7 +1586,7 @@ public sealed class WeatherWidget : NativeWidgetControl
             double min = hours.Min(h => h.TempC);
             double max = hours.Max(h => h.TempC);
             double span = Math.Max(max - min, 1.0);
-            double w = DesignW - 24;
+            double w = _canvasW - 24;
             double h = 78 - 8;
             double step = w / (hours.Count - 1);
 
@@ -1356,6 +1759,7 @@ public sealed class WeatherWidget : NativeWidgetControl
             try { _timer.Stop(); } catch { }
             try { _timer.Tick -= OnTimerTick; } catch { }
             try { Loaded -= OnLoaded; } catch { }
+            try { SizeChanged -= OnWidgetSizeChanged; } catch { }
             try { Unloaded -= OnUnloaded; } catch { }
             try { _cts?.Cancel(); } catch { }
             try { _cts?.Dispose(); } catch { }
@@ -1396,10 +1800,33 @@ public sealed class WeatherWidget : NativeWidgetControl
     /// moon stays legible instead of being buried under it.</summary>
     private static void AddCloud(GeometryGroup g)
     {
-        g.Children.Add(new EllipseGeometry(new Rect(28, 28, 44, 36)));   // crown
-        g.Children.Add(new EllipseGeometry(new Rect(18, 45, 32, 26)));   // left lobe
-        g.Children.Add(new EllipseGeometry(new Rect(50, 45, 32, 26)));   // right lobe
-        g.Children.Add(new RectangleGeometry(new Rect(20, 58, 60, 13), 6.5, 6.5));
+        AddCloudAt(g, 0, 0);
+    }
+
+    /// <summary>Cloud silhouette shared by every precipitation icon (a GeometryGroup, not a
+    /// union: overlapping shapes painted in one fill read as one solid cloud). Occupies
+    /// x 18..82, y 28..71 at the default offset. <paramref name="dx"/>/<paramref name="dy"/>
+    /// shift it so a partly-cloudy icon can leave the sun genuinely visible in the corner
+    /// rather than burying it.</summary>
+    private static void AddCloudAt(GeometryGroup g, double dx, double dy)
+    {
+        Geometry[] shapes =
+        {
+            new EllipseGeometry(new Rect(28 + dx, 28 + dy, 44, 36)),   // crown
+            new EllipseGeometry(new Rect(18 + dx, 45 + dy, 32, 26)),   // left lobe
+            new EllipseGeometry(new Rect(50 + dx, 45 + dy, 32, 26)),   // right lobe
+            new RectangleGeometry(new Rect(20 + dx, 58 + dy, 60, 13), 6.5, 6.5),
+        };
+        if (dx == 0 && dy == 0)
+        {
+            foreach (var s in shapes) g.Children.Add(s);
+            return;
+        }
+        foreach (var s in shapes)
+        {
+            s.Transform = new TranslateTransform(dx, dy);
+            g.Children.Add(s);
+        }
     }
 
     /// <summary>Eight rays as thin rotated rectangles rather than a stroked polyline: the
@@ -1408,10 +1835,13 @@ public sealed class WeatherWidget : NativeWidgetControl
     private static void AddSun(GeometryGroup g, double cx, double cy, double discR)
     {
         g.Children.Add(new EllipseGeometry(new Rect(cx - discR, cy - discR, discR * 2, discR * 2)));
-        double inner = discR + 4, outer = discR + 12;
+        // Long and thick enough to read at icon size: short hairline rays on a big disc just
+        // look like specks of dirt.
+        double inner = discR + 5, outer = discR + 15;
         for (int i = 0; i < 8; i++)
         {
-            var ray = new RectangleGeometry(new Rect(cx - 1.5, cy - outer, 3, outer - inner), 1.5, 1.5);
+            var ray = new RectangleGeometry(
+                new Rect(cx - 2, cy - outer, 4, outer - inner), 2, 2);
             ray.Transform = new RotateTransform(i * 45, cx, cy);
             g.Children.Add(ray);
         }
@@ -1496,12 +1926,14 @@ public sealed class WeatherWidget : NativeWidgetControl
             case 0:
                 if (isDay) AddSun(g, 50, 48, 20); else AddMoon(g, 50, 48, 20);
                 break;
-            // Mainly clear / partly cloudy: the luminary shrinks to the top-left and the
-            // cloud is painted OVER it, so only a corner peeks out - the standard reading.
+            // Mainly clear / partly cloudy: the sun sits up and to the LEFT with its lower half
+            // BEHIND the cloud, so it reads as rising from behind the cloud rather than as a
+            // second blob floating beside it. The cloud's crown overlaps the sun's bottom by
+            // roughly a third of its diameter — enough to occlude, not enough to hide it.
             case 1:
             case 2:
-                if (isDay) AddSun(g, 32, 32, 13); else AddMoon(g, 32, 32, 13);
-                AddCloud(g);
+                if (isDay) AddSun(g, 38, 32, 15); else AddMoon(g, 38, 32, 15);
+                AddCloudAt(g, 6, 10);
                 break;
             case 3:
                 AddCloud(g);
@@ -1527,7 +1959,51 @@ public sealed class WeatherWidget : NativeWidgetControl
         }
         g.Freeze();
         GeometryCache[key] = g;
-        return g;
+        var centred = CentreInBox(g);
+        GeometryCache[key] = centred;
+        return centred;
+    }
+
+    /// <summary>Re-centres a glyph so its optical centre sits at (50,50) of the 100-unit box.
+    /// Several silhouettes are asymmetric — the crescent most of all, since subtracting the
+    /// bite leaves the remaining shape biased up and to the left — which made the icon read
+    /// as nudged sideways even though its geometry was correct. Returns the same instance when
+    /// it is already centred.</summary>
+    private static Geometry CentreInBox(GeometryGroup g)
+    {
+        try
+        {
+            var b = g.Bounds;
+            if (b.IsEmpty || b.Width <= 0 || b.Height <= 0) return g;
+            double dx = 50 - (b.X + b.Width / 2);
+            double dy = 50 - (b.Y + b.Height / 2);
+            if (Math.Abs(dx) < 0.01 && Math.Abs(dy) < 0.01) return g;
+
+            var centred = new GeometryGroup { FillRule = FillRule.Nonzero };
+            foreach (Geometry child in g.Children)
+            {
+                var moved = child.Clone();
+                // COMPOSE with any transform the child already has, never replace it. The sun's
+                // rays carry a per-ray RotateTransform; assigning here silently collapsed all
+                // eight back to a single unrotated bar on top of the disc.
+                Transform existing = child.Transform!;
+                if (existing is null)
+                {
+                    moved.Transform = new TranslateTransform(dx, dy);
+                }
+                else
+                {
+                    var group = new TransformGroup();
+                    group.Children.Add(existing);
+                    group.Children.Add(new TranslateTransform(dx, dy));
+                    moved.Transform = group;
+                }
+                centred.Children.Add(moved);
+            }
+            centred.Freeze();
+            return centred;
+        }
+        catch { return g; }
     }
 
     /// <summary>Localization key and English source string for one WMO code, in a single

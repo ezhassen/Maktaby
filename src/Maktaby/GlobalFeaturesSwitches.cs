@@ -36,4 +36,19 @@ public static class GlobalFeaturesSwitches
     /// being tested.
     /// </remarks>
     public static bool SimulateUpdateAvailable { get; } = false;
+
+    /// <summary>
+    /// DEBUG ONLY. Publishes <see cref="Maktaby.WidgetSdk.WidgetDev.SimulateData"/> so a native
+    /// widget that hits a live service can serve generated data instead. The point is a
+    /// repeatable dev loop: a weather widget otherwise refetches on every window open, every
+    /// resume and every 30-minute tick, which makes a layout change impossible to eyeball
+    /// twice in a row (and hammers a free-tier endpoint).
+    /// </summary>
+    /// <remarks>
+    /// A single global switch rather than a manifest flag, because it must be impossible for
+    /// a shipped widget to ship with simulation on: a release build never sets this, and the
+    /// widget's own code still has to opt in by checking the flag before touching the
+    /// network. Off in release.
+    /// </remarks>
+    public static bool SimulateNativeWidgetData { get; } = false;
 }

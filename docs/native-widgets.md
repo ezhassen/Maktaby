@@ -138,6 +138,24 @@ forever. In that case `auto` simply follows the app theme. A widget overrides in
 current value only when it still equals the old default, so an explicit user choice is never
 overwritten and **Reset** returns to `auto`.
 
+## 10. Developing without a live service
+
+A widget that calls a real service refetches on every window open, every resume and every
+refresh tick, which makes layout work impossible to eyeball twice in a row and hammers a
+free-tier endpoint. `WidgetDev.SimulateData` lets the widget serve generated data instead.
+
+It is published once by the host at startup from
+`GlobalFeaturesSwitches.SimulateNativeWidgetData` — **debug-only, `false` in release** — and
+defaults to `false` regardless. A widget must still check it itself before skipping its own
+I/O; the hook publishes the decision, it does not perform it.
+
+```csharp
+if (Maktaby.WidgetSdk.WidgetDev.SimulateData) { ApplySample(); return; }
+```
+
+Check it *before* any staleness logic: the point is that no window open, resume or timer tick
+reaches the network at all. `WidgetDev.Reset()` restores the shipping value.
+
 ## 2. Assembly mode (single DLL)
 
 1. Create a .NET class library (`net10.0-windows`, WPF allowed).
