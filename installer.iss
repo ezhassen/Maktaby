@@ -201,19 +201,41 @@ var
   StartupCheckBox: TNewCheckBox;
 
 // The in-app updater runs this setup silently (UpdateInstaller.Launch passes
-// /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-) and adds this flag so the update can be
-// told apart from a human install.
+// /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-) and adds this switch so the update can
+// be told apart from a human install.
 //
+// This matters because Inno Setup 6 DOES call InitializeWizard for /SILENT and /VERYSILENT:
+// a silent install gets the same two checkboxes, with the same defaults, and they are ticked.
+// Without the switch, every update would re-run --enable-startup and turn Windows startup back
+// on for a user who had deliberately turned it off - silently, through a path they never
+// chose and cannot see.
+//
+function IsUpdateRun: Boolean;
+var
+  I: Integer;
+  A: String;
+begin
+  // Scanned with ParamStr, NOT with {param:...}: that constant only resolves Inno's OWN
+  // parameters, so a custom /MAKTABY-UPDATE always came back empty and this function was
+  // permanently false. Verified with a throwaway setup - {param:MaktabyUpdate} was empty for
+  // no switch, for /MAKTABY-UPDATE, and for /MAKTABY-UPDATE=1 alike. ParamStr sees all three.
+  // The prefix match accepts the bare switch and the =1 form, in any case.
+  Result := False;
+  for I := 1 to ParamCount do
+  begin
+    A := Uppercase(ParamStr(I));
+    if Pos('/MAKTABY-UPDATE', A) = 1 then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+end;
 // This matters because Inno Setup 6 DOES call InitializeWizard for /SILENT and /VERYSILENT:
 // a silent install gets the same two checkboxes, with the same defaults, and they are ticked.
 // Without the flag, every update would re-run --enable-startup and turn Windows startup back
 // on for a user who had deliberately turned it off - silently, through a path they never
 // chose and cannot see.
-function IsUpdateRun: Boolean;
-begin
-  Result := CompareText(ExpandConstant('{param:MaktabyUpdate}'), '/MAKTABY-UPDATE') = 0;
-end;
-
 function IsMaktabyRunning(): Boolean;
 var
   ResultCode: Integer;

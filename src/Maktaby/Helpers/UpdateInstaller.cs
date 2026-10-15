@@ -266,11 +266,17 @@ internal static class UpdateInstaller
             // /NORESTART: we relaunch ourselves. /SP- skips the "this will close Maktaby"
             // prompt that would otherwise sit there unanswered in a silent install.
             //
-            // /MAKTABY-UPDATE tells the installer this run is an update, not a fresh
+            // /MAKTABY-UPDATE=1 tells the installer this run is an update, not a fresh
             // install. Without it the setup would apply its post-install defaults, which
             // means re-enabling the Windows startup entry on every update - including for
             // a user who had deliberately turned it off. See IsUpdateRun in installer.iss.
-            psi.Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /MAKTABY-UPDATE"
+            //
+            // The `=1` is load-bearing. Inno exposes command-line parameters to the script
+            // through {param:Name}, which resolves the VALUE of a `/Name=Value` pair. A
+            // valueless `/MAKTABY-UPDATE` never registers, so {param:MaktabyUpdate} comes
+            // back empty, IsUpdateRun is always false, and a silent update silently
+            // re-enables Windows startup for everyone.
+            psi.Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /MAKTABY-UPDATE=1"
                           + InstallerLanguageArgument();
         }
 

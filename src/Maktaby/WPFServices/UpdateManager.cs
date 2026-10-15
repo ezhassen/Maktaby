@@ -638,7 +638,16 @@ public sealed class UpdateManager : IDisposable
     {
         while (!_disposed)
         {
-            bool finished = await InstallAsync(update, silent: false).ConfigureAwait(true);
+            // silent: true. The user already made the decision by pressing Install (or Retry) in
+            // OUR prompt, so putting the Inno wizard in front of them asks the same question
+            // twice and stalls the update on a dialog they have nothing to decide. The install
+            // is therefore run /VERYSILENT with /MAKTABY-UPDATE, which is what that flag in
+            // installer.iss's IsUpdateRun exists for: a silent install must not re-apply the
+            // post-install defaults, or every update would re-enable the Windows startup entry
+            // for someone who had deliberately turned it off. installer.iss already handles a
+            // silent run correctly - InitializeWizard is still called under /VERYSILENT, and
+            // ShouldLaunchApp falls back to the captured WasRunning, so the app is relaunched.
+            bool finished = await InstallAsync(update, silent: true).ConfigureAwait(true);
 
             if (finished) { return; }
 
