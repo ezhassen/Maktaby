@@ -65,11 +65,14 @@ env:
   #   arch    - the token in the asset name, and the one the in-app updater matches against
   #             the running process (Core/Services/UpdateService.cs)
   #   flavor  - lean (framework-dependent) or full (self-contained); also the asset suffix
-  TARGETS_JSON: >-
-    [{"rid":"win-x64","arch":"x64","flavor":"lean"},
-     {"rid":"win-x64","arch":"x64","flavor":"full"},
-     {"rid":"win-arm64","arch":"arm64","flavor":"lean"},
-     {"rid":"win-arm64","arch":"arm64","flavor":"full"}]
+  #
+  # ONE LINE, deliberately. A wrapped-looking `>-` block scalar does NOT work here: YAML only
+  # folds lines that are NOT more indented than the first content line, so indenting the
+  # continuation lines (the natural way to wrap this) preserves real newlines. The value then
+  # reaches the runner as 4 lines and GITHUB_OUTPUT parses each as its own `name=value`,
+  # failing with "Invalid format ' {...'". The delimiter form used in the validate step is the
+  # belt to this braces: it tolerates newlines if anyone wraps it later.
+  TARGETS_JSON: '[{"rid":"win-x64","arch":"x64","flavor":"lean"},{"rid":"win-x64","arch":"x64","flavor":"full"},{"rid":"win-arm64","arch":"arm64","flavor":"lean"},{"rid":"win-arm64","arch":"arm64","flavor":"full"}]'
 
 jobs:
   # Classification and the branch rule happen ONCE, before anything is built, so all four
@@ -110,8 +113,13 @@ jobs:
           echo "version=$ver"    >> "$GITHUB_OUTPUT"
           # Hand the target list to the build matrix. env is readable from a step's shell but
           # NOT from jobs.<job_id>.strategy, so the matrix gets it through needs instead.
-          # `>-` folds TARGETS_JSON onto one line, which is what GITHUB_OUTPUT needs.
-          echo "targets=$TARGETS_JSON" >> "$GITHUB_OUTPUT"
+          # Delimiter form (`name<<EOF` ... `EOF`), not `name=value`: it is the only form that
+          # survives a multi-line value, which is exactly how this broke once already.
+          {
+            echo 'targets<<TARGETS_EOF'
+            echo "$TARGETS_JSON"
+            echo 'TARGETS_EOF'
+          } >> "$GITHUB_OUTPUT"
           echo "Building $tag ($ver) -> $channel channel, expected on $branch"
 
       # Node 24 majors. The v4 generation of these actions targets Node 20, which
