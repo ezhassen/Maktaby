@@ -49,8 +49,17 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  # Single definition of a release's contents. `matrix: target: ${{ fromJson(env.TARGETS_JSON) }}`
-  # turns each entry into a build leg; the notes job reads the same JSON.
+  # Single definition of a release's contents, consumed by the build matrix AND by the
+  # release-notes composer - so the table in the release notes cannot drift from what was
+  # actually built. build.ps1 derives the file name it writes from the same target
+  # (runtime + flavor), so a typo here fails loudly instead of shipping a misnamed asset.
+  #
+  # It is re-exported as a `validate` job OUTPUT because the `env` context is NOT available
+  # in `jobs.<job_id>.strategy`: a matrix cannot read env, so
+  # `matrix: target: ${{ fromJson(env.TARGETS_JSON) }}` is rejected at workflow-validation
+  # time ("Unrecognized named-value: 'env'"). `needs` IS allowed there, so the build matrix
+  # reads `fromJson(needs.validate.outputs.targets)` instead. The literal below stays the one
+  # place the four targets are written.
   #
   #   rid     - .NET runtime identifier passed to build.ps1 -Runtime
   #   arch    - the token in the asset name, and the one the in-app updater matches against
@@ -73,6 +82,7 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
       prerelease: ${{ steps.tag.outputs.prerelease }}
+      targets: ${{ steps.tag.outputs.targets }}
     steps:
       - name: Classify version
         id: tag
@@ -98,6 +108,10 @@ jobs:
           fi
           echo "tag=$tag"        >> "$GITHUB_OUTPUT"
           echo "version=$ver"    >> "$GITHUB_OUTPUT"
+          # Hand the target list to the build matrix. env is readable from a step's shell but
+          # NOT from jobs.<job_id>.strategy, so the matrix gets it through needs instead.
+          # `>-` folds TARGETS_JSON onto one line, which is what GITHUB_OUTPUT needs.
+          echo "targets=$TARGETS_JSON" >> "$GITHUB_OUTPUT"
           echo "Building $tag ($ver) -> $channel channel, expected on $branch"
 
       # Node 24 majors. The v4 generation of these actions targets Node 20, which
@@ -141,7 +155,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ${{ fromJson(env.TARGETS_JSON) }}
+        target: ${{ fromJson(needs.validate.outputs.targets) }}
     steps:
       - uses: actions/checkout@v7
         with:
