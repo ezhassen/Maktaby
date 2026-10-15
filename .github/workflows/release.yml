@@ -184,42 +184,91 @@ jobs:
       - name: Install Inno Setup
         shell: pwsh
         run: |
-          # ISCC is preinstalled on the GitHub windows images, but the exact location
-          # is not contractual - fall back to Chocolatey rather than failing the
-          # release on a runner-image change.
-          function Find-Iscc {
-            $cmd = Get-Command iscc -ErrorAction SilentlyContinue
-            if ($cmd) { return $cmd.Source }
-            $found = Get-ChildItem "${env:ProgramFiles(x86)}\Inno Setup*\ISCC.exe" -ErrorAction SilentlyContinue |
-                     Select-Object -First 1
-            if ($found) { return $found.FullName }
+          # "iscc is on PATH" is NOT a reliable answer on the GitHub images. Chocolatey
+          # installs a SHIM at C:\ProgramData\Chocolatey\bin\ISCC.exe, and that folder has no
+          # Languages\ beside it - so probing the shim reported a perfectly good Inno Setup as
+          # having no Arabic wizard and failed the release. Resolve the REAL install directory
+          # instead, and prefer one that actually carries Arabic.isl.
+          function Get-InnoInstalls {
+            $patterns = @("${env:ProgramFiles(x86)}\Inno Setup*", "$env:ProgramFiles\Inno Setup*")
+            $dirs = foreach ($pattern in $patterns) {
+              # Enumerate the DIRECTORIES and append ISCC.exe ourselves. A wildcard -Path
+              # combined with -Filter silently matches nothing here (verified: it returns 0
+              # even when ISCC.exe is right there), which would look like "no Inno Setup".
+              Get-ChildItem -Path $pattern -Directory -ErrorAction SilentlyContinue
+            }
+            foreach ($d in $dirs) {
+              $exe = Join-Path $d.FullName 'ISCC.exe'
+              if (Test-Path $exe) {
+                # Sort newest first. 'Inno Setup 6' -> 6, 'Inno Setup 7.1' -> 7.1.
+                # [version] needs at least two components, hence the padding.
+                $v = $d.Name -replace '[^0-9.]', ''
+                if ($v -notmatch '^\d+\.\d+') { $v = if ($v) { "$v.0" } else { '0.0' } }
+                [pscustomobject]@{
+                  Dir     = $d.FullName
+                  Exe     = $exe
+                  Version = [version]$v
+                  Label   = $d.Name
+                }
+              }
+            }
+          }
+
+          function Get-ArabicPath([string]$iscc) {
+            if (-not $iscc) { return $null }
+            Join-Path (Split-Path -Parent $iscc) 'Languages\Arabic.isl'
+          }
+
+          # An install is usable only if it has Arabic.isl; fall back to the newest one so the
+          # error message can say exactly what was there.
+          function Resolve-Iscc {
+            $all = @(Get-InnoInstalls | Sort-Object Version -Descending)
+            foreach ($c in $all) {
+              if (Test-Path (Get-ArabicPath $c.Exe)) { return $c.Exe }
+            }
+            if ($all.Count -gt 0) { return $all[0].Exe }
             return $null
           }
 
-          $iscc = Find-Iscc
+          $iscc = Resolve-Iscc
           if (-not $iscc) {
-            Write-Host "Inno Setup not found on the image, installing via Chocolatey..."
+            Write-Host "No Inno Setup under Program Files; installing via Chocolatey..."
             choco install innosetup --yes --no-progress --limit-output
-            $iscc = Find-Iscc
+            $iscc = Resolve-Iscc
           }
           if (-not $iscc) { throw "Inno Setup compiler (ISCC.exe) is unavailable." }
 
-          # The installer is bilingual (English + Arabic) and pulls the Arabic wizard
-          # from the compiler's own Languages folder. Arabic.isl only ships with Inno
-          # Setup 6.5.0+, so an older compiler on the image - or on a dev machine -
-          # would fail at compile time with a bare "file not found". Check explicitly.
-          $arabic = Join-Path (Split-Path -Parent $iscc) 'Languages\Arabic.isl'
-          if (-not (Test-Path $arabic)) {
-            throw "Inno Setup at '$iscc' has no Languages\Arabic.isl. installer.iss declares an" +
-                  " Arabic setup wizard, which needs Inno Setup 6.5.0 or newer. Install a newer" +
-                  " Inno Setup, or vendor the translation as installer\languages\Arabic.isl and" +
-                  " point the [Languages] entry at it."
+          # The installer is bilingual (English + Arabic) and pulls the Arabic wizard from the
+          # compiler's own Languages folder. Arabic.isl first ships with Inno Setup 6.5.0, so an
+          # older compiler would fail at compile time with a bare "file not found". Check it
+          # explicitly and, if this really is an old one, try upgrading through Chocolatey -
+          # the same package manager that put the shim there - before giving up.
+          if (-not (Test-Path (Get-ArabicPath $iscc))) {
+            Write-Host "Inno Setup at '$iscc' has no Languages\Arabic.isl; trying a Chocolatey upgrade..."
+            choco upgrade innosetup --yes --no-progress --limit-output
+            $iscc = Resolve-Iscc
           }
 
-          Write-Host "Using ISCC: $iscc"
+          $arabic = Get-ArabicPath $iscc
+          if (-not (Test-Path $arabic)) {
+            # ISCC.exe carries no usable FileVersion (it reports 0.0.0.0), so name the install
+            # folder instead - that is where Inno puts its major version.
+            $seen = foreach ($c in @(Get-InnoInstalls | Sort-Object Version -Descending)) {
+              "  $($c.Label) at $($c.Dir) - Arabic.isl: $(Test-Path (Get-ArabicPath $c.Exe))"
+            }
+            throw ("No Inno Setup on this image provides Languages\Arabic.isl, which installer.iss" +
+                   " needs for the Arabic setup wizard (Inno Setup 6.5.0+). Inspected:" +
+                   [Environment]::NewLine + ($seen -join [Environment]::NewLine) +
+                   [Environment]::NewLine + "Install a newer Inno Setup on the runner image, or vendor" +
+                   " the translation as installer\languages\Arabic.isl and point [Languages] at it.")
+          }
+
+          Write-Host "Using ISCC: $iscc  (install: $(Split-Path -Parent $iscc | Split-Path -Leaf))"
           Write-Host "Arabic setup language available: $arabic"
-          # build.ps1 resolves the compiler with Get-Command iscc, so its directory
-          # has to be on PATH.
+          # build.ps1 resolves the compiler with Get-Command iscc, so its directory has to be
+          # on PATH. GITHUB_PATH appends, so the Chocolatey shim can still win the lookup -
+          # harmless: the shim forwards to this same ISCC, and Inno resolves a `compiler:`
+          # path against its own executable directory, not against PATH.
           Split-Path -Parent $iscc | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Publish and build installer
