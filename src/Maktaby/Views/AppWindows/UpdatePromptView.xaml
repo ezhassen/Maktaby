@@ -57,24 +57,57 @@
                 Visibility="{Binding PublishedText, Converter={StaticResource StringToVisibilityConverter}}" />
         </StackPanel>
 
-        <!--  Release notes excerpt. Scrollable with a capped height so a long changelog cannot
-              grow the window past the screen.  -->
+        <!--  Release notes: the changes, grouped by heading. Scrollable with a capped height so a
+              long changelog cannot grow the window past the screen. The old version bound a raw
+              monospace TextBlock to the first five lines of the release body, which on the notes
+              we generate are the download table - the user saw links and no changes at all.  -->
         <Border
             Grid.Row="2"
             Margin="20,12,20,0"
-            MaxHeight="140"
+            MaxHeight="220"
             Padding="12"
             Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
             BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
             BorderThickness="1"
             CornerRadius="6"
-            Visibility="{Binding NotesText, Converter={StaticResource StringToVisibilityConverter}}">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <TextBlock
-                    FontFamily="Consolas"
-                    FontSize="11"
-                    Text="{Binding NotesText}"
-                    TextWrapping="Wrap" />
+            Visibility="{Binding HasNotes, Converter={StaticResource BoolToVisibilityConverter}}">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,6,0">
+                <ItemsControl ItemsSource="{Binding Sections}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="0,0,0,10">
+                                <TextBlock
+                                    FontSize="12"
+                                    FontWeight="SemiBold"
+                                    Text="{Binding Title}"
+                                    TextWrapping="Wrap" />
+                                <ItemsControl Margin="10,4,0,0" ItemsSource="{Binding Items}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <!--  Bullet lives in the item template, not an
+                                                  ItemContainerStyle: ContentPresenter has no
+                                                  settable Template property.  -->
+                                            <StackPanel Margin="0,1" Orientation="Horizontal">
+                                                <TextBlock Margin="0,0,6,0" Text="&#x2022;" />
+                                                <TextBlock
+                                                    FontSize="12"
+                                                    Text="{Binding}"
+                                                    TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock
+                                    Margin="10,3,0,0"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding HiddenItemsText}"
+                                    TextWrapping="Wrap"
+                                    Visibility="{Binding HasHiddenItems, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </ScrollViewer>
         </Border>
 

@@ -160,6 +160,12 @@
     <unit id="Update.Install"><segment><source>Install</source><target>تثبيت</target></segment></unit>
     <unit id="Update.Later"><segment><source>Later</source><target>لاحقًا</target></segment></unit>
     <unit id="Update.Skip"><segment><source>Skip this version</source><target>تخطّي هذا الإصدار</target></segment></unit>
+    <!-- Release notes in the prompt: heading labels for the buckets the release workflow groups
+         commits into, plus the "trimmed" hint. The bullets themselves are English-only. -->
+    <unit id="Update.NotesHighlights"><segment><source>Highlights</source><target>أبرز التغييرات</target></segment></unit>
+    <unit id="Update.NotesFixed"><segment><source>Fixed</source><target>إصلاحات</target></segment></unit>
+    <unit id="Update.NotesOther"><segment><source>Other changes</source><target>تغييرات أخرى</target></segment></unit>
+    <unit id="Update.NotesMore"><segment><source>and {0} more — see the full changelog on GitHub</source><target>و{0} تغييرات أخرى — راجع سجل التغييرات كاملًا على GitHub</target></segment></unit>
     <unit id="Update.InstalledTitle"><segment><source>Update installed</source><target>تم تثبيت التحديث</target></segment></unit>
     <unit id="Update.NoUpdateTitle"><segment><source>No update available</source><target>لا يتوفر تحديث</target></segment></unit>
     <unit id="Update.CheckFailedTitle"><segment><source>Update check failed</source><target>فشل التحقق من التحديث</target></segment></unit>

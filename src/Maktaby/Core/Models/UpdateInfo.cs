@@ -46,7 +46,15 @@ public sealed class UpdateInfo
     /// <summary>Page a user can read for the changelog.</summary>
     public required string ReleasePageUrl { get; init; }
 
-    /// <summary>First lines of the generated release notes, for display in the prompt.</summary>
+    /// <summary>
+    /// The parsed change list, grouped by heading. Empty when the release body has no changes
+    /// section, which is normal - the prompt then shows the release page link alone.
+    /// </summary>
+    public IReadOnlyList<ReleaseNotesSection> Notes { get; init; } = Array.Empty<ReleaseNotesSection>();
+
+    /// <summary>
+    /// Flat plain-text version of <see cref="Notes"/>, for anything that wants one string.
+    /// </summary>
     public string? ReleaseNotes { get; init; }
 }
 

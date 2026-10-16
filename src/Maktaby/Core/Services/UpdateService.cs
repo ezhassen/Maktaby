@@ -302,6 +302,8 @@ public sealed class UpdateService : IUpdateService, IDisposable
 
     private static UpdateInfo BuildInfo(ReleaseDto release, SemVersion candidate, ReleaseAssetDto asset)
     {
+        var notes = ReleaseNotesParser.Parse(release.Body);
+
         return new UpdateInfo
         {
             // candidate.ToString() drops the 'v' prefix and any '+sha', so the displayed and
@@ -314,8 +316,27 @@ public sealed class UpdateService : IUpdateService, IDisposable
             IsPreRelease = release.Prerelease,
             PublishedAt = release.PublishedAt,
             ReleasePageUrl = release.HtmlUrl ?? string.Empty,
-            ReleaseNotes = SummarizeNotes(release.Body),
+            Notes = notes,
+            ReleaseNotes = Flatten(notes),
         };
+    }
+
+    /// <summary>
+    /// Plain-text form of the parsed notes, for callers that want a single string. Caps the item
+    /// count: this is a preview, and the prompt renders <see cref="UpdateInfo.Notes"/> instead.
+    /// </summary>
+    private static string? Flatten(IReadOnlyList<ReleaseNotesSection> notes)
+    {
+        if (notes.Count == 0) { return null; }
+
+        var lines = new List<string>();
+        foreach (var section in notes)
+        {
+            lines.Add(section.Title);
+            lines.AddRange(section.Items.Select(i => "- " + i));
+        }
+
+        return string.Join('\n', lines);
     }
 
     /// <summary>GitHub returns <c>sha256:&lt;hex&gt;</c>; store the bare lowercase hex.</summary>
@@ -326,23 +347,6 @@ public sealed class UpdateService : IUpdateService, IDisposable
         int colon = value.IndexOf(':');
         if (colon >= 0) { value = value[(colon + 1)..]; }
         return value.Trim().ToLowerInvariant();
-    }
-
-    /// <summary>First few non-empty, non-badge lines of the generated notes — enough for a
-    /// prompt, not a full changelog (the release page link carries the rest).</summary>
-    private static string? SummarizeNotes(string? body)
-    {
-        if (string.IsNullOrWhiteSpace(body)) { return null; }
-
-        var lines = body
-            .Split('\n')
-            .Select(l => l.TrimEnd('\r').Trim())
-            .Where(l => l.Length > 0)
-            .Where(l => !l.StartsWith("**", StringComparison.Ordinal))
-            .Take(5)
-            .ToArray();
-
-        return lines.Length == 0 ? null : string.Join('\n', lines);
     }
 
     private static UpdateCheckResult Fail(string diagnostic) => new()

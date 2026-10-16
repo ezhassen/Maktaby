@@ -1,4 +1,5 @@
 using Maktaby.Core.Models;
+using Maktaby.Localization;
 using System;
 
 namespace Maktaby.ViewModels;
@@ -45,11 +46,26 @@ public sealed class UpdatePromptViewModel : ViewModelBase
             PublishedText = $"Published {published.LocalDateTime:d MMM yyyy}";
         }
 
+        foreach (var section in update.Notes)
+        {
+            Sections.Add(new ReleaseNotesSectionViewModel(section));
+        }
+
+        // Kept for anything still binding the flat string; the view renders Sections instead.
         if (!string.IsNullOrWhiteSpace(update.ReleaseNotes))
         {
             NotesText = update.ReleaseNotes!;
         }
     }
+
+    /// <summary>
+    /// The parsed change list, grouped by heading. Empty when the release notes had no changes
+    /// section, in which case the card is hidden and the release page link carries the story.
+    /// </summary>
+    public System.Collections.ObjectModel.ObservableCollection<ReleaseNotesSectionViewModel> Sections { get; } = new();
+
+    /// <summary>Drives the visibility of the whole notes card.</summary>
+    public bool HasNotes => Sections.Count > 0;
 
     public UpdateInfo Update { get; }
 
@@ -175,4 +191,51 @@ public sealed class UpdatePromptViewModel : ViewModelBase
         if (!_isCancellable) { return; }
         CancelRequested?.Invoke(this, EventArgs.Empty);
     }
+}
+
+/// <summary>
+/// One heading and its bullets, as the prompt displays them.
+/// </summary>
+/// <remarks>
+/// The heading is localized, the bullets are not: the release body is generated in English only,
+/// so translating the four bucket names is the whole of what can be translated here. An
+/// unrecognized heading is shown verbatim rather than swallowed - a hand-written release should
+/// still read correctly.
+/// </remarks>
+public sealed class ReleaseNotesSectionViewModel
+{
+    public ReleaseNotesSectionViewModel(Maktaby.Core.Models.ReleaseNotesSection section)
+    {
+        Title = Localize(section.Title);
+        Items = section.Items;
+        HiddenItemCount = section.HiddenItemCount;
+    }
+
+    public string Title { get; }
+
+    public System.Collections.Generic.IReadOnlyList<string> Items { get; }
+
+    /// <summary>Items trimmed by the parser's per-section cap; 0 when nothing was hidden.</summary>
+    public int HiddenItemCount { get; }
+
+    public bool HasHiddenItems => HiddenItemCount > 0;
+
+    /// <summary>Localized "and N more" line, shown only when the parser trimmed a long section.</summary>
+    public string HiddenItemsText => Loc.Get("Update.NotesMore", HiddenItemCount);
+
+    private static string Localize(string title) => title.Trim().ToLowerInvariant() switch
+    {
+        "highlights" => Tr(Loc.Get("Update.NotesHighlights"), title),
+        "fixed" => Tr(Loc.Get("Update.NotesFixed"), title),
+        "other" => Tr(Loc.Get("Update.NotesOther"), "Other changes"),
+        _ => title,
+    };
+
+    /// <summary>
+    /// Falls back to the English heading when localization has nothing for the key. Without this
+    /// a prompt built before the language packs load would show the raw key, which is worse than
+    /// showing English.
+    /// </summary>
+    private static string Tr(string localized, string fallback) =>
+        localized.StartsWith("Update.", StringComparison.Ordinal) ? fallback : localized;
 }
