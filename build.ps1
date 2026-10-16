@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Builds, publishes and packages Maktaby, and manages git-tag-driven versions.
 

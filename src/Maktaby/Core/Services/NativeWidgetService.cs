@@ -1,9 +1,7 @@
-using Maktaby.WidgetSdk;
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Emit;
+using Maktaby.Shared;
+using Maktaby.WidgetSdk;
 using System.IO;
 using System.Reflection;
 using System.Runtime.Loader;
@@ -53,6 +51,14 @@ public sealed class NativeWidgetService : INativeWidgetService
 
     private readonly Lock _gate = new();
     private readonly Dictionary<string, PluginLoadContext> _contexts = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Slugs whose shipped <c>plugin.dll</c> failed to bind against this build. The file
+    /// lives in the install folder and may be read-only, so it cannot be deleted the way a
+    /// cached build is; remembering the verdict is what stops it being offered again.</summary>
+    private readonly HashSet<string> _prebuiltDisabled = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Slugs whose source-compile cache has already been dropped as superseded.</summary>
+    private readonly HashSet<string> _supersededCleaned = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, string>? _trust;
 
     public IReadOnlyList<NativeWidgetInfo> GetAvailableWidgets()
@@ -481,7 +487,23 @@ public sealed class NativeWidgetService : INativeWidgetService
             // Belt and braces: make sure this really is a cache directory we own before
             // deleting anything under it.
             var root = Path.GetFullPath(NativeCacheRoot);
-            if (!Path.GetFullPath(dir).StartsWith(root, StringComparison.OrdinalIgnoreCase)) return;
+            if (!Path.GetFullPath(dir).StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                // Not ours to delete - the prebuilt DLL of an app widget, which lives in the
+                // install folder and may well be read-only. Remember the verdict instead so
+                // ResolveAssembly stops offering it and compiles from the sources beside it.
+                // Without this the widget would fail on every single launch, forever: the stale
+                // bytes can never be replaced because we are not allowed to overwrite them.
+                if (HasSources(widget))
+                {
+                    lock (_gate) { _prebuiltDisabled.Add(widget.Slug); }
+                    Serilog.Log.Warning(
+                        $"Native widget '{widget.Slug}' ships a prebuilt assembly that does not match this " +
+                        $"build ({cause.GetType().Name}); falling back to compiling its sources. Rebuild the " +
+                        "widget prebuild output (Maktaby.WidgetPrebuild) to fix this permanently.");
+                }
+                return;
+            }
 
             foreach (var file in Directory.EnumerateFiles(dir, "*", SearchOption.TopDirectoryOnly))
             {
@@ -493,6 +515,52 @@ public sealed class NativeWidgetService : INativeWidgetService
         catch (Exception ex)
         {
             Serilog.Log.Debug(ex, $"Native widget cache eviction failed: {widget.Slug}");
+        }
+    }
+
+    /// <summary>
+    /// Drops the source-compile cache of a widget that now loads a prebuilt assembly.
+    /// </summary>
+    /// <remarks>
+    /// Installs that predate prebuilt app widgets carry a
+    /// <c>NativeCache/&lt;slug&gt;/&lt;hash&gt;/plugin.dll</c> per widget, compiled on first use.
+    /// Nothing ever deletes those now: the widget no longer compiles from source, so
+    /// <c>PruneStaleBuilds</c> - which only runs after a successful compile - never fires for it.
+    /// Without this they accumulate forever, and a stale DLL sitting in the cache is actively
+    /// misleading when diagnosing a load problem.
+    /// </remarks>
+    private void EvictSupersededCache(NativeWidgetInfo widget)
+    {
+        try
+        {
+            lock (_gate)
+            {
+                if (!_supersededCleaned.Add(widget.Slug)) return;
+            }
+
+            string dir = Path.Combine(NativeCacheRoot, widget.Slug);
+            if (!Directory.Exists(dir)) return;
+
+            Directory.Delete(dir, recursive: true);
+            Serilog.Log.Information(
+                $"Native widget cache superseded by the prebuilt assembly and removed: {widget.Slug}");
+        }
+        catch (Exception ex)
+        {
+            // Pure housekeeping. A cache we failed to tidy must never block loading the widget.
+            Serilog.Log.Debug(ex, $"Superseded cache cleanup failed: {widget.Slug}");
+        }
+    }
+
+    private static bool HasSources(NativeWidgetInfo widget)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(widget.FolderPath, "*.cs", SearchOption.AllDirectories).Any();
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -529,14 +597,43 @@ public sealed class NativeWidgetService : INativeWidgetService
     private string ResolveAssembly(NativeWidgetInfo widget)
     {
         var folder = widget.FolderPath;
-        if (!string.IsNullOrWhiteSpace(widget.Manifest.Assembly))
+        List<string> getSources() => Directory.EnumerateFiles(folder, "*.cs", SearchOption.TopDirectoryOnly).ToList();
+
+        bool prebuiltUsable;
+        lock (_gate) { prebuiltUsable = !_prebuiltDisabled.Contains(widget.Slug); }
+
+        if (prebuiltUsable && !string.IsNullOrWhiteSpace(widget.Manifest.Assembly))
         {
             var explicit_ = Path.Combine(folder, widget.Manifest.Assembly!);
-            if (!File.Exists(explicit_))
-                throw new NativeWidgetLoadException(widget.Slug, $"Assembly '{widget.Manifest.Assembly}' not found.");
-            return explicit_;
+            if (File.Exists(explicit_))
+            {
+                EvictSupersededCache(widget);
+                return explicit_;
+            }
+
+            // "assembly" names a build artifact, so it can legitimately be absent: a fresh clone
+            // that has not run the prebuilder, or a `dotnet run` from bin before it. Throwing
+            // here would take the widget out of the gallery on a machine that is merely
+            // un-built, when the sources sitting next to it would compile perfectly well.
+            var sources1 = getSources();
+            if (sources1.Count > 0)
+            {
+                Serilog.Log.Information(
+                    $"Native widget '{widget.Slug}': assembly '{widget.Manifest.Assembly}' is missing, " +
+                    "compiling from the sources in the folder instead.");
+                return CompileSources(widget, sources1);
+            }
+            throw new NativeWidgetLoadException(widget.Slug, $"Assembly '{widget.Manifest.Assembly}' not found.");
         }
-        var sources = Directory.EnumerateFiles(folder, "*.cs", SearchOption.TopDirectoryOnly).ToList();
+
+        // A prebuilt assembly that already proved it cannot bind (see EvictStaleBuild) is
+        // skipped from here on, and the sources beside it take over.
+        var sources = getSources();
+        if (!prebuiltUsable && !string.IsNullOrWhiteSpace(widget.Manifest.Assembly) && sources.Count > 0)
+        {
+            return CompileSources(widget, sources);
+        }
+
         if (sources.Count > 0) return CompileSources(widget, sources);
         var dlls = Directory.EnumerateFiles(folder, "*.dll", SearchOption.TopDirectoryOnly).ToList();
         if (dlls.Count == 1) return dlls[0];
@@ -623,82 +720,31 @@ public sealed class NativeWidgetService : INativeWidgetService
         }
     }
 
-    // ---- source compilation (Roslyn, hashed cache) ----------------------------------------
+    // ---- source compilation (hashed cache) -------------------------------------------------
 
-    /// <summary>Mirrors the SDK's implicit usings so plugin sources read like a normal
-    /// project file without boilerplate headers.</summary>
-    private const string ImplicitUsings = """
-        global using global::System;
-        global using global::System.Collections.Generic;
-        global using global::System.IO;
-        global using global::System.Linq;
-        global using global::System.Text;
-        global using global::System.Threading;
-        global using global::System.Threading.Tasks;
-        global using global::System.Windows;
-        global using global::System.Windows.Controls;
-        global using global::System.Windows.Media;
-        global using global::System.Windows.Shapes;
-        global using global::System.Windows.Threading;
-        """;
-
+    /// <summary>Compiles the widget's sources into the content-hash cache and returns the DLL
+    /// path. The compile itself is <see cref="NativeWidgetCompiler"/> in Maktaby.Shared, shared
+    /// with the build-time prebuilder; this method owns the cache (key, hit, prune) only.</summary>
     private string CompileSources(NativeWidgetInfo widget, List<string> sources)
     {
         sources.Sort(StringComparer.OrdinalIgnoreCase);
         string hash = ComputeSourceHash(widget.FolderPath);
         string dir = Path.Combine(NativeCacheRoot, widget.Slug, hash);
-        string dllPath = Path.Combine(dir, "plugin.dll");
+        string dllPath = Path.Combine(dir, NativeWidgetCompiler.PluginFileName);
         if (File.Exists(dllPath))
         {
             Serilog.Log.Information($"Native widget cache hit: {widget.Slug} ({hash[..12]})");
             return dllPath;
         }
         Serilog.Log.Information($"Compiling native widget: {widget.Slug} ({sources.Count} files)");
-        Directory.CreateDirectory(dir);
 
-        var parseOptions = new CSharpParseOptions(LanguageVersion.Latest);
-        // Attach the encoding explicitly: string-parsed trees default to none and PDB
-        // emit fails on them (CS8055).
-        var trees = new List<SyntaxTree>
+        // The compile itself lives in Maktaby.Shared so the build-time prebuilder produces byte-
+        // for-byte the same plugin this path would; see NativeWidgetCompiler for why that must
+        // not be two copies.
+        var errors = NativeWidgetCompiler.Compile(new NativeWidgetCompiler.Request(
+            widget.Slug, widget.FolderPath, sources, dllPath));
+        if (errors.Count > 0)
         {
-            // SDK-style implicit usings, so plugin sources read like a normal project.
-            CSharpSyntaxTree.ParseText(
-                Microsoft.CodeAnalysis.Text.SourceText.From(ImplicitUsings, Encoding.UTF8),
-                parseOptions, path: "<implicit-usings>"),
-        };
-        trees.AddRange(sources.Select(f => CSharpSyntaxTree.ParseText(
-            Microsoft.CodeAnalysis.Text.SourceText.From(File.ReadAllText(f, Encoding.UTF8), Encoding.UTF8),
-            parseOptions, path: f)));
-        var references = TrustedReferences(widget.FolderPath);
-        references.Add(MetadataReference.CreateFromFile(typeof(INativeWidget).Assembly.Location));
-        var compilation = CSharpCompilation.Create(
-            $"NativeWidget_{widget.Slug}",
-            trees,
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary,
-                optimizationLevel: OptimizationLevel.Release,
-                nullableContextOptions: NullableContextOptions.Enable));
-
-        var xamls = Directory.EnumerateFiles(widget.FolderPath, "*.xaml", SearchOption.TopDirectoryOnly).ToList();
-        var resources = xamls.Select(f => new ResourceDescription(
-            $"{widget.Slug}/{Path.GetFileName(f)}",
-            () => File.OpenRead(f),
-            isPublic: true)).ToList();
-
-        string pdbPath = Path.ChangeExtension(dllPath, ".pdb");
-        EmitResult emit;
-        using (var dllStream = File.Create(dllPath))
-        using (var pdbStream = File.Create(pdbPath))
-        {
-            emit = compilation.Emit(dllStream, pdbStream, manifestResources: resources);
-        }
-        if (!emit.Success)
-        {
-            try { File.Delete(dllPath); File.Delete(pdbPath); } catch { }
-            var errors = emit.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Take(5)
-                .Select(d => d.ToString());
             throw new NativeWidgetLoadException(widget.Slug, "Compile failed: " + string.Join(" | ", errors));
         }
         Serilog.Log.Information($"Native widget compiled: {widget.Slug} -> {dllPath}");
@@ -732,57 +778,6 @@ public sealed class NativeWidgetService : INativeWidgetService
         }
         catch { }
     }
-
-    private static List<MetadataReference> TrustedReferences(string pluginFolder)
-    {
-        var tpa = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string ?? "";
-        var list = new List<MetadataReference>(256);
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in tpa.Split(';', StringSplitOptions.RemoveEmptyEntries))
-        {
-            try
-            {
-                var name = Path.GetFileName(path);
-                // WPF (incl. WinForms interop) + BCL surface. Everything else (WidgetSdk,
-                // plugin deps) resolves through the plugin load context at runtime.
-                if (name.StartsWith("System.", StringComparison.Ordinal) ||
-                    name.StartsWith("Microsoft.", StringComparison.Ordinal) ||
-                    string.Equals(name, "PresentationFramework.dll", StringComparison.Ordinal) ||
-                    string.Equals(name, "PresentationCore.dll", StringComparison.Ordinal) ||
-                    string.Equals(name, "WindowsBase.dll", StringComparison.Ordinal) ||
-                    string.Equals(name, "WindowsFormsIntegration.dll", StringComparison.Ordinal) ||
-                    string.Equals(name, "System.Xaml.dll", StringComparison.Ordinal) ||
-                    string.Equals(name, "netstandard.dll", StringComparison.Ordinal) ||
-                    string.Equals(name, "mscorlib.dll", StringComparison.Ordinal))
-                {
-                    list.Add(MetadataReference.CreateFromFile(path));
-                    names.Add(Path.GetFileNameWithoutExtension(name));
-                }
-            }
-            catch { }
-        }
-        // Third-party DLLs shipped next to the sources (SkiaSharp, Vortice, …) so source
-        // plugins can reference them. Host-owned assemblies are skipped to force type
-        // unification with the running host; unloadable (native) files are skipped quietly.
-        try
-        {
-            foreach (var path in Directory.EnumerateFiles(pluginFolder, "*.dll", SearchOption.TopDirectoryOnly)
-                         .OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    var simple = Path.GetFileNameWithoutExtension(path);
-                    if (simple.StartsWith("Maktaby.", StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!names.Add(simple)) continue;
-                    list.Add(MetadataReference.CreateFromFile(path));
-                }
-                catch { }
-            }
-        }
-        catch { }
-        return list;
-    }
-
     private static string SanitizeSlug(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return "widget";

@@ -83,10 +83,119 @@
 		<Folder Include="Animations\" />
 	</ItemGroup>
 
-   <ItemGroup>
- 	  <ProjectReference Include="..\Maktaby.LiveWallpaper\Maktaby.LiveWallpaper.csproj" />
- 	  <ProjectReference Include="..\Maktaby.WidgetSdk\Maktaby.WidgetSdk.csproj" />
- 	  <ProjectReference Include="..\Maktaby.Native\Maktaby.Native.csproj" />
- 	  <ProjectReference Include="..\Maktaby.Shared\Maktaby.Shared.csproj" />
-   </ItemGroup>
+  	<ItemGroup>
+ 		<ProjectReference Include="..\Maktaby.LiveWallpaper\Maktaby.LiveWallpaper.csproj" />
+ 		<ProjectReference Include="..\Maktaby.WidgetSdk\Maktaby.WidgetSdk.csproj" />
+ 		<ProjectReference Include="..\Maktaby.Native\Maktaby.Native.csproj" />
+ 		<ProjectReference Include="..\Maktaby.Shared\Maktaby.Shared.csproj" />
+    </ItemGroup>
+
+	<!-- =====================================================================
+	     Native widget prebuild.
+
+	     The app-provided widgets under NativeWidgets\ ship as source AND as a prebuilt
+	     plugin.dll (named by "assembly" in nwidget.json). Compiling them here rather than
+	     on first use means nobody pays Roslyn at runtime, and a widget that no longer
+	     compiles fails this build instead of a user's desktop.
+
+	     The prebuild writes to obj\nativewidgets\<rid>\ - a disposable intermediate,
+	     per-runtime, rebuilt only when a widget's sources actually change - and the
+	     targets below copy the result into bin/ and the publish folder, which is where
+	     NativeWidgetService.AppWidgetsRoot looks (AppContext.BaseDirectory\NativeWidgets).
+	     ===================================================================== -->
+	<PropertyGroup>
+		<NativeWidgetPrebuildProject>$(MSBuildThisFileDirectory)..\Maktaby.WidgetPrebuild\Maktaby.WidgetPrebuild.csproj</NativeWidgetPrebuildProject>
+		<!-- Directories whose SOURCES define how a widget compiles: this tool, and the shared
+		     compiler it delegates to. The prebuild stamps their file contents, so editing one
+		     widget no longer rebuilds the others - see Program.ComputeStamp. -->
+		<NativeWidgetPrebuildProjectDir>$(MSBuildThisFileDirectory)..\Maktaby.WidgetPrebuild</NativeWidgetPrebuildProjectDir>
+		<SharedCompilerProjectDir>$(MSBuildThisFileDirectory)..\Maktaby.Shared</SharedCompilerProjectDir>
+		<NativeWidgetsSourceDir>$(MSBuildThisFileDirectory)NativeWidgets</NativeWidgetsSourceDir>
+		<!-- RuntimeIdentifier is empty for a plain `dotnet build`; the prebuilt plugin is AnyCPU
+		     IL so the RID is only a cache key here, never an input to the output. -->
+		<NativeWidgetsCacheDir>$(MSBuildProjectDirectory)\obj\nativewidgets\$(RuntimeIdentifier)</NativeWidgetsCacheDir>
+	</PropertyGroup>
+
+	<!-- One place decides where the cache lives. RuntimeIdentifier is not known until a target
+	     runs, so this cannot be an evaluation-time PropertyGroup, and a property set inside a
+	     target DOES persist for later targets - so all three targets below depend on this. -->
+	<Target Name="ResolveNativeWidgetsCacheDir">
+		<PropertyGroup>
+			<!-- Built here rather than in an evaluation-time PropertyGroup because
+			     RuntimeIdentifier is not known until a target runs; a property set inside a target
+			     DOES persist for later targets, so all three targets below depend on this.
+			     The no-RID branch is assigned FIRST and outright, so the path can never end in a
+			     separator: a trailing backslash escapes the closing quote in the Exec command
+			     line and mangles the argument (the tool then saw an unparseable path). -->
+			<_NativeWidgetsCacheDir>$(MSBuildProjectDirectory)\obj\nativewidgets\$(RuntimeIdentifier)</_NativeWidgetsCacheDir>
+			<_NativeWidgetsCacheDir Condition="'$(RuntimeIdentifier)' == ''">$(MSBuildProjectDirectory)\obj\nativewidgets\_no-rid</_NativeWidgetsCacheDir>
+		</PropertyGroup>
+	</Target>
+
+	<Target Name="PrebuildNativeWidgets"
+	        DependsOnTargets="ResolveNativeWidgetsCacheDir"
+	        BeforeTargets="Build"
+	        Condition="'$(DesignTimeBuild)' != 'true' And Exists('$(NativeWidgetsSourceDir)') And Exists('$(NativeWidgetPrebuildProject)')">
+		<Message Importance="normal" Text="Precompiling native widgets -> $(_NativeWidgetsCacheDir)" />
+		<!-- ContinueOnError defaults to false on purpose: a widget that does not compile must
+		     fail the build. build.ps1 publishes through this project, so the release is
+		     gated by the same check. -->
+		<Exec Command="dotnet run --project &quot;$(NativeWidgetPrebuildProject)&quot; -c $(Configuration) -- &quot;$(NativeWidgetsSourceDir)&quot; &quot;$(_NativeWidgetsCacheDir)&quot; --contract &quot;$(NativeWidgetPrebuildProjectDir)&quot; --contract &quot;$(SharedCompilerProjectDir)&quot;"
+		      ContinueOnError="false" />
+	</Target>
+
+	<!-- Copy into bin\ after a build, and into the publish folder after a publish. Two hooks
+	     because $(OutDir) and $(PublishDir) are different destinations for the same object. -->
+	<Target Name="CopyPrebuiltNativeWidgetsToOutput"
+	        AfterTargets="Build"
+	        DependsOnTargets="ResolveNativeWidgetsCacheDir"
+	        Condition="'$(DesignTimeBuild)' != 'true' And Exists('$(_NativeWidgetsCacheDir)')">
+		<ItemGroup>
+			<_PrebuiltNativeWidget Include="$(_NativeWidgetsCacheDir)\**\plugin.dll" />
+			<_PrebuiltNativeWidget Include="$(_NativeWidgetsCacheDir)\**\plugin.pdb" />
+		</ItemGroup>
+		<Copy SourceFiles="@(_PrebuiltNativeWidget)"
+		      DestinationFiles="@(_PrebuiltNativeWidget->'$(OutDir)NativeWidgets\%(RecursiveDir)%(Filename)%(Extension)')"
+		      SkipUnchangedFiles="true" />
+	</Target>
+
+	<Target Name="CopyPrebuiltNativeWidgetsToPublish"
+	        AfterTargets="Publish"
+	        DependsOnTargets="ResolveNativeWidgetsCacheDir"
+	        Condition="'$(DesignTimeBuild)' != 'true' And '$(PublishDir)' != '' And Exists('$(_NativeWidgetsCacheDir)')">
+		<ItemGroup>
+			<_PrebuiltNativeWidgetPublish Include="$(_NativeWidgetsCacheDir)\**\plugin.dll" />
+			<_PrebuiltNativeWidgetPublish Include="$(_NativeWidgetsCacheDir)\**\plugin.pdb" />
+		</ItemGroup>
+		<Copy SourceFiles="@(_PrebuiltNativeWidgetPublish)"
+		      DestinationFiles="@(_PrebuiltNativeWidgetPublish->'$(PublishDir)NativeWidgets\%(RecursiveDir)%(Filename)%(Extension)')"
+		      SkipUnchangedFiles="true" />
+	</Target>
+
+	<!-- Clean must take the prebuilts with it. They live outside the normal intermediate set:
+	     the cache is obj\nativewidgets\<rid>\ (written by the tool, not by the compiler), and the
+	     copies in bin\ and bin\Publish\ are plain files no incremental-clean knows about. That
+	     left STALE plugin.dll files behind - and a stale prebuilt is worse than none, because the
+	     app prefers it over the sources. -->
+	<Target Name="CleanNativeWidgets" AfterTargets="Clean">
+		<ItemGroup>
+			<_NativeWidgetCacheRoot Include="$(MSBuildProjectDirectory)\obj\nativewidgets" />
+			<!-- Deliberately the widget files only, not whole trees: bin\Publish\<rid>-<flavor>
+			     also holds the whole app, and cleaning the project should not decide to delete a
+			     publish tree the user may still be running. -->
+			<_StalePrebuiltNativeWidget Include="$(OutDir)NativeWidgets\*\plugin.dll" />
+			<_StalePrebuiltNativeWidget Include="$(OutDir)NativeWidgets\*\plugin.pdb" />
+			<!-- Also the per-RID output dirs. A plain `dotnet clean` runs without a RuntimeIdentifier,
+			     so $(OutDir) is the RID-less folder and the copies under bin\<cfg>\<tfm>\<rid>\ are
+			     left behind by it - stale prebuilts in exactly the folders a run-from-output picks up. -->
+			<_StalePrebuiltNativeWidget Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\**\NativeWidgets\*\plugin.dll" />
+			<_StalePrebuiltNativeWidget Include="$(MSBuildProjectDirectory)\bin\$(Configuration)\**\NativeWidgets\*\plugin.pdb" />
+			<_StalePrebuiltNativeWidget Include="$(MSBuildProjectDirectory)\bin\Publish\**\NativeWidgets\*\plugin.dll" />
+			<_StalePrebuiltNativeWidget Include="$(MSBuildProjectDirectory)\bin\Publish\**\NativeWidgets\*\plugin.pdb" />
+		</ItemGroup>
+		<RemoveDir Directories="@(_NativeWidgetCacheRoot)" />
+		<Delete Files="@(_StalePrebuiltNativeWidget)" />
+		<Message Importance="normal"
+		         Text="Cleaned native widget prebuilds (@(_StalePrebuiltNativeWidget->Count()) copied file(s) + obj cache)" />
+	</Target>
 </Project>

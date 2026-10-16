@@ -47,13 +47,28 @@ Optional disambiguation keys (omit when unambiguous):
 
 | key | meaning |
 |---|---|
-| `assembly` | DLL file name. Default: the single `*.dll` in the folder. Required when several exist. Ignored in source mode. |
+| `assembly` | DLL file name. Default: the single `*.dll` in the folder. Required when several exist. If the named file is **missing** but `.cs` sources are present, the host compiles those instead rather than failing. |
 | `type` | Full type name implementing `INativeWidget`. Default: the single such type found. Required when zero (error) or several exist. |
-| `thumbnail` | Image file. Default `thumbnail.png`. |
+| `thumbnail` | Image file. Default `thumbnail.png`. If absent, the gallery renders one on first open and caches it. |
 | `showTitleBar` | `false` (default) hides the host's title bar over the widget. Opt in only if the widget draws nothing in its top ~28px — the host already supplies everything that bar provided. See §1a. |
 | `autoTheme` | `false` (default). Adds an **Auto** option to the automatic theme setting *and* makes it the default. Only meaningful for a widget that paints a user-choosable background and can derive light/dark from it. Requires `supportsTheme`. |
 
-How the host decides, in order: explicit `assembly` → any `*.cs` sources (compile) → single `*.dll` → error. Folders starting with `.` (e.g. caches) are skipped by both loaders.
+How the host decides, in order: explicit `assembly` (if the file exists) → any `*.cs` sources (compile) → single `*.dll` → error. Folders starting with `.` (e.g. caches) are skipped by both loaders.
+
+### Shipping sources with a prebuilt DLL
+
+A widget folder can hold **both** the `.cs` sources and a prebuilt DLL named by `assembly`. That is what Maktaby's own widgets ship, and it is the recommended shape for a distributed widget:
+
+- The DLL loads immediately, so nobody pays a compile on first use.
+- The sources are still there, so the host can rebuild if the DLL turns out to be built against a different WidgetSdk (`MissingMethodException` and friends), or if the DLL is simply absent.
+- `plugin.dll`/`plugin.pdb` are build output, not source — keep them out of version control. Only the `assembly` entry and the `.cs` files belong in the repo.
+
+A **corrupt** prebuilt is the one case with no automatic recovery: the load fails loudly rather than being quietly replaced from source, because a damaged shipped binary is not the same thing as a stale one.
+
+Maktaby compiles its own widgets at build time into `obj/nativewidgets/<rid>/`, then copies them next to the app. Two build behaviours worth knowing:
+
+- **Editing one widget rebuilds only that widget.** The cache key is the widget's own sources and XAML plus the *sources* of the compiler. It is deliberately not the compiler's module version: that value carries the commit sha, so keying on it would rebuild everything on every commit.
+- **`dotnet clean` removes the prebuilts** — the cache and the copies under `bin/`. A stale prebuilt is worse than none, because the app prefers it over the sources sitting next to it.
 
 ## 1a. Chrome: no title bar, drag the widget body
 

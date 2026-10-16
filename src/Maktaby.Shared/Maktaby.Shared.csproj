@@ -16,9 +16,16 @@
 		<PackageReference Include="CommunityToolkit.Mvvm" />
 		<PackageReference Include="WPF-UI" />
 		<PackageReference Include="Microsoft.Web.WebView2" />
+		<!-- NativeWidgetCompiler lives here so the runtime and the build-time prebuilder compile
+		     plugin sources through one implementation. Roslyn already ships in Maktaby itself;
+		     this only moves who owns the reference. -->
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
 	</ItemGroup>
 
 	<ItemGroup>
 	  <ProjectReference Include="..\Maktaby.Native\Maktaby.Native.csproj" />
+		<!-- typeof(INativeWidget).Assembly.Location is added as a compile reference for every
+		     plugin, so the compiler itself must be able to see the SDK. -->
+		<ProjectReference Include="..\Maktaby.WidgetSdk\Maktaby.WidgetSdk.csproj" />
 	</ItemGroup>
 </Project>

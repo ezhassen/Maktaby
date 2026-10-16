@@ -6,5 +6,6 @@
   "width": 340,
   "height": 320,
   "resizable": true,
-  "supportsTheme": true
+  "supportsTheme": true,
+  "assembly": "plugin.dll"
 }

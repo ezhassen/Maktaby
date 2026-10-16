@@ -88,6 +88,46 @@ Follow it to keep the architecture clean and the build green.
   anywhere in the chain as "built against another SDK" and evicting the cached build (unload
   the ALC, delete the dll/pdb) so the next load recompiles. Prune sibling hash dirs after a
   successful compile (age-guarded 5 min) so a key change does not orphan builds forever.
+  App-provided widgets are PREBUILT, and the prebuild is a **build step of `Maktaby.csproj`**
+  (`PrebuildNativeWidgets`, BeforeTargets="Build"), not a separate script: a widget that does not
+  compile fails the ordinary build, and `build.ps1` publishes through that project so the
+  release is gated by the same check. Output goes to `obj\nativewidgets\<rid>/<slug>/plugin.dll`
+  — a disposable per-runtime intermediate, **not** the source tree — and the csproj copies it
+  into `$(OutDir)` and `$(PublishDir)`, which is where `AppWidgetsRoot` looks. Rebuilds are
+  incremental per widget, keyed on a content hash of that widget's sources + XAML **and the
+  sources of the compile contract** (the prebuilder project and `Maktaby.Shared`, passed as
+  `--contract`, `*.cs` + `*.csproj`). Deliberately **not** the prebuilder's `ModuleVersionId`:
+  MinVer stamps the commit sha into `AssemblyInformationalVersion`, and the MVID hashes that
+  metadata, so keying on it rebuilt *every* widget on *every* commit — one changed source dragged
+  the other two along. Editing one widget rebuilds one widget; editing the compiler rebuilds all of
+  them (verified by overriding `MinVerVersionOverride` with two different fake shas: 0 built).
+  **Clean removes the prebuilts** (`CleanNativeWidgets`, `AfterTargets="Clean"`): the
+  `obj\nativewidgets\<rid>\` cache plus the `plugin.dll`/`.pdb` copies under
+  `bin\$(Configuration)\**` *and* `bin\Publish\**`. No incremental clean knows about those, and a
+  stale prebuilt is worse than none — the app prefers it over the sources. It deletes only the
+  widget files, never a whole publish tree. The tool stamps `"assembly": "plugin.dll"` into
+  `nwidget.json`,
+  which `ResolveAssembly` prefers over the sources: no Roslyn on the first launch. The `.cs`
+  files still ship and are the fallback. The compiled DLL is **AnyCPU** (`ProcessorArchitecture
+  None`), so one prebuild serves x64, ARM64 and both flavors — the RID keys the cache, it is not
+  an input. Two fallbacks are load-bearing. A **missing** prebuilt compiles from source, so a
+  fresh clone that never ran the prebuild does not lose the widget. A prebuilt that fails to
+  **bind** is recorded in `_prebuiltDisabled` and rebuilt from source for the rest of the
+  session: `EvictStaleBuild` cannot delete it, because it lives in the install folder and may be
+  read-only, so without that the widget would fail on every launch forever. A **corrupt** prebuilt
+  still fails loudly on purpose — silently replacing shipped bytes with a source rebuild is the
+  wrong response to something that looks like tampering. Serving a prebuilt also deletes the
+  widget's old `NativeCache/<slug>` entry (`EvictSupersededCache`): installs that predate this
+  still carry a source-compile cache per widget, and `PruneStaleBuilds` only runs after a
+  successful compile, which these widgets no longer do.
+  The compile itself is `Maktaby.Shared/NativeWidgetCompiler`, shared by the runtime and the
+  prebuilder. ONE implementation is the point: the implicit-usings list, the reference set and
+  the XAML resources are all part of the contract, and a second copy would compile subtly
+  different IL — a divergence that only shows up as a `MissingMethodException`, days later.
+  The tool needs `UseWPF` + a WidgetSdk reference for the same reason: `BuildReferences` reads
+  the current process's `TRUSTED_PLATFORM_ASSEMBLIES`, so the plugin must be compiled against the
+  reference surface the running app will offer.
+
   `UserWidgets/<slug>` folders are shared with CSS widgets;
   `WidgetFolder.PeekKind` (WidgetSdk) decides ownership without loading code — keep it so.
 - **Views/Containers/NativeWidgetWindow** — native plugin host; shares `WidgetChromeOverlay`
@@ -111,8 +151,13 @@ Follow it to keep the architecture clean and the build green.
   `GlobalFeaturesSwitches.SimulateNativeWidgetData` (false in release). A widget must still
   check the flag itself before skipping its own I/O, and must check it BEFORE any staleness
   logic — otherwise the network is still reached on the "is it stale?" path.
-- **NativeWidgets/** (`NativeClock`, `CalendarWidget`) — built-in plugins; `NativeClock` doubles as
-  the reference implementation (settings, suspend/resume, theming).
+- **NativeWidgets/** (`NativeClock`, `CalendarWidget`, `WeatherWidget`) — built-in plugins;
+  `NativeClock` doubles as the reference implementation (settings, suspend/resume, theming).
+  `WeatherWidget` is the biggest one and the reason the prebuild exists. Each folder ships its
+  `.cs` plus a `thumbnail.png`; the prebuilt `plugin.dll` is generated into `obj` by
+  `Maktaby.WidgetPrebuild` and copied in at build time — see the NativeWidgetService entry.
+- **Maktaby.WidgetPrebuild/** (`src/`) — build-time precompiler for the above. `Program.cs` only,
+  invoked by `Maktaby.csproj`, never by hand; it holds no plugin logic of its own.
 - **docs/** — user-facing guides (`native-widgets.md` = plugin authoring reference).
 - **AttachedProperties/** wpf Attached Properties
 - **Animations/** wpf Animations

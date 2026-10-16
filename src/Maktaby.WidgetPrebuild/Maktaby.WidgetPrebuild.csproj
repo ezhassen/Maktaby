@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(SharedTargetFrameworWindows)</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Maktaby.WidgetPrebuild</RootNamespace>
+    <AssemblyName>Maktaby.WidgetPrebuild</AssemblyName>
+    <!-- UseWPF is REQUIRED, not cosmetic: NativeWidgetCompiler.BuildReferences reads this
+         process's TRUSTED_PLATFORM_ASSEMBLIES, so the plugin must be compiled against a WPF +
+         WidgetSdk reference set that matches the one the running app will offer. A console
+         tool without WPF would compile against a different surface. -->
+    <UseWPF>true</UseWPF>
+    <Description>Build-time precompiler for Maktaby's app-provided native widgets.</Description>
+    <!-- Not a shipping artifact: never part of a publish. -->
+    <IsPublishable>false</IsPublishable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Maktaby.Shared brings the compiler itself; WidgetSdk is what plugins compile against,
+         and BuildReferences adds typeof(INativeWidget).Assembly.Location to every plugin. -->
+    <ProjectReference Include="..\Maktaby.Shared\Maktaby.Shared.csproj" />
+    <ProjectReference Include="..\Maktaby.WidgetSdk\Maktaby.WidgetSdk.csproj" />
+  </ItemGroup>
+
+</Project>
