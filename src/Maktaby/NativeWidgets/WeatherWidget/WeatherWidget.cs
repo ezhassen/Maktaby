@@ -73,6 +73,20 @@ public sealed class WeatherWidget : NativeWidgetControl
 
     private static readonly TimeSpan RefreshInterval = TimeSpan.FromMinutes(30);
 
+    // Grace period before the first fetch. The widget is created during the app's busiest moment
+    // (wallpaper, media, other widgets, WebView2 all starting), and the fetch has to open a cold
+    // connection to two different hosts; giving that a couple of seconds keeps it off the
+    // critical path of startup. See ScheduleFirstLoad.
+    private static readonly TimeSpan FirstLoadDelay = TimeSpan.FromSeconds(2);
+
+    // One retry after a timed-out request, so a transient blip on a first load does not need the
+    // user to press refresh. Bounded: at most one pending, and only while there is no data.
+    private static readonly TimeSpan TimeoutRetryDelay = TimeSpan.FromSeconds(5);
+
+    // Total timeout retries allowed before the widget gives up and waits for the user. Without
+    // a cap each retry schedules the next, which is a permanent 5s request loop offline.
+    private const int MaxTimeoutRetries = 2;
+
     // Weather icon geometry, keyed by ((long)code << 1) | isDay. Bounded by the WMO code
     // set, so it never grows.
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, Geometry> GeometryCache = new();
@@ -92,6 +106,17 @@ public sealed class WeatherWidget : NativeWidgetControl
 
     private readonly DispatcherTimer _timer;
     private CancellationTokenSource? _cts;
+
+    /// <summary>Cancellation for the deferred first load, so unloading or replacing the widget
+    /// during the grace period does not leave a task pending that fires into a torn-down tree.</summary>
+    private CancellationTokenSource? _firstLoadCts;
+
+    /// <summary>True while a timeout retry is pending, so at most one is ever in flight.</summary>
+    private bool _timeoutRetryScheduled;
+
+    /// <summary>Timeout retries spent since the last successful fetch; see
+    /// <see cref="MaxTimeoutRetries"/>.</summary>
+    private int _timeoutRetries;
 
     private int _generation;
     private bool _disposed;
@@ -113,7 +138,7 @@ public sealed class WeatherWidget : NativeWidgetControl
     private Grid _canvas = null!;
     private RowDefinition _headerRow = null!;
     private RowDefinition _tabsRow = null!;
-private RowDefinition _statusRow = null!;
+    private RowDefinition _statusRow = null!;
     private double _canvasW = DesignW;
 
     // Elements whose size follows the available content height (see ApplyContentScale).
@@ -256,7 +281,7 @@ private RowDefinition _statusRow = null!;
         catch { return _resolvedThemeIsLight; }
     }
 
-        /// <summary>Builds a snapshot locally, touching no network. Deterministic from the clock so
+    /// <summary>Builds a snapshot locally, touching no network. Deterministic from the clock so
     /// consecutive runs look the same, but it still cycles conditions and a slow temperature
     /// drift so the hourly sparkline and the condition art are all reachable while testing
     /// layout — a fixed sample would hide half the states.
@@ -276,7 +301,8 @@ private RowDefinition _statusRow = null!;
             var snap = new Snapshot
             {
                 LocationName = "Amsterdam",
-                Lat = 52.37, Lng = 4.90,
+                Lat = 52.37,
+                Lng = 4.90,
                 TempC = 14 + (phase - Codes.Length / 2) * 0.7,
                 FeelsC = 13 + (phase - Codes.Length / 2) * 0.7,
                 Humidity = 45 + (phase * 3) % 40,
@@ -417,7 +443,7 @@ private RowDefinition _statusRow = null!;
 
     #region Visual construction
 
-private void BuildVisual()
+    private void BuildVisual()
     {
         // A Grid does NOT clip its children: any panel whose content outgrows its row paints
         // straight over the neighbouring row, which is how the status line came to overlap
@@ -473,7 +499,7 @@ private void BuildVisual()
         catch { }
     }
 
-        /// <summary>Scales the content to the height actually available. With the chrome collapsed
+    /// <summary>Scales the content to the height actually available. With the chrome collapsed
     /// the content row grows by the header+status height, and without this the Now view just
     /// re-centred inside the extra room — the same "empty band" problem the user resized the
     /// window to get rid of. Scaling the type and icons keeps the resting view filling the
@@ -640,7 +666,7 @@ private void BuildVisual()
             Orientation = Orientation.Horizontal,
             VerticalAlignment = VerticalAlignment.Center,
         };
-buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh now"), OnRefreshClicked));
+        buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh now"), OnRefreshClicked));
         buttons.Children.Add(MakeIconButton(LocateGeometry(), L("Detect my location", "Detect my location"), OnDetectClicked));
         // Debug-only condition picker, shown only when the host published the simulation
         // hook. Cycling through conditions on a timer means you cannot hold a given one on
@@ -895,7 +921,7 @@ buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh
         return _statusPill;
     }
 
-        /// <summary>Every WMO code the icon set and the condition labels both understand, so the
+    /// <summary>Every WMO code the icon set and the condition labels both understand, so the
     /// picker only offers codes that actually produce a distinct icon.</summary>
     private static readonly int[] SupportedCodes =
     {
@@ -1277,7 +1303,14 @@ buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh
 
     #region Refresh
 
-    private async void OnTimerTick(object? sender, EventArgs e) => await RefreshAsync(force: false);
+    private async void OnTimerTick(object? sender, EventArgs e)
+    {
+        // try/catch is not optional here even though RefreshAsync handles its own failures: this
+        // is an async void event handler, so anything that ever escapes lands on the dispatcher
+        // with no caller to catch it - see agents.md, "Anything scheduled as a callback that
+        // runs async work must be typed Func<Task>".
+        try { await RefreshAsync(force: false); } catch { }
+    }
 
     // Named async-void handlers rather than `() => RefreshAsync(...)` lambdas typed as
     // Action: an Action-wrapped async lambda becomes async void with no place to catch,
@@ -1328,7 +1361,20 @@ buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh
             _snapshot = snap;
             _fetchedUtc = DateTimeOffset.UtcNow;
             _hasData = true;
+            // Real data arrived: refill the timeout-retry allowance, so a later blip gets the
+            // full budget again instead of inheriting a spent one.
+            NoteFetchSucceeded();
             Render();
+        }
+        catch (TaskCanceledException) when (!cts.IsCancellationRequested)
+        {
+            // HttpClient surfaces its OWN Timeout as TaskCanceledException, and that is an
+            // OperationCanceledException - so without this branch a 20s budget being missed fell
+            // into the catch below and vanished. The widget then sat on "Loading…" forever: no
+            // error, no data, and the next attempt a full 30 minutes away.
+            if (_disposed || gen != _generation) return;
+            SetStatus(L("FetchTimedOut", "Weather service timed out"), warn: true);
+            ScheduleTimeoutRetry();
         }
         catch (OperationCanceledException)
         {
@@ -1377,6 +1423,12 @@ buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh
             // pair above is what makes the next resolve use the fresh coordinates.
             await RefreshAsync(force: true);
         }
+        catch (TaskCanceledException) when (!cts.IsCancellationRequested)
+        {
+            if (_disposed || gen != _generation) return;
+            SetStatus(L("FetchTimedOut", "Weather service timed out"), warn: true);
+            ScheduleTimeoutRetry();
+        }
         catch (OperationCanceledException)
         {
         }
@@ -1391,6 +1443,43 @@ buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh
             cts.Dispose();
             _isFetching = false;
         }
+    }
+
+    /// <summary>One bounded retry after a timeout, and only while there is still no data at all.
+    /// A first load that times out should not require the user to press anything, but a widget on
+    /// a genuinely dead network must not spin.</summary>
+    /// <remarks>
+    /// The cap is the point. "One pending at a time" is not a limit: each retry that times out
+    /// schedules the next, so without a counter a machine with no connectivity re-armed this
+    /// every 5 seconds for as long as the widget stayed open - a slow, permanent request loop
+    /// against a network that cannot answer. The counter resets only on data that actually
+    /// arrived, so a real outage costs <c>MaxTimeoutRetries</c> extra requests, not infinite
+    /// ones, and a later blip (after a good fetch) still gets the full allowance again.
+    /// </remarks>
+    private void ScheduleTimeoutRetry()
+    {
+        if (_timeoutRetryScheduled || _hasData || _disposed) return;
+        if (_timeoutRetries >= MaxTimeoutRetries) return;
+        _timeoutRetries++;
+        _timeoutRetryScheduled = true;
+        DispatcherTimer? timer = null;
+        timer = new DispatcherTimer(TimeoutRetryDelay, DispatcherPriority.Background, (_, _) =>
+        {
+            timer!.Stop();
+            _timeoutRetryScheduled = false;
+            if (_disposed) return;
+            _ = RefreshAsync(force: true);
+        }, Dispatcher.CurrentDispatcher);
+        timer.Start();
+    }
+
+    /// <summary>Called only once a snapshot has actually been applied, so the retry allowance
+    /// refills after a successful fetch instead of being spent for the rest of the session, and
+    /// the refresh cadence is re-anchored to this data.</summary>
+    private void NoteFetchSucceeded()
+    {
+        _timeoutRetries = 0;
+        RestartRefreshTimer();
     }
 
     private CancellationToken CancelInFlight()
@@ -1408,20 +1497,115 @@ buttons.Children.Add(MakeIconButton(RefreshGeometry(), L("Refresh now", "Refresh
         _ = RefreshAsync(force: true);
     }
 
-private void OnLoaded(object sender, RoutedEventArgs e)
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (IsSuspended) return;
         // ActualWidth is 0 during construction, so the canvas can only be fitted to the real
         // window once it is measured.
         UpdateCanvasSize();
         ApplyContentScale();
-        _ = RefreshAsync(force: true);
-        try { _timer.Start(); } catch { }
+        // The 30-minute timer is started by the deferred load once it finishes, NOT here.
+        // DispatcherTimer fires its first Tick one Interval after Start, so starting it now
+        // would put the first tick exactly 30:00 after load - while the data is 29:58 old
+        // (the grace period), which the staleness test then skips, and the widget would
+        // silently refresh every 60 minutes instead of 30. Aligning the cadence to the data
+        // removes that race; the several-millisecond margin it used to win by is not a plan.
+        ScheduleFirstLoad();
+    }
+
+    /// <summary>
+    /// Defers the first fetch by a couple of seconds instead of hitting the network the instant
+    /// the widget appears.
+    /// </summary>
+    /// <remarks>
+    /// This widget is created while the app is still bringing up the desktop - wallpaper, media,
+    /// every other widget, WebView2 - so the first <c>Loaded</c> is the single busiest moment in
+    /// the process, and the fetch competes with all of it. A cold DNS + TLS handshake to TWO
+    /// different hosts under that load is the likeliest way to blow the shared HttpClient's 20s
+    /// budget, and HttpClient reports its own timeout as <c>TaskCanceledException</c> - which is
+    /// an <c>OperationCanceledException</c>, i.e. indistinguishable from "the user cancelled" and
+    /// silently swallowed. Nothing is lost by waiting: the widget is already on screen showing its
+    /// placeholders, and two seconds is invisible against a 30-minute refresh interval.
+    /// </remarks>
+    private void ScheduleFirstLoad()
+    {
+        try
+        {
+            var cts = new CancellationTokenSource();
+            if (Interlocked.Exchange(ref _firstLoadCts, cts) is { } previous)
+            {
+                try { previous.Cancel(); } catch { }
+                try { previous.Dispose(); } catch { }
+            }
+
+            var task = RunFirstLoadAsync(cts);
+            _ = task.ContinueWith(t => t.Exception, TaskContinuationOptions.OnlyOnFaulted);
+        }
+        catch { }
+    }
+
+    private async Task RunFirstLoadAsync(CancellationTokenSource cts)
+    {
+        try
+        {
+            await Task.Delay(FirstLoadDelay, cts.Token).ConfigureAwait(true);
+            if (_disposed || cts.IsCancellationRequested) return;
+            // Start the cadence BEFORE fetching, not after: waiting for the request to finish
+            // would tie the 30-minute timer to network latency (and to the timeout retries), so a
+            // slow or dead link would postpone every later refresh as well.
+            StartRefreshTimer();
+            await RefreshAsync(force: true).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            // Unloaded or replaced before the delay elapsed: nothing to do.
+        }
+        catch
+        {
+            // RefreshAsync reports its own failures; this only guards the delay itself.
+        }
+        finally
+        {
+            if (ReferenceEquals(_firstLoadCts, cts)) _firstLoadCts = null;
+            try { cts.Dispose(); } catch { }
+            // Start the refresh cadence only once, from here, so it is measured from the data
+            // rather than from Loaded. Guarded because the delay can end on an unload path.
+            StartRefreshTimer();
+        }
+    }
+
+    private void StartRefreshTimer()
+    {
+        try
+        {
+            if (_disposed || IsSuspended || !IsLoaded || _timer.IsEnabled) return;
+            _timer.Start();
+        }
+        catch { }
+    }
+
+    /// <summary>Re-arms the refresh timer so its 30-minute period is measured from the data that
+    /// just arrived rather than from whenever the timer happened to start.</summary>
+    private void RestartRefreshTimer()
+    {
+        try
+        {
+            if (_disposed || IsSuspended) return;
+            _timer.Stop();
+            _timer.Start();
+        }
+        catch { }
+    }
+
+    private void CancelFirstLoad()
+    {
+        try { Interlocked.Exchange(ref _firstLoadCts, null)?.Cancel(); } catch { }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         try { _timer.Stop(); } catch { }
+        CancelFirstLoad();
         CancelInFlight();
     }
 
@@ -1485,14 +1669,14 @@ private void OnLoaded(object sender, RoutedEventArgs e)
             _locationText.Text = snap.LocationName;
 
             // Now
-            _tempText.Text = Fmt(Temp(snap.TempC)) + Unit;
+            _tempText.Text = Val(Fmt(Temp(snap.TempC)) + Unit);
             var condition = ConditionOf(snap.Code);
             _condText.Text = L(condition.Key, condition.Text);
             _nowIcon.Data = BuildWeatherGeometry(snap.Code, snap.IsDay);
             _hiloText.Text = L("HighLow", "H {0}  L {1}").Replace("{0}", Fmt(Temp(snap.MaxC))).Replace("{1}", Fmt(Temp(snap.MinC)));
-            _metricValues[0].Text = Fmt(Temp(snap.FeelsC)) + Unit;
-            _metricValues[1].Text = Fmt(snap.Humidity) + "%";
-            _metricValues[2].Text = Fmt(Wind(snap.WindKph)) + " " + WindUnit;
+            _metricValues[0].Text = Val(Fmt(Temp(snap.FeelsC)) + Unit);
+            _metricValues[1].Text = Val(Fmt(snap.Humidity) + "%");
+            _metricValues[2].Text = Val(Fmt(Wind(snap.WindKph)) + " " + WindUnit);
 
             // Hourly: 8 cells at 3-hour steps, sparkline across all 24 points.
             var hours = snap.Hours;
@@ -1508,8 +1692,8 @@ private void OnLoaded(object sender, RoutedEventArgs e)
                 {
                     var h = hours[idx];
                     label.Text = h.LocalTime.ToString("t", CultureInfo.CurrentCulture);
-                    temp.Text = Fmt(Temp(h.TempC)) + "°";
-                    precip.Text = h.PrecipProbability >= 20 ? h.PrecipProbability + "%" : "";
+                    temp.Text = Val(Fmt(Temp(h.TempC)) + "°");
+                    precip.Text = h.PrecipProbability >= 20 ? Val(h.PrecipProbability + "%") : "";
                     precip.Foreground = _accent;
                     icon.Data = BuildWeatherGeometry(h.Code, true);
                 }
@@ -1536,8 +1720,8 @@ private void OnLoaded(object sender, RoutedEventArgs e)
                 {
                     var d = snap.Days[i];
                     label.Text = d.Date.ToString("ddd", CultureInfo.CurrentCulture);
-                    hi.Text = Fmt(Temp(d.MaxC)) + "°";
-                    lo.Text = Fmt(Temp(d.MinC)) + "°";
+                    hi.Text = Val(Fmt(Temp(d.MaxC)) + "°");
+                    lo.Text = Val(Fmt(Temp(d.MinC)) + "°");
                     precip.Text = "";
                     icon.Data = BuildWeatherGeometry(d.Code, true);
                 }
@@ -1769,6 +1953,7 @@ private void OnLoaded(object sender, RoutedEventArgs e)
             // its collectible AssemblyLoadContext for the life of the process.
             try { _timer.Stop(); } catch { }
             try { _timer.Tick -= OnTimerTick; } catch { }
+            try { CancelFirstLoad(); } catch { }
             try { Loaded -= OnLoaded; } catch { }
             try { SizeChanged -= OnWidgetSizeChanged; } catch { }
             try { Unloaded -= OnUnloaded; } catch { }
@@ -1797,10 +1982,10 @@ private void OnLoaded(object sender, RoutedEventArgs e)
         var g = new GeometryGroup();
         // Donut, not a disc: the button icons carry both a Fill and a Stroke, so a plain
         // ellipse would render solid. The ticks are zero-area lines and rely on the stroke.
-            g.Children.Add(new CombinedGeometry(
-                GeometryCombineMode.Exclude,
-            new EllipseGeometry(new Rect(5.5, 5.5, 13, 13)),
-            new EllipseGeometry(new Rect(8.2, 8.2, 7.6, 7.6))));
+        g.Children.Add(new CombinedGeometry(
+            GeometryCombineMode.Exclude,
+        new EllipseGeometry(new Rect(5.5, 5.5, 13, 13)),
+        new EllipseGeometry(new Rect(8.2, 8.2, 7.6, 7.6))));
         g.Children.Add(Geometry.Parse("M 12,1.5 L 12,5 M 12,19 L 12,22.5 M 1.5,12 L 5,12 M 19,12 L 22.5,12"));
         return g;
     }
@@ -2025,7 +2210,32 @@ private void OnLoaded(object sender, RoutedEventArgs e)
         catch { return g; }
     }
 
-    /// <summary>Localization key and English source string for one WMO code, in a single
+    /// <summary>
+    /// Wraps a numeric value in LEFT-TO-RIGHT MARKs so bidi cannot reorder it.
+    /// </summary>
+    /// <remarks>
+    /// Measured by rendering the same strings LTR, in an RTL block, and in an RTL block with these
+    /// marks, at a size where the order is readable:
+    /// <code>
+    /// LTR        24&#176;C   9 km/h   60%
+    /// RTL raw    C&#176;24   km/h 9   %60      <- the unit is reordered IN FRONT of the number
+    /// RTL + LRM  24&#176;C   9 km/h   60%      <- identical to LTR
+    /// </code>
+    /// The obvious alternative - pinning <c>FlowDirection=LeftToRight</c> on the TextBlock - also
+    /// renders correctly but BREAKS THE LAYOUT: WPF places an element whose FlowDirection differs
+    /// from its parent's one column-width over. In this widget that pushed the third metric value to
+    /// x=328 with a width of 105 on a 340px surface, i.e. clipped off the widget entirely. The
+    /// marks are invisible and zero-width (verified: identical measured width), so nothing moves.
+    /// <para>
+    /// Apply only to numbers with units. Localized prose - condition, day names, the status line -
+    /// must stay unwrapped, or Arabic itself would be reversed.
+    /// </para>
+    /// </remarks>
+    private const string Lrm = "\u200e";
+
+    private static string Val(string text) => Lrm + text + Lrm;
+
+    /// <summary>Localized key and English source string for one WMO code, in a single
     /// table so the two cannot drift. Carrying the English text matters: WidgetLocalization
     /// returns the supplied default VERBATIM when a key is missing, so a fallback that is
     /// not the real phrase would label rain as "Clear sky".</summary>

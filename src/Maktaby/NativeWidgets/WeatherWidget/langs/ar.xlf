@@ -30,7 +30,8 @@
     <unit id="Refresh now"><segment><source>Refresh now</source><target>تحديث الآن</target></segment></unit>
     <unit id="NoData"><segment><source>No data</source><target>لا توجد بيانات</target></segment></unit>
     <unit id="NetworkError"><segment><source>Network unavailable</source><target>الشبكة غير متاحة</target></segment></unit>
-    <unit id="Error"><segment><source>Could not load weather</source><target>تعذر تحميل الطقس</target></segment></unit>
+    <unit id="FetchTimedOut"><segment><source>Weather service timed out</source><target>انتهت مهلة خدمة الطقس</target></segment></unit>
+   <unit id="Error"><segment><source>Could not load weather</source><target>تعذر تحميل الطقس</target></segment></unit>
     <unit id="CityNotFound"><segment><source>City not found</source><target>لم يتم العثور على المدينة</target></segment></unit>
     <unit id="Stale"><segment><source>stale</source><target>قديم</target></segment></unit>
     <unit id="UpdatedNow"><segment><source>Updated just now</source><target>تم التحديث الآن</target></segment></unit>

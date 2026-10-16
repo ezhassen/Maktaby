@@ -30,7 +30,8 @@
     <unit id="Refresh now"><segment><source>Refresh now</source><target>Refresh now</target></segment></unit>
     <unit id="NoData"><segment><source>No data</source><target>No data</target></segment></unit>
     <unit id="NetworkError"><segment><source>Network unavailable</source><target>Network unavailable</target></segment></unit>
-    <unit id="Error"><segment><source>Could not load weather</source><target>Could not load weather</target></segment></unit>
+    <unit id="FetchTimedOut"><segment><source>Weather service timed out</source><target>Weather service timed out</target></segment></unit>
+   <unit id="Error"><segment><source>Could not load weather</source><target>Could not load weather</target></segment></unit>
     <unit id="CityNotFound"><segment><source>City not found</source><target>City not found</target></segment></unit>
     <unit id="Stale"><segment><source>stale</source><target>stale</target></segment></unit>
     <unit id="UpdatedNow"><segment><source>Updated just now</source><target>Updated just now</target></segment></unit>
