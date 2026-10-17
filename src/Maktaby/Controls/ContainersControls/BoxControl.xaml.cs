@@ -311,6 +311,14 @@ public partial class BoxControl : WidgetControlBase
         }
 
         // Mark handled so the empty-area marquee handler on the UserControl does not also fire.
+        if (Box?.IsFilterActive == true)
+        {
+            // No drag out of a filtered box. The visible tiles are a subset, so their order says
+            // nothing about where an item belongs - a drop would reorder by a lie - and the rows that
+            // are hidden cannot be dropped between.
+            _dragOrigin = null;
+            return;
+        }
         e.Handled = true;
 
         _dragStart = e.GetPosition(null);
@@ -1002,6 +1010,10 @@ public partial class BoxControl : WidgetControlBase
         // Re-select the items that were just dropped into this box.
         if (moved != null && moved.Count > 0 && Box is { } box)
         {
+            // The arrivals are new item instances whose IsFilteredOut is default, so an active
+            // filter must be re-applied or they would show regardless of it.
+            box.SetFilter(box.FilterText);
+
             foreach (var m in moved)
             {
                 var vm = box.Items.FirstOrDefault(i => i.Model == m);
@@ -1356,6 +1368,43 @@ public partial class BoxControl : WidgetControlBase
         _ = Dispatcher.BeginInvoke(
             () => FocusItem(_focusedIndex),
             System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>True while an item's inline rename editor is open.</summary>
+    public bool HasRenamingItem => Box?.Items.Any(i => i.IsEditing) == true;
+
+    /// <summary>
+    /// Focuses the first item the filter lets through, for "type, press Enter, land on a result".
+    /// </summary>
+    public void FocusFirstVisibleItem()
+    {
+        if (Box is not { } box) { return; }
+
+        var first = box.Items.FirstOrDefault(i => !i.IsFilteredOut);
+        if (first is null) { return; }
+
+        SelectOnly(first);
+        _focusedIndex = box.Items.IndexOf(first);
+        _anchorIndex = _focusedIndex;
+        FocusItem(_focusedIndex);
+    }
+
+    /// <summary>
+    /// Re-reads every icon from the shell, bypassing the cache - the F5 path.
+    /// </summary>
+    /// <remarks>
+    /// Goes through the cache-invalidating path rather than <see cref="BoxItemViewModel.ReloadIcon"/>,
+    /// which would re-resolve and get the same cached bitmap back. Useful when the shell's icon theme
+    /// or a file's association changed underneath us.
+    /// </remarks>
+    public void ReloadAllIcons()
+    {
+        if (Box is not { } box) { return; }
+
+        foreach (var item in box.Items)
+        {
+            item.ReloadIconBypassingCache();
+        }
     }
 
     /// <summary>Called by owning window on Deactivated to avoid stale multi-selections persisting.</summary>

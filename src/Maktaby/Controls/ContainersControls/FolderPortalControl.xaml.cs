@@ -473,6 +473,28 @@ public partial class FolderPortalControl : WidgetControlBase
 
     // ---- Selection helpers ----
 
+    /// <summary>True while a row's inline rename editor is open.</summary>
+    public bool HasRenamingItem => Box?.FolderItems.Any(i => i.IsEditing) == true;
+
+    /// <summary>Focuses the first row the filter lets through.</summary>
+    public void FocusFirstVisibleItem()
+    {
+        if (Box is not { } box) { return; }
+
+        var first = box.FolderItems.FirstOrDefault(i => !i.IsFilteredOut);
+        if (first is null) { return; }
+
+        SelectOnly(first);
+        int index = box.FolderItems.IndexOf(first);
+        _focusedIndex = index;
+        _anchorIndex = index;
+        ScrollToItem(index);
+        FocusItem(index);
+    }
+
+    /// <summary>Re-reads the folder from disk - the F5 path for a portal.</summary>
+    public Task RefreshFolderAsync() => Box?.RefreshFolderAsync() ?? Task.CompletedTask;
+
     public void ClearSelection()
     {
         if (Box == null) return;

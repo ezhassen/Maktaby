@@ -12,8 +12,9 @@ public sealed class FolderItemViewModel : ViewModelBase
     private readonly bool _isDirectory;
     private System.Windows.Media.ImageSource? _icon;
     private bool _iconLoadRequested;
-    private bool _isSelected;
-    private bool _isEditing;
+private bool _isSelected;
+      private bool _isFilteredOut;
+      private bool _isEditing;
     private string _renameText = string.Empty;
     private string _displayName;
 
@@ -67,6 +68,11 @@ public sealed class FolderItemViewModel : ViewModelBase
 
     public bool IsSelected { get => _isSelected; set { if (_isSelected != value) { _isSelected = value; OnPropertyChanged(); } } }
     public bool IsEditing { get => _isEditing; set { if (_isEditing != value) { _isEditing = value; OnPropertyChanged(); } } }
+
+      /// <summary>True when the portal is filtered and this row does not match the text.</summary>
+      /// <remarks>A property rather than a filtered collection, so every index in
+      /// <c>FolderItems</c> - which selection, focus and scrolling all address - stays valid.</remarks>
+      public bool IsFilteredOut { get => _isFilteredOut; set { if (_isFilteredOut != value) { _isFilteredOut = value; OnPropertyChanged(); } } }
     public string RenameText { get => _renameText; set { if (_renameText != value) { _renameText = value; OnPropertyChanged(); } } }
 
     public System.Windows.Media.ImageSource? Icon

@@ -24,6 +24,8 @@
     mc:Ignorable="d">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <!--  Filter: INVERTED, because the flag means "hidden".  -->
+        <conv:BoolInvertedToVisibilityConverter x:Key="BoolToVisInverted" />
         <!--  Tile = resolved icon size + chrome offsets (hand-tuned at the 32px baseline: 68×64).  -->
         <conv:AdaptiveTileSizeConverter x:Key="TileWidth" />
         <conv:AdaptiveTileSizeConverter x:Key="TileHeight" />
@@ -58,8 +60,11 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate DataType="vm:BoxItemViewModel">
+                            <!--  Collapsed rather than removed from Items: a hidden item keeps its
+                                  index, so selection, focus and marquee stay correct.  -->
                             <Border
                                 x:Name="ItemBorder"
+                                Visibility="{Binding IsFilteredOut, Converter={StaticResource BoolToVisInverted}}"
                                 Width="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
                                 Height="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
                                 Margin="2"

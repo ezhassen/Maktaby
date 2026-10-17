@@ -11,6 +11,8 @@ using Maktaby.Win32.NativeMethods;
 using Maktaby.Win32.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.Versioning;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -273,6 +275,7 @@ public partial class BoxContainerWindow : WidgetWindow
     {
         UpdateBody();
         RefreshRemoveTabMenu();
+        ReapplyFilterForActiveBox();
     }
 
     private void OnBoxContainerVmPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -331,7 +334,27 @@ public partial class BoxContainerWindow : WidgetWindow
         RollButton.Visibility = headerButtonsVisibility;
         LockButton.Visibility = headerButtonsVisibility;
 
-        // The tab strip is always visible when there is more than one tab; the header buttons and
+        bool filtering = FilterBorder?.Visibility == Visibility.Visible;
+        if (!show && filtering && string.IsNullOrEmpty(_filterText))
+        {
+            // An open, empty search box that survives losing focus is just clutter on a window the
+            // user is no longer using - and it hides the title. Dismissing here rather than on
+            // Deactivated so every path that drops the chrome (blur, mouse-out, roll) agrees.
+            // A box WITH text is the user's deliberate state and stays put.
+            _suppressFilterDismiss = true;
+            ExitFilterMode();
+            _suppressFilterDismiss = false;
+            filtering = false;
+        }
+
+        // While the box is open it stands in for the button, so the button goes away; otherwise the
+        // button follows the chrome like every other header button.
+        if (SearchButton is not null)
+        {
+            SearchButton.Visibility = filtering ? Visibility.Collapsed : headerButtonsVisibility;
+        }
+
+        // Tab strip: always visible when there is more than one tab; the header buttons and
         // scrollbar stay hidden until the container is hovered or focused. While rolled it is hidden.
         TabStrip.Visibility = isBox && _vm.BoxContainerVm!.ShowTabs && !_vm.IsRolled
             ? Visibility.Visible
@@ -456,6 +479,295 @@ public partial class BoxContainerWindow : WidgetWindow
         UpdateChrome();
     }
 
+    /// <summary>
+    /// The filter text the window is filtering by, owned here rather than bound to the active box.
+    /// See <see cref="ReapplyFilterForActiveBox"/> for why.
+    /// </summary>
+    private string _filterText = string.Empty;
+
+    /// <summary>
+    /// Set while <see cref="ExitFilterMode"/> is called from <see cref="UpdateChrome"/>. That call
+    /// is the dismissal, so the box's own lost-focus handler must not run its extra bookkeeping.
+    /// </summary>
+    private bool _suppressFilterDismiss;
+
+    /// <summary>Set while the box's text is changed in code, so it does not schedule a debounce pass.</summary>
+    private bool _suppressFilterSchedule;
+
+    private void SearchButton_Click(object sender, RoutedEventArgs e) => EnterFilterMode();
+
+    /// <summary>Swaps the search button for the filter box and focuses it.</summary>
+    private void EnterFilterMode()
+    {
+        if (FilterBorder is null) { return; }
+
+        FilterBox.Text = _filterText;
+        FilterBorder.Visibility = Visibility.Visible;
+        // The box would otherwise draw over the centred title on a narrow container, so the title
+        // layer steps aside for as long as the box is up.
+        TitleLayer.Visibility = Visibility.Collapsed;
+        UpdateFilterPlaceholder();
+        UpdateChrome();
+        FilterBox.Focus();
+        FilterBox.SelectAll();
+    }
+
+    /// <summary>Closes the filter box and reveals every item again.</summary>
+    private void ExitFilterMode()
+    {
+        if (FilterBorder is null) { return; }
+
+        _filterText = string.Empty;
+
+        // Programmatic clear: suppress the debounce it would otherwise schedule, then apply directly.
+        _suppressFilterSchedule = true;
+        try
+        {
+            FilterBox.Clear();
+        }
+        finally
+        {
+            _suppressFilterSchedule = false;
+        }
+
+        FlushFilterNow(string.Empty);
+        UpdateFilterPlaceholder();
+        FilterBorder.Visibility = Visibility.Collapsed;
+        TitleLayer.Visibility = Visibility.Visible;
+
+        // UpdateChrome is what puts the search icon back. Nothing else does on this path: the click
+        // that dismissed the box changed no VM state, so without this the icon would stay hidden
+        // until the next hover or focus change.
+        UpdateChrome();
+
+        if (!_suppressFilterDismiss && !IsKeyboardFocusWithin)
+        {
+            // Give focus somewhere real instead of leaving it on a box that just disappeared.
+            BoxContent?.FocusFirstVisibleItem();
+        }
+    }
+
+    private void UpdateFilterPlaceholder()
+    {
+        bool empty = string.IsNullOrEmpty(FilterBox?.Text);
+
+        if (FilterPlaceholder is { } placeholder)
+        {
+            placeholder.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        if (FilterClearButton is { } clear)
+        {
+            clear.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+        }
+    }
+
+    private void FilterClearButton_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        // Keep the box alive across the click: without this the empty text would trip the
+        // lost-focus dismissal and the user would lose the box they are still typing into.
+        _suppressFilterDismiss = true;
+    }
+
+    private void FilterClearButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            FilterBox.Clear();
+            FilterBox.Focus();
+        }
+        finally
+        {
+            _suppressFilterDismiss = false;
+        }
+    }
+
+    /// <summary>
+    /// Pushes the window's filter into the box that is active now. Deliberately NOT a binding on
+    /// <see cref="FilterBox"/>: the binding's source is <c>ActiveBox</c>, so it would replace the text
+    /// with the newly selected box's own (empty) filter the moment the tab changes. The window owns
+    /// the text instead, so the filter survives a tab switch and follows the user across tabs.
+    /// </summary>
+    /// <summary>
+    /// How long typing must pause before the filter is applied. Filtering walks every item and
+    /// re-collapses rows, which on a large folder is visible lag, and re-running it per keystroke
+    /// made that worse. One deferred pass after the pause fixes both.
+    /// </summary>
+    private const int FilterDebounceMs = 650;
+
+    private CancellationTokenSource? _filterDebounce;
+
+    private void FilterBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        _filterText = FilterBox?.Text ?? string.Empty;
+        UpdateFilterPlaceholder();
+
+        if (_suppressFilterSchedule)
+        {
+            return;
+        }
+
+        ScheduleFilterApply();
+    }
+
+    /// <summary>Restarts the debounce, cancelling any pass already pending for older text.</summary>
+    private void ScheduleFilterApply()
+    {
+        _filterDebounce?.Cancel();
+        _filterDebounce?.Dispose();
+        var cts = new CancellationTokenSource();
+        _filterDebounce = cts;
+        _ = ApplyFilterAfterPauseAsync(cts.Token);
+    }
+
+    private async Task ApplyFilterAfterPauseAsync(CancellationToken token)
+    {
+        try
+        {
+            // Captured at schedule time: applying text the user has since replaced would fight the
+            // newer keystrokes and, worse, leave the visible items out of step with the box.
+            string text = _filterText;
+            await Task.Delay(FilterDebounceMs, token).ConfigureAwait(true);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _vm.ActiveBox?.SetFilter(text);
+        }
+        catch (OperationCanceledException)
+        {
+            // Superseded by newer text.
+        }
+    }
+
+    /// <summary>
+    /// Cancels a pending debounced pass and applies <paramref name="text"/> right away. Used where
+    /// waiting would be wrong: leaving filter mode, switching tabs, dropping items.
+    /// </summary>
+    private void FlushFilterNow(string text)
+    {
+        _filterDebounce?.Cancel();
+        _filterDebounce?.Dispose();
+        _filterDebounce = null;
+        _vm.ActiveBox?.SetFilter(text);
+    }
+
+    /// <summary>
+    /// Carries the filter onto a newly selected tab. A folder portal is re-enumerated first, because
+    /// its items only exist after a refresh - filtering a stale list would hide everything that the
+    /// refresh then loads, and the user would see an empty box.
+    /// </summary>
+    private async void ReapplyFilterForActiveBox()
+    {
+        if (_vm.ActiveBox is not { } active)
+        {
+            return;
+        }
+
+        // The refresh is NOT gated on filter mode being open. It used to be, and that was the bug:
+        // clearing the filter auto-dismisses the box, so the next tab switch skipped the whole
+        // method and the portal never re-read its folder. The watcher covers file changes, but not
+        // a stale read from a watcher gap (a background tab, a rolled or hidden container), which is
+        // exactly what a switch back needs to shake loose.
+
+        // A debounced pass still pending belongs to the tab we are leaving; it must not land on this
+        // one and filter it by text that was never typed here.
+        _filterDebounce?.Cancel();
+        _filterDebounce?.Dispose();
+        _filterDebounce = null;
+
+        bool filtering = FilterBorder?.Visibility == Visibility.Visible;
+        if (filtering)
+        {
+            FilterBox.Text = _filterText;
+        }
+
+        try
+        {
+            if (active.IsFolderPortal && FolderPortalContent is { } portal)
+            {
+                await portal.RefreshFolderAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            // A folder that cannot be read is a refresh failure, not a reason to tear down the app
+            // mid-tab-switch; the filter still applies to whatever did load.
+            Serilog.Log.Warning(ex, "Filter carry-over: refreshing folder {Folder} failed", active.CurrentFolderPath);
+        }
+
+        active.SetFilter(_filterText);
+    }
+
+    private void FilterBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppressFilterDismiss)
+        {
+            // The clear button takes focus on MouseDown; the empty text is momentary, not a decision
+            // to leave filter mode.
+            return;
+        }
+
+        // Emptying the box is a legitimate way to finish, so collapse it once the text is gone.
+        // Leaving it open with nothing typed would just hide the search button for no reason.
+        if (FilterBox is { } box && string.IsNullOrEmpty(box.Text))
+        {
+            ExitFilterMode();
+        }
+    }
+
+    private void FilterBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            // Escape belongs to the box while the box has focus; handled here rather than at window
+            // level so the title rename's own Escape handler is unaffected.
+            ExitFilterMode();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            // Commit and give the keyboard back to the items, filtered as they are.
+            FocusFilteredItems();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Moves focus to the first visible item, so typing a filter and pressing Enter lands on a
+    /// result instead of leaving focus in the box.
+    /// </summary>
+    private void FocusFilteredItems()
+    {
+        FilterBox?.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+
+        if (BoxContent is { } box)
+        {
+            box.FocusFirstVisibleItem();
+        }
+        else if (FolderPortalContent is { } portal)
+        {
+            portal.FocusFirstVisibleItem();
+        }
+    }
+
+    /// <summary>
+    /// F5: refresh what is on screen. Icons are re-read from the shell with the cache invalidated -
+    /// the user's explicit "this is wrong, get it again" - and a folder portal re-enumerates its
+    /// folder, which is the only way to notice files added or removed behind our back.
+    /// </summary>
+    private async void RefreshActiveBox()
+    {
+        if (FolderPortalContent is { } portal && _vm.ActiveBox is { IsFolderPortal: true })
+        {
+            await portal.RefreshFolderAsync();
+            return;
+        }
+
+        BoxContent?.ReloadAllIcons();
+    }
+
     private void Window_Deactivated(object? sender, EventArgs e)
     {
         if (_isRenaming)
@@ -480,6 +792,10 @@ public partial class BoxContainerWindow : WidgetWindow
         // A pending hover-switch must not fire (and Activate()) after the window is gone.
         try { _tabHoverTimer?.Stop(); } catch { }
         _tabHoverTimer = null;
+        // Same for a debounced filter pass: it would otherwise apply to a closed window's box.
+        _filterDebounce?.Cancel();
+        _filterDebounce?.Dispose();
+        _filterDebounce = null;
         _pendingHoverTab = null;
         _drag.Detach();
         // Detach via the attach-time HWND: re-resolving the handle here would yield Zero (already
@@ -1195,6 +1511,10 @@ public partial class BoxContainerWindow : WidgetWindow
         _renameOriginal = _vm.ActiveBox.Name;
         TitleEdit.Text = _vm.ActiveBox.Name;
         TitleText.Visibility = Visibility.Collapsed;
+        // The icon sits in the title layer, which the centred editor overlays - on a narrow box they
+        // collide. SetCurrentValue, not assignment: assigning would drop the IsFolderPortal binding
+        // and leave the icon showing on every later box.
+        TitleFolderIcon.SetCurrentValue(UIElement.VisibilityProperty, Visibility.Collapsed);
         TitleEdit.Visibility = Visibility.Visible;
         TitleEdit.Focus();
         TitleEdit.SelectAll();
@@ -1244,6 +1564,8 @@ public partial class BoxContainerWindow : WidgetWindow
 
         TitleEdit.Visibility = Visibility.Collapsed;
         TitleText.Visibility = Visibility.Visible;
+        // Restore the icon from its binding by re-evaluating it, not by hard-coding a value.
+        BindingOperations.GetBindingExpression(TitleFolderIcon, UIElement.VisibilityProperty)?.UpdateTarget();
         _save();
     }
 
@@ -1550,6 +1872,33 @@ public partial class BoxContainerWindow : WidgetWindow
             return;
         }
 
+        if (e.Key == Key.Escape)
+        {
+            // Escape leaves filter mode, but ONLY when nothing is being renamed: the title editor
+            // and the per-item rename popups own Escape while they are open, and a Window tunnels
+            // PreviewKeyDown ahead of them, so handling it here unconditionally would close the
+            // filter instead of cancelling the rename the user asked to cancel.
+            bool renaming = _isRenaming ||
+                            BoxContent?.HasRenamingItem == true ||
+                            FolderPortalContent?.HasRenamingItem == true;
+
+            if (!renaming && FilterBorder?.Visibility == Visibility.Visible)
+            {
+                ExitFilterMode();
+                e.Handled = true;
+                return;
+            }
+
+            return;
+        }
+
+        if (e.Key == Key.F5)
+        {
+            RefreshActiveBox();
+            e.Handled = true;
+            return;
+        }
+
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
         bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         if (!ctrl || key is not (Key.C or Key.X or Key.V))
@@ -1721,6 +2070,10 @@ public partial class BoxContainerWindow : WidgetWindow
                         if (vm != null) vm.IsSelected = true;
                     }
                 }
+
+                // The moved items arrive as new item instances whose IsFilteredOut is default, so an
+                // active filter has to be re-applied or the arrivals show regardless of it.
+                targetBox.SetFilter(_filterText);
                 _save();
             }
         }

@@ -202,6 +202,86 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
 
     public ObservableCollection<FolderItemViewModel> FolderItems { get; }
 
+    // ----- Search / filter -----
+
+    private string _filterText = string.Empty;
+
+    /// <summary>
+    /// The text items are filtered by. Empty means no filtering; assigning re-filters both
+    /// collections at once, so one box's filter is shared by its two body types.
+    /// </summary>
+    public string FilterText
+    {
+        get => _filterText;
+        set
+        {
+            if (string.Equals(_filterText, value, StringComparison.Ordinal)) { return; }
+
+            _filterText = value ?? string.Empty;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(IsFilterActive));
+            ApplyFilter();
+        }
+    }
+
+    /// <summary>True when <see cref="FilterText"/> is non-empty.</summary>
+    public bool IsFilterActive => _filterText.Length > 0;
+
+    /// <summary>Clears the filter and reveals every item again.</summary>
+    public void ClearFilter() => FilterText = string.Empty;
+
+    /// <summary>
+    /// Applies <paramref name="text"/> as the filter and re-filters even when the text is unchanged.
+    /// </summary>
+    /// <remarks>
+    /// The <see cref="FilterText"/> setter skips work when the value is equal, which is right in
+    /// isolation but wrong after a folder refresh or a dropped tab: both rebuild the item instances,
+    /// and the new ones carry a default <c>IsFilteredOut</c> - so an unchanged filter would have to
+    /// be re-applied by hand to hide the entries it should hide.
+    /// </remarks>
+    public void SetFilter(string text)
+    {
+        if (!string.Equals(FilterText, text, StringComparison.Ordinal))
+        {
+            FilterText = text;
+            return;
+        }
+
+        ApplyFilter();
+    }
+
+    /// <summary>
+    /// Hides the entries that do not match, on both the box items and the folder rows.
+    /// </summary>
+    /// <remarks>
+    /// Matching is on the displayed name, plus the full path so a fragment of a folder can find
+    /// things in it - the behaviour Explorer has. Case-insensitive, and deliberately substring rather
+    /// than prefix: the filter is a find box, not a jump-to-initial.
+    /// <para>
+    /// Items are hidden with a per-item flag rather than by removing them from the collections,
+    /// because every index in <see cref="Items"/> and <see cref="FolderItems"/> - which selection,
+    /// focus, marquee and scrolling all address - is a position in the unfiltered list.
+    /// </para>
+    /// </remarks>
+    public void ApplyFilter()
+    {
+        var text = _filterText;
+
+        foreach (var item in Items)
+        {
+            item.IsFilteredOut = text.Length > 0 && !Matches(item.DisplayName, item.Path, text);
+        }
+
+        foreach (var row in FolderItems)
+        {
+            row.IsFilteredOut = text.Length > 0 && !Matches(row.DisplayName, row.Path, text);
+        }
+    }
+
+    private static bool Matches(string? name, string? path, string text) =>
+        (name is not null && name.Contains(text, StringComparison.CurrentCultureIgnoreCase)) ||
+        (path is not null && path.Contains(text, StringComparison.CurrentCultureIgnoreCase));
+
     public void SetFolderPath(string? path)
     {
         FolderPath = path;

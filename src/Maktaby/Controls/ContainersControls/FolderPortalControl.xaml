@@ -17,6 +17,8 @@ PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
       mc:Ignorable="d">
       <UserControl.Resources>
           <BooleanToVisibilityConverter x:Key="BoolToVis" />
+          <!--  Filter: INVERTED, because the flag means "hidden".  -->
+          <conv:BoolInvertedToVisibilityConverter x:Key="BoolToVisInverted" />
           <conv:AdaptiveTileSizeConverter x:Key="TileWidth" />
           <conv:TileSizeToSizeConverter x:Key="TileSize" />
           <conv:BoolToVisibilityConverter x:Key="BoolVis" />
@@ -226,8 +228,11 @@ PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="vm:FolderItemViewModel">
+                                <!--  Collapsed rather than removed from FolderItems: a hidden row keeps
+                                      its index, which selection, focus and scrolling all address.  -->
                                 <Border
                                     x:Name="ItemBorder"
+                                    Visibility="{Binding IsFilteredOut, Converter={StaticResource BoolToVisInverted}}"
                                     Width="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
                                     Height="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
                                     Margin="2"
@@ -302,8 +307,8 @@ PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
                 IsReadOnly="True"
                 ItemsSource="{Binding FolderItems}"
                 PreviewMouseLeftButtonDown="DetailsGrid_PreviewMouseLeftButtonDown"
-                RowHeaderWidth="0"
-                RowHeight="22"
+RowHeaderWidth="0"
+RowHeight="22"
                 ScrollViewer.CanContentScroll="True"
                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -364,6 +369,11 @@ PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="Margin" Value="0" />
                         <Style.Triggers>
+                            <!--  Filter: collapse the row rather than removing it, so every index in
+                                  FolderItems stays valid for selection, focus and scrolling.  -->
+                            <DataTrigger Binding="{Binding IsFilteredOut}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter Property="Background" Value="#3A3A3A" />
                                 <Setter Property="BorderBrush" Value="#5A5A5A" />

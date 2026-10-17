@@ -128,9 +128,20 @@ public sealed class BoxItemViewModel : ViewModelBase
         OnPropertyChanged(nameof(Icon));
     }
 
-    /// <summary>
-    /// Drops the cached icon and reloads it - for an item whose icon the shell recomputes over time.
-    /// </summary>
+    /// <summary>True when the box is filtered and this item does not match the text.</summary>
+    /// <remarks>
+    /// Kept as a property rather than by removing items from the collection: the item template binds
+    /// its Visibility to this, while <c>Items</c> stays the full list. That matters because selection,
+    /// focus and every index in the box are positions in the unfiltered collection.
+    /// </remarks>
+    private bool _isFilteredOut;
+    public bool IsFilteredOut
+    {
+        get => _isFilteredOut;
+        set => SetField(ref _isFilteredOut, value);
+    }
+
+    /// <summary>Drops the cached icon and reloads it - for an item whose icon the shell recomputes over time.
     /// <remarks>
     /// <see cref="ReloadIcon"/> alone would be useless for the Recycle Bin: it re-resolves through
     /// <see cref="IconImageService"/>, whose LRU is keyed on the PIDL, and the bin's PIDL never

@@ -49,6 +49,9 @@
     <unit id="Tray.ContainerHidden"><segment><source>Container hidden</source><target>تم إخفاء الحاوية</target></segment></unit>
 
     <unit id="Box.Menu"><segment><source>Menu</source><target>القائمة</target></segment></unit>
+  <unit id="Box.SearchTooltip"><segment><source>Search items in this box</source><target>ابحث في العناصر</target></segment></unit>
+  <unit id="Box.SearchPlaceholder"><segment><source>Search…</source><target>ابحث…</target></segment></unit>
+  <unit id="Box.SearchClearTooltip"><segment><source>Clear search</source><target>مسح البحث</target></segment></unit>
     <unit id="Box.MenuLock"><segment><source>Lock</source><target>قفل</target></segment></unit>
     <unit id="Box.MenuLockTooltip"><segment><source>Toggle Locked state (Cannot Move or Resize the Window)</source><target>تبديل حالة القفل (لا يمكن التحريك أو تغيير الحجم)</target></segment></unit>
     <unit id="Box.MenuHide"><segment><source>Hide</source><target>إخفاء</target></segment></unit>

@@ -31,6 +31,7 @@
     mc:Ignorable="d">
     <containers:WidgetWindow.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+        <conv:BoolInvertedToVisibilityConverter x:Key="BoolToVisInverted" />
         <conv:TabSelectedConverter x:Key="TabSelectedConverter" />
 
         <!--
@@ -155,8 +156,9 @@
                             Background="Transparent"
                             MouseLeftButtonDown="TitleArea_MouseLeftButtonDown"
                             MouseRightButtonDown="TitleArea_MouseRightButtonDown">
-                            <Grid
-                                HorizontalAlignment="Center"
+<Grid
+                                  x:Name="TitleLayer"
+                                  HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Background="Transparent">
                                 <Grid.ColumnDefinitions>
@@ -199,6 +201,111 @@
                                 ToolTip="Rename the box (max 64 characters)"
                                 Visibility="Collapsed" />
                         </Grid>
+                        <!--
+                            Search. Sits immediately beside the menu button (column 1 is the star the
+                            title is centred over, and the title layer below spans every column, so
+                            declaring these after it keeps them clickable on top).
+                        -->
+                        <StackPanel
+                            Grid.Column="1"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal">
+                            <Button
+                                x:Name="SearchButton"
+                                Width="24"
+                                Click="SearchButton_Click"
+                                Cursor="Arrow"
+                                Style="{StaticResource BorderlesButtonStyle}"
+                                ToolTip="{loc:LocKey Box.SearchTooltip}">
+                                <!--
+                                    Foreground is explicit, not inherited. SymbolIcon does not take the
+                                    button's foreground, so without this the glyph renders black and
+                                    is invisible on the dark header.
+                                -->
+                                <ui:SymbolIcon
+                                    Foreground="{DynamicResource BoxHeaderForeground}"
+                                    Symbol="Search24" />
+                            </Button>
+                            <!--
+                                The rename box's styling with a border: the search needs an edge to
+                                read as an input, which the borderless rename style deliberately has
+                                none of. The TextBox itself stays borderless inside it.
+                            -->
+                            <Border
+                                x:Name="FilterBorder"
+                                Margin="4,0,0,0"
+                                VerticalAlignment="Center"
+                                Background="{Binding Background, ElementName=HeaderBorder}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Visibility="Collapsed">
+                                <Grid ClipToBounds="True">
+                                    <TextBox
+                                        x:Name="FilterBox"
+                                        MinWidth="120"
+                                        MaxWidth="200"
+                                        Padding="6,1,20,1"
+                                        VerticalAlignment="Center"
+                                        KeyDown="FilterBox_KeyDown"
+                                        LostFocus="FilterBox_LostFocus"
+                                        Style="{StaticResource TitleRenameBoxStyle}"
+                                        TextChanged="FilterBox_TextChanged"
+                                        ToolTip="{loc:LocKey Box.SearchTooltip}" />
+                                    <TextBlock
+                                        x:Name="FilterPlaceholder"
+                                        Margin="7,0,0,0"
+                                        VerticalAlignment="Center"
+                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                        IsHitTestVisible="False"
+                                        Text="{loc:LocKey Box.SearchPlaceholder}" />
+                                    <!--
+                                        Clear affordance. Only up while there is something to clear -
+                                        its own visibility is driven from the same check as the
+                                        placeholder. PreviewMouseDown, not Click, arms the dismissal
+                                        guard: the box's lost-focus fires when the button takes focus,
+                                        which is on MouseDown and therefore before Click.
+
+                                        Deliberately not the shared BorderlesButtonStyle: that style is
+                                        sized for a 24px header button and its own padding/min-size
+                                        pushed this glyph out of its 16px box, so it rendered clipped.
+                                        A self-contained button plus a Path (a plain 8px cross, no icon
+                                        font) is deterministic at any size.
+                                    -->
+                                    <Button
+                                        x:Name="FilterClearButton"
+                                        Width="16"
+                                        Height="16"
+                                        Margin="0,0,2,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Click="FilterClearButton_Click"
+                                        Cursor="Arrow"
+                                        Focusable="False"
+                                        MinHeight="0"
+                                        MinWidth="0"
+                                        Padding="0"
+                                        PreviewMouseDown="FilterClearButton_PreviewMouseDown"
+                                        SnapsToDevicePixels="True"
+                                        ToolTip="{loc:LocKey Box.SearchClearTooltip}"
+                                        Visibility="Collapsed">
+                                        <Path
+                                            Width="9"
+                                            Height="9"
+                                            Data="M 0,0 L 8,8 M 8,0 L 0,8"
+                                            SnapsToDevicePixels="True"
+                                            Stretch="Uniform"
+                                            Stroke="{DynamicResource TextFillColorSecondaryBrush}"
+                                            StrokeEndLineCap="Round"
+                                            StrokeStartLineCap="Round"
+                                            StrokeThickness="1.3" />
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
                         <Button
                             x:Name="MenuButton"
                             Grid.Column="0"
