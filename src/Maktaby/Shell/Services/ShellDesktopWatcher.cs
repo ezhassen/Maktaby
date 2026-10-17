@@ -4,6 +4,7 @@ using Maktaby.Core.Services;
 using Maktaby.Native;
 using Maktaby.Win32.NativeMethods;
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
@@ -29,11 +30,26 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     private ushort _atom;
     private IntPtr _hwnd;
     private uint _regId;
-    /// <summary>Second registration, on the Recycle Bin folder only - see RegisterRecycleBin.</summary>
-    private uint _binRegId;
 
-    /// <summary>Bytes of the registered bin FOLDER pidl, so bin-internal events can be recognised.</summary>
-    private byte[] _binFolderBytes = Array.Empty<byte>();
+    /// <summary>
+    /// The Recycle Bin's physical folder, watched through <c>ReadDirectoryChangesW</c>.
+    /// </summary>
+    /// <remarks>
+    /// This is the mechanism that finally works. Three shell-notification routes were tried and none
+    /// delivered anything when the bin was emptied: the shell-namespace PIDL from
+    /// <c>SHGetSpecialFolderLocation(CSIDL_BITBUCKET)</c> (recursive or not, with or without
+    /// <c>UPDATEITEM</c>), and a recursive registration on <c>C:\$Recycle.Bin</c> itself. All of them
+    /// go through the shell's notification service, which evidently does not report this.
+    /// <para>
+    /// <c>FileSystemWatcher</c> sits directly on the kernel's directory-change notifications, so it
+    /// does not depend on that service at all. It is still fully event-driven - no polling - and it
+    /// watches exactly one folder. The shell registration above is kept as a second, cheap signal.
+    /// </para>
+    /// </remarks>
+    private FileSystemWatcher? _binWatcher;
+
+    /// <summary>Where the bin watch is installed, for logging and for re-arming it.</summary>
+    private string? _binWatchPath;
     private bool _suppressed;
 
     public event Action<BoxItem>? ItemCreated;
@@ -108,71 +124,71 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
 
         Shell32.ILFree(deskPidl);
 
-        RegisterRecycleBin();
+        StartBinFolderWatch();
     }
 
     /// <summary>
-    /// Subscribes to the Recycle Bin's PHYSICAL folder (<c>C:\$Recycle.Bin</c>), recursively.
+    /// Watches <c>C:\$Recycle.Bin</c> with <see cref="FileSystemWatcher"/> - the working mechanism -
+    /// and turns any change into one <see cref="ItemUpdated"/> for the bin.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// This replaces an earlier registration on the shell-namespace PIDL from
-    /// <c>SHGetSpecialFolderLocation(CSIDL_BITBUCKET)</c>. That one was the obvious choice and it does
-    /// not work: measured on this machine, emptying the bin produced <b>no notification at all</b> -
-    /// not <c>UPDATEITEM</c>, not <c>UPDATEDIR</c>, nothing - so the icon stayed stale. The
-    /// namespace PIDL represents the bin's appearance, not its contents, and the shell does not
-    /// report changes to the latter through it.
-    /// </para>
-    /// <para>
-    /// The real folder does change on every operation that matters: deleting something writes new
-    /// <c>$I</c>/<c>$R</c> pairs into it, restoring removes them, emptying removes them all. Those are
-    /// ordinary filesystem notifications, so this registration is filesystem-level
-    /// (<c>SHCNRF_InterruptLevel</c>) rather than shell-level.
-    /// </para>
-    /// <para>
-    /// Recursive because the interesting entries live in per-drive, per-user subfolders below it.
-    /// The descendants are never treated as items: <see cref="HandleEvent"/> recognises them by PIDL
-    /// prefix and reports a single update for the bin, so none of this can leak into the boxes as
-    /// phantom desktop items.
-    /// </para>
+    /// Everything under the bin is noise as far as the UI is concerned: only the bin's icon
+    /// changes. So the raw events are collapsed here rather than in the consumers, which is also
+    /// what keeps the $I/$R churn from turning into a storm of icon reloads.
     /// </remarks>
-    private void RegisterRecycleBin()
+    private void StartBinFolderWatch()
     {
-        IntPtr folderPidl = IntPtr.Zero;
+        // The physical bin path is composed rather than asked for: SHGetSpecialFolderPath faulted
+        // with an ExecutionEngineException, and there is nothing to learn from a native call when
+        // the answer is "%SystemDrive%\$Recycle.Bin".
+        string? systemDrive = Environment.GetEnvironmentVariable("SystemDrive");
+        if (string.IsNullOrWhiteSpace(systemDrive)) { return; }
+
+        var binPath = Path.Combine(systemDrive, "$Recycle.Bin");
+        if (!Directory.Exists(binPath)) { return; }
+
         try
         {
-            // The physical bin path is composed rather than asked for: SHGetSpecialFolderPath
-            // faulted with an ExecutionEngineException, and there is nothing to learn from a
-            // native call when the answer is "%SystemDrive%\\$Recycle.Bin".
-            string? systemDrive = Environment.GetEnvironmentVariable("SystemDrive");
-            if (string.IsNullOrWhiteSpace(systemDrive))
-            {
-                return;
+                var watcher = new FileSystemWatcher(binPath)
+                {
+                    // The $I/$R pairs live in per-drive, per-user subfolders.
+                    IncludeSubdirectories = true,
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                                    NotifyFilters.LastWrite | NotifyFilters.Size,
+                    // A bin can be emptied in one burst; the default 8 KB buffer overflows and the
+                    // watcher silently stops reporting until re-armed.
+                    InternalBufferSize = 64 * 1024,
+                };
+
+                void OnChange(object sender, FileSystemEventArgs e)
+                {
+                    if (ResolveRecycleBin() is { } item) { ItemUpdated?.Invoke(item); }
+                }
+
+                watcher.Created += OnChange;
+                watcher.Deleted += OnChange;
+                watcher.Changed += OnChange;
+                watcher.Renamed += (_, e) => OnChange(watcher, e);
+
+                watcher.Error += (_, e) =>
+                {
+                    // Overflow (or a dropped handle) stops delivery until events are re-enabled.
+                    Serilog.Log.Warning(e.GetException(), "Recycle Bin watch error; re-arming");
+                    try { watcher.EnableRaisingEvents = true; } catch { }
+                };
+
+                watcher.EnableRaisingEvents = true;
+
+                _binWatcher = watcher;
+                _binWatchPath = binPath;
+
+                Serilog.Log.Information("Recycle Bin watch active on {Path}", binPath);
             }
-
-            var binPath = System.IO.Path.Combine(systemDrive, "$Recycle.Bin");
-            if (!System.IO.Directory.Exists(binPath)) { return; }
-
-            folderPidl = Shell32.ILCreateFromPathW(binPath);
-            if (folderPidl == IntPtr.Zero) { return; }
-
-            // Kept for recognising events that arrive from inside the bin.
-            _binFolderBytes = PidlToBytes(folderPidl);
-
-            var binEntry = new SHChangeNotifyEntry { pidl = folderPidl, fRecursive = 1 };
-            _binRegId = Shell32.SHChangeNotifyRegister(
-                _hwnd,
-                SHCNRF.InterruptLevel | SHCNRF.NewDelivery,
-                SHCNE.CREATE | SHCNE.DELETE | SHCNE.UPDATEDIR | SHCNE.UPDATEITEM,
-                WmNotify,
-                1,
-                ref binEntry);
+            catch (Exception ex)
+            {
+                Serilog.Log.Warning(ex, "Recycle Bin folder watch could not start on {Path}", binPath);
+            }
         }
-        finally
-        {
-            if (folderPidl != IntPtr.Zero) { Shell32.ILFree(folderPidl); }
-        }
-    }
 
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
     {
@@ -200,16 +216,6 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     private void HandleEvent(int lEvent, IntPtr pppidl)
     {
         var pidl1 = Marshal.ReadIntPtr(pppidl, 0);
-
-        // Anything INSIDE the physical bin is a signal about the bin, never an item of its own.
-        // Checked first: the bin registration is recursive, so without this the $I/$R pairs would
-        // arrive as ordinary CREATE/DELETE and be filed as phantom desktop items in the default
-        // box.
-        if (IsInsideRecycleBin(pidl1))
-        {
-            if (ResolveRecycleBin() is { } binItem) { ItemUpdated?.Invoke(binItem); }
-            return;
-        }
 
         switch (lEvent)
         {
@@ -359,31 +365,6 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     }
 
     /// <summary>
-    /// True when an event's PIDL lies inside the registered bin folder.
-    /// </summary>
-    /// <remarks>
-    /// Prefix compare on the marshalled PIDL bytes, which is exactly how the shell encodes "this item
-    /// is inside that folder". Cheaper and more reliable than resolving every event to a path and
-    /// string-matching it.
-    /// </remarks>
-    private bool IsInsideRecycleBin(IntPtr pidl)
-    {
-        if (_binFolderBytes.Length == 0 || pidl == IntPtr.Zero) { return false; }
-
-        try
-        {
-            var bytes = PidlToBytes(pidl);
-            if (bytes.Length <= _binFolderBytes.Length) { return false; }
-
-            return _binFolderBytes.AsSpan().SequenceEqual(bytes.AsSpan(0, _binFolderBytes.Length));
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    /// <summary>
     /// The Recycle Bin as a <see cref="BoxItem"/>, resolved from its namespace PIDL.
     /// </summary>
     /// <remarks>
@@ -422,10 +403,22 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
             _regId = 0;
         }
 
-        if (_binRegId != 0)
+        // The folder watcher holds an OS handle, so it must be disposed on every Stop - not just on
+        // shutdown, or a disable/enable cycle leaks one per cycle.
+        if (_binWatcher is not null)
         {
-            Shell32.SHChangeNotifyDeregister(_binRegId);
-            _binRegId = 0;
+            try
+            {
+                _binWatcher.EnableRaisingEvents = false;
+                _binWatcher.Dispose();
+            }
+            catch
+            {
+                // Nothing useful to do while tearing down.
+            }
+
+            _binWatcher = null;
+            _binWatchPath = null;
         }
 
         if (_hwnd != IntPtr.Zero)
