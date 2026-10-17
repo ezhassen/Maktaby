@@ -1,13 +1,13 @@
-using System;
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
-using System.Text;
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using Maktaby.Core.Services;
 using Maktaby.Native;
-using static Maktaby.Native.Win32Constants;
 using Maktaby.Win32.NativeMethods;
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
+using System.Text;
+using static Maktaby.Native.Win32Constants;
 
 namespace Maktaby.Shell.Services;
 
@@ -29,10 +29,18 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     private ushort _atom;
     private IntPtr _hwnd;
     private uint _regId;
+    /// <summary>Second registration, on the Recycle Bin folder only - see RegisterRecycleBin.</summary>
+    private uint _binRegId;
+
+    /// <summary>Bytes of the registered bin FOLDER pidl, so bin-internal events can be recognised.</summary>
+    private byte[] _binFolderBytes = Array.Empty<byte>();
     private bool _suppressed;
 
     public event Action<BoxItem>? ItemCreated;
     public event Action<BoxItem>? ItemDeleted;
+
+    /// <inheritdoc />
+    public event Action<BoxItem>? ItemUpdated;
 
     public void Start()
     {
@@ -91,14 +99,79 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
         };
 
         _regId = Shell32.SHChangeNotifyRegister(
-            _hwnd,
-            SHCNRF.InterruptLevel | SHCNRF.ShellLevel | SHCNRF.NewDelivery,
-            SHCNE.CREATE | SHCNE.DELETE | SHCNE.RENAMEITEM | SHCNE.RENAMEFOLDER,
-            WmNotify,
-            1,
-            ref entry);
+                    _hwnd,
+                    SHCNRF.InterruptLevel | SHCNRF.ShellLevel | SHCNRF.NewDelivery,
+                    SHCNE.CREATE | SHCNE.DELETE | SHCNE.RENAMEITEM | SHCNE.RENAMEFOLDER,
+                    WmNotify,
+                    1,
+                    ref entry);
 
         Shell32.ILFree(deskPidl);
+
+        RegisterRecycleBin();
+    }
+
+    /// <summary>
+    /// Subscribes to the Recycle Bin's PHYSICAL folder (<c>C:\$Recycle.Bin</c>), recursively.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This replaces an earlier registration on the shell-namespace PIDL from
+    /// <c>SHGetSpecialFolderLocation(CSIDL_BITBUCKET)</c>. That one was the obvious choice and it does
+    /// not work: measured on this machine, emptying the bin produced <b>no notification at all</b> -
+    /// not <c>UPDATEITEM</c>, not <c>UPDATEDIR</c>, nothing - so the icon stayed stale. The
+    /// namespace PIDL represents the bin's appearance, not its contents, and the shell does not
+    /// report changes to the latter through it.
+    /// </para>
+    /// <para>
+    /// The real folder does change on every operation that matters: deleting something writes new
+    /// <c>$I</c>/<c>$R</c> pairs into it, restoring removes them, emptying removes them all. Those are
+    /// ordinary filesystem notifications, so this registration is filesystem-level
+    /// (<c>SHCNRF_InterruptLevel</c>) rather than shell-level.
+    /// </para>
+    /// <para>
+    /// Recursive because the interesting entries live in per-drive, per-user subfolders below it.
+    /// The descendants are never treated as items: <see cref="HandleEvent"/> recognises them by PIDL
+    /// prefix and reports a single update for the bin, so none of this can leak into the boxes as
+    /// phantom desktop items.
+    /// </para>
+    /// </remarks>
+    private void RegisterRecycleBin()
+    {
+        IntPtr folderPidl = IntPtr.Zero;
+        try
+        {
+            // The physical bin path is composed rather than asked for: SHGetSpecialFolderPath
+            // faulted with an ExecutionEngineException, and there is nothing to learn from a
+            // native call when the answer is "%SystemDrive%\\$Recycle.Bin".
+            string? systemDrive = Environment.GetEnvironmentVariable("SystemDrive");
+            if (string.IsNullOrWhiteSpace(systemDrive))
+            {
+                return;
+            }
+
+            var binPath = System.IO.Path.Combine(systemDrive, "$Recycle.Bin");
+            if (!System.IO.Directory.Exists(binPath)) { return; }
+
+            folderPidl = Shell32.ILCreateFromPathW(binPath);
+            if (folderPidl == IntPtr.Zero) { return; }
+
+            // Kept for recognising events that arrive from inside the bin.
+            _binFolderBytes = PidlToBytes(folderPidl);
+
+            var binEntry = new SHChangeNotifyEntry { pidl = folderPidl, fRecursive = 1 };
+            _binRegId = Shell32.SHChangeNotifyRegister(
+                _hwnd,
+                SHCNRF.InterruptLevel | SHCNRF.NewDelivery,
+                SHCNE.CREATE | SHCNE.DELETE | SHCNE.UPDATEDIR | SHCNE.UPDATEITEM,
+                WmNotify,
+                1,
+                ref binEntry);
+        }
+        finally
+        {
+            if (folderPidl != IntPtr.Zero) { Shell32.ILFree(folderPidl); }
+        }
     }
 
     private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -128,11 +201,25 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     {
         var pidl1 = Marshal.ReadIntPtr(pppidl, 0);
 
+        // Anything INSIDE the physical bin is a signal about the bin, never an item of its own.
+        // Checked first: the bin registration is recursive, so without this the $I/$R pairs would
+        // arrive as ordinary CREATE/DELETE and be filed as phantom desktop items in the default
+        // box.
+        if (IsInsideRecycleBin(pidl1))
+        {
+            if (ResolveRecycleBin() is { } binItem) { ItemUpdated?.Invoke(binItem); }
+            return;
+        }
+
         switch (lEvent)
         {
             case (int)SHCNE.CREATE:
-            case (int)SHCNE.UPDATEITEM:
                 RaiseCreated(Resolve(pidl1));
+                break;
+
+            case (int)SHCNE.UPDATEITEM:
+            case (int)SHCNE.UPDATEDIR:
+                if (Resolve(pidl1) is { } updated) { ItemUpdated?.Invoke(updated); }
                 break;
 
             case (int)SHCNE.DELETE:
@@ -204,6 +291,14 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
                     Path = parse,
                     DisplayName = name,
                     ItemType = isFolder ? BoxItemType.Folder : BoxItemType.File,
+
+                    // The PIDL travels WITH the resolved item, not just the notification. Without it the
+                    // item is unmatchable for anything that has no filesystem path: measured on this
+                    // machine, the Recycle Bin answers SHGetPathFromIDListW with a failure, so it is
+                    // stored as a PIDL-backed entry, while this resolved copy would carry only the
+                    // namespace string in Path - and BoxItem.RefersToSame needs both sides to hold the
+                    // SAME kind of identity to compare them.
+                    Pidl = Convert.ToBase64String(PidlToBytes(pidl)),
                 };
             }
             finally
@@ -223,12 +318,114 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Marshals an absolute PIDL to bytes, the form <see cref="BoxItem.Pidl"/> stores.
+    /// </summary>
+    /// <remarks>
+    /// Walks the SHITEMID chain: each item begins with its own byte count, and a zero-length item
+    /// terminates the list. Best-effort - a PIDL that cannot be walked yields an empty array, which
+    /// simply leaves the caller with a path-matched item rather than failing the notification.
+    /// </remarks>
+    private static byte[] PidlToBytes(IntPtr pidl)
+    {
+        try
+        {
+            int size = 2;   // terminating null SHITEMID
+            for (var item = pidl; item != IntPtr.Zero;)
+            {
+                short cb = Marshal.ReadInt16(item);
+                if (cb <= 0) { break; }
+                size += cb;
+                item = IntPtr.Add(item, cb);
+            }
+
+            var buffer = new byte[size];
+            var dst = 0;
+            for (var src = pidl; src != IntPtr.Zero;)
+            {
+                short cb = Marshal.ReadInt16(src);
+                if (cb <= 0) { break; }
+                Marshal.Copy(src, buffer, dst, cb);
+                dst += cb;
+                src = IntPtr.Add(src, cb);
+            }
+
+            return buffer;
+        }
+        catch
+        {
+            return Array.Empty<byte>();
+        }
+    }
+
+    /// <summary>
+    /// True when an event's PIDL lies inside the registered bin folder.
+    /// </summary>
+    /// <remarks>
+    /// Prefix compare on the marshalled PIDL bytes, which is exactly how the shell encodes "this item
+    /// is inside that folder". Cheaper and more reliable than resolving every event to a path and
+    /// string-matching it.
+    /// </remarks>
+    private bool IsInsideRecycleBin(IntPtr pidl)
+    {
+        if (_binFolderBytes.Length == 0 || pidl == IntPtr.Zero) { return false; }
+
+        try
+        {
+            var bytes = PidlToBytes(pidl);
+            if (bytes.Length <= _binFolderBytes.Length) { return false; }
+
+            return _binFolderBytes.AsSpan().SequenceEqual(bytes.AsSpan(0, _binFolderBytes.Length));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The Recycle Bin as a <see cref="BoxItem"/>, resolved from its namespace PIDL.
+    /// </summary>
+    /// <remarks>
+    /// Resolved separately from the event's own PIDL because the event points at an $I/$R pair inside
+    /// the physical folder - a file the user never sees - and the icon belongs to the bin item.
+    /// </remarks>
+    private BoxItem? ResolveRecycleBin()
+    {
+        IntPtr pidl = IntPtr.Zero;
+        try
+        {
+            if (Shell32.SHGetSpecialFolderLocation(IntPtr.Zero, 10 /* CSIDL_BITBUCKET */, out pidl) != 0 ||
+                pidl == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            return Resolve(pidl);
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            if (pidl != IntPtr.Zero) { Shell32.ILFree(pidl); }
+        }
+    }
+
+
     public void Stop()
     {
         if (_regId != 0)
         {
             Shell32.SHChangeNotifyDeregister(_regId);
             _regId = 0;
+        }
+
+        if (_binRegId != 0)
+        {
+            Shell32.SHChangeNotifyDeregister(_binRegId);
+            _binRegId = 0;
         }
 
         if (_hwnd != IntPtr.Zero)
@@ -254,4 +451,28 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
     public void Pause() => _suppressed = true;
 
     public void Resume() => _suppressed = false;
+
+    /// <inheritdoc />
+    public void NotifyRecycleBinUpdated()
+    {
+        // Resolve the bin and hand it over as an updated item, so a consumer that reloads icons by
+        // matching identity behaves the same for our own deletes as for the shell's own.
+        IntPtr pidl = IntPtr.Zero;
+        try
+        {
+            if (Shell32.SHGetSpecialFolderLocation(IntPtr.Zero, 10 /* CSIDL_BITBUCKET */, out pidl) == 0 &&
+                pidl != IntPtr.Zero)
+            {
+                if (Resolve(pidl) is { } item) { ItemUpdated?.Invoke(item); }
+            }
+        }
+        catch
+        {
+            // Icon freshness is never worth failing a delete over.
+        }
+        finally
+        {
+            if (pidl != IntPtr.Zero) { Shell32.ILFree(pidl); }
+        }
+    }
 }

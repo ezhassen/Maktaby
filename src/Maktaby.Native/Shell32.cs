@@ -44,6 +44,19 @@ public static class Shell32
     [DllImport("shell32.dll")]
     public static extern int SHGetSpecialFolderLocation(IntPtr hwndOwner, int csidl, out IntPtr ppidl);
 
+    /// <summary>
+    /// PIDL for a filesystem path, the counterpart of <see cref="ILCreateFromPath"/>'s inverse.
+    /// </summary>
+    /// <remarks>
+    /// Spelled with the explicit <c>W</c> and <c>ExactSpelling</c>. Relying on the CLR to append
+    /// the suffix works for most entry points in this file, but an earlier sibling
+    /// (<c>SHGetSpecialFolderPath</c>) faulted with an <see cref="ExecutionEngineException"/> rather
+    /// than returning an HRESULT, which is what a mis-resolved or mis-marshalled string parameter
+    /// looks like. There is no reason to leave that ambiguity in place for a call this code depends on.
+    /// </remarks>
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+    public static extern IntPtr ILCreateFromPathW([MarshalAs(UnmanagedType.LPWStr)] string pszPath);
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     public static extern int SHGetPathFromIDListW(IntPtr pidl, StringBuilder pszPath);
 

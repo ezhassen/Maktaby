@@ -89,6 +89,11 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
 
     private void HandleDeleted(BoxItem item)
     {
+        //// A deletion that was not permanent changed the Recycle Bin's contents, and with them its
+        //// icon. The shell's own bin notification covers external changes; this covers ours, which
+        //// can arrive while the watcher is paused suppressing other notifications.
+        NotifyRecycleBinTouched();
+
         if (item is null || string.IsNullOrEmpty(item.Path))
         {
             return;
@@ -113,6 +118,28 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
         if (changed)
         {
             _save();
+        }
+    }
+
+    /// <summary>
+    /// Tells the watcher the Recycle Bin's appearance may have changed, from this app's own
+    /// deletions.
+    /// </summary>
+    /// <remarks>
+    /// The observer for this signal is a view concern (an icon cache), so the coordinator only
+    /// reports the fact and lets the watcher fan it out on the dispatcher it already owns. Wrapped
+    /// because a missing watcher must not break deletion - the worst case is an icon that updates one
+    /// action later.
+    /// </remarks>
+    private void NotifyRecycleBinTouched()
+    {
+        try
+        {
+            _dispatcher.Invoke(() => _watcher.NotifyRecycleBinUpdated());
+        }
+        catch
+        {
+            // Icon freshness is never worth failing a delete over.
         }
     }
 
@@ -256,3 +283,4 @@ public sealed class FileRuleCoordinator : IFileRuleCoordinator
         return true;
     }
 }
+

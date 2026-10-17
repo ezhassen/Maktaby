@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
+using System.Windows.Input;
 using Maktaby.Native;
 using static Maktaby.Native.Win32Constants;
 
@@ -486,6 +487,57 @@ internal static class Win32Apis
         handle = GCHandle.Alloc(bytes, GCHandleType.Pinned);
         ptr = handle.AddrOfPinnedObject();
         return true;
+    }
+
+    /// <summary>
+    /// Shell NAMESPACE identity of a stored PIDL - the <c>::{GUID}</c> form - or empty.
+    /// </summary>
+    /// <remarks>
+    /// Needed because <see cref="GetPathFromPidl"/> cannot identify some shell items: it fails for
+    /// the Recycle Bin (measured: <c>SHGetPathFromIDListW</c> returns 0 and an empty buffer), which is
+    /// therefore stored with a PIDL and no path at all. FORPARSING is the one representation both that
+    /// item and a shell-resolved one can be compared on - the Recycle Bin answers
+    /// <c>::{645FF040-5081-101B-9F08-00AA002F954E}</c> - whereas the localized NORMAL name cannot be
+    /// used for identity because it changes with the language.
+    /// </remarks>
+    public static string GetPidlParseName(string pidlBase64)
+    {
+        if (!TryPinPidl(pidlBase64, out _, out var handle, out var ptr))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            if (Shell32.SHCreateItemFromIDList(ptr, Shell32.IID_IShellItem, out IShellItem item) != 0 ||
+                item is null)
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                if (item.GetDisplayName(SHGDNF.FORPARSING, out IntPtr p) != 0 || p == IntPtr.Zero)
+                {
+                    return string.Empty;
+                }
+
+                try { return Marshal.PtrToStringUni(p) ?? string.Empty; }
+                finally { Marshal.FreeCoTaskMem(p); }
+            }
+            finally
+            {
+                Marshal.ReleaseComObject(item);
+            }
+        }
+        catch
+        {
+            return string.Empty;
+        }
+        finally
+        {
+            handle.Free();
+        }
     }
 
     /// <summary>Returns the display name for a stored PIDL (used as the item label).</summary>
@@ -1750,13 +1802,53 @@ internal static class Win32Apis
     /// <summary>The LANGID of the installed system display language (the machine-wide fallback).</summary>
     public static ushort GetSystemDefaultUILanguage()
     {
-        try
-        {
-            return Kernel32.GetSystemDefaultUILanguage();
-        }
-        catch
-        {
-            return 0;
-        }
-    }
-}
+try
+          {
+              return Kernel32.GetSystemDefaultUILanguage();
+          }
+          catch
+          {
+              return 0;
+          }
+      }
+
+      /// <summary>
+      /// The character the active keyboard layout produces for <paramref name="key"/>, or '\0'.
+      /// </summary>
+      /// <remarks>
+      /// Type-ahead navigation needs this rather than <c>KeyInterop.KeyToChar</c>, which is a fixed
+      /// Latin table: on an Arabic or German layout the fixed table would search for the wrong
+      /// initial. Modifier-only keys, dead keys and an unhandled layout all come back as '\0',
+      /// which every caller treats as "not a search character".
+      /// </remarks>
+      public static char TranslateKeyToChar(Key key)
+      {
+          try
+          {
+              if (key == Key.System) { return '\0'; }
+
+              int virtualKey = KeyInterop.VirtualKeyFromKey(key);
+              if (virtualKey <= 0) { return '\0'; }
+
+              var state = new byte[256];
+              if (!User32.GetKeyboardState(state)) { return '\0'; }
+
+              var hkl = User32.GetKeyboardLayout(0);
+              if (hkl == IntPtr.Zero) { return '\0'; }
+
+              var buffer = new char[8];
+              int written = User32.ToUnicodeEx((uint)virtualKey, 0, state, buffer, buffer.Length, 0, hkl);
+
+              // Negative means the layout was swapped underneath us and 0 means nothing to show -
+              // neither is worth surfacing; the caller simply sees no character.
+              if (written <= 0) { return '\0'; }
+
+              char c = buffer[0];
+              return char.IsControl(c) ? '\0' : c;
+          }
+          catch
+          {
+              return '\0';
+          }
+      }
+  }

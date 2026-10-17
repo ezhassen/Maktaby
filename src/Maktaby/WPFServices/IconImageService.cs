@@ -130,6 +130,41 @@ public sealed class IconImageService
         return source;
     }
 
+    /// <summary>
+    /// Drops the cached icon for a shell PIDL so the next request re-reads it from the shell.
+    /// </summary>
+    /// <remarks>
+    /// Needed for the Recycle Bin, whose icon is derived from its contents and therefore changes
+    /// without the PIDL - or anything about the item - changing. Every other icon is stable for the
+    /// life of the path, which is exactly why the cache is safe for them.
+    /// </remarks>
+    public void InvalidatePidl(string pidlBase64)
+    {
+        if (string.IsNullOrEmpty(pidlBase64)) { return; }
+
+        lock (_cacheLock)
+        {
+            if (_pidlIndex.Remove(pidlBase64, out var node))
+            {
+                _pidlOrder.Remove(node);
+            }
+        }
+    }
+
+    /// <summary>Drops the cached icon for a path, for the same reason as <see cref="InvalidatePidl"/>.</summary>
+    public void InvalidatePath(string path)
+    {
+        if (string.IsNullOrEmpty(path)) { return; }
+
+        lock (_cacheLock)
+        {
+            if (_cacheIndex.Remove(path, out var node))
+            {
+                _cacheOrder.Remove(node);
+            }
+        }
+    }
+
     /// <summary>Loads an icon for a stored shell PIDL (virtual items such as UWP/Store apps). When
     /// <paramref name="filePath"/> is supplied (a desktop <c>.lnk</c> we created for the item) it is used as
     /// an additional resolution source so the icon follows PIDL-only link targets.</summary>

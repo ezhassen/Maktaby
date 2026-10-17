@@ -124,7 +124,7 @@ public sealed class FileOperationService : IFileOperationService
         }, cancellationToken);
     }
 
-    public Task<bool> CopyAsync(IReadOnlyList<string> sources, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default)
+    public Task<bool> CopyAsync(IReadOnlyList<string> sources, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default, bool confirmReplace = false)
     {
         if (sources == null || sources.Count == 0 || destinations == null || destinations.Count == 0) return Task.FromResult(false);
         var validSources = sources.Where(s => !string.IsNullOrEmpty(s)).ToArray();
@@ -159,11 +159,23 @@ public sealed class FileOperationService : IFileOperationService
                 wFunc = Win32Constants.FO_COPY,
                 pFrom = multiFrom,
                 pTo = multiTo,
-                fFlags = (ushort)(Win32Constants.FOF_NOCONFIRMATION | Win32Constants.FOF_NOERRORUI | Win32Constants.FOF_ALLOWUNDO),
+                fFlags = CopyFlags(confirmReplace),
             };
             int hr = Win32Apis.FileOperation(ref op);
             return hr == 0 && op.fAnyOperationsAborted == 0;
         }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Flags for a shell copy. <c>FOF_NOCONFIRMATION</c> is the one that matters: it suppresses the
+    /// shell's "file already exists, replace it?" prompt, so leaving it out is what makes a paste
+    /// into a folder behave like Explorer's instead of silently overwriting.
+    /// </summary>
+    private static ushort CopyFlags(bool confirmReplace)
+    {
+        var flags = Win32Constants.FOF_NOERRORUI | Win32Constants.FOF_ALLOWUNDO;
+        if (!confirmReplace) { flags |= Win32Constants.FOF_NOCONFIRMATION; }
+        return (ushort)flags;
     }
 
     private static string BuildMultiString(IReadOnlyList<string> paths)

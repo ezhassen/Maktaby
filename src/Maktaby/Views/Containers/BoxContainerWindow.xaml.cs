@@ -3,6 +3,8 @@ using Maktaby.Controls.ContainersControls;
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using Maktaby.Helpers;
+using Maktaby.Native;
+using Maktaby.Shared.Interfaces;
 using Maktaby.ViewModels;
 using Maktaby.Views.HelpersViews;
 using Maktaby.Win32.NativeMethods;
@@ -16,8 +18,6 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
-using Maktaby.Native;
-using Maktaby.Shared.Interfaces;
 
 namespace Maktaby.Views.Containers;
 
@@ -1524,13 +1524,72 @@ public partial class BoxContainerWindow : WidgetWindow
         (srcTabWin2 as WidgetWindow)?.UpdateChrome();
     }
 
-    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    /// <summary>
+    /// Owner of the Ctrl+C / Ctrl+X / Ctrl+V shortcuts, for BOTH body types.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// These live at window level on purpose. They used to be split: paste was handled here but
+    /// only for <see cref="BoxType.DesktopItems"/>, while copy and cut sat in each control's own
+    /// key handler and therefore only fired when an item happened to be focused - and not at all in
+    /// a folder portal, because the window-level branch skipped them. That split is exactly how
+    /// "paste works in a box, copy and cut do nothing in a portal" happened.
+    /// </para>
+    /// <para>
+    /// A Window tunnels <c>PreviewKeyDown</c> ahead of every focused element, so handling it here
+    /// and marking it handled is sufficient and leaves exactly one owner. The controls therefore
+    /// do NOT also handle these keys: two owners would drift apart, which is the bug this replaced.
+    /// </para>
+    /// </remarks>
+    private async void Window_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (_tabDragging && e.Key == Key.Escape)
         {
             CancelTabDrag();
             e.Handled = true;
+            return;
         }
+
+        Key key = e.Key == Key.System ? e.SystemKey : e.Key;
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        if (!ctrl || key is not (Key.C or Key.X or Key.V))
+        {
+            return;
+        }
+
+        // Never steal a keystroke from a text box - the box title and the rename popups live in
+        // this window, and typing "c" into a name must not copy anything.
+        if (e.OriginalSource is TextBox or PasswordBox) { return; }
+
+        bool handled;
+
+        if (_vm.ActiveBox?.BoxType == BoxType.FolderPortal)
+        {
+            var portal = FolderPortalContent;
+            handled = portal is null
+                ? false
+                : key switch
+                {
+                    Key.C => portal.CopySelectedItems(cut: false),
+                    Key.X => portal.CopySelectedItems(cut: true),
+                    _ => await portal.PasteIntoFolderAsync(),
+                };
+        }
+        else if (BoxContent is { } box)
+        {
+            handled = key switch
+            {
+                Key.C => box.CopySelectedItems(cut: false),
+                Key.X => box.CopySelectedItems(cut: true),
+                _ => await box.PasteFromClipboard() > 0,
+            };
+        }
+        else
+        {
+            handled = false;
+        }
+
+        if (handled) { e.Handled = true; }
     }
 
     private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)

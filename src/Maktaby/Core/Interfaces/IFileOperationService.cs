@@ -28,5 +28,14 @@ public interface IFileOperationService
 
     /// <summary>Copies multiple items from <paramref name="sources"/> to <paramref name="destinations"/>
     /// (one-to-one mapping). Uses a single shell operation. Returns false if cancelled or failed.</summary>
-    Task<bool> CopyAsync(IReadOnlyList<string> sources, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Copies with the shell, optionally asking before replacing an existing destination.
+    /// </summary>
+    /// <param name="confirmReplace">
+    /// When true the shell shows its own "this file already exists, replace it?" prompt on a name
+    /// collision, which is what pasting into a folder that already holds the name should do.
+    /// False (the default) keeps the operation silent and is what the app's own materialisation
+    /// wants, since those callers have already chosen a free name.
+    /// </param>
+    Task<bool> CopyAsync(IReadOnlyList<string> sources, IReadOnlyList<string> destinations, CancellationToken cancellationToken = default, bool confirmReplace = false);
 }

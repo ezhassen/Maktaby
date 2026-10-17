@@ -1,5 +1,7 @@
+using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
 using Maktaby.Helpers;
+using Maktaby.Localization;
 using Maktaby.Shell.Services;
 using Maktaby.ViewModels;
 using Maktaby.Views.Containers;
@@ -37,6 +39,41 @@ public partial class FolderPortalControl : WidgetControlBase
 
     public MainViewModel? Host { get; set; }
     public Action? RequestSave { get; set; }
+
+    // Copying indicator, mirroring BoxControl: a paste into a folder can move real files, and a
+    // cross-volume copy is slow enough to need feedback. Dependency properties rather than plain
+    // CLR properties because the pill binds to the control as a RelativeSource ancestor, which
+    // only updates on a change notification.
+    public static readonly DependencyProperty IsCopyingFilesProperty = DependencyProperty.Register(
+        nameof(IsCopyingFiles), typeof(bool), typeof(FolderPortalControl), new PropertyMetadata(false));
+
+    public bool IsCopyingFiles
+    {
+        get => (bool)GetValue(IsCopyingFilesProperty);
+        private set => SetValue(IsCopyingFilesProperty, value);
+    }
+
+    public static readonly DependencyProperty CopyStatusTextProperty = DependencyProperty.Register(
+        nameof(CopyStatusText), typeof(string), typeof(FolderPortalControl), new PropertyMetadata(string.Empty));
+
+    public string CopyStatusText
+    {
+        get => (string)GetValue(CopyStatusTextProperty);
+        private set => SetValue(CopyStatusTextProperty, value);
+    }
+
+    // Generation guard for the pill: Progress<T> posts asynchronously, so a late callback from a
+    // finished operation would otherwise leave the indicator stuck on. Shared with the drop path
+    // for the same reason BoxControl shares one counter.
+    private int _copyingSeq;
+
+    // Type-ahead state: the character being repeated and when the run started. The cycle position is
+    // derived from the selection each time, so it cannot drift onto a non-matching item.
+    private char _typeAheadChar;
+    private DateTime _typeAheadAt;
+
+    /// <summary>Gap after which a keystroke starts a new type-ahead search instead of extending one.</summary>
+    private const int TypeAheadResetMs = 800;
 
     public static readonly DependencyProperty IconSizeProperty = DependencyProperty.Register(
         nameof(IconSize), typeof(double), typeof(FolderPortalControl), new PropertyMetadata(32.0));
@@ -736,6 +773,153 @@ public partial class FolderPortalControl : WidgetControlBase
         _dragOrigin = null;
     }
 
+    /// <summary>
+    /// Copies (Ctrl+C) or cuts (Ctrl+X) the selected folder entries.
+    /// </summary>
+    /// <remarks>
+    /// A cut changes nothing here. These are real files, so the originals can only be removed once
+    /// a paste has produced their replacements - the same rule a box item follows. Falls back to
+    /// the entry the key was pressed on, then to the focused one, matching Delete and the arrow
+    /// keys. Copying "nothing" silently is worse.
+    /// <para>
+    /// Called from <c>BoxContainerWindow.Window_PreviewKeyDown</c>, which owns these shortcuts for
+    /// every body type. Kept here so the box and the portal share one implementation of "put the
+    /// selection on the clipboard" rather than one per key handler.
+    /// </para>
+    /// </remarks>
+    public bool CopySelectedItems(bool cut) => CopySelectedItems(cut, fallback: null);
+
+    private bool CopySelectedItems(bool cut, FolderItemViewModel? fallback)
+    {
+        if (Box is not { } box) { return false; }
+
+        var selected = box.FolderItems.Where(i => i.IsSelected).ToList();
+
+        // Nothing selected: fall back to the entry the key was pressed on, then to the focused one,
+        // matching what Delete and the arrow keys do. Copying "nothing" silently is worse.
+        if (selected.Count == 0)
+        {
+            if (fallback is not null && box.FolderItems.Contains(fallback))
+            {
+                selected.Add(fallback);
+            }
+            else if (_focusedIndex >= 0 && _focusedIndex < box.FolderItems.Count)
+            {
+                selected.Add(box.FolderItems[_focusedIndex]);
+            }
+        }
+
+        if (selected.Count == 0) { return false; }
+
+        return BoxItemClipboardOps.SetClipboard(selected.Select(ToTransfer), cut);
+    }
+
+    private static BoxItemTransfer ToTransfer(FolderItemViewModel item) => new()
+    {
+        Path = item.Path,
+        DisplayName = item.DisplayName,
+        ItemType = item.IsDirectory ? BoxItemType.Folder : BoxItemType.File,
+    };
+
+    /// <summary>
+    /// Explorer-style type-ahead: a printable key jumps to the next item whose name starts with
+    /// that character, and typing the same letter again cycles through the matches.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The character comes from the active keyboard layout via <c>ToUnicodeEx</c>, not from a fixed
+    /// table, so an Arabic or German layout searches for the letter the user actually typed.
+    /// </para>
+    /// <para>
+    /// The search always runs DOWN the list and wraps at the end, whichever way the folder is
+    /// sorted. "As the current sort" decides which items are neighbours, not which way the search
+    /// travels - reversing it on a descending sort made the next match the one above, which is not
+    /// what a typed prefix is for.
+    /// </para>
+    /// <para>
+    /// The run resets when the character changes or after <see cref="TypeAheadResetMs"/>, so typing
+    /// "ab" fast searches "ab" while typing "a", waiting, then "b" searches for "b".
+    /// </para>
+    /// </remarks>
+    private bool TryTypeAhead(Key key)
+    {
+        if (Box is not { } box || box.FolderItems.Count == 0) { return false; }
+        if (Keyboard.Modifiers != ModifierKeys.None) { return false; }
+
+        char c = Win32Apis.TranslateKeyToChar(key);
+        if (char.IsWhiteSpace(c) || char.IsControl(c)) { return false; }
+
+        var now = DateTime.UtcNow;
+        if (c != _typeAheadChar || (now - _typeAheadAt).TotalMilliseconds > TypeAheadResetMs)
+        {
+            // Different character, or the run went stale: this press starts a fresh search.
+            _typeAheadChar = c;
+            _typeAheadAt = now;
+        }
+        else
+        {
+            _typeAheadAt = now;
+        }
+
+        var items = box.FolderItems;
+
+        // Collect the matches and step among THEM. Walking the list and skipping non-matches looks
+        // equivalent but is not: with one match the next press landed on the following item, which
+        // by definition cannot start with the typed character.
+        var initial = c.ToString();
+        var matches = new List<int>();
+        for (int i = 0; i < items.Count; i++)
+        {
+            var name = items[i].DisplayName;
+            if (name.StartsWith(initial, StringComparison.CurrentCultureIgnoreCase) ||
+                name.StartsWith(initial, StringComparison.OrdinalIgnoreCase))
+            {
+                matches.Add(i);
+            }
+        }
+
+        if (matches.Count == 0)
+        {
+            // Nothing starts with that character: leave the selection alone, the way Explorer does.
+            return true;
+        }
+
+        // The first match BELOW the current item, wrapping to the first. Strictly greater, so
+        // holding a key cycles through the matches instead of sticking to the one under the cursor.
+        int position = matches.FindIndex(m => m > _focusedIndex);
+        if (position < 0) { position = 0; }
+
+        int target = matches[position];
+        SelectOnly(items[target]);
+        _focusedIndex = target;
+        _anchorIndex = target;
+        ScrollToItem(target);
+        FocusItem(target);
+        return true;
+    }
+
+    /// <summary>
+    /// Brings an index into view in whichever view is active.
+    /// </summary>
+    /// <remarks>
+    /// <c>FocusItem</c> only knows the icons list, so in the Details view a selection could land
+    /// entirely off-screen - which reads as "the key did nothing". Selection that cannot be seen is
+    /// not feedback.
+    /// </remarks>
+    private void ScrollToItem(int index)
+    {
+        if (Box is not { } box || index < 0 || index >= box.FolderItems.Count) { return; }
+
+        if (box.FolderPortalViewMode == FolderPortalViewMode.Details)
+        {
+            if (box.FolderItems[index] is { } row)
+            {
+                DetailsGrid.ScrollIntoView(row);
+                DetailsGrid.SelectedItem = row;
+            }
+        }
+    }
+
     private void ItemBorder_GotFocus(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: FolderItemViewModel vm } && Box != null)
@@ -1012,6 +1196,10 @@ public partial class FolderPortalControl : WidgetControlBase
                 e.Handled = true;
             }
         }
+        else if (TryTypeAhead(key))
+        {
+            e.Handled = true;
+        }
     }
 
     private void HandleArrowKey(Key key)
@@ -1260,6 +1448,161 @@ public partial class FolderPortalControl : WidgetControlBase
         var window = Window.GetWindow(this);
         IntPtr hwnd = window != null ? new System.Windows.Interop.WindowInteropHelper(window).Handle : IntPtr.Zero;
         Win32.NativeMethods.Win32Apis.ShowProperties(hwnd, vm.Path, null);
+    }
+
+    /// <summary>
+    /// Right-click on bare portal surface opens the paste menu; a right-click on a row is left to
+    /// the native shell menu.
+    /// </summary>
+    private void FolderPortal_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Box is not { } box || !box.HasFolder) { return; }
+        if (IsOverFolderItem(e.OriginalSource as DependencyObject)) { return; }
+
+        var menu = (ContextMenu?)Resources["FolderEmptySpaceMenu"];
+        if (menu is null) { return; }
+
+        menu.PlacementTarget = this;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        menu.DataContext = DataContext;
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    private void FolderEmptySpaceMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu) { return; }
+
+        var item = menu.Items.OfType<MenuItem>().FirstOrDefault();
+        if (item is null) { return; }
+
+        // Set here rather than with the LocKey markup extension, which fails to compile in this
+        // file (see the comment on the menu in the XAML). Same string, same live-switch behaviour.
+        item.Header = Loc.Get("Box.PasteItems");
+
+        try
+        {
+            var clipboard = App.Services.GetService<IBoxItemClipboard>();
+            item.IsEnabled = clipboard is not null &&
+                             (clipboard.Get() is { HasItems: true } || clipboard.GetFileDrop() is { HasFiles: true });
+        }
+        catch
+        {
+            item.IsEnabled = false;
+        }
+    }
+
+    /// <summary>
+    /// Pastes into the folder the portal is showing, with the shell's own copy/move. A folder
+    /// portal shows real files, so this is a genuine file operation into the target folder rather
+    /// than the Desktop materialisation a box needs. The portal's folder watcher brings the new
+    /// files in.
+    /// </summary>
+    private void FolderEmptySpacePaste_Click(object sender, RoutedEventArgs e) => _ = PasteIntoFolderAsync();
+
+    /// <summary>
+    /// Pastes into the folder the portal is showing, with the shell's own copy/move. A folder
+    /// portal shows real files, so this is a genuine file operation into the target folder rather
+    /// than the Desktop materialisation a box needs.
+    /// </summary>
+    /// <remarks>
+    /// Owned by <c>BoxContainerWindow.Window_PreviewKeyDown</c> together with copy and cut, so all
+    /// three work whether or not an item happens to be focused. The empty-space menu routes here
+    /// too.
+    /// </remarks>
+    /// <returns>True when files actually landed.</returns>
+    public async Task<bool> PasteIntoFolderAsync()
+    {
+        var folder = Box?.CurrentFolderPath ?? Box?.FolderPath;
+        if (string.IsNullOrWhiteSpace(folder)) { return false; }
+
+        int seq = ++_copyingSeq;
+        var progress = new Progress<DropHelper.DropProgress>(p =>
+        {
+            if (seq != _copyingSeq) { return; }
+            IsCopyingFiles = true;
+            CopyStatusText = p.Total > 1
+                ? $"Pasting {p.Processed} of {p.Total} - {p.CurrentName}"
+                : $"Pasting {p.CurrentName}";
+        });
+
+        bool any = false;
+
+        try
+        {
+            var pasted = await BoxItemClipboardOps.PasteIntoFolderAsync(folder, RequestSave, progress);
+            any = pasted.Count > 0;
+
+            // Refresh explicitly rather than waiting for the folder watcher: the shell copy is one
+            // operation against a folder the watcher may have already enumerated, so the new files
+            // would otherwise not show until something else triggered a reload.
+            if (any && Box is { } box)
+            {
+                await box.RefreshFolderAsync();
+                SelectPasted(pasted);
+            }
+        }
+        finally
+        {
+            if (seq == _copyingSeq)
+            {
+                _copyingSeq++;
+                IsCopyingFiles = false;
+            }
+        }
+
+        return any;
+    }
+
+    /// <summary>
+    /// Selects what the paste delivered and brings the first of it into view.
+    /// </summary>
+    /// <remarks>
+    /// Matching is by path, because the paste returns the destination paths it created (including
+    /// any "(1)" suffix the uniqueness rule added) and the refreshed items are new view models.
+    /// Scrolling matters as much as selecting here: a paste can land outside the viewport, and a
+    /// selection the user cannot see reads as "nothing happened".
+    /// </remarks>
+    private void SelectPasted(IReadOnlyList<string> paths)
+    {
+        if (Box is not { } box || paths.Count == 0) { return; }
+
+        var pasted = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+        var first = -1;
+
+        foreach (var item in box.FolderItems)
+        {
+            if (!pasted.Contains(item.Path)) { continue; }
+
+            item.IsSelected = true;
+            if (first < 0) { first = box.FolderItems.IndexOf(item); }
+        }
+
+        if (first < 0) { return; }
+
+        _focusedIndex = first;
+        _anchorIndex = first;
+
+        // Scroll for both view modes: a paste can land far outside the viewport, and a selection
+        // the user cannot see reads as "nothing happened".
+        ScrollToItem(first);
+        FocusItem(first);
+    }
+
+    /// <summary>
+    /// True when the source sits inside a row of the portal's grid, i.e. the right-click belonged
+    /// to an item rather than to the empty surface behind them.
+    /// </summary>
+    private static bool IsOverFolderItem(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is FrameworkElement { DataContext: FolderItemViewModel }) { return true; }
+            if (current is Visual or System.Windows.Media.Media3D.Visual3D) { continue; }
+            if (current is not FrameworkElement) { break; }
+        }
+
+        return false;
     }
 
     private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)

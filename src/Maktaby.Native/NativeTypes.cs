@@ -340,6 +340,9 @@ public enum SHCNE : int
     DELETE = 0x0004,
     RENAMEFOLDER = 0x0008,
     UPDATEITEM = 0x00002000,
+    /// <summary>A folder's contents changed. Added for the Recycle Bin registration, which asks
+    /// for it so emptying or restoring the bin is visible to the app.</summary>
+    UPDATEDIR = 0x00001000,
 }
 
 /// <summary>Toolhelp32 process snapshot entry (Process32FirstW/NextW). Only the PID,

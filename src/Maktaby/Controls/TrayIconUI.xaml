@@ -24,11 +24,11 @@
                 Click="NewWidget_Click"
                 Header="{loc:LocKey Tray.NewWidget}"
                 Icon="{StaticResource ItemIcon_NewWidget}" />
-            <MenuItem
-                Click="ManageWidgets_Click"
-                Header="{loc:LocKey Tray.WidgetsGallery}"
-                Icon="{StaticResource ItemIcon_Gallery}" />
-            <Separator />
+<MenuItem
+        Click="ManageWidgets_Click"
+        Header="{loc:LocKey Tray.WidgetsGallery}"
+        Icon="{StaticResource ItemIcon_Gallery}" />
+    <Separator />
             <MenuItem
                 x:Name="resetMenuItem"
                 Click="Reset_Click"

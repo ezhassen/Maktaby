@@ -127,4 +127,20 @@ public sealed class BoxItemViewModel : ViewModelBase
         _iconLoadRequested = false;
         OnPropertyChanged(nameof(Icon));
     }
+
+    /// <summary>
+    /// Drops the cached icon and reloads it - for an item whose icon the shell recomputes over time.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ReloadIcon"/> alone would be useless for the Recycle Bin: it re-resolves through
+    /// <see cref="IconImageService"/>, whose LRU is keyed on the PIDL, and the bin's PIDL never
+    /// changes while its icon does. Invalidating the entry is what forces a fresh shell lookup.
+    /// </remarks>
+    public void ReloadIconBypassingCache()
+    {
+        if (!string.IsNullOrEmpty(_model.Pidl)) { _icons.InvalidatePidl(_model.Pidl); }
+        if (!string.IsNullOrEmpty(_model.Path)) { _icons.InvalidatePath(_model.Path); }
+
+        ReloadIcon();
+    }
 }

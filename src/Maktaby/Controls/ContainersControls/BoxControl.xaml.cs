@@ -1,5 +1,7 @@
 using Maktaby.Core.Interfaces;
+using Maktaby.Core.Models;
 using Maktaby.Helpers;
+using Maktaby.Native;
 using Maktaby.Shell.Services;
 using Maktaby.ViewModels;
 using Maktaby.Views.Containers;
@@ -16,7 +18,6 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
-using Maktaby.Native;
 
 namespace Maktaby.Controls.ContainersControls;
 
@@ -74,6 +75,8 @@ public partial class BoxControl : WidgetControlBase
 
     private readonly ItemRenameService _renameService = new();
 
+    private IShellWatcherService? _shellWatcher;
+
     private static readonly bool _singleClick = ShellSettings.IsSingleClickToOpen();
     private static DateTime _lastOpenUtc;
 
@@ -89,13 +92,31 @@ public partial class BoxControl : WidgetControlBase
 
     protected override void InitializeCtrlsCore()
     {
-        // Nothing one-time: drag timer is created lazily on first drag-over.
+        // One subscription per CONTROL, not per item: item view models are created and discarded as
+        // boxes reload, and a per-item subscription on a process-wide service would pin every one
+        // of them for the life of the app.
+        try
+        {
+            var watcher = App.Services.GetService<IShellWatcherService>();
+            watcher?.ItemUpdated += OnItemUpdated;
+            _shellWatcher = watcher;
+        }
+        catch
+        {
+            // Without the watcher the icon simply stays as cached - no reason to fail the control.
+        }
     }
 
     protected override void OnUnloadedCore()
     {
         // Torn down mid-drag (tab switch/close while hovering): never leave the scroll timer running.
         StopDragAutoScroll();
+
+        if (_shellWatcher is not null)
+        {
+            _shellWatcher.ItemUpdated -= OnItemUpdated;
+            _shellWatcher = null;
+        }
     }
 
     protected override bool SuspendCore()
@@ -536,6 +557,11 @@ public partial class BoxControl : WidgetControlBase
         // the real key lives in e.SystemKey. Normalise so Alt+Enter (properties) and friends are recognised.
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
         bool alt = (Keyboard.Modifiers & ModifierKeys.Alt) == ModifierKeys.Alt;
+
+        // Ctrl+C / Ctrl+X / Ctrl+V are NOT handled here: BoxContainerWindow.Window_PreviewKeyDown
+        // owns them for every body type. A Window tunnels PreviewKeyDown ahead of every focused
+        // element, so handling them in both places would just be two implementations of the same
+        // shortcut waiting to disagree.
 
         if (key == Key.F2)
         {
@@ -1246,6 +1272,92 @@ public partial class BoxControl : WidgetControlBase
         _anchorIndex = -1;
     }
 
+    /// <summary>
+    /// Copies (Ctrl+C) or cuts (Ctrl+X) the selected items onto the clipboard.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is moved or removed here. A cut is a real file operation and its originals can only
+    /// be deleted once the paste has produced the copies, so the clipboard is the whole of the
+    /// cut until then - see <see cref="BoxItemClipboardOps"/>.
+    /// </remarks>
+    public bool CopySelectedItems(bool cut)
+    {
+        if (Box is not { } box) { return false; }
+
+        var selected = box.Items.Where(i => i.IsSelected).Select(i => i.Model).ToList();
+        if (selected.Count == 0) { return false; }
+
+        return BoxItemClipboardOps.SetClipboard(selected, cut);
+    }
+
+    /// <summary>
+    /// Pastes box items from the clipboard into this box (Ctrl+V). Returns how many landed.
+    /// </summary>
+    /// <remarks>
+    /// Uses the same "copying n of m" pill as a file drop, and the same generation counter: pasting
+    /// files is as slow as dropping them, and the sequence guard is what stops a late callback
+    /// from a previous operation leaving the pill stuck on.
+    /// </remarks>
+    public async Task<int> PasteFromClipboard()
+    {
+        if (Box is not { } box || Host is not { } host) { return 0; }
+
+        int pasteSeq = ++_copyingSeq;
+        var progress = new Progress<DropHelper.DropProgress>(p =>
+        {
+            if (pasteSeq != _copyingSeq) { return; }
+            IsCopyingFiles = true;
+            CopyStatusText = p.Total > 1
+                ? $"Pasting {p.Processed} of {p.Total} - {p.CurrentName}"
+                : $"Pasting {p.CurrentName}";
+        });
+
+        IReadOnlyList<Maktaby.Core.Models.BoxItem> added;
+        try
+        {
+            added = await BoxItemClipboardOps.PasteAsync(box, host, RequestSave, progress);
+        }
+        finally
+        {
+            if (pasteSeq == _copyingSeq)
+            {
+                _copyingSeq++;
+                IsCopyingFiles = false;
+            }
+        }
+
+        if (added.Count == 0) { return 0; }
+
+        SelectPastedItems(added);
+        return added.Count;
+    }
+
+    /// <summary>
+    /// Selects and focuses the items a paste just delivered, so the keyboard carries on from them
+    /// and the result is visible instead of appearing silently at the end of the flow.
+    /// </summary>
+    private void SelectPastedItems(IReadOnlyList<Maktaby.Core.Models.BoxItem> added)
+    {
+        if (Box is not { } box || added.Count == 0) { return; }
+
+        foreach (var vm in box.Items)
+        {
+            if (added.Any(a => a == vm.Model))
+            {
+                vm.IsSelected = true;
+            }
+        }
+
+        var first = box.Items.FirstOrDefault(i => i.Model == added[0]);
+        if (first is null) { return; }
+
+        _focusedIndex = box.Items.IndexOf(first);
+        _anchorIndex = _focusedIndex;
+        _ = Dispatcher.BeginInvoke(
+            () => FocusItem(_focusedIndex),
+            System.Windows.Threading.DispatcherPriority.Input);
+    }
+
     /// <summary>Called by owning window on Deactivated to avoid stale multi-selections persisting.</summary>
     public void ClearSelectionOnDeactivate()
     {
@@ -1477,6 +1589,140 @@ public partial class BoxControl : WidgetControlBase
         _dragging = false;
         _moved = false;
         WindowDragController.InvalidateItemDrags();
+    }
+
+    /// <summary>
+    /// Right-click on bare box surface opens the paste menu. Right-click ON an item is left alone:
+    /// that path shows the native shell menu (see <see cref="ItemBorder_MouseRightButtonUp"/>), and
+    /// stealing it would remove Cut/Copy/Delete/Properties from every item.
+    /// </summary>
+    private void BoxControl_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (Box is not { } box || Host is null) { return; }
+        if (IsOverItem(e.OriginalSource as DependencyObject)) { return; }
+
+        var menu = (ContextMenu?)Resources["BoxEmptySpaceMenu"];
+        if (menu is null) { return; }
+
+        // The item that owns the generated name lives inside the ContextMenu itself, so it is
+        // reached through the item container rather than as a field on this class.
+        menu.PlacementTarget = this;
+        menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+        menu.DataContext = DataContext;
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Enables Paste only when the clipboard can actually supply something: Maktaby's own payload,
+    /// or files from another application. Read at open time - the clipboard changes without the
+    /// menu knowing.
+    /// </summary>
+    private void BoxEmptySpaceMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ContextMenu menu) { return; }
+
+        var item = menu.Items.OfType<MenuItem>().FirstOrDefault();
+        if (item is null) { return; }
+
+        try
+        {
+            var clipboard = App.Services.GetService<IBoxItemClipboard>();
+            item.IsEnabled = clipboard is not null &&
+                             (clipboard.Get() is { HasItems: true } || clipboard.GetFileDrop() is { HasFiles: true });
+        }
+        catch
+        {
+            item.IsEnabled = false;
+        }
+    }
+
+    private async void EmptySpacePaste_Click(object sender, RoutedEventArgs e)
+    {
+        // PasteFromClipboard drives the copying pill and selects what arrived, so the menu entry
+        // needs nothing beyond the call.
+        await PasteFromClipboard();
+    }
+
+    /// <summary>
+    /// True when <paramref name="source"/> sits inside one of the item templates, i.e. the
+    /// right-click belonged to an item rather than to the empty surface behind them.
+    /// </summary>
+    private static bool IsOverItem(DependencyObject? source)
+    {
+        for (var current = source; current is not null; current = VisualTreeHelper.GetParent(current))
+        {
+            if (current is FrameworkElement { DataContext: BoxItemViewModel }) { return true; }
+
+            if (current is Visual or System.Windows.Media.Media3D.Visual3D) { continue; }
+            if (current is not FrameworkElement) { break; }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// An existing item's shell appearance changed - the Recycle Bin's icon is recomputed from the
+    /// bin's contents, so it changes while the item itself stays identical. Re-read it.
+    /// </summary>
+    /// <remarks>
+    /// Matching is by identity through <see cref="BoxItem.RefersToSame"/>, not by asking whether the
+    /// PIDL "looks like" the bin: the bin is normally a PATH item here (a drop resolves it through
+    /// <c>GetPathFromPidl</c> first, so its PIDL is empty), and an earlier PIDL-comparison approach
+    /// therefore never matched anything. Dispatched because the shell notification arrives on the
+    /// watcher's own window procedure, not the UI thread.
+    /// </remarks>
+    private void OnItemUpdated(BoxItem updated)
+    {
+        void Reload()
+        {
+            if (Box is not { } box) { return; }
+
+            foreach (var vm in box.Items)
+            {
+                if (Matches(vm.Model, updated))
+                {
+                    vm.ReloadIconBypassingCache();
+                }
+            }
+        }
+
+        var dispatcher = Dispatcher;
+        if (dispatcher.CheckAccess())
+        {
+            Reload();
+        }
+        else
+        {
+            _ = dispatcher.BeginInvoke(Reload);
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="model"/> is the item the shell reported as updated.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="BoxItem.RefersToSame"/> alone is not enough, and that is what broke the first
+    /// attempt. Measured on this machine: the Recycle Bin answers <c>SHGetPathFromIDListW</c> with a
+    /// failure, so its stored item has <b>no path and only a PIDL</b>; while the shell-resolved item
+    /// handed to <c>ItemUpdated</c> carries <b>no PIDL</b> and a path holding its namespace identity
+    /// (<c>::{645FF040-...}</c>). RefersToSame skips both comparisons - one side is missing a path,
+    /// the other a PIDL - so it always answers false.
+    /// <para>
+    /// The fallback therefore compares shell namespace identity, which both sides can produce. It
+    /// costs one shell lookup per PIDL-backed item, on a rare event, and there are only ever a
+    /// handful of those.
+    /// </para>
+    /// </remarks>
+    private static bool Matches(BoxItem model, BoxItem updated)
+    {
+        if (BoxItem.RefersToSame(model, updated)) { return true; }
+
+        if (!string.IsNullOrEmpty(model.Path) || string.IsNullOrEmpty(model.Pidl)) { return false; }
+
+        var parse = Win32Apis.GetPidlParseName(model.Pidl);
+        return !string.IsNullOrEmpty(parse) &&
+               string.Equals(parse, updated.Path, StringComparison.OrdinalIgnoreCase);
     }
 
     private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)

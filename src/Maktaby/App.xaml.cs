@@ -417,6 +417,9 @@ public partial class App : Application
         services.AddSingleton<IShellWatcherService, ShellDesktopWatcher>();
         //services.AddSingleton<IFileWatcherService, DesktopFileWatcher>();
         services.AddSingleton<IDispatcher, WpfDispatcher>();
+        // Box-item cut/copy/paste. A singleton on purpose: the clipboard is process-wide state,
+        // and keeping one instance means the payload is written and read by the same object.
+        services.AddSingleton<IBoxItemClipboard, BoxItemClipboard>();
         services.AddSingleton<DesktopManager, DesktopManager>((serv) => new DesktopManager(serv));
 
         // Shell platform services

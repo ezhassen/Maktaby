@@ -402,4 +402,38 @@ public static partial class User32
     /// bytes points at driver mappings or pools instead.</summary>
     [DllImport("user32.dll")]
     public static extern uint GetGuiResources(IntPtr hProcess, uint uiFlags);
+
+    /// <summary>
+    /// Translates a virtual key into characters for the ACTIVE keyboard layout.
+    /// </summary>
+    /// <remarks>
+    /// Needed for type-ahead navigation. <c>KeyInterop.KeyToChar</c> is a fixed table for the
+    /// unshifted A-Z/0-9 keys and returns the Latin letter whatever the user has selected - so on
+    /// an Arabic or German layout it would search for the wrong initial. This is what the keyboard
+    /// layout actually produces, which is also how dead keys and IME composition are honoured.
+    /// <para>
+    /// <paramref name="keyboardState"/> must be a 256-byte buffer from
+    /// <see cref="GetKeyboardState"/>, not null: the call reads the whole modifier/shift state.
+    /// A return of 0 means no translation (a modifier-only or dead key), and a negative return
+    /// means the layout changed - both are "no character", never an error to surface.
+    /// </para>
+    /// </remarks>
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    public static extern int ToUnicodeEx(
+        uint virtualKey,
+        uint scanCode,
+        [In] byte[] keyboardState,
+        [Out] char[] buffer,
+        int bufferLength,
+        uint flags,
+        IntPtr keyboardLayout);
+
+    /// <summary>Keyboard layout for the calling thread, the <c>hkl</c> that <see cref="ToUnicodeEx"/> expects.</summary>
+    [DllImport("user32.dll")]
+    public static extern IntPtr GetKeyboardLayout(uint threadId);
+
+    /// <summary>Current keyboard state, 256 bytes: shift/caps/numlock plus the pressed keys.</summary>
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool GetKeyboardState(byte[] keyboardState);
 }

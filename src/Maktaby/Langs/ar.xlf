@@ -75,6 +75,7 @@
     <unit id="Box.MenuIconSizeMid"><segment><source>Mid</source><target>متوسط</target></segment></unit>
     <unit id="Box.MenuIconSizeLarge"><segment><source>Large</source><target>كبير</target></segment></unit>
     <unit id="Box.MenuDelete"><segment><source>Delete</source><target>حذف</target></segment></unit>
+  <unit id="Box.PasteItems"><segment><source>Paste items</source><target>لصق العناصر</target></segment></unit>
     <unit id="Box.RollUp"><segment><source>Roll up</source><target>لف لأعلى</target></segment></unit>
     <unit id="Box.CannotDeleteDefault"><segment><source>The default box cannot be deleted.</source><target>لا يمكن حذف الصندوق الافتراضي.</target></segment></unit>
     <unit id="Box.CannotDeleteDefaultTitle"><segment><source>Cannot delete</source><target>لا يمكن الحذف</target></segment></unit>

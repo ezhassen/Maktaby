@@ -216,6 +216,37 @@ public sealed class MainViewModel : ViewModelBase
         return null;
     }
 
+    /// <summary>
+    /// Finds the box (across all containers and tabs) that holds an item matching
+    /// <paramref name="transfer"/>'s identity, and the model behind it.
+    /// </summary>
+    /// <remarks>
+    /// By identity rather than by reference: the clipboard holds a projection of the item, not the
+    /// live <see cref="BoxItem"/>. Box-item paste needs this to know which box an item came from -
+    /// to ignore a cut into that same box, and to drop the source reference of a shell item,
+    /// which has no file deletion for the watcher to report.
+    /// </remarks>
+    public (BoxViewModel? Box, BoxItem? Item)? FindBoxWithItem(BoxItemTransfer transfer)
+    {
+        foreach (var container in Containers)
+        {
+            if (container.BoxContainerVm is null) { continue; }
+
+            foreach (var tab in container.BoxContainerVm.Tabs)
+            {
+                foreach (var vm in tab.Items)
+                {
+                    if (transfer.Matches(vm.Model))
+                    {
+                        return (tab, vm.Model);
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Moves a single box from <paramref name="source"/> into <paramref name="target"/>.</summary>
     public void MoveBoxToContainer(Box box, ContainerViewModel source, ContainerViewModel target, int index = -1)
     {

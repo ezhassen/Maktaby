@@ -358,7 +358,15 @@ internal static class DropHelper
         return Win32Apis.CreateShortcutFromPidl(pidlBase64, dest) ? dest : null;
     }
 
-    private static string MakeUnique(string path)
+    /// <summary>
+    /// Returns <paramref name="path"/> when nothing is there, otherwise the first free
+    /// "name (n).ext" beside it.
+    /// </summary>
+    /// <remarks>
+    /// Internal, not private: box-item paste needs the same naming Explorer uses for a duplicate,
+    /// so that a copied file lands as "notes (1).txt" instead of overwriting or colliding.
+    /// </remarks>
+    internal static string MakeUnique(string path)
     {
         if (!File.Exists(path) && !Directory.Exists(path))
         {

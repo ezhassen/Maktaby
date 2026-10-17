@@ -81,6 +81,7 @@
     <unit id="Box.MenuIconSizeMid"><segment><source>Mid</source><target>Mid</target></segment></unit>
     <unit id="Box.MenuIconSizeLarge"><segment><source>Large</source><target>Large</target></segment></unit>
     <unit id="Box.MenuDelete"><segment><source>Delete</source><target>Delete</target></segment></unit>
+  <unit id="Box.PasteItems"><segment><source>Paste items</source><target>Paste items</target></segment></unit>
     <unit id="Box.RollUp"><segment><source>Roll up</source><target>Roll up</target></segment></unit>
     <unit id="Box.CannotDeleteDefault"><segment><source>The default box cannot be deleted.</source><target>The default box cannot be deleted.</target></segment></unit>
     <unit id="Box.CannotDeleteDefaultTitle"><segment><source>Cannot delete</source><target>Cannot delete</target></segment></unit>
