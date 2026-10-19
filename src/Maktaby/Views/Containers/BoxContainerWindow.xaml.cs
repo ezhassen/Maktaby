@@ -321,6 +321,12 @@ public partial class BoxContainerWindow : WidgetWindow
     /// </summary>
     public override void UpdateChrome()
     {
+        // A tooltip popup lives in its own HWND and is closed by mouse-leave on its owner. We are a
+        // desktop-band tool window that gets activated, z-order pinned and re-shown while the pointer
+        // may not move at all, so that mouse-leave does not always arrive and the popup outlives the
+        // moment it belonged to. Every chrome pass is a cheap place to re-establish that.
+        Maktaby.Helpers.ToolTipGuard.Close();
+
         bool isBox = _vm.BoxContainerVm != null;
         bool isDragging = IsAnyDragging();
         if (isDragging)
@@ -503,6 +509,8 @@ public partial class BoxContainerWindow : WidgetWindow
 
         FilterBox.Text = _filterText;
         FilterBorder.Visibility = Visibility.Visible;
+        // The chrome just rearranged itself; drop any tooltip that belonged to the old layout.
+        Maktaby.Helpers.ToolTipGuard.Close();
         // The box would otherwise draw over the centred title on a narrow container, so the title
         // layer steps aside for as long as the box is up.
         TitleLayer.Visibility = Visibility.Collapsed;
@@ -770,6 +778,10 @@ public partial class BoxContainerWindow : WidgetWindow
 
     private void Window_Deactivated(object? sender, EventArgs e)
     {
+        // Losing activation is the single most common way a tooltip ends up stranded: the pointer is
+        // already off the tile, so no mouse-leave is coming to close the popup it opened.
+        Maktaby.Helpers.ToolTipGuard.Close();
+
         if (_isRenaming)
         {
             CommitRename();
@@ -902,6 +914,10 @@ public partial class BoxContainerWindow : WidgetWindow
 
     private void UpdateBody()
     {
+        // Swapping the body unloads the tiles that owned any open tooltip, and an unloaded owner
+        // never reports Closed - the popup would sit there until the window is hidden and shown.
+        Maktaby.Helpers.ToolTipGuard.Close();
+
         if (_vm.ActiveBox != null)
         {
             bool isFolder = _vm.ActiveBox.BoxType == BoxType.FolderPortal;

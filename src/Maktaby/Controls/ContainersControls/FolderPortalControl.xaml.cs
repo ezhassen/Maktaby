@@ -646,7 +646,7 @@ public partial class FolderPortalControl : WidgetControlBase
     private FolderItemViewModel? _gridDragVm;
     private long _gridDragEpoch;
 
-    private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
+private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     {
         if (_suppressDragUntilMouseUp)
         {
@@ -1639,11 +1639,13 @@ public partial class FolderPortalControl : WidgetControlBase
         e.Handled = true;
     }
 
+
     private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
-    {
-        DisarmDrag();
-        e.Handled = true;
-    }
+      {
+          DisarmDrag();
+          Helpers.ToolTipGuard.Close();
+          e.Handled = true;
+      }
 
     private void Control_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {

@@ -10,6 +10,7 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:vm="clr-namespace:Maktaby.ViewModels"
+        xmlns:tt="clr-namespace:Maktaby.Helpers"
     MinWidth="160"
     MinHeight="120"
     AllowsTransparency="True"
@@ -199,7 +200,8 @@
                                 Text="{Binding ActiveBox.Name, UpdateSourceTrigger=PropertyChanged}"
                                 TextAlignment="Center"
                                 ToolTip="Rename the box (max 64 characters)"
-                                Visibility="Collapsed" />
+                                Visibility="Collapsed" 
+                                tt:ToolTipGuard.Managed="True"/>
                         </Grid>
                         <!--
                             Search. Sits immediately beside the menu button (column 1 is the star the
@@ -217,7 +219,8 @@
                                 Click="SearchButton_Click"
                                 Cursor="Arrow"
                                 Style="{StaticResource BorderlesButtonStyle}"
-                                ToolTip="{loc:LocKey Box.SearchTooltip}">
+                                ToolTip="{loc:LocKey Box.SearchTooltip}"
+                              tt:ToolTipGuard.Managed="True">
                                 <!--
                                     Foreground is explicit, not inherited. SymbolIcon does not take the
                                     button's foreground, so without this the glyph renders black and
@@ -252,7 +255,8 @@
                                         LostFocus="FilterBox_LostFocus"
                                         Style="{StaticResource TitleRenameBoxStyle}"
                                         TextChanged="FilterBox_TextChanged"
-                                        ToolTip="{loc:LocKey Box.SearchTooltip}" />
+                                        ToolTip="{loc:LocKey Box.SearchTooltip}"
+                                        tt:ToolTipGuard.Managed="True" />
                                     <TextBlock
                                         x:Name="FilterPlaceholder"
                                         Margin="7,0,0,0"
@@ -291,7 +295,8 @@
                                         PreviewMouseDown="FilterClearButton_PreviewMouseDown"
                                         SnapsToDevicePixels="True"
                                         ToolTip="{loc:LocKey Box.SearchClearTooltip}"
-                                        Visibility="Collapsed">
+                                        Visibility="Collapsed"
+                                        tt:ToolTipGuard.Managed="True">
                                         <Path
                                             Width="9"
                                             Height="9"
@@ -315,7 +320,8 @@
                             Cursor="Arrow"
                             DockPanel.Dock="Left"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="{loc:LocKey Box.Menu}">
+                            ToolTip="{loc:LocKey Box.Menu}"
+                              tt:ToolTipGuard.Managed="True">
                             <ui:SymbolIcon Symbol="Navigation24" />
                             <Button.ContextMenu>
                                 <ContextMenu x:Name="BoxMenu">
@@ -505,7 +511,8 @@
                             Click="LockButton_Click"
                             Cursor="Arrow"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="{loc:LocKey Box.MenuLockTooltip}">
+                            ToolTip="{loc:LocKey Box.MenuLockTooltip}"
+                              tt:ToolTipGuard.Managed="True">
                             <ui:SymbolIcon x:Name="LockIcon" Symbol="LockOpen24" />
                         </Button>
 
@@ -519,7 +526,8 @@
                             Click="RollButton_Click"
                             Cursor="Arrow"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="{loc:LocKey Box.RollUp}">
+                            ToolTip="{loc:LocKey Box.RollUp}"
+                              tt:ToolTipGuard.Managed="True">
                             <ui:SymbolIcon x:Name="RollIcon" Symbol="ChevronUp24" />
                         </Button>
                     </Grid>

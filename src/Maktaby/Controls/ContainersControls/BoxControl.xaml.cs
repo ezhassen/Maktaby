@@ -330,7 +330,8 @@ public partial class BoxControl : WidgetControlBase
         _moved = false;
     }
 
-    private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
+
+private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     {
         if (_suppressDragUntilMouseUp)
         {
@@ -1816,6 +1817,10 @@ public partial class BoxControl : WidgetControlBase
     private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
         DisarmDrag("context-menu");
+
+        // The menu is modal over the tile, so a tooltip still up would float above it or hang around
+        // after it closes.
+        Helpers.ToolTipGuard.Close();
         if (_suppressNextContextMenu)
         {
             _suppressNextContextMenu = false;

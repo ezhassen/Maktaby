@@ -2,42 +2,43 @@
     x:Class="Maktaby.Controls.ContainersControls.FolderPortalControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="clr-namespace:Maktaby.Controls.ContainersControls"
     xmlns:conv="clr-namespace:Maktaby.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="clr-namespace:Maktaby.Controls.ContainersControls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:tt="clr-namespace:Maktaby.Helpers"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:vm="clr-namespace:Maktaby.ViewModels"
     d:DesignHeight="300"
     d:DesignWidth="400"
     PreviewMouseDown="Control_PreviewMouseDown"
     PreviewMouseLeftButtonDown="Root_PreviewMouseLeftButtonDown"
-PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
-      PreviewMouseRightButtonUp="FolderPortal_PreviewMouseRightButtonUp"
-      mc:Ignorable="d">
-      <UserControl.Resources>
-          <BooleanToVisibilityConverter x:Key="BoolToVis" />
-          <!--  Filter: INVERTED, because the flag means "hidden".  -->
-          <conv:BoolInvertedToVisibilityConverter x:Key="BoolToVisInverted" />
-          <conv:AdaptiveTileSizeConverter x:Key="TileWidth" />
-          <conv:TileSizeToSizeConverter x:Key="TileSize" />
-          <conv:BoolToVisibilityConverter x:Key="BoolVis" />
+    PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
+    PreviewMouseRightButtonUp="FolderPortal_PreviewMouseRightButtonUp"
+    mc:Ignorable="d">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <!--  Filter: INVERTED, because the flag means "hidden".  -->
+        <conv:BoolInvertedToVisibilityConverter x:Key="BoolToVisInverted" />
+        <conv:AdaptiveTileSizeConverter x:Key="TileWidth" />
+        <conv:TileSizeToSizeConverter x:Key="TileSize" />
+        <conv:BoolToVisibilityConverter x:Key="BoolVis" />
 
-          <!--  Empty-surface menu. A right-click ON a row still shows the native shell menu. Here
-                the paste is a real file copy/move into the portal's folder, done by the shell.
-                The header is set in code rather than with LocKey: the markup extension throws an
-                opaque MC1000 ("value cannot be null, key") at XAML compile time in THIS file
-                while the identical construct compiles fine in BoxControl.xaml.  -->
-          <ContextMenu x:Key="FolderEmptySpaceMenu" Opened="FolderEmptySpaceMenu_Opened">
-              <MenuItem
-                  Click="FolderEmptySpacePaste_Click"
-                  InputGestureText="Ctrl+V">
-                  <MenuItem.Icon>
-                      <ui:SymbolIcon FontSize="16" Symbol="Clipboard20" />
-                  </MenuItem.Icon>
-              </MenuItem>
-          </ContextMenu>
-      </UserControl.Resources>
+        <!--
+            Empty-surface menu. A right-click ON a row still shows the native shell menu. Here
+            the paste is a real file copy/move into the portal's folder, done by the shell.
+            The header is set in code rather than with LocKey: the markup extension throws an
+            opaque MC1000 ("value cannot be null, key") at XAML compile time in THIS file
+            while the identical construct compiles fine in BoxControl.xaml.
+        -->
+        <ContextMenu x:Key="FolderEmptySpaceMenu" Opened="FolderEmptySpaceMenu_Opened">
+            <MenuItem Click="FolderEmptySpacePaste_Click" InputGestureText="Ctrl+V">
+                <MenuItem.Icon>
+                    <ui:SymbolIcon FontSize="16" Symbol="Clipboard20" />
+                </MenuItem.Icon>
+            </MenuItem>
+        </ContextMenu>
+    </UserControl.Resources>
     <Grid Background="{DynamicResource BoxBackground}">
         <!--  Placeholder when no folder selected / missing  -->
         <StackPanel
@@ -207,8 +208,10 @@ PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
                 </StackPanel>
             </Border>
 
-            <!--  Icons view: plain WrapPanel (reliable). VirtualizingIconPanel stays dormant
-              until its scrolling/selection/drag issues are resolved — see .ai/todo.md.  -->
+            <!--
+                Icons view: plain WrapPanel (reliable). VirtualizingIconPanel stays dormant
+                until its scrolling/selection/drag issues are resolved — see .ai/todo.md.
+            -->
             <ScrollViewer
                 x:Name="IconsScroll"
                 Grid.Row="2"
@@ -228,14 +231,16 @@ PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="vm:FolderItemViewModel">
-                                <!--  Collapsed rather than removed from FolderItems: a hidden row keeps
-                                      its index, which selection, focus and scrolling all address.  -->
+                                <!--
+                                    Collapsed rather than removed from FolderItems: a hidden row keeps
+                                    its index, which selection, focus and scrolling all address.
+                                -->
                                 <Border
                                     x:Name="ItemBorder"
-                                    Visibility="{Binding IsFilteredOut, Converter={StaticResource BoolToVisInverted}}"
                                     Width="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
                                     Height="{Binding IconSize, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource TileWidth}, ConverterParameter=36}"
                                     Margin="2"
+                                    tt:ToolTipGuard.Managed="True"
                                     ContextMenuOpening="ItemBorder_ContextMenuOpening"
                                     Cursor="Arrow"
                                     Focusable="True"
@@ -246,7 +251,8 @@ PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
                                     MouseMove="ItemBorder_MouseMove"
                                     MouseRightButtonUp="ItemBorder_MouseRightButtonUp"
                                     PreviewMouseDown="ItemBorder_PreviewMouseDown"
-                                    ToolTip="{Binding Path}">
+                                    ToolTip="{Binding Path}"
+                                    Visibility="{Binding IsFilteredOut, Converter={StaticResource BoolToVisInverted}}">
                                     <Border.Style>
                                         <Style TargetType="Border">
                                             <Setter Property="BorderThickness" Value="1" />
@@ -307,8 +313,8 @@ PreviewMouseLeftButtonUp="FolderPortal_PreviewMouseLeftButtonUp"
                 IsReadOnly="True"
                 ItemsSource="{Binding FolderItems}"
                 PreviewMouseLeftButtonDown="DetailsGrid_PreviewMouseLeftButtonDown"
-RowHeaderWidth="0"
-RowHeight="22"
+                RowHeaderWidth="0"
+                RowHeight="22"
                 ScrollViewer.CanContentScroll="True"
                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
@@ -369,8 +375,10 @@ RowHeight="22"
                         <Setter Property="Padding" Value="0" />
                         <Setter Property="Margin" Value="0" />
                         <Style.Triggers>
-                            <!--  Filter: collapse the row rather than removing it, so every index in
-                                  FolderItems stays valid for selection, focus and scrolling.  -->
+                            <!--
+                                Filter: collapse the row rather than removing it, so every index in
+                                FolderItems stays valid for selection, focus and scrolling.
+                            -->
                             <DataTrigger Binding="{Binding IsFilteredOut}" Value="True">
                                 <Setter Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
@@ -473,8 +481,10 @@ RowHeight="22"
                         SortMemberPath="ModifiedTime" />
                 </DataGrid.Columns>
             </DataGrid>
-            <!--  Lazy-load indicator: folder tabs enumerate off the UI thread on first selection.
-              Last sibling so it renders above the views; hit-test off so it never blocks input.  -->
+            <!--
+                Lazy-load indicator: folder tabs enumerate off the UI thread on first selection.
+                Last sibling so it renders above the views; hit-test off so it never blocks input.
+            -->
             <StackPanel
                 Grid.Row="2"
                 HorizontalAlignment="Center"
@@ -491,9 +501,11 @@ RowHeight="22"
                     Text="Loading folder…"
                     TextAlignment="Center" />
             </StackPanel>
-            <!--  Paste / copy indicator, same shape as BoxControl's. IsIndeterminate is
-                  BOUND, not a constant True: an indeterminate ring keeps animating even while
-                  Collapsed, which is a permanent render loop per portal.  -->
+            <!--
+                Paste / copy indicator, same shape as BoxControl's. IsIndeterminate is
+                BOUND, not a constant True: an indeterminate ring keeps animating even while
+                Collapsed, which is a permanent render loop per portal.
+            -->
             <Border
                 Grid.Row="2"
                 Margin="0,0,0,8"
