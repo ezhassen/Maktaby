@@ -55,7 +55,7 @@
 
     <!-- ===== Box context menu + window (Views/Containers — text only) ===== -->
     <unit id="Box.Menu"><segment><source>Menu</source><target>Menu</target></segment></unit>
-  <unit id="Box.SearchTooltip"><segment><source>Search items in this box</source><target>Search items in this box</target></segment></unit>
+  <unit id="Box.SearchTooltip"><segment><source>Search items in this box (Ctrl+F)</source><target>Search items in this box (Ctrl+F)</target></segment></unit>
   <unit id="Box.SearchClearTooltip"><segment><source>Clear search</source><target>Clear search</target></segment></unit>
   <unit id="Box.SearchPlaceholder"><segment><source>Search…</source><target>Search…</target></segment></unit>
     <unit id="Box.MenuLock"><segment><source>Lock</source><target>Lock</target></segment></unit>

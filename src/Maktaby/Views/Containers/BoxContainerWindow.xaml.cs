@@ -1916,6 +1916,26 @@ public partial class BoxContainerWindow : WidgetWindow
             return;
         }
 
+        // Ctrl+F and F4 both mean "search this box". When the box is already up, EnterFilterMode
+        // is exactly the "let me type a different search" behaviour: it focuses and selects what is
+        // there, so the next keystroke replaces it instead of appending.
+        bool openSearch = e.Key == Key.F4 ||
+                          (e.Key == Key.F &&
+                           (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control);
+
+        if (openSearch)
+        {
+            // While a name is being edited the editor owns the keyboard - stealing focus would commit
+            // the rename mid-word, and the same reason ESC defers to it above.
+            if (!_isRenaming)
+            {
+                EnterFilterMode();
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
         bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
         if (!ctrl || key is not (Key.C or Key.X or Key.V))
