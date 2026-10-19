@@ -1558,11 +1558,19 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
             // Refresh explicitly rather than waiting for the folder watcher: the shell copy is one
             // operation against a folder the watcher may have already enumerated, so the new files
             // would otherwise not show until something else triggered a reload.
-            if (any && Box is { } box)
-            {
-                await box.RefreshFolderAsync();
-                SelectPasted(pasted);
-            }
+if (any && Box is { } box)
+          {
+              await box.RefreshFolderAsync();
+
+              // Same rule as a drop into a filtered box: keep the search and reveal what landed,
+              // rather than clearing a search the user is still using to find something.
+              if (box.IsFilterActive)
+              {
+                  box.RevealFolderRows(pasted);
+              }
+
+              SelectPasted(pasted);
+          }
         }
         finally
         {

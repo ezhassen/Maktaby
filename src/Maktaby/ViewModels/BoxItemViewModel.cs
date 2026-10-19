@@ -141,6 +141,22 @@ public sealed class BoxItemViewModel : ViewModelBase
         set => SetField(ref _isFilteredOut, value);
     }
 
+    private bool _isFilterExempt;
+    /// <summary>
+    /// Shown even when it does not match the filter - set when the item arrives (a drop) while a
+    /// filter is active, so the thing the user just added cannot vanish on landing.
+    /// </summary>
+    /// <remarks>
+    /// The exemption is dropped by <see cref="BoxViewModel"/> as soon as the filter text changes: the
+    /// user is searching again, and the visible set should be matches and nothing else. It survives a
+    /// refresh on purpose - the pasted or dropped files keep showing until then.
+    /// </remarks>
+    public bool IsFilterExempt
+    {
+        get => _isFilterExempt;
+        set => SetField(ref _isFilterExempt, value);
+    }
+
     /// <summary>Drops the cached icon and reloads it - for an item whose icon the shell recomputes over time.
     /// <remarks>
     /// <see cref="ReloadIcon"/> alone would be useless for the Recycle Bin: it re-resolves through

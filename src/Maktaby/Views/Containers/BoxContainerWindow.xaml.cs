@@ -286,6 +286,7 @@ public partial class BoxContainerWindow : WidgetWindow
         }
     }
 
+
     /// <summary>Adjusts which parts of the window are visible based on the container type.</summary>
     private void ApplyType()
     {
@@ -601,7 +602,7 @@ public partial class BoxContainerWindow : WidgetWindow
     /// re-collapses rows, which on a large folder is visible lag, and re-running it per keystroke
     /// made that worse. One deferred pass after the pause fixes both.
     /// </summary>
-    private const int FilterDebounceMs = 650;
+    private const int FilterDebounceMs = 350;
 
     private CancellationTokenSource? _filterDebounce;
 

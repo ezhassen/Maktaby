@@ -73,6 +73,14 @@ private bool _isSelected;
       /// <remarks>A property rather than a filtered collection, so every index in
       /// <c>FolderItems</c> - which selection, focus and scrolling all address - stays valid.</remarks>
       public bool IsFilteredOut { get => _isFilteredOut; set { if (_isFilteredOut != value) { _isFilteredOut = value; OnPropertyChanged(); } } }
+
+  private bool _isFilterExempt;
+  /// <summary>
+  /// Shown even when it does not match the filter - set when the row arrives (a paste) while a
+  /// filter is active, so the files the user just pasted cannot vanish on landing. Dropped by
+  /// <see cref="BoxViewModel"/> as soon as the filter text changes, kept across a refresh.
+  /// </summary>
+  public bool IsFilterExempt { get => _isFilterExempt; set { if (_isFilterExempt != value) { _isFilterExempt = value; OnPropertyChanged(); } } }
     public string RenameText { get => _renameText; set { if (_renameText != value) { _renameText = value; OnPropertyChanged(); } } }
 
     public System.Windows.Media.ImageSource? Icon

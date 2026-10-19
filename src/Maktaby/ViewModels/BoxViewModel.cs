@@ -220,6 +220,9 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
             _filterText = value ?? string.Empty;
             OnPropertyChanged();
             OnPropertyChanged(nameof(IsFilterActive));
+            // New search, new answer: items that were only being kept visible because they had just
+            // arrived must go back to being filtered like everything else.
+            ClearFilterExemptions();
             ApplyFilter();
         }
     }
@@ -229,6 +232,78 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
 
     /// <summary>Clears the filter and reveals every item again.</summary>
     public void ClearFilter() => FilterText = string.Empty;
+
+    /// <summary>
+    /// Keeps the given items visible even though they do not match the active filter, so something
+    /// the user just dropped or pasted cannot disappear on landing.
+    /// </summary>
+    /// <remarks>
+    /// The alternative - clearing the filter - throws away the search the user was in, which is
+    /// worse than showing a few non-matching rows they recognise as the ones they just added. The
+    /// exemption is dropped the moment the filter text changes, so the next keystroke returns to a
+    /// pure result set.
+    /// </remarks>
+    public void RevealItems(IEnumerable<BoxItem> models)
+    {
+        bool revealed = false;
+        var wanted = models as IReadOnlyCollection<BoxItem> ?? models.ToList();
+
+        foreach (var item in Items)
+        {
+            if (item.IsFilterExempt || !wanted.Contains(item.Model))
+            {
+                continue;
+            }
+
+            item.IsFilterExempt = true;
+            revealed = true;
+        }
+
+        if (revealed)
+        {
+            ApplyFilter();
+        }
+    }
+
+    /// <summary>Folder-row counterpart of <see cref="RevealItems"/>, keyed on the row's path.</summary>
+    public void RevealFolderRows(IEnumerable<string> paths)
+    {
+        var wanted = new HashSet<string>(paths, StringComparer.OrdinalIgnoreCase);
+        bool revealed = false;
+
+        foreach (var row in FolderItems)
+        {
+            if (!row.IsFilterExempt && wanted.Contains(row.Path))
+            {
+                row.IsFilterExempt = true;
+                revealed = true;
+            }
+        }
+
+        if (revealed)
+        {
+            ApplyFilter();
+        }
+    }
+
+    private void ClearFilterExemptions()
+    {
+        foreach (var item in Items)
+        {
+            if (item.IsFilterExempt)
+            {
+                item.IsFilterExempt = false;
+            }
+        }
+
+        foreach (var row in FolderItems)
+        {
+            if (row.IsFilterExempt)
+            {
+                row.IsFilterExempt = false;
+            }
+        }
+    }
 
     /// <summary>
     /// Applies <paramref name="text"/> as the filter and re-filters even when the text is unchanged.
@@ -269,12 +344,12 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
 
         foreach (var item in Items)
         {
-            item.IsFilteredOut = text.Length > 0 && !Matches(item.DisplayName, item.Path, text);
+            item.IsFilteredOut = text.Length > 0 && !item.IsFilterExempt && !Matches(item.DisplayName, item.Path, text);
         }
 
         foreach (var row in FolderItems)
         {
-            row.IsFilteredOut = text.Length > 0 && !Matches(row.DisplayName, row.Path, text);
+            row.IsFilteredOut = text.Length > 0 && !row.IsFilterExempt && !Matches(row.DisplayName, row.Path, text);
         }
     }
 
@@ -521,6 +596,12 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
                 FolderItems.Add(vm);
             }
         }
+
+        // Re-apply the filter after every load. Newly added rows arrive with the default
+        // IsFilteredOut and reused rows keep whatever they had, so without this a refresh (watcher
+        // event, F5, a paste) would let new files bypass the filter outright and leave the view
+        // showing a mix of filtered and unfiltered rows.
+        ApplyFilter();
     }
 
     private IEnumerable<FolderItemViewModel> SortEntries(IEnumerable<FolderItemViewModel> items)

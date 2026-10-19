@@ -311,14 +311,6 @@ public partial class BoxControl : WidgetControlBase
         }
 
         // Mark handled so the empty-area marquee handler on the UserControl does not also fire.
-        if (Box?.IsFilterActive == true)
-        {
-            // No drag out of a filtered box. The visible tiles are a subset, so their order says
-            // nothing about where an item belongs - a drop would reorder by a lie - and the rows that
-            // are hidden cannot be dropped between.
-            _dragOrigin = null;
-            return;
-        }
         e.Handled = true;
 
         _dragStart = e.GetPosition(null);
@@ -871,8 +863,49 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     /// the indicator only when the slot (or its existence) changed. Shared by DragOver and
     /// the auto-scroll timer: with the timer scrolling content under a stationary cursor,
     /// the slot must refresh without waiting for the next mouse move.</summary>
+    /// <summary>
+    /// True when the dragged box items belong to <em>this</em> box - i.e. the drop would be a
+    /// reorder of the list on screen rather than a move in from elsewhere.
+    /// </summary>
+    /// <remarks>
+    /// The source has to be resolved through <see cref="MainViewModel.FindBoxContaining"/> rather than
+    /// compared to the drop target: this control's <c>Box</c> <em>is</em> its DataContext, and so is
+    /// <c>targetBox</c>, so comparing the two says "same box" about every drop that ever arrives.
+    /// Only box-internal drags carry <see cref="DndFormats.BoxItems"/>; a file drop from elsewhere is
+    /// never a reorder of this list and is always allowed to append.
+    /// </remarks>
+    private bool DragComesFromThisBox(DragEventArgs e)
+    {
+        if (Box is not { } box || !e.Data.GetDataPresent(DndFormats.BoxItems))
+        {
+            return false;
+        }
+
+        if (e.Data.GetData(DndFormats.BoxItems) is not List<BoxItemViewModel> items || items.Count == 0)
+        {
+            return false;
+        }
+
+        return ReferenceEquals(Host?.FindBoxContaining(items[0]), box);
+    }
+
     private void RefreshDropIndicatorForPoint(Point pt)
     {
+        if (Box?.IsFilterActive == true)
+        {
+            // No slot to promise. While a filter hides part of the list, the tile the pointer sits
+            // between is not the item the computed index would land between, so a visible insertion
+            // line would be a position we cannot honour. GetDropPlacement below decides what the
+            // drop actually does (append cross-box, refuse in-box).
+            if (_insertIndex != -1)
+            {
+                _insertIndex = -1;
+                RemoveDropIndicator();
+            }
+
+            return;
+        }
+
         int newIdx = GetInsertIndex(pt);
         // Same slot: geometry depends only on the index, so the existing visual is already
         // correct — rebuilding it per event only wastes layout/render passes.
@@ -971,6 +1004,24 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
             return;
         }
 
+        // Where the drop is allowed to land. Under a filter the visible tiles are a subset of the list,
+        // so a visible-space slot maps to the wrong real position - the tiles the user is aiming
+        // between are not neighbours in the collection. Rather than reorder by a lie:
+        // a drop from another box appends (no slot claimed), while a drop of THIS box's own items is
+        // refused outright, because "reorder" inside a filtered view has no meaning the user can
+        // see. Refusing is safe precisely because it happens before AddToBoxAsync, which is what
+        // would otherwise remove the dragged items from their source.
+        bool filtered = targetBox.IsFilterActive;
+        int insertIndex = filtered ? -1 : _insertIndex;
+
+        if (filtered && DragComesFromThisBox(e))
+        {
+            StopDragAutoScroll();
+            RemoveDropIndicator();
+            _insertIndex = -1;
+            return;
+        }
+
         // External file drops copy on a background thread with no other feedback: report
         // per-file progress into the copying pill (first report shows it, completion hides it).
         // Internal Box-item moves are instant — no indicator, no flash.
@@ -994,7 +1045,7 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
         List<Maktaby.Core.Models.BoxItem>? moved;
         try
         {
-            moved = await DropHelper.AddToBoxAsync(targetBox, Host, e, _insertIndex, progress);
+            moved = await DropHelper.AddToBoxAsync(targetBox, Host, e, insertIndex, progress);
         }
         finally
         {
@@ -1015,6 +1066,15 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
             // filter must be re-applied or they would show regardless of it.
             box.SetFilter(box.FilterText);
 
+            // And if the filter would hide any of them, the drop reads as "nothing arrived".
+            // Keep the search the user is in and reveal just the arrivals - they are recognisable
+            // as what was just added, and a cleared search box is worse feedback than a few extra
+            // rows. The next keystroke drops the exemption.
+            if (filtered)
+            {
+                box.RevealItems(moved);
+            }
+
             foreach (var m in moved)
             {
                 var vm = box.Items.FirstOrDefault(i => i.Model == m);
@@ -1023,10 +1083,10 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
                     vm.IsSelected = true;
                 }
             }
-            // Focus first dropped item so keyboard navigation and dotted focus rect resume there
-            var firstVm = box.Items.FirstOrDefault(i => i.Model == moved[0]);
-            if (firstVm != null)
-            {
+// Focus first dropped item so keyboard navigation and dotted focus rect resume there
+                var firstVm = box.Items.FirstOrDefault(i => i.Model == moved[0]);
+                if (firstVm is { IsFilteredOut: false })
+                {
                 _focusedIndex = box.Items.IndexOf(firstVm);
                 _anchorIndex = _focusedIndex;
                 _ = Dispatcher.BeginInvoke(() => FocusItem(_focusedIndex), System.Windows.Threading.DispatcherPriority.Input);
