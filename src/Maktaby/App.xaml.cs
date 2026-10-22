@@ -192,57 +192,27 @@ public partial class App : Application
         // Tier 0 also auto-pauses playback + widgets (software rasterization of live content
         // is the likely burner and pointless eye candy); recovery resumes only what this
         // paused, never user/supervisor-paused content.
-        try
-        {
-            System.Windows.Media.RenderCapability.TierChanged += (_, _) =>
-            {
-                try
-                {
-                    int tier = System.Windows.Media.RenderCapability.Tier >> 16;
-                    Log.Information("WPF render tier changed to {Tier} ({Mode})", tier, tier > 0 ? "hardware" : "SOFTWARE fallback");
-                    try { Dispatcher.BeginInvoke(new Action(() => OnRenderTierChanged(tier))); } catch { }
-                }
-                catch { }
-            };
-        }
-        catch { }
+        //
+        // The subscription is attached from inside the splash (see the startup callback): the
+        // first touch of RenderCapability queries the graphics tier, which enumerates the display
+        // adapters and measured ~220 ms — a quarter of a second of frozen desktop before the
+        // loading indicator even appears. The event only fires on a *change*, so attaching it a
+        // moment later cannot miss anything that matters.
 
         // Power-resume render quiesce (see _resumeSuspendedWidgets): SystemEvents surfaces
         // the same resume broadcast the wallpaper engine converges on. Handler marshals to
         // the UI thread; unsubscribed in OnExit.
-        try
-        {
-            _powerModeHandler = (_, e) =>
-            {
-                try
-                {
-                    if (e.Mode != Microsoft.Win32.PowerModes.Resume) return;
-                    Log.Information("Power resume broadcast received — quiescing widget render stack");
-                    try { Dispatcher.BeginInvoke(new Action(OnPowerResumeQuiesce)); } catch { }
-                }
-                catch { }
-            };
-            Microsoft.Win32.SystemEvents.PowerModeChanged += _powerModeHandler;
-            Helpers.StartupProfiler.Mark("power-handler-ready");
-        }
-        catch { }
+        //
+        // The subscription itself is NOT made here: the first SystemEvents access creates a
+        // hidden window and costs ~440 ms (measured). It gates nothing, so it is attached from
+        // inside the splash (see the startup callback), where the cost is hidden behind the
+        // loading indicator instead of freezing the desktop before it appears.
 
-        // Watch the live desktop icon size ONLY while it is actually used (DefaultBoxIconSize is
-        // Auto/null). With an explicit value pinned, monitoring is suspended.
-        // The service reads Explorer's list-view across process boundaries on construction, so it
-        // is resolved inside the splash as well (see the startup callback).
-        var iconSizes = Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>();
-        iconSizes.Changed += size =>
-        {
-            Log.Information("Desktop icon size changed to {Size}px", size);
-            Dispatcher.BeginInvoke(() =>
-            {
-                foreach (var w in Windows.OfType<BoxContainerWindow>())
-                {
-                    w.BoxContent?.RefreshIconSize();
-                }
-            });
-        };
+        // The desktop icon size watcher is resolved and started inside the splash (see the
+        // startup callback): the service reads Explorer's list-view across process boundaries on
+        // construction, which is measurable time spent in the window where the user is still
+        // looking at a frozen desktop.
+        Helpers.StartupProfiler.Mark("pre-splash-ready");
 
         // The global loading dialog drives initialization itself once first shown (it pumps
         // a nested message loop, so the Box windows are created under a fully-rendered WPF context).
@@ -291,6 +261,27 @@ public partial class App : Application
             // DesktopManager pulls in ~20 singletons, and the desktop-icon-size service reads
             // Explorer's list-view across process boundaries on construction. Both are startup
             // work, not something the user has to stare at a frozen desktop for.
+            AttachPowerModeHandler();
+            AttachRenderTierWatcher();
+
+            // The desktop icon size watcher: only while it is actually used (DefaultBoxIconSize is
+            // Auto/null). With an explicit value pinned, monitoring is suspended. The service reads
+            // Explorer's list-view across process boundaries on construction, so it is resolved
+            // here rather than before the splash.
+            SyncDesktopIconSizeWatcher();
+            var iconSizes = Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>();
+            iconSizes.Changed += size =>
+            {
+                Log.Information("Desktop icon size changed to {Size}px", size);
+                Dispatcher.BeginInvoke(() =>
+                {
+                    foreach (var w in Windows.OfType<BoxContainerWindow>())
+                    {
+                        w.BoxContent?.RefreshIconSize();
+                    }
+                });
+            };
+
             var manager = Services.GetRequiredService<DesktopManager>();
             manager.LayoutRefreshed += ScheduleTrayRefresh;
             SyncDesktopIconSizeWatcher();
@@ -368,6 +359,77 @@ public partial class App : Application
         {
             Serilog.Log.Warning(ex, "Live wallpaper initialization failed");
         }
+    }
+
+    /// <summary>
+    /// Subscribes to the WPF render-tier change, which is the signal for a post-resume driver
+    /// degradation to software rendering.
+    /// </summary>
+    /// <remarks>
+    /// The first touch of <see cref="System.Windows.Media.RenderCapability"/> queries the graphics
+    /// tier, which enumerates the display adapters — measured at ~220 ms. It gates nothing, so it
+    /// is attached from inside the loading splash, where the cost is hidden behind the loading
+    /// indicator rather than spent in front of a frozen desktop. The event only fires on a
+    /// *change*, so a later attachment cannot miss anything that matters.
+    /// </remarks>
+    private void AttachRenderTierWatcher()
+    {
+        if (_renderTierAttached)
+        {
+            // Idempotent: a second subscription would run the whole tier-change response twice.
+            return;
+        }
+
+        try
+        {
+            System.Windows.Media.RenderCapability.TierChanged += (_, _) =>
+            {
+                try
+                {
+                    int tier = System.Windows.Media.RenderCapability.Tier >> 16;
+                    Log.Information("WPF render tier changed to {Tier} ({Mode})", tier, tier > 0 ? "hardware" : "SOFTWARE fallback");
+                    try { Dispatcher.BeginInvoke(new Action(() => OnRenderTierChanged(tier))); } catch { }
+                }
+                catch { }
+            };
+            _renderTierAttached = true;
+            Helpers.StartupProfiler.Mark("render-tier-subscribed");
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Subscribes to the power-mode broadcast that triggers the post-resume render quiesce.
+    /// </summary>
+    /// <remarks>
+    /// The first <see cref="Microsoft.Win32.SystemEvents"/> access creates a hidden window and
+    /// costs a few hundred milliseconds, so it is attached from inside the loading splash where
+    /// the cost is hidden. It gates nothing: a resume broadcast cannot arrive during the seconds
+    /// the splash is up.
+    /// </remarks>
+    private void AttachPowerModeHandler()
+    {
+        if (_powerModeHandler is not null)
+        {
+            return;
+        }
+
+        try
+        {
+            _powerModeHandler = (_, e) =>
+            {
+                try
+                {
+                    if (e.Mode != Microsoft.Win32.PowerModes.Resume) return;
+                    Log.Information("Power resume broadcast received — quiescing widget render stack");
+                    try { Dispatcher.BeginInvoke(new Action(OnPowerResumeQuiesce)); } catch { }
+                }
+                catch { }
+            };
+            Microsoft.Win32.SystemEvents.PowerModeChanged += _powerModeHandler;
+            Helpers.StartupProfiler.Mark("power-handler-ready");
+        }
+        catch { }
     }
 
     /// <summary>
@@ -574,6 +636,9 @@ public partial class App : Application
     private readonly List<Views.Containers.WidgetWindow> _resumeSuspendedWidgets = new();
     private System.Windows.Threading.DispatcherTimer? _resumeRecoverTimer;
     private Microsoft.Win32.PowerModeChangedEventHandler? _powerModeHandler;
+
+    /// <summary>Guards against a second render-tier subscription (which would double every response).</summary>
+    private bool _renderTierAttached;
 
     // System-theme watcher, live ONLY while the user theme is "System". Static because it is
     // driven by the static ApplyTheme funnel, which every theme change passes through.

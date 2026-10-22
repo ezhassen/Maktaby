@@ -105,7 +105,9 @@ public sealed class LoadingDialogService : ILoadingDialogService
         // so UI-touching tasks (startup init creates windows) keep working while input is blocked.
         await _dispatcher.InvokeAsync(() =>
         {
+            Helpers.StartupProfiler.Mark("loading-dialog-dispatch-entered");
             var dialog = new LoadingDialog();
+            Helpers.StartupProfiler.Mark("loading-dialog-created");
             if (canCancel)
                 dialog.EnableCancel(() => { try { cts.Cancel(); } catch { } });
             SetBusy(true, pausePlayback);
@@ -118,6 +120,7 @@ public sealed class LoadingDialogService : ILoadingDialogService
 
             dialog.Loaded += async (_, _) =>
             {
+                Helpers.StartupProfiler.Mark("loading-dialog-loaded");
                 bool completed = false;
                 object? result = null;
                 try
