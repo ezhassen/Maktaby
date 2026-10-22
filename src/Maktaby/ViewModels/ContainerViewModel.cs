@@ -23,6 +23,10 @@ public sealed class ContainerViewModel : ViewModelBase, IDisposable
     private readonly BoxContainerViewModel? _boxContainerVm;
     private bool _disposed;
 
+    private System.Windows.Threading.DispatcherTimer? _undoTimer;
+    private Action? _undoAction;
+    private string _undoText = string.Empty;
+
     public ContainerViewModel(DesktopItemContainer container, IconImageService icons, IBoxService boxService)
     {
         _container = container;
@@ -202,6 +206,9 @@ public sealed class ContainerViewModel : ViewModelBase, IDisposable
 
     public RectD Bounds => _container.Bounds;
 
+    /// <summary>Bounds captured before a drag started; used to restore a container's location on undo.</summary>
+    public RectD? DragStartBounds { get; set; }
+
     // --- Styling (always on the DesktopItemContainer) ---
 
     public bool IsLocked
@@ -241,6 +248,45 @@ public sealed class ContainerViewModel : ViewModelBase, IDisposable
                 OnPropertyChanged();
             }
         }
+    }
+
+    // --- Temporary undo (e.g. after a merge) ---
+    public bool HasUndo => _undoAction != null;
+
+    public string UndoText => _undoText;
+
+    public System.Windows.Input.ICommand UndoCommand => new RelayCommand(_ => ExecuteUndoMerge());
+
+    public void SetUndoMerge(Action undo, string text, TimeSpan timeout)
+    {
+        ClearUndoState();
+        _undoAction = undo;
+        _undoText = text ?? string.Empty;
+        _undoTimer = new System.Windows.Threading.DispatcherTimer { Interval = timeout };
+        _undoTimer.Tick += (_, _) => ClearUndoState();
+        _undoTimer.Start();
+        OnPropertyChanged(nameof(HasUndo));
+        OnPropertyChanged(nameof(UndoText));
+    }
+
+    public void ClearUndoState()
+    {
+        if (_undoTimer != null)
+        {
+            _undoTimer.Stop();
+            _undoTimer = null;
+        }
+        _undoAction = null;
+        _undoText = string.Empty;
+        OnPropertyChanged(nameof(HasUndo));
+        OnPropertyChanged(nameof(UndoText));
+    }
+
+    public void ExecuteUndoMerge()
+    {
+        var action = _undoAction;
+        ClearUndoState();
+        action?.Invoke();
     }
 
     // --- Tabs (BoxContainer only) ---

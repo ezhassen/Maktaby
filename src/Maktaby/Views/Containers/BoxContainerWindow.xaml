@@ -5,12 +5,12 @@
     xmlns:containers="clr-namespace:Maktaby.Views.Containers"
     xmlns:controls="clr-namespace:Maktaby.Controls"
     xmlns:conv="clr-namespace:Maktaby.Converters"
-    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:tt="clr-namespace:Maktaby.Helpers"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:vm="clr-namespace:Maktaby.ViewModels"
-        xmlns:tt="clr-namespace:Maktaby.Helpers"
     MinWidth="160"
     MinHeight="120"
     AllowsTransparency="True"
@@ -142,7 +142,7 @@
                     Background="#3f3f46"
                     CornerRadius="8,8,0,0"
                     DockPanel.Dock="Top">
-                    <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto, auto">
+                    <Grid x:Name="HeaderContent" ColumnDefinitions="auto, *, auto, auto, auto">
                         <!--
                             Title layer first (bottom z-order): spans the full header width so the
                             title stays centered whether or not the side buttons are visible. Buttons
@@ -157,9 +157,9 @@
                             Background="Transparent"
                             MouseLeftButtonDown="TitleArea_MouseLeftButtonDown"
                             MouseRightButtonDown="TitleArea_MouseRightButtonDown">
-<Grid
-                                  x:Name="TitleLayer"
-                                  HorizontalAlignment="Center"
+                            <Grid
+                                x:Name="TitleLayer"
+                                HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Background="Transparent">
                                 <Grid.ColumnDefinitions>
@@ -193,6 +193,7 @@
                                 MinWidth="160"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
+                                tt:ToolTipGuard.Managed="True"
                                 KeyDown="TitleEdit_KeyDown"
                                 LostFocus="TitleEdit_LostFocus"
                                 MaxLength="64"
@@ -200,8 +201,7 @@
                                 Text="{Binding ActiveBox.Name, UpdateSourceTrigger=PropertyChanged}"
                                 TextAlignment="Center"
                                 ToolTip="Rename the box (max 64 characters)"
-                                Visibility="Collapsed" 
-                                tt:ToolTipGuard.Managed="True"/>
+                                Visibility="Collapsed" />
                         </Grid>
                         <!--
                             Search. Sits immediately beside the menu button (column 1 is the star the
@@ -216,19 +216,17 @@
                             <Button
                                 x:Name="SearchButton"
                                 Width="24"
+                                tt:ToolTipGuard.Managed="True"
                                 Click="SearchButton_Click"
                                 Cursor="Arrow"
                                 Style="{StaticResource BorderlesButtonStyle}"
-                                ToolTip="{loc:LocKey Box.SearchTooltip}"
-                              tt:ToolTipGuard.Managed="True">
+                                ToolTip="{loc:LocKey Box.SearchTooltip}">
                                 <!--
                                     Foreground is explicit, not inherited. SymbolIcon does not take the
                                     button's foreground, so without this the glyph renders black and
                                     is invisible on the dark header.
                                 -->
-                                <ui:SymbolIcon
-                                    Foreground="{DynamicResource BoxHeaderForeground}"
-                                    Symbol="Search24" />
+                                <ui:SymbolIcon Foreground="{DynamicResource BoxHeaderForeground}" Symbol="Search24" />
                             </Button>
                             <!--
                                 The rename box's styling with a border: the search needs an edge to
@@ -251,12 +249,12 @@
                                         MaxWidth="200"
                                         Padding="6,1,20,1"
                                         VerticalAlignment="Center"
+                                        tt:ToolTipGuard.Managed="True"
                                         KeyDown="FilterBox_KeyDown"
                                         LostFocus="FilterBox_LostFocus"
                                         Style="{StaticResource TitleRenameBoxStyle}"
                                         TextChanged="FilterBox_TextChanged"
-                                        ToolTip="{loc:LocKey Box.SearchTooltip}"
-                                        tt:ToolTipGuard.Managed="True" />
+                                        ToolTip="{loc:LocKey Box.SearchTooltip}" />
                                     <TextBlock
                                         x:Name="FilterPlaceholder"
                                         Margin="7,0,0,0"
@@ -270,7 +268,7 @@
                                         placeholder. PreviewMouseDown, not Click, arms the dismissal
                                         guard: the box's lost-focus fires when the button takes focus,
                                         which is on MouseDown and therefore before Click.
-
+                                        
                                         Deliberately not the shared BorderlesButtonStyle: that style is
                                         sized for a 24px header button and its own padding/min-size
                                         pushed this glyph out of its 16px box, so it rendered clipped.
@@ -281,22 +279,22 @@
                                         x:Name="FilterClearButton"
                                         Width="16"
                                         Height="16"
+                                        MinWidth="0"
+                                        MinHeight="0"
                                         Margin="0,0,2,0"
+                                        Padding="0"
                                         HorizontalAlignment="Right"
                                         VerticalAlignment="Center"
+                                        tt:ToolTipGuard.Managed="True"
                                         Background="Transparent"
                                         BorderThickness="0"
                                         Click="FilterClearButton_Click"
                                         Cursor="Arrow"
                                         Focusable="False"
-                                        MinHeight="0"
-                                        MinWidth="0"
-                                        Padding="0"
                                         PreviewMouseDown="FilterClearButton_PreviewMouseDown"
                                         SnapsToDevicePixels="True"
                                         ToolTip="{loc:LocKey Box.SearchClearTooltip}"
-                                        Visibility="Collapsed"
-                                        tt:ToolTipGuard.Managed="True">
+                                        Visibility="Collapsed">
                                         <Path
                                             Width="9"
                                             Height="9"
@@ -316,12 +314,12 @@
                             Grid.Column="0"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
+                            tt:ToolTipGuard.Managed="True"
                             Click="MenuButton_Click"
                             Cursor="Arrow"
                             DockPanel.Dock="Left"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="{loc:LocKey Box.Menu}"
-                              tt:ToolTipGuard.Managed="True">
+                            ToolTip="{loc:LocKey Box.Menu}">
                             <ui:SymbolIcon Symbol="Navigation24" />
                             <Button.ContextMenu>
                                 <ContextMenu x:Name="BoxMenu">
@@ -502,33 +500,98 @@
                         </Button>
 
                         <Button
-                            x:Name="LockButton"
+                            x:Name="UndoButton"
                             Grid.Column="2"
                             Margin="0,0,4,0"
                             Padding="0"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
+                            tt:ToolTipGuard.Managed="True"
+                            Command="{Binding UndoCommand}"
+                            Cursor="Arrow"
+                            Style="{StaticResource BorderlesButtonStyle}"
+                            ToolTip="{Binding UndoText}"
+                            Visibility="{Binding HasUndo, Converter={StaticResource BoolToVis}}">
+                            <Grid Width="20" Height="20">
+                                <Ellipse
+                                    x:Name="UndoRing"
+                                    Width="20"
+                                    Height="20"
+                                    Fill="Transparent"
+                                    RenderTransformOrigin="0.5,0.5"
+                                    Stroke="#4EC9B0"
+                                    StrokeDashArray="4 2"
+                                    StrokeThickness="2">
+                                    <Ellipse.RenderTransform>
+                                        <RotateTransform />
+                                    </Ellipse.RenderTransform>
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Visibility, RelativeSource={RelativeSource AncestorType=Button}}" Value="Visible">
+                                                    <DataTrigger.EnterActions>
+                                                        <BeginStoryboard x:Name="UndoRingStoryboard">
+                                                            <Storyboard RepeatBehavior="Forever">
+                                                                <DoubleAnimation
+                                                                    Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                    From="0"
+                                                                    To="360"
+                                                                    Duration="0:0:1" />
+                                                            </Storyboard>
+                                                        </BeginStoryboard>
+                                                    </DataTrigger.EnterActions>
+                                                    <DataTrigger.ExitActions>
+                                                        <StopStoryboard BeginStoryboardName="UndoRingStoryboard" />
+                                                    </DataTrigger.ExitActions>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <ui:SymbolIcon
+                                    Width="14"
+                                    Height="14"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Foreground="{DynamicResource BoxHeaderForeground}"
+                                    Symbol="ArrowUndo16" />
+                            </Grid>
+                        </Button>
+
+                        <Button
+                            x:Name="LockButton"
+                            Grid.Column="3"
+                            Margin="0,0,4,0"
+                            Padding="0"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            tt:ToolTipGuard.Managed="True"
                             Click="LockButton_Click"
                             Cursor="Arrow"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="{loc:LocKey Box.MenuLockTooltip}"
-                              tt:ToolTipGuard.Managed="True">
-                            <ui:SymbolIcon x:Name="LockIcon" Symbol="LockOpen24" />
+                            ToolTip="{loc:LocKey Box.MenuLockTooltip}">
+                            <ui:SymbolIcon
+                                x:Name="LockIcon"
+                                Foreground="{DynamicResource BoxHeaderForeground}"
+                                Symbol="LockOpen24" />
                         </Button>
 
                         <Button
                             x:Name="RollButton"
-                            Grid.Column="3"
+                            Grid.Column="4"
                             Margin="4,0,0,0"
                             Padding="0"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
+                            tt:ToolTipGuard.Managed="True"
                             Click="RollButton_Click"
                             Cursor="Arrow"
                             Style="{StaticResource BorderlesButtonStyle}"
-                            ToolTip="{loc:LocKey Box.RollUp}"
-                              tt:ToolTipGuard.Managed="True">
-                            <ui:SymbolIcon x:Name="RollIcon" Symbol="ChevronUp24" />
+                            ToolTip="{loc:LocKey Box.RollUp}">
+                            <ui:SymbolIcon
+                                x:Name="RollIcon"
+                                Foreground="{DynamicResource BoxHeaderForeground}"
+                                Symbol="ChevronUp24" />
                         </Button>
                     </Grid>
                 </Border>

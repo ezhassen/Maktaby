@@ -331,6 +331,88 @@ public sealed class MainViewModel : ViewModelBase
         RemoveContainer(source);
     }
 
+    /// <summary>Merges every box from <paramref name="source"/> into <paramref name="target"/>, then removes
+    /// the source, but keeps a temporary undo on the target that recreates the source container with the
+    /// moved boxes. The undo expires after <paramref name="timeout"/>.</summary>
+    public void MergeContainersWithUndo(ContainerViewModel source, ContainerViewModel target, TimeSpan? timeout = null, string? undoText = null)
+    {
+        if (source == target || source.BoxContainerVm == null || target.BoxContainerVm == null)
+        {
+            return;
+        }
+
+        timeout ??= TimeSpan.FromSeconds(10);
+        undoText ??= $"Undo merge '{source.Title}'";
+
+        var movedModels = source.BoxContainerVm.Tabs.Select(t => t.Model).ToList();
+        int sourceSelectedIndex = source.BoxContainerVm.SelectedIndex;
+        int targetSelectedIndex = target.BoxContainerVm.SelectedIndex;
+        foreach (var model in movedModels.ToList())
+        {
+            var sourceTabs = source.BoxContainerVm.Tabs;
+            int idx = sourceTabs.IndexOf(sourceTabs.First(t => t.Model == model));
+            if (idx >= 0)
+            {
+                source.BoxContainerVm.RemoveTab(idx, allowDefault: true);
+            }
+
+            target.BoxContainerVm.InsertBox(model);
+        }
+
+        if (movedModels.Count > 0)
+        {
+            var idx = target.BoxContainerVm.Tabs.IndexOf(target.BoxContainerVm.Tabs.FirstOrDefault(t => t.Model == movedModels[0])!);
+            if (idx >= 0) target.BoxContainerVm.SelectedIndex = idx;
+        }
+
+        var sourceBounds = source.DragStartBounds ?? source.Bounds;
+
+        target.SetUndoMerge(() =>
+        {
+            // Move the merged boxes back out of the target.
+            foreach (var model in movedModels.ToList())
+            {
+                var targetTabs = target.BoxContainerVm.Tabs;
+                int idx = targetTabs.IndexOf(targetTabs.FirstOrDefault(t => t.Model == model)!);
+                if (idx >= 0)
+                {
+                    target.BoxContainerVm.RemoveTab(idx, allowDefault: true);
+                }
+            }
+
+            // Recreate the source container at its original bounds and re-insert the boxes.
+            var newVm = RegisterContainer(new BoxContainer(), sourceBounds.X, sourceBounds.Y, sourceBounds.Width, sourceBounds.Height);
+            foreach (var model in movedModels)
+            {
+                newVm.BoxContainerVm?.InsertBox(model);
+            }
+            if (newVm.BoxContainerVm != null && newVm.BoxContainerVm.Tabs.Count > 0)
+            {
+                newVm.BoxContainerVm.SelectedIndex = Math.Clamp(sourceSelectedIndex, 0, newVm.BoxContainerVm.Tabs.Count - 1);
+            }
+            if (target.BoxContainerVm != null && target.BoxContainerVm.Tabs.Count > 0)
+            {
+                target.BoxContainerVm.SelectedIndex = Math.Clamp(targetSelectedIndex, 0, target.BoxContainerVm.Tabs.Count - 1);
+            }
+
+            // The newly created window subscribes to SelectedIndexChanged during its Loaded event,
+            // which is dispatched asynchronously after Show(); re-apply the body once it is ready.
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                foreach (System.Windows.Window w in System.Windows.Application.Current.Windows)
+                {
+                    if (w is Views.Containers.BoxContainerWindow bw)
+                    {
+                        if (bw.DataContext == newVm) bw.UpdateBody();
+                        if (bw.DataContext == target) bw.UpdateBody();
+                    }
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
+        }, undoText, timeout.Value);
+
+        RemoveContainer(source);
+    }
+
     /// <summary>Renames a tracked item. Updates the view-model (display name + icon) on success.</summary>
     public async Task<bool> RenameItem(BoxItemViewModel vm, string newName)
     {

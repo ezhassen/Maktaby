@@ -913,7 +913,7 @@ public partial class BoxContainerWindow : WidgetWindow
     public BoxControl? BoxContent => _boxContent;
     public FolderPortalControl? FolderPortalContent => _folderPortalContent;
 
-    private void UpdateBody()
+    public void UpdateBody()
     {
         // Swapping the body unloads the tiles that owned any open tooltip, and an unloaded owner
         // never reports Closed - the popup would sit there until the window is hidden and shown.
@@ -1082,6 +1082,7 @@ public partial class BoxContainerWindow : WidgetWindow
         }
 
         _lastTitleClick = DateTime.UtcNow;
+        _vm.DragStartBounds = _vm.Bounds;
         _drag.BeginTitleDrag(e);
     }
 
@@ -1147,6 +1148,7 @@ public partial class BoxContainerWindow : WidgetWindow
         {
             _mergeTarget = null;
         }
+        _vm.DragStartBounds = null;
     }
 
     private void AddTab_Click(object sender, RoutedEventArgs e)
@@ -1916,6 +1918,13 @@ public partial class BoxContainerWindow : WidgetWindow
             return;
         }
 
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && e.Key == Key.Z && _vm.HasUndo)
+        {
+            _vm.UndoCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key == Key.F5)
         {
             RefreshActiveBox();
@@ -2343,6 +2352,7 @@ public partial class BoxContainerWindow : WidgetWindow
             double left = Math.Max(wa.Left, Math.Min(p.X, wa.Right - 240));
             double top = Math.Max(wa.Top, Math.Min(p.Y, wa.Bottom - 200));
             _host.MoveBoxToNewContainer(box, _vm, left, top);
+            _vm.ClearUndoState();
             _save();
             // Activate the newly created container window.
             Dispatcher.BeginInvoke(new Action(() =>
@@ -2358,6 +2368,7 @@ public partial class BoxContainerWindow : WidgetWindow
         {
             int from = _vm.BoxContainerVm.Tabs.IndexOf(_dragTab);
             _vm.BoxContainerVm.MoveTab(from, _tabDropIndex);
+            _vm.ClearUndoState();
             Activate();
             _save();
         }
@@ -2366,6 +2377,8 @@ public partial class BoxContainerWindow : WidgetWindow
             // Merge into another container at the indicated insertion index; make it the active tab.
             var targetVm = _dropWindow._vm;
             _host.MoveBoxToContainer(box, _vm, targetVm, _tabDropIndex);
+            _vm.ClearUndoState();
+            targetVm.ClearUndoState();
             // Activate target window so dropped tab selection is visible.
             _dropWindow.Activate();
             // Ensure the moved box becomes active tab in target (MoveBoxToContainer may already, but enforce)
@@ -2593,6 +2606,7 @@ public partial class BoxContainerWindow : WidgetWindow
 
         if (box != null)
         {
+            Activate();
             _host.MoveBoxToContainer(box, source, _vm);
             // Activate target and select moved box
             Activate();
@@ -2605,7 +2619,8 @@ public partial class BoxContainerWindow : WidgetWindow
         }
         else
         {
-            _host.MergeContainers(source, _vm);
+            Activate();
+            _host.MergeContainersWithUndo(source, _vm);
             Activate();
         }
 
@@ -2708,8 +2723,16 @@ public partial class BoxContainerWindow : WidgetWindow
             return;
         }
 
-        double cx = Left + Width / 2;
-        double cy = Top + Height / 2;
+        // Track the pointer itself, not the dragged window's centre, so a merge triggers based on
+        // where the cursor actually is rather than the (possibly large) window bounds.
+        if (!Win32Apis.GetCursorPos(out var cursorPt))
+        {
+            return;
+        }
+
+        var relative = PointFromScreen(new Point(cursorPt.X, cursorPt.Y));
+        double cx = Left + relative.X;
+        double cy = Top + relative.Y;
 
         var newTarget = _host.Containers.FirstOrDefault(c =>
             c.Id != _vm.Id &&
@@ -2749,7 +2772,12 @@ public partial class BoxContainerWindow : WidgetWindow
         }
 
         FindWindowFor(target)?.HideDropHighlight();
-        _host.MergeContainers(_vm, target);
+        FindWindowFor(target)?.Activate();
+        foreach (var c in _host.Containers)
+        {
+            c.ClearUndoState();
+        }
+        _host.MergeContainersWithUndo(_vm, target);
         _save();
     }
 
