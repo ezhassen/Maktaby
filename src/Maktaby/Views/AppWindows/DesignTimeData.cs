@@ -1,4 +1,5 @@
 using Maktaby.Core.Models;
+using Maktaby.Core.Services;
 using Maktaby.Settings;
 using Maktaby.ViewModels;
 using System;
@@ -143,6 +144,40 @@ public static class DesignTimeData
             {
                 try { Debug.WriteLine($"[design] SampleGallery failed: {ex}"); } catch { }
                 return System.Array.Empty<Views.WidgetGalleryItem>();
+            }
+        }
+    }
+
+    private static ContainerViewModel? _boxContainer;
+
+    /// <summary>Sample box container with two tabs for design-time preview of BoxContainerWindow.</summary>
+    public static ContainerViewModel? SampleBoxContainer
+    {
+        get
+        {
+            try
+            {
+                if (_boxContainer != null) return _boxContainer;
+                var boxService = new BoxService();
+                var b1 = boxService.CreateBox("Documents", 0, 0, 0, 0);
+                var b2 = boxService.CreateBox("Downloads", 0, 0, 0, 0);
+                b2.BoxType = BoxType.FolderPortal;
+                var b3 = boxService.CreateBox("Projects", 0, 0, 0, 0);
+                var container = new DesktopItemContainer
+                {
+                    Type = DesktopItemContainerType.BoxContainer,
+                    Bounds = RectD.FromXYWH(100, 100, 360, 260),
+                    IsVisible = true,
+                    ChildContainer = new BoxContainer { Boxes = { b1, b2, b3 }, SelectedIndex = 1 }
+                };
+                _boxContainer = new ContainerViewModel(container, null!, boxService);
+                _boxContainer.BoxContainerVm?.SelectedIndex = 1;
+                return _boxContainer;
+            }
+            catch (Exception ex)
+            {
+                try { Debug.WriteLine($"[design] SampleBoxContainer failed: {ex}"); } catch { }
+                return null;
             }
         }
     }

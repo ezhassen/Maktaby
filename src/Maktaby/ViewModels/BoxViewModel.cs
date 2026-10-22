@@ -100,6 +100,20 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
     }
 
     public bool IsFolderPortal => _box.BoxType == BoxType.FolderPortal;
+
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        internal set
+        {
+            if (_isSelected != value)
+            {
+                _isSelected = value;
+                OnPropertyChanged();
+            }
+        }
+    }
     public bool IsDesktopItems => _box.BoxType == BoxType.DesktopItems;
 
     /// <summary>True for the built-in default box (fed by the default rule; cannot be deleted).</summary>

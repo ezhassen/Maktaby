@@ -26,6 +26,7 @@ public sealed class BoxContainerViewModel : ViewModelBase
         _boxService = boxService;
         Tabs = new ObservableCollection<BoxViewModel>(model.Boxes.Select(b => new BoxViewModel(b, icons)));
         _selectedIndex = model.Boxes.Count == 0 ? 0 : System.Math.Clamp(model.SelectedIndex, 0, model.Boxes.Count - 1);
+        UpdateTabSelection();
     }
 
     public ObservableCollection<BoxViewModel> Tabs { get; }
@@ -42,6 +43,7 @@ public sealed class BoxContainerViewModel : ViewModelBase
 
             _selectedIndex = value;
             _model.SelectedIndex = value;
+            UpdateTabSelection();
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedBox));
             SelectedIndexChanged?.Invoke();
@@ -50,6 +52,14 @@ public sealed class BoxContainerViewModel : ViewModelBase
 
     /// <summary>The box shown by the active tab, or null when there are no tabs.</summary>
     public BoxViewModel? SelectedBox => Tabs.Count > 0 ? Tabs[System.Math.Min(_selectedIndex, Tabs.Count - 1)] : null;
+
+    private void UpdateTabSelection()
+    {
+        for (int i = 0; i < Tabs.Count; i++)
+        {
+            Tabs[i].IsSelected = i == _selectedIndex;
+        }
+    }
 
     /// <summary>The box driving the body/title/menu (alias of <see cref="SelectedBox"/>).</summary>
     public BoxViewModel? ActiveBox => SelectedBox;
@@ -160,6 +170,7 @@ public sealed class BoxContainerViewModel : ViewModelBase
         _model.Boxes.Insert(insert, model);
 
         _selectedIndex = insert;
+        UpdateTabSelection();
         OnPropertyChanged(nameof(SelectedIndex));
         OnPropertyChanged(nameof(SelectedBox));
         OnPropertyChanged(nameof(ShowTabs));
