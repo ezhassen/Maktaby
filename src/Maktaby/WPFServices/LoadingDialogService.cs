@@ -53,6 +53,18 @@ public sealed class LoadingDialogService : ILoadingDialogService
         bool pausePlayback = false)
         => RunAsync(loadingTask, afterFinished, cancellationToken, canCancel: true, pausePlayback);
 
+    /// <summary>
+    /// Completes when the loading dialog has painted its first frame.
+    /// </summary>
+    /// <remarks>
+    /// The startup work used to wait a hard-coded 800 ms "so the splash paints" before it began.
+    /// That is the delay replaced: the caller can await the real paint instead, so the splash is
+    /// on screen exactly as long as it takes — no more.
+    /// </remarks>
+    public Task SplashPainted => _splashPainted?.Task ?? Task.CompletedTask;
+
+    private TaskCompletionSource<bool>? _splashPainted;
+
     private async Task<object?> RunAsync(
         Func<Action<string>, CancellationToken, Task<object?>> loadingTask,
         Action<object?>? afterFinished,
@@ -97,6 +109,13 @@ public sealed class LoadingDialogService : ILoadingDialogService
             if (canCancel)
                 dialog.EnableCancel(() => { try { cts.Cancel(); } catch { } });
             SetBusy(true, pausePlayback);
+
+            // The first paint is the signal the startup work waits for, so it does not have to
+            // guess with a fixed delay. Created per dialog: a second splash must not inherit the
+            // first one's already-completed task.
+            _splashPainted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            dialog.ContentRendered += (_, _) => _splashPainted.TrySetResult(true);
+
             dialog.Loaded += async (_, _) =>
             {
                 bool completed = false;

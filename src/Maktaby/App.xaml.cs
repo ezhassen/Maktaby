@@ -48,6 +48,7 @@ public partial class App : Application
     #endregion
 
     #region Startup
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -121,13 +122,16 @@ public partial class App : Application
         //
         AppJSettings.Reload();
         Logging.InitializeDefaultLogger();
+        Helpers.StartupProfiler.Mark("logger-ready");//Logging only starts after AppJSettings.Reload+Logging.InitializeDefaultLogger to set logger level and config
         //
 
         var services = new ServiceCollection();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
+        Helpers.StartupProfiler.Mark("di-ready");
 
         Services.GetRequiredService<ISettingsService>().Load();
+        Helpers.StartupProfiler.Mark("settings-loaded");
         // Localization MUST be initialized before BuildTrayAndMenuItems: the tray XAML
         // resolves its {loc:LocKey …} extensions at parse time, and parsing before the
         // provider is attached caches "[key]" into every tray header for the session.
@@ -136,6 +140,7 @@ public partial class App : Application
             var loc = Services.GetRequiredService<ILocalizationProvider>();
             Localization.Loc.Attach(loc);
             loc.Initialize(LangsFolder(), Services.GetRequiredService<ISettingsService>().UserSettings.Language);
+            Helpers.StartupProfiler.Mark("localization-ready");
             // Shared dialogs (DialogService / exception window) resolve their text and flow
             // direction through this delegate — Shared does not reference Maktaby.
             Maktaby.Shared.Localization.SharedText.Resolver = key => Localization.Loc.Get(key);
@@ -147,7 +152,6 @@ public partial class App : Application
             Log.Warning(ex, "Localization init failed; UI will show [key] placeholders");
         }
 
-        BuildTrayAndMenuItems(Services);
         // Vertically center every MenuItem's submenu on its row via a dynamic placement callback —
         // a fixed VerticalOffset can't work in both drop directions (it detaches the submenu and
         // kills hover when the menu opens upward). No-op when no submenu is present.
@@ -158,6 +162,7 @@ public partial class App : Application
         // initial theme lands — otherwise the boxes come up unstyled for the whole session.
         ApplicationThemeManager.Changed += (_, _) => ApplyBoxAppearance();
         ApplyTheme(Services.GetRequiredService<ISettingsService>().UserSettings.SelectedTheme);
+        Helpers.StartupProfiler.Mark("theme-applied");
         // Ensure WebWidget storage roots exist (UserWidgets + EBWebView)
         try { Services.GetRequiredService<IWebWidgetService>().EnsureUserWidgetsRoot(); } catch { }
         // Gallery previews get their own environment under the managed tree (not %TEMP%), so the
@@ -172,7 +177,9 @@ public partial class App : Application
         // Display scale/resolution changes can leave the tray popup with stale DPI/placement
         // state (small, unclickable menu). Re-create the icon once the layout settles.
         // DesktopManager.LayoutRefreshed fires for both resolution and DPI-only passes.
-        Services.GetRequiredService<DesktopManager>().LayoutRefreshed += ScheduleTrayRefresh;
+        // Resolving DesktopManager materializes the whole service graph, so it happens inside the
+        // splash (see the startup callback) — not before it, where it would only delay the
+        // loading indicator the user is waiting on.
 
         // Windows shutdown / user logoff: disarm the minimize-prevention hooks BEFORE the session
         // starts collapsing our owned window chains, so teardown is not fought.
@@ -216,12 +223,14 @@ public partial class App : Application
                 catch { }
             };
             Microsoft.Win32.SystemEvents.PowerModeChanged += _powerModeHandler;
+            Helpers.StartupProfiler.Mark("power-handler-ready");
         }
         catch { }
 
         // Watch the live desktop icon size ONLY while it is actually used (DefaultBoxIconSize is
         // Auto/null). With an explicit value pinned, monitoring is suspended.
-        SyncDesktopIconSizeWatcher();
+        // The service reads Explorer's list-view across process boundaries on construction, so it
+        // is resolved inside the splash as well (see the startup callback).
         var iconSizes = Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>();
         iconSizes.Changed += size =>
         {
@@ -238,36 +247,66 @@ public partial class App : Application
         // The global loading dialog drives initialization itself once first shown (it pumps
         // a nested message loop, so the Box windows are created under a fully-rendered WPF context).
         var loading = Services.GetRequiredService<ILoadingDialogService>();
+        Helpers.StartupProfiler.Mark("loading-dialog-resolved");
         loading.StateChanged += (_, _) =>
-        {
-            // A loading dialog blocks all input, including the tray menu: the menu is not shown
-            // at all while one is up (SetMenuSuppressed also closes one that was already open
-            // when the dialog appeared). Read _tray per event, not captured, so this keeps
-            // working across the tray icon being rebuilt on an Explorer restart.
-            try
-            {
-                bool busy = loading.IsBusy;
-                _tray?.SetMenuSuppressed(busy);
-                // Loading dialogs are rare (startup and explicit user actions), so this cannot
-                // spam — and it is the only way to explain "the tray menu did not open".
-                Serilog.Log.Information("Loading dialog {State}: tray context menu {Menu}",
-                    busy ? "shown" : "dismissed", busy ? "suppressed" : "available");
-            }
-            catch { }
-        };
+              {
+                  // A loading dialog blocks all input, including the tray menu: the menu is not shown
+                  // at all while one is up (SetMenuSuppressed also closes one that was already open
+                  // when the dialog appeared). Read _tray per event, not captured, so this keeps
+                  // working across the tray icon being rebuilt on an Explorer restart.
+                  try
+                  {
+                      bool busy = loading.IsBusy;
+                      _tray?.SetMenuSuppressed(busy);
+                      // Loading dialogs are rare (startup and explicit user actions), so this cannot
+                      // spam — and it is the only way to explain "the tray menu did not open".
+                      Serilog.Log.Information("Loading dialog {State}: tray context menu {Menu}",
+                          busy ? "shown" : "dismissed", busy ? "suppressed" : "available");
+                  }
+                  catch { }
+              };
         await loading.ShowAsync(async report =>
         {
             report(Localization.Loc.Get("Loading.Loading"));
-            // Let the splash paint and the dispatcher settle before the Shell enumeration /
-            // Box creation work begins.
-            await Task.Delay(800);
+            Helpers.StartupProfiler.Mark("splash-shown");            // Wait for the splash to actually be on screen, instead of a fixed 800 ms that was
+            // only ever a guess at how long that takes. The cap is the safety net for a dialog
+            // that never reports a paint.
+            await WaitForSplashPaint(loading);
+            Helpers.StartupProfiler.Mark("splash-painted");
+
+            // The tray is built here, not before the splash: it costs ~750 ms (XAML parse, hidden
+            // host window, the mouse monitor, the TaskbarCreated hook) and none of it is needed
+            // before the splash appears. Building it inside the splash means the user sees the
+            // loading indicator ~750 ms earlier, and the tray is still ready before the splash
+            // lifts.
+            // The tray is built AFTER the splash (see below), not here: Wpf.Ui's NotifyIcon
+            // registers with the shell from its host window's Loaded event, and a window shown
+            // while a modal dialog owns the dispatcher never gets that event — the icon simply
+            // never appears. Building it before the splash is also ~750 ms of work the user
+            // would spend staring at a frozen desktop instead of the loading indicator.
             var manager = Services.GetRequiredService<DesktopManager>();
+            manager.LayoutRefreshed += ScheduleTrayRefresh;
+            SyncDesktopIconSizeWatcher();
+            Helpers.StartupProfiler.Mark("services-ready");
+
             await manager.InitializeAsync();
+            Helpers.StartupProfiler.Mark("desktop-init-done");
 
             // Standalone live wallpaper (own windows, own lifecycle — independent from DesktopManager).
             try { await Services.GetRequiredService<LiveWallpaperManager>().InitializeAsync(); } catch { }
+            Helpers.StartupProfiler.Mark("wallpaper-init-done");
             return null;
         }, pausePlayback: false);
+
+        Helpers.StartupProfiler.Mark("splash-closed");
+
+        // The tray is built here, after the splash has closed. Wpf.Ui's NotifyIcon registers
+        // with the shell from its host window's Loaded event, and a window shown while a modal
+        // dialog owns the dispatcher never receives it — the icon then never appears at all.
+        // Building it here also keeps ~750 ms of XAML parsing and window plumbing out of the
+        // time before the user sees the loading indicator.
+        BuildTrayAndMenuItems(Services);
+        Helpers.StartupProfiler.Mark("tray-ready");
 
         // Update checks start only after the loading dialog is gone: a release check must
         // never overlap initialisation, and the prompt window is useless before the desktop
@@ -284,6 +323,8 @@ public partial class App : Application
             Log.Warning(ex, "Could not start the update checker");
         }
 
+        Helpers.StartupProfiler.Summary();
+
         //StartHealthSnapshots, when logging
         if (GlobalFeaturesSwitches.EnableHealthSnapshots) StartHealthSnapshots();
 
@@ -294,6 +335,26 @@ public partial class App : Application
         if (Maktaby.WidgetSdk.WidgetDev.SimulateData)
         {
             Log.Warning("Native widget data simulation is ON: widgets may serve generated data instead of calling live services.");
+        }
+    }
+
+    /// <summary>
+    /// Waits for the loading dialog's first paint, bounded so a dialog that never renders cannot
+    /// stall the startup.
+    /// </summary>
+    private static async Task WaitForSplashPaint(ILoadingDialogService loading)
+    {
+        try
+        {
+            await loading.SplashPainted.WaitAsync(TimeSpan.FromMilliseconds(600)).ConfigureAwait(true);
+        }
+        catch (TimeoutException)
+        {
+            // No paint reported: carry on rather than stall the app on a cosmetic wait.
+        }
+        catch (Exception)
+        {
+            // A failed cosmetic wait is not a failed startup.
         }
     }
 

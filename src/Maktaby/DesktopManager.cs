@@ -68,6 +68,26 @@ public sealed class DesktopManager
     private DesktopWidgetLayerHost? _widgetLayerHost;
     private bool _allBoxesHidden;
 
+    /// <summary>Number of container windows that have painted their first frame. Used only by the
+    /// startup profiler to mark the moment the first box became visible.</summary>
+    private int _renderedWindowCount;
+
+    /// <summary>
+    /// Completes when the first container window has painted its first frame — the moment the app
+    /// is genuinely on screen and interactive.
+    /// </summary>
+    /// <remarks>
+    /// The startup splash is dismissed only once this has happened (or the wait times out), so the
+    /// user never gets a splash that reveals an empty desktop. The task is completed explicitly
+    /// when there is no container to show, so the splash can never wait for something that will
+    /// not arrive.
+    /// </remarks>
+    private readonly TaskCompletionSource<bool> _firstContainerRendered =
+        new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Completes when the first container window has painted. Never faults.</summary>
+    public Task FirstContainerRendered => _firstContainerRendered.Task;
+
     // WinEvent watch for desktop-icon show/hide toggles (e.g. via Explorer's own menu):
     // the hook handle, the rooted callback delegate, and the list-view handle it filters on.
     private IntPtr _iconWatchHook;
@@ -142,7 +162,9 @@ public sealed class DesktopManager
         _mouseMonitor.Stop();
         //
         await _explorer.SetDesktopIconsVisibleAsync(false);
+        Helpers.StartupProfiler.Mark("desktop-icons-hidden");
         var snapshot = await _persistence.LoadSnapshotAsync();
+        Helpers.StartupProfiler.Mark("snapshot-loaded");
         if (snapshot is not { Containers.Count: > 0 })
         {
             await BuildDefaultContainerAsync();
@@ -168,6 +190,8 @@ public sealed class DesktopManager
             EnsureDefaultRuleAndBox();
         }
 
+        Helpers.StartupProfiler.Mark("containers-restored");
+
         // Snapshots written before per-instance widget settings can hold several instances of the
         // same slug that all share one settings file. Give each of them (except the lowest-Id one,
         // which stays on the default file) a private file seeded with the values they were sharing,
@@ -177,6 +201,7 @@ public sealed class DesktopManager
         // Collect what no instance points at any more. After migration, never before: the names it
         // just assigned are referenced, so they cannot be mistaken for orphans.
         CleanupOrphanedWidgetSettings();
+        Helpers.StartupProfiler.Mark("widget-settings-swept");
 
         // Build the container view-models off the UI thread (this also kicks off the per-item icon loads)
         // so the splash keeps animating, then add the already-built VMs on the UI thread. The
@@ -190,9 +215,11 @@ public sealed class DesktopManager
         }
 
         _mainVm.Containers.CollectionChanged += Containers_CollectionChanged;
+        Helpers.StartupProfiler.Mark("view-models-built");
 
         EnsureSurface();
         StartIconVisibilityWatch();
+        Helpers.StartupProfiler.Mark("surface-ready");
 
         // Show the first container right away so the desktop isn't empty, then lazily stream the
         // remaining container windows in the background (after the splash closes) for an instant startup.
@@ -201,9 +228,34 @@ public sealed class DesktopManager
         {
             AddWindow(_mainVm.Containers[0], showActivated: false, updateWidgetAutoPause: false);//focusWorkaround: true
             EnsureDesktopZOrder();
+
+            // Let the first box paint BEFORE the remaining containers are streamed. Streaming them
+            // hogs the dispatcher (one window per turn, each a full XAML parse), and the first
+            // box's first render was queued behind that work — it appeared 1.3 s after the splash
+            // closed, on an otherwise empty desktop. The splash is dismissed only once this box
+            // is on screen, so the user goes from "loading" straight to a usable desktop.
+            await WaitForFirstContainerRender();
+        }
+        else
+        {
+            // Nothing to show: release the wait so the splash is never stuck on a box that will
+            // not arrive.
+            _firstContainerRendered.TrySetResult(false);
         }
 
-        _ = StreamRemainingContainersAsync(onFinishAction: ReconcileItemsAsync);
+        Helpers.StartupProfiler.Mark("first-window-added");
+
+        // Every remaining container window is created BEFORE the splash is dismissed. Streaming
+        // them in the background looked cheap, but the user then watched the boxes appear one by
+        // one after the loading window lifted, which reads as jank: the desktop was visibly
+        // filling up while they were already supposed to be able to use it. The splash is the
+        // gate, so everything it gates must be up when it closes.
+        await StreamRemainingContainersAsync();
+
+        // The reconciliation is a second Shell COM walk over the desktop (a consistency check
+        // against what the snapshot recorded). It is not user-visible, so it runs after the
+        // splash instead of holding it up.
+        _ = ReconcileItemsAfterStreamAsync();
 
         _appliedResolution = GetPrimaryWorkAreaDip();
         SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
@@ -1377,10 +1429,21 @@ public sealed class DesktopManager
         //{
         //    foregroundWindowHwnd = User32.GetForegroundWindow();
         //}
+        // Attached BEFORE Show(): the first render can happen inside Show(), and a handler
+        // attached afterwards would miss it and never complete.
+        window.ContentRendered += (_, _) =>
+        {
+            if (Interlocked.Increment(ref _renderedWindowCount) == 1)
+            {
+                Helpers.StartupProfiler.Mark("first-box-visible");
+                _firstContainerRendered.TrySetResult(true);
+            }
+        };
+
         window.Show();
-        if (showActivated) window.Activate();
-        // A window created while its monitor is already covered must start suspended.
-        ApplySupervisorStateToWindow(window);
+          if (showActivated) window.Activate();
+          // A window created while its monitor is already covered must start suspended.
+          ApplySupervisorStateToWindow(window);
 
         /*if (!showActivated && focusWorkaround && foregroundWindowHwnd is not null)
         {
@@ -1415,7 +1478,50 @@ public sealed class DesktopManager
         }
     }*/
 
-    /// <summary>True when every open <see cref="BoxContainerWindow"/> is currently hidden via
+    /// <summary>
+    /// Waits for the first container window to paint, bounded so a window that never renders
+    /// (a broken template, a display that vanished) cannot hold the startup hostage.
+    /// </summary>
+    private async Task WaitForFirstContainerRender()
+    {
+        try
+        {
+            await _firstContainerRendered.Task.WaitAsync(TimeSpan.FromSeconds(2)).ConfigureAwait(true);
+        }
+        catch (TimeoutException)
+        {
+            // The splash must not hang on a window that never painted; the user gets the desktop
+            // and the box appears when it can.
+            Helpers.StartupProfiler.Mark("first-window-render-timeout");
+        }
+        catch (Exception)
+        {
+            // Same reasoning: a failed wait is not a failed startup.
+        }
+    }
+
+    /// <summary>
+    /// Runs the post-stream reconciliation outside the startup path, with its own error handling.
+    /// </summary>
+    /// <remarks>
+    /// Typed <see cref="Func{TResult}"/> of Task, not Action: an Action would make an async lambda
+    /// an <c>async void</c>, and an exception from it would escape to the dispatcher — crashing into
+    /// the global handler instead of being contained here.
+    /// </remarks>
+    private async Task ReconcileItemsAfterStreamAsync()
+    {
+        try
+        {
+            await ReconcileItemsAsync();
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Post-stream reconciliation failed");
+        }
+    }
+
+    /// <summary>
+    /// True when every open <see cref="BoxContainerWindow"/> is currently hidden via
     /// <see cref="HideAllBoxes"/>. Session-only (not persisted across restarts).</summary>
     public bool AllBoxesHidden => _allBoxesHidden;
 
@@ -1518,15 +1624,16 @@ public sealed class DesktopManager
         {
             // Best-effort background streaming; a window failure must never break startup.
         }
-        finally
-        {
-            UpdateWidgetAutoPause();
-            if (onFinishAction is not null)
-            {
-                try { await onFinishAction(); }
-                catch (Exception ex) { Serilog.Log.Error(ex, "Post-stream reconciliation failed"); }
-            }
-        }
+          finally
+          {
+              UpdateWidgetAutoPause();
+                Helpers.StartupProfiler.Mark("containers-streamed");
+              if (onFinishAction is not null)
+              {
+                  try { await onFinishAction(); }
+                  catch (Exception ex) { Serilog.Log.Error(ex, "Post-stream reconciliation failed"); }
+              }
+          }
     }
 
     private void RemoveWindow(System.Guid id, bool updateWidgetAutoPause = true)

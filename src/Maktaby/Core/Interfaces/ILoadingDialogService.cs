@@ -11,6 +11,16 @@ public interface ILoadingDialogService
     /// <summary>True while a loading dialog is on screen (playback paused, input blocked).</summary>
     bool IsBusy { get; }
 
+    /// <summary>
+    /// Completes when the loading dialog has painted its first frame.
+    /// </summary>
+    /// <remarks>
+    /// The startup work used to wait a fixed 800 ms "so the splash paints" before it began. This
+    /// is the real signal: await it and the splash is on screen exactly as long as it takes, no
+    /// more. Completes immediately when no dialog is showing.
+    /// </remarks>
+    Task SplashPainted { get; }
+
     /// <summary>Raised on the UI thread whenever <see cref="IsBusy"/> changes.</summary>
     event EventHandler? StateChanged;
 
