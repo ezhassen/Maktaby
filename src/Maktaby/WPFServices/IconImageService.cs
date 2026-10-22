@@ -25,6 +25,39 @@ public sealed class IconImageService
 {
     private const int MaxCacheEntries = 1000;
 
+    /// <summary>
+    /// How many shell icon extractions may be in flight at once.
+    /// </summary>
+    /// <remarks>
+    /// Every tracked item that gets realized issues one shell call, and a desktop with 100+
+    /// shortcuts issues them all at once: the Icons view uses a plain <c>WrapPanel</c> (the
+    /// virtualizing panel is not in use), so a shown box realizes every one of its items. Unbounded,
+    /// that floods the thread pool — starving the startup work — and hammers the shell, which is a
+    /// single shared COM resource (Explorer lives in it too). The waiters are released in arrival
+    /// order, so the box that is shown first still gets its icons first.
+    /// </remarks>
+    private const int MaxConcurrentLoads = 6;
+
+    private readonly SemaphoreSlim _loadGate = new(MaxConcurrentLoads, MaxConcurrentLoads);
+
+    /// <summary>Icon loads issued since startup - the fan-out that the gate now bounds.</summary>
+    private int _issuedLoads;
+
+    /// <summary>Icon loads that finished (successfully or not) since startup.</summary>
+    private int _completedLoads;
+
+    /// <summary>Number of icon loads issued since startup.</summary>
+    public int IssuedLoads => Volatile.Read(ref _issuedLoads);
+
+    /// <summary>Number of icon loads finished since startup.</summary>
+    public int CompletedLoads => Volatile.Read(ref _completedLoads);
+
+    /// <summary>
+    /// Raised when no icon load is in flight any more - i.e. the desktop has stopped asking the
+    /// shell for icons. Fires again if a later box (or a later refresh) starts more.
+    /// </summary>
+    public event Action? LoadsSettled;
+
     private readonly IShellIconService _shellIcon;
     private readonly object _cacheLock = new();
     private readonly Dictionary<string, LinkedListNode<LruEntry>> _cacheIndex = new(StringComparer.OrdinalIgnoreCase);
@@ -83,51 +116,69 @@ public sealed class IconImageService
             return cached;
         }
 
-        object? token = await _shellIcon.GetIconAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        ImageSource? source = null;
-        await Task.Run(() =>
+        // One shell call at a time per slot, so a desktop full of shortcuts cannot flood the
+        // thread pool and the shell. Waiters are served in arrival order, which keeps the
+        // first-shown box's icons at the head of the queue.
+        Interlocked.Increment(ref _issuedLoads);
+        await _loadGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            if (token is IntPtr hicon && hicon != IntPtr.Zero)
+            object? token = await _shellIcon.GetIconAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            ImageSource? source = null;
+            await Task.Run(() =>
             {
-                try
+                if (token is IntPtr hicon && hicon != IntPtr.Zero)
                 {
-                    source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                    source.Freeze();
-                }
-                finally
-                {
-                    Win32Apis.DestroyIcon(hicon);
+                    try
+                    {
+                        source = Imaging.CreateBitmapSourceFromHIcon(hicon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                        source.Freeze();
+                    }
+                    finally
+                    {
+                        Win32Apis.DestroyIcon(hicon);
+                    }
+
+                    return;
                 }
 
-                return;
+                // SHGetFileInfo couldn't resolve a PIDL-only link (e.g. a .lnk we created for a Start Menu app).
+                // IShellItemImageFactory follows the link and returns a proper alpha icon for the target.
+                IntPtr hbitmap = Win32Apis.GetIconBitmapForPath(path);
+                if (hbitmap != IntPtr.Zero)
+                {
+                    try
+                    {
+                        source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, new Int32Rect(0, 0, 0, 0), BitmapSizeOptions.FromEmptyOptions());
+                        source.Freeze();
+                    }
+                    finally
+                    {
+                        Win32Apis.DeleteObject(hbitmap);
+                    }
+                }
+            }, cancellationToken);
+
+            // Only cache successes: a transient failure (shell busy, overlay handler glitch, startup race)
+            // must stay retryable instead of being frozen as a permanent blank icon.
+            if (source is not null)
+            {
+                Add(_cacheIndex, _cacheOrder, path, source);
             }
 
-            // SHGetFileInfo couldn't resolve a PIDL-only link (e.g. a .lnk we created for a Start Menu app).
-            // IShellItemImageFactory follows the link and returns a proper alpha icon for the target.
-            IntPtr hbitmap = Win32Apis.GetIconBitmapForPath(path);
-            if (hbitmap != IntPtr.Zero)
-            {
-                try
-                {
-                    source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
-                    source.Freeze();
-                }
-                finally
-                {
-                    Win32Apis.DeleteObject(hbitmap);
-                }
-            }
-        }, cancellationToken);
-
-        // Only cache successes: a transient failure (shell busy, overlay handler glitch, startup race)
-        // must stay retryable instead of being frozen as a permanent blank icon.
-        if (source is not null)
-        {
-            Add(_cacheIndex, _cacheOrder, path, source);
+            return source;
         }
-
-        return source;
+        finally
+        {
+            _loadGate.Release();
+            int completed = Interlocked.Increment(ref _completedLoads);
+            if (completed >= Volatile.Read(ref _issuedLoads))
+            {
+                // Nothing in flight: the desktop has stopped asking the shell for icons.
+                try { LoadsSettled?.Invoke(); } catch { }
+            }
+        }
     }
 
     /// <summary>

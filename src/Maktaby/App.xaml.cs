@@ -294,6 +294,16 @@ public partial class App : Application
             };
 
             var manager = Services.GetRequiredService<DesktopManager>();
+
+            if (Helpers.StartupProfiler.Enabled)
+            {
+                // When the last icon load finishes, the desktop is visually complete. That is the
+                // moment worth measuring: the boxes are up before the splash lifts, but their icons
+                // trickle in afterwards, and the fan-out that causes it is now bounded.
+                var iconService = Services.GetRequiredService<WPFServices.IconImageService>();
+                iconService.LoadsSettled += () =>
+                    Helpers.StartupProfiler.Mark($"icons-settled ({iconService.CompletedLoads} loads)");
+            }
             manager.LayoutRefreshed += ScheduleTrayRefresh;
             SyncDesktopIconSizeWatcher();
             Helpers.StartupProfiler.Mark("services-ready");

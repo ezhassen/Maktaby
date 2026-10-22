@@ -1,6 +1,6 @@
-using System.Diagnostics;
 using Serilog;
 using Serilog.Events;
+using System.Diagnostics;
 
 namespace Maktaby.Helpers;
 
@@ -52,7 +52,7 @@ internal static class StartupProfiler
     private static int _anchored;
 
     /// <summary>True when the global logger would actually write an Information line.</summary>
-    private static bool Enabled => Log.IsEnabled(LogEventLevel.Information);
+    public static bool Enabled => Log.IsEnabled(LogEventLevel.Information);
 
     /// <summary>
     /// Captures the start of the measured window. Does nothing when the profiler is disabled, and
