@@ -1,5 +1,6 @@
 using Maktaby.Core.Interfaces;
 using Maktaby.Core.Models;
+using Maktaby.Localization;
 using Maktaby.ViewModels;
 using Maktaby.WPFServices;
 using System.Collections.ObjectModel;
@@ -342,7 +343,8 @@ public sealed class MainViewModel : ViewModelBase
         }
 
         timeout ??= TimeSpan.FromSeconds(10);
-        undoText ??= $"Undo merge '{source.Title}'";
+        undoText ??= $"{Loc.Get("Box.UndoMerge")} '{source.Title}'";
+        undoText += "\r\nCtrl+Z";
 
         var movedModels = source.BoxContainerVm.Tabs.Select(t => t.Model).ToList();
         int sourceSelectedIndex = source.BoxContainerVm.SelectedIndex;

@@ -381,5 +381,6 @@
   <unit id="WidgetSettings.Light"><segment><source>Light</source><target>Light</target></segment></unit>
   <unit id="WidgetSettings.Dark"><segment><source>Dark</source><target>Dark</target></segment></unit>
   <unit id="WidgetSettings.AutoBackground"><segment><source>Auto (from background)</source><target>Auto (from background)</target></segment></unit>
+  <unit id="Box.UndoMerge"><segment><source>Undo merge</source><target>Undo merge</target></segment></unit>
   </file>
 </xliff>

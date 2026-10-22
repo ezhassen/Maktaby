@@ -368,5 +368,6 @@
   <unit id="WidgetSettings.Light"><segment><source>Light</source><target>فاتح</target></segment></unit>
   <unit id="WidgetSettings.Dark"><segment><source>Dark</source><target>داكن</target></segment></unit>
   <unit id="WidgetSettings.AutoBackground"><segment><source>Auto (from background)</source><target>تلقائي (من الخلفية)</target></segment></unit>
+  <unit id="Box.UndoMerge"><segment><source>Undo merge</source><target>تراجع عن الدمج</target></segment></unit>
   </file>
 </xliff>
