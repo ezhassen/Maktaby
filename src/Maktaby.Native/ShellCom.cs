@@ -140,13 +140,13 @@ public interface IPersistFile
     [PreserveSig] int GetCurFile(out IntPtr ppszFileName);
 }
 
-[ComImport]
-[Guid("BCC6EEA8-5C45-44F0-8DF0-8B3B728B1728")]
-[InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-public interface IShellItemImageFactory
-{
+    [ComImport]
+    [Guid("BCC18B79-BA16-442F-80C4-8A59C30C463B")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    public interface IShellItemImageFactory
+    {
     [PreserveSig] int GetImage(SIZE size, uint flags, out IntPtr phBitmap);
-}
+    }
 
 [ComImport, Guid("C2CF3110-460B-4d97-BF42-7ED4146F695C")]
 public class DesktopWallpaperClass { }

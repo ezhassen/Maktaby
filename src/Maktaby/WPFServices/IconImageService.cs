@@ -23,7 +23,91 @@ namespace Maktaby.WPFServices;
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class IconImageService
 {
+    /// <summary>
+    /// Memory ceiling for the path-keyed icon cache.
+    /// </summary>
+    /// <remarks>
+    /// An icon is a frozen ARGB bitmap, and its cost scales with the size it was rendered at:
+    /// 4 KB at 32x32, 9 KB at 48x48, 36 KB at 96x96, 64 KB at 128x128. A budget that only suits
+    /// the small sizes would thrash the moment the user picks a large icon size - every icon
+    /// evicted, then re-resolved, again and again. 16 MB covers the large sizes comfortably
+    /// (~440 icons at 96 px) while still capping what a long browsing session can accumulate; the
+    /// entry count stays as the secondary bound, so small icons cannot grow without limit either.
+    /// </remarks>
+    private const long MaxCacheBytes = 16L * 1024 * 1024;
+
+    /// <summary>Secondary bound, so a cache of tiny icons still cannot grow without limit.</summary>
     private const int MaxCacheEntries = 1000;
+
+    /// <summary>
+    /// The size the shell's own icon path produces (32 px, or 48 px at 150% DPI). Anything above
+    /// that has to come from the scalable factory, or it is an upscale and looks soft.
+    /// </summary>
+    private const int ShellNativeIconSize = 48;
+
+    /// <summary>The size used when the caller does not care (the small tiles).</summary>
+    private const int DefaultIconSize = 32;
+
+    /// <summary>
+    /// Normalises a requested pixel size to one the shell can actually produce.
+    /// </summary>
+    /// <remarks>
+    /// The shell's own icons come in 16/32/48 steps, so a request inside that range is snapped to
+    /// the step that answers it - asking for 40 px and getting 32 would be an upscale again, and
+    /// snapping also keeps the cache keys stable. Above 48 the scalable factory renders any size,
+    /// so the request is used as it is.
+    /// </remarks>
+    private static int NormalizeSize(int pixelSize)
+    {
+        int edge = Math.Clamp(pixelSize, 16, 256);
+        if (edge <= 48)
+        {
+            foreach (int step in new[] { 16, 24, 32, 48 })
+            {
+                if (edge <= step)
+                {
+                    return step;
+                }
+            }
+
+            return 48;
+        }
+
+        return edge;
+    }
+
+    /// <summary>
+    /// The physical pixel size a display size of <paramref name="dips"/> needs on this machine.
+    /// </summary>
+    /// <remarks>
+    /// The icon has to be as many pixels as the slot is physically wide, or WPF upscales it and the
+    /// large icon sizes look soft. The conversion lives here so every caller speaks in display units
+    /// and only this one knows about pixels.
+    /// </remarks>
+    private static int PhysicalSize(int dips)
+    {
+        double scale = 1.0;
+        try
+        {
+            uint dpi = Maktaby.Native.User32.GetDpiForSystem();
+            if (dpi > 0)
+            {
+                scale = dpi / 96.0;
+            }
+        }
+        catch { }
+
+        return (int)Math.Round(dips * scale);
+    }
+
+    /// <summary>
+    /// Memory ceiling for the PIDL-keyed cache. It only ever holds *virtual* items (This PC, the
+    /// Recycle Bin, Store apps) — a handful — so it gets a small budget of its own.
+    /// </summary>
+    private const long MaxPidlCacheBytes = 512L * 1024;
+
+    /// <summary>Secondary bound for the PIDL cache.</summary>
+    private const int MaxPidlCacheEntries = 64;
 
     /// <summary>
     /// How many shell icon extractions may be in flight at once.
@@ -83,19 +167,31 @@ public sealed class IconImageService
     private readonly object _cacheLock = new();
     private readonly Dictionary<string, LinkedListNode<LruEntry>> _cacheIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly LinkedList<LruEntry> _cacheOrder = new();
+    private long _cacheBytes;
+
     private readonly Dictionary<string, LinkedListNode<LruEntry>> _pidlIndex = new(StringComparer.OrdinalIgnoreCase);
     private readonly LinkedList<LruEntry> _pidlOrder = new();
+    private long _pidlBytes;
 
-    private sealed record LruEntry(string Key, ImageSource? Value);
+    private sealed record LruEntry(string Key, ImageSource? Value, long Bytes, int Size);
 
     public IconImageService(IShellIconService shellIcon) => _shellIcon = shellIcon;
 
-    private bool TryGet(Dictionary<string, LinkedListNode<LruEntry>> index, LinkedList<LruEntry> order, string key, out ImageSource? value)
+    private bool TryGet(Dictionary<string, LinkedListNode<LruEntry>> index, LinkedList<LruEntry> order, string key, int size, out ImageSource? value)
     {
         lock (_cacheLock)
         {
             if (index.TryGetValue(key, out var node))
             {
+                // A cached icon at the wrong resolution is a blurry icon: the shell only ever hands
+                // back 32 or 48 px, so a tile displayed at 96 was an upscale. Treat a size mismatch
+                // as a miss and re-resolve at the size that was asked for.
+                if (node.Value.Size != size)
+                {
+                    value = null;
+                    return false;
+                }
+
                 // Refresh recency; the frozen ImageSource itself is immutable and shareable.
                 order.Remove(node);
                 order.AddLast(node);
@@ -108,31 +204,93 @@ public sealed class IconImageService
         return false;
     }
 
-    private void Add(Dictionary<string, LinkedListNode<LruEntry>> index, LinkedList<LruEntry> order, string key, ImageSource value)
+    /// <summary>
+    /// Inserts into an LRU and evicts until the cache is inside both of its bounds.
+    /// </summary>
+    /// <remarks>
+    /// The byte budget is the real constraint: an icon is a frozen ARGB bitmap, so a 48x48 one
+    /// (the large icon at 150% DPI) costs 9 KB while a 32x32 costs 4 KB - an entry count is only a
+    /// proxy for memory. The entry count stays as a secondary bound so a cache of tiny icons cannot
+    /// grow without limit either.
+    /// </remarks>
+    private void Add(
+        Dictionary<string, LinkedListNode<LruEntry>> index,
+        LinkedList<LruEntry> order,
+        ref long totalBytes,
+        long maxBytes,
+        int maxEntries,
+        string key,
+        ImageSource value,
+        int size)
     {
         lock (_cacheLock)
         {
             if (index.TryGetValue(key, out var existing))
             {
+                // Replaced rather than duplicated: one entry per path, at the resolution last
+                // asked for. Two resolutions of the same icon would double the memory for no gain.
                 order.Remove(existing);
-                order.AddLast(existing);
-                return;
+                totalBytes -= existing.Value.Bytes;
+                index.Remove(key);
             }
 
-            var node = order.AddLast(new LruEntry(key, value));
+            long bytes = EstimateBytes(value);
+            var node = order.AddLast(new LruEntry(key, value, bytes, size));
             index[key] = node;
-            while (index.Count > MaxCacheEntries && order.First != null)
+            totalBytes += bytes;
+
+            while (order.First != null &&
+                   (totalBytes > maxBytes || index.Count > maxEntries))
             {
                 var oldest = order.First;
                 order.RemoveFirst();
                 index.Remove(oldest.Value.Key);
+                totalBytes -= oldest.Value.Bytes;
             }
         }
     }
 
-    public async Task<ImageSource?> GetIconAsync(string path, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Approximate managed bytes held by the two icon caches, and their entry counts.
+    /// </summary>
+    /// <remarks>
+    /// An icon is a frozen ARGB bitmap, so its cost is pixels x 4: a 32x32 shell icon is 4 KB, a
+    /// 48x48 one (the large icon at 150% DPI) is 9 KB. The LRU is bounded by entry count, which
+    /// is a proxy for memory rather than a budget - this is the real number.
+    /// </remarks>
+    public (long PathBytes, int PathEntries, long PidlBytes, int PidlEntries) CacheStats()
     {
-        if (TryGet(_cacheIndex, _cacheOrder, path, out var cached))
+        lock (_cacheLock)
+        {
+            return (_cacheBytes, _cacheIndex.Count, _pidlBytes, _pidlIndex.Count);
+        }
+    }
+
+    private static long EstimateBytes(ImageSource? source)
+    {
+        if (source is not BitmapSource bitmap)
+        {
+            return 0;
+        }
+
+        // 32 bpp ARGB, plus a small constant for the object itself.
+        return (long)bitmap.PixelWidth * bitmap.PixelHeight * 4 + 128;
+    }
+
+    public async Task<ImageSource?> GetIconAsync(string path, CancellationToken cancellationToken = default) =>
+        await GetIconAsync(path, DefaultIconSize, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>
+    /// Loads the icon for a path at a display size.
+    /// </summary>
+    /// <param name="size">The size the icon is displayed at, in device-independent pixels. The
+    /// physical pixel count is derived from the system DPI, because the icon has to be as many
+    /// pixels as the slot is physically wide or WPF upscales it — that upscale is what made the
+    /// large icon sizes look soft.</param>
+    public async Task<ImageSource?> GetIconAsync(string path, int size, CancellationToken cancellationToken = default)
+    {
+        int edge = NormalizeSize(PhysicalSize(size));
+        if (TryGet(_cacheIndex, _cacheOrder, path, edge, out var cached))
         {
             return cached;
         }
@@ -158,7 +316,7 @@ public sealed class IconImageService
             // caller forever. Race it against a deadline instead and walk away: the abandoned
             // call keeps its thread, but the slot is freed and the caller gets no icon.
             using var timeoutCts = new CancellationTokenSource();
-            var load = LoadIconCoreAsync(path, cancellationToken);
+            var load = LoadIconCoreAsync(path, edge, cancellationToken);
             var finished = await Task.WhenAny(load, Task.Delay(IconLoadTimeout, timeoutCts.Token)).ConfigureAwait(false);
             if (finished != load)
             {
@@ -194,8 +352,25 @@ public sealed class IconImageService
     /// <summary>
     /// The actual extraction: shell call, GDI handle to bitmap, cache.
     /// </summary>
-    private async Task<ImageSource?> LoadIconCoreAsync(string path, CancellationToken cancellationToken)
+    private async Task<ImageSource?> LoadIconCoreAsync(string path, int size, CancellationToken cancellationToken)
     {
+        // Above the shell's own icon sizes, the scalable factory renders the icon at the size we
+        // ask for. SHGetFileInfo only ever hands back 32/48 px, and WPF upscaling those is exactly
+        // the blur the large tiles showed.
+        if (size > ShellNativeIconSize)
+        {
+            Serilog.Log.Information("DIAG requesting a scaled icon for {Path} at {Size}px", path, size);
+            var scaled = await LoadScaledIconAsync(path, size, cancellationToken).ConfigureAwait(false);
+            if (scaled is not null)
+            {
+                Add(_cacheIndex, _cacheOrder, ref _cacheBytes, MaxCacheBytes, MaxCacheEntries, path, scaled, size);
+                return scaled;
+            }
+
+            // The factory could not render it (a broken link, a virtual item): fall through to the
+            // shell's own icon, which is small but always present.
+        }
+
         object? token = await _shellIcon.GetIconAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         ImageSource? source = null;
@@ -218,7 +393,7 @@ public sealed class IconImageService
 
             // SHGetFileInfo couldn't resolve a PIDL-only link (e.g. a .lnk we created for a Start Menu app).
             // IShellItemImageFactory follows the link and returns a proper alpha icon for the target.
-            IntPtr hbitmap = Win32Apis.GetIconBitmapForPath(path);
+            IntPtr hbitmap = Win32Apis.GetIconBitmapForPath(path, size);
             if (hbitmap != IntPtr.Zero)
             {
                 try
@@ -237,8 +412,34 @@ public sealed class IconImageService
         // must stay retryable instead of being frozen as a permanent blank icon.
         if (source is not null)
         {
-            Add(_cacheIndex, _cacheOrder, path, source);
+            Add(_cacheIndex, _cacheOrder, ref _cacheBytes, MaxCacheBytes, MaxCacheEntries, path, source, size);
         }
+
+        return source;
+    }
+
+    /// <summary>Renders the icon through <c>IShellItemImageFactory</c> at an exact pixel size.</summary>
+    private static async Task<ImageSource?> LoadScaledIconAsync(string path, int size, CancellationToken cancellationToken)
+    {
+        ImageSource? source = null;
+        await Task.Run(() =>
+        {
+            IntPtr hbitmap = Win32Apis.GetIconBitmapForPath(path, size);
+            if (hbitmap == IntPtr.Zero)
+            {
+                return;
+            }
+
+            try
+            {
+                source = Imaging.CreateBitmapSourceFromHBitmap(hbitmap, IntPtr.Zero, new Int32Rect(0, 0, 0, 0), BitmapSizeOptions.FromEmptyOptions());
+                source.Freeze();
+            }
+            finally
+            {
+                Win32Apis.DeleteObject(hbitmap);
+            }
+        }, cancellationToken);
 
         return source;
     }
@@ -260,6 +461,7 @@ public sealed class IconImageService
             if (_pidlIndex.Remove(pidlBase64, out var node))
             {
                 _pidlOrder.Remove(node);
+                _pidlBytes -= node.Value.Bytes;
             }
         }
     }
@@ -274,6 +476,7 @@ public sealed class IconImageService
             if (_cacheIndex.Remove(path, out var node))
             {
                 _cacheOrder.Remove(node);
+                _cacheBytes -= node.Value.Bytes;
             }
         }
     }
@@ -281,9 +484,14 @@ public sealed class IconImageService
     /// <summary>Loads an icon for a stored shell PIDL (virtual items such as UWP/Store apps). When
     /// <paramref name="filePath"/> is supplied (a desktop <c>.lnk</c> we created for the item) it is used as
     /// an additional resolution source so the icon follows PIDL-only link targets.</summary>
-    public async Task<ImageSource?> GetIconFromPidlAsync(string pidlBase64, string? filePath = null, CancellationToken cancellationToken = default)
+    public async Task<ImageSource?> GetIconFromPidlAsync(string pidlBase64, string? filePath = null, CancellationToken cancellationToken = default) =>
+        await GetIconFromPidlAsync(pidlBase64, filePath, DefaultIconSize, cancellationToken).ConfigureAwait(false);
+
+    /// <summary>Loads the icon for a stored shell PIDL at a requested pixel size.</summary>
+    public async Task<ImageSource?> GetIconFromPidlAsync(string pidlBase64, string? filePath, int size, CancellationToken cancellationToken = default)
     {
-        if (TryGet(_pidlIndex, _pidlOrder, pidlBase64, out var cached))
+        int edge = NormalizeSize(PhysicalSize(size));
+        if (TryGet(_pidlIndex, _pidlOrder, pidlBase64, edge, out var cached))
         {
             return cached;
         }
@@ -301,7 +509,7 @@ public sealed class IconImageService
         try
         {
             using var timeoutCts = new CancellationTokenSource();
-            var load = LoadIconFromPidlCoreAsync(pidlBase64, filePath, cancellationToken);
+            var load = LoadIconFromPidlCoreAsync(pidlBase64, filePath, edge, cancellationToken);
             var finished = await Task.WhenAny(load, Task.Delay(IconLoadTimeout, timeoutCts.Token)).ConfigureAwait(false);
             if (finished != load)
             {
@@ -330,7 +538,7 @@ public sealed class IconImageService
         }
     }
 
-    private async Task<ImageSource?> LoadIconFromPidlCoreAsync(string pidlBase64, string? filePath, CancellationToken cancellationToken)
+    private async Task<ImageSource?> LoadIconFromPidlCoreAsync(string pidlBase64, string? filePath, int size, CancellationToken cancellationToken)
     {
         ImageSource? source = null;
         await Task.Run(() =>
@@ -355,7 +563,7 @@ public sealed class IconImageService
 
             if (!string.IsNullOrEmpty(filePath))
             {
-                IntPtr hbmpPath = Win32Apis.GetIconBitmapForPath(filePath);
+                IntPtr hbmpPath = Win32Apis.GetIconBitmapForPath(filePath, size);
                 if (hbmpPath != IntPtr.Zero)
                 {
                     try
@@ -391,7 +599,7 @@ public sealed class IconImageService
         // Successes only — see GetIconAsync.
         if (source is not null)
         {
-            Add(_pidlIndex, _pidlOrder, pidlBase64, source);
+            Add(_pidlIndex, _pidlOrder, ref _pidlBytes, MaxPidlCacheBytes, MaxPidlCacheEntries, pidlBase64, source, size);
         }
 
         return source;

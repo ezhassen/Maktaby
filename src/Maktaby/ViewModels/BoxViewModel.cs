@@ -46,8 +46,9 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
     {
         _box = box;
         _icons = icons;
+        var iconsSize = Helpers.BoxIconSize.Resolve(box);
         Items = new ObservableCollection<BoxItemViewModel>(
-            box.Items.Where(i => !ShellItemFilter.IsExcluded(i.Path)).Select(i => new BoxItemViewModel(i, icons)));
+             box.Items.Where(i => !ShellItemFilter.IsExcluded(i.Path)).Select(i => new BoxItemViewModel(i, icons, iconsSize)));
         _box.Items.CollectionChanged += OnBoxItemsChanged;
         FolderItems = new ObservableCollection<FolderItemViewModel>();
         // Lazy: no enumeration here — the folder loads on first selection (EnsureFolderLoadedAsync
@@ -517,7 +518,8 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
 
                 // Exclude desktop.ini etc via filter on path filename and hidden/system per Explorer settings
                 entries = entries.Where(p => !ShellItemFilter.IsExcluded(p) && ShouldShowEntry(p)).ToList();
-                return SortEntries(entries.Select(p => new FolderItemViewModel(p, _icons))).ToList();
+                int iconSize = Helpers.BoxIconSize.ResolveForView(_box, _box.FolderPortalViewMode);
+                return SortEntries(entries.Select(p => new FolderItemViewModel(p, _icons, iconSize))).ToList();
             }).ConfigureAwait(false);
         }
         catch
@@ -1106,7 +1108,7 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
                 if (string.Equals(vm.Path, path, StringComparison.OrdinalIgnoreCase)) return false;
             }
 
-            FolderItems.Add(new FolderItemViewModel(path, _icons));
+            FolderItems.Add(new FolderItemViewModel(path, _icons, Helpers.BoxIconSize.ResolveForView(_box, _box.FolderPortalViewMode)));
             return true;
         }
         catch { return false; }
@@ -1243,6 +1245,7 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
     {
         if (e.NewItems != null)
         {
+            int iconSize = Helpers.BoxIconSize.ResolveForView(_box, _box.FolderPortalViewMode);
             for (int k = 0; k < e.NewItems.Count; k++)
             {
                 if (e.NewItems[k] is BoxItem item && !ShellItemFilter.IsExcluded(item.Path))
@@ -1250,11 +1253,11 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
                     int at = e.NewStartingIndex + k;
                     if (at >= 0 && at <= Items.Count)
                     {
-                        Items.Insert(at, new BoxItemViewModel(item, _icons));
+                        Items.Insert(at, new BoxItemViewModel(item, _icons, iconSize));
                     }
                     else
                     {
-                        Items.Add(new BoxItemViewModel(item, _icons));
+                        Items.Add(new BoxItemViewModel(item, _icons, iconSize));
                     }
                 }
             }

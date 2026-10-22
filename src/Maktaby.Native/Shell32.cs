@@ -75,10 +75,21 @@ public static class Shell32
         [MarshalAs(UnmanagedType.LPStruct)] Guid riid,
         out IShellItem ppv);
 
+    /// <summary>Asks the shell for the image factory itself. Casting an <see cref="IShellItem"/> to
+    /// another interface is not reliable - the shell's item for a parsing name does not always answer
+    /// the QueryInterface - so the wanted interface is requested up front.</summary>
+    [DllImport("shell32.dll", EntryPoint = "SHCreateItemFromParsingName", CharSet = CharSet.Unicode)]
+    public static extern int SHCreateItemFromParsingNameFactory(
+        string pszPath,
+        IntPtr pbc,
+        [MarshalAs(UnmanagedType.LPStruct)] Guid riid,
+        out IShellItemImageFactory ppv);
+
     [DllImport("shell32.dll")]
     public static extern int SHGetIDListFromObject(IntPtr punk, out IntPtr ppidl);
 
     public static readonly Guid IID_IShellItem = new("43826D1E-E718-42EE-BC55-A1E261C37BFE");
+    public static readonly Guid IID_IShellItemImageFactory = new("BCC18B79-BA16-442F-80C4-8A59C30C463B");
     public static readonly Guid CLSID_ShellLink = new("00021401-0000-0000-C000-000000000046");
     public static readonly Guid IID_IContextMenu = new("000214e4-0000-0000-c000-000000000046");
 

@@ -12,7 +12,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Win32;
 using System.ComponentModel;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -79,12 +78,65 @@ public partial class FolderPortalControl : WidgetControlBase
         nameof(IconSize), typeof(double), typeof(FolderPortalControl), new PropertyMetadata(32.0));
     public double IconSize { get => (double)GetValue(IconSizeProperty); private set => SetValue(IconSizeProperty, value); }
 
+    /// <summary>
+    /// The icon size the Details view uses. Fixed: a list row is a text row, and a large icon in it
+    /// is decoration that also costs a bigger bitmap per file.
+    /// </summary>
+    private const int _detailsViewIconSize = BoxIconSize.DetailsViewIconSize;
+
+    /// <summary>
+    /// The icon size in effect: the fixed one in the Details view, the user's size in the Icons
+    /// view.
+    /// </summary>
+    /// <remarks>
+    /// This is the *display* size — the Details view draws its rows at 32 whatever the user picked.
+    /// The user's size is resolved on demand rather than cached, so switching back to the Icons view
+    /// picks up whatever it is now — including a change made while the Details view was up, which is
+    /// ignored there on purpose.
+    /// </remarks>
+    private int EffectiveIconSize =>
+        Box is { } box
+            ? Helpers.BoxIconSize.ResolveForView(box.Model, box.FolderPortalViewMode)
+            : _detailsViewIconSize;
+
     public void RefreshIconSize()
     {
-        int resolved = Box?.Model.IconSize
-            ?? App.Services.GetRequiredService<Core.Interfaces.ISettingsService>().UserSettings.DefaultBoxIconSize
-            ?? App.Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>().Current;
+        int resolved = EffectiveIconSize;
+
         IconSize = Math.Clamp(resolved, 16, 128);
+        PushIconSizeToRows();
+    }
+
+    /// <summary>
+    /// Pushes the size to the rows so their icons are resolved sharp enough for it.
+    /// </summary>
+    /// <remarks>
+    /// The rows are created when the folder loads, which can be after the size was set, so this runs
+    /// both on a size change and whenever the folder contents are replaced.
+    /// <para>
+    /// In the Details view the rows are left alone on purpose. The view already draws them at
+    /// <see cref="_detailsViewIconSize"/> (the control's IconSize), and a bitmap that is larger than
+    /// that is simply scaled down - sharp, and no re-resolve. Re-resolving every row of a large
+    /// folder just to make them smaller would blank the list and then re-fetch every icon.
+    /// </para>
+    /// </remarks>
+    private void PushIconSizeToRows()
+    {
+        if (Box is not { } box)
+        {
+            return;
+        }
+
+        if (box.FolderPortalViewMode == Core.Models.FolderPortalViewMode.Details)
+        {
+            return;
+        }
+
+        int size = Helpers.BoxIconSize.Resolve(box.Model);//EffectiveIconSize
+        foreach (var row in box.FolderItems)
+        {
+            row.IconSize = size;
+        }
     }
 
     private void OnDataContextChanged(object sender, DependencyPropertyChangedEventArgs e)
@@ -92,17 +144,44 @@ public partial class FolderPortalControl : WidgetControlBase
         if (e.OldValue is BoxViewModel oldVm)
         {
             oldVm.PropertyChanged -= OnBoxPropertyChanged;
+            oldVm.FolderItems.CollectionChanged -= OnFolderItemsChanged;
         }
         BoxViewModel? newVm = e.NewValue as BoxViewModel;
         if (newVm != null)
         {
             newVm.PropertyChanged += OnBoxPropertyChanged;
+            // The rows are created when the folder loads, which can be after the icon size was
+            // resolved - so new rows are told the size as they arrive.
+            newVm.FolderItems.CollectionChanged += OnFolderItemsChanged;
         }
         RefreshIconSize();
         UpdateView();
         if (newVm != null && newVm.IsFolderPortal && newVm.HasFolder)
         {
             _ = newVm.EnsureFolderLoadedAsync();
+        }
+    }
+
+    private void OnFolderItemsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+        {
+            PushIconSizeToRows();
+            return;
+        }
+
+        if (Box is null || e.NewItems is null)
+        {
+            return;
+        }
+
+        int size = EffectiveIconSize;
+        foreach (var row in e.NewItems)
+        {
+            if (row is ViewModels.FolderItemViewModel item)
+            {
+                item.IconSize = size;
+            }
         }
     }
 
@@ -646,7 +725,7 @@ public partial class FolderPortalControl : WidgetControlBase
     private FolderItemViewModel? _gridDragVm;
     private long _gridDragEpoch;
 
-private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
+    private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     {
         if (_suppressDragUntilMouseUp)
         {
@@ -1558,19 +1637,19 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
             // Refresh explicitly rather than waiting for the folder watcher: the shell copy is one
             // operation against a folder the watcher may have already enumerated, so the new files
             // would otherwise not show until something else triggered a reload.
-if (any && Box is { } box)
-          {
-              await box.RefreshFolderAsync();
+            if (any && Box is { } box)
+            {
+                await box.RefreshFolderAsync();
 
-              // Same rule as a drop into a filtered box: keep the search and reveal what landed,
-              // rather than clearing a search the user is still using to find something.
-              if (box.IsFilterActive)
-              {
-                  box.RevealFolderRows(pasted);
-              }
+                // Same rule as a drop into a filtered box: keep the search and reveal what landed,
+                // rather than clearing a search the user is still using to find something.
+                if (box.IsFilterActive)
+                {
+                    box.RevealFolderRows(pasted);
+                }
 
-              SelectPasted(pasted);
-          }
+                SelectPasted(pasted);
+            }
         }
         finally
         {
@@ -1649,11 +1728,11 @@ if (any && Box is { } box)
 
 
     private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
-      {
-          DisarmDrag();
-          Helpers.ToolTipGuard.Close();
-          e.Handled = true;
-      }
+    {
+        DisarmDrag();
+        Helpers.ToolTipGuard.Close();
+        e.Handled = true;
+    }
 
     private void Control_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {

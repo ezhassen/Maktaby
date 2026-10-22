@@ -289,6 +289,7 @@ public partial class App : Application
                     foreach (var w in Windows.OfType<BoxContainerWindow>())
                     {
                         w.BoxContent?.RefreshIconSize();
+                        w.FolderPortalContent?.RefreshIconSize();
                     }
                 });
             };
@@ -323,7 +324,19 @@ public partial class App : Application
         BuildTrayAndMenuItems(Services);
         Helpers.StartupProfiler.Mark("tray-ready");
 
-
+        if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+        {
+            // What the icon caches hold once the startup wave of loads has settled. The exit-time
+            // line in OnExit reports the same thing for a session that browsed more.
+            try
+            {
+                var stats = Services.GetRequiredService<WPFServices.IconImageService>().CacheStats();
+                Serilog.Log.Information(
+                    "Icon cache after startup: paths {PathEntries} entries / {PathKB} KB, pidl {PidlEntries} entries / {PidlKB} KB",
+                    stats.PathEntries, stats.PathBytes / 1024, stats.PidlEntries, stats.PidlBytes / 1024);
+            }
+            catch { }
+        }
 
         // Update checks start only after the loading dialog is gone: a release check must
         // never overlap initialisation, and the prompt window is useless before the desktop
@@ -483,6 +496,21 @@ public partial class App : Application
         // fire WM_SHOWWINDOW hides that the hooks would otherwise counter, delaying shutdown).
         Win32Apis.SystemTeardown = true;
         _isExiting = true;
+        if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+        {
+            // What the icon caches actually held at exit — the number the cache limits are tuned against.
+            try
+            {
+                var stats = Services.GetService<WPFServices.IconImageService>()?.CacheStats();
+                if (stats is { } s)
+                {
+                    Serilog.Log.Information(
+                        "Icon cache at exit: paths {PathEntries} entries / {PathKB} KB, pidl {PidlEntries} entries / {PidlKB} KB",
+                        s.PathEntries, s.PathBytes / 1024, s.PidlEntries, s.PidlBytes / 1024);
+                }
+            }
+            catch { }
+        }
         // Detach the system-theme hook here. It is an HwndSource hook on the tray host, so
         // leaving it attached keeps this app (and its whole visual tree) rooted for the life
         // of the message pump. Done next to the power-resume teardown for the same reason.

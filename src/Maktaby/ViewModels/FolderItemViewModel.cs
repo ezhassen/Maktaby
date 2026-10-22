@@ -1,4 +1,3 @@
-using Maktaby.Core.Services;
 using Maktaby.WPFServices;
 using System.IO;
 
@@ -12,15 +11,49 @@ public sealed class FolderItemViewModel : ViewModelBase
     private readonly bool _isDirectory;
     private System.Windows.Media.ImageSource? _icon;
     private bool _iconLoadRequested;
-private bool _isSelected;
-      private bool _isFilteredOut;
-      private bool _isEditing;
+
+    private int _iconSize = 32;
+
+    /// <summary>
+    /// The pixel size this row's icon has to be sharp at. Setting it re-resolves the icon.
+    /// </summary>
+    /// <remarks>
+    /// The shell only returns 32 or 48 px icons, so a row drawn at 96 px was an upscale - the blur
+    /// the large icon size showed. Above that the icon is rendered at the requested size instead.
+    /// </remarks>
+    public int IconSize
+    {
+        get => _iconSize;
+        set
+        {
+            int normalized = value < 16 ? 16 : (value > 256 ? 256 : value);
+            if (normalized == _iconSize)
+            {
+                return;
+            }
+
+            _iconSize = normalized;
+            ReloadIconAtCurrentSize();
+        }
+    }
+
+    private void ReloadIconAtCurrentSize()
+    {
+        _iconLoadRequested = false;
+        _icon = null;
+        OnPropertyChanged(nameof(Icon));
+        EnsureIconLoaded();
+    }
+    private bool _isSelected;
+    private bool _isFilteredOut;
+    private bool _isEditing;
     private string _renameText = string.Empty;
     private string _displayName;
 
-    public FolderItemViewModel(string path, IconImageService icons)
+    public FolderItemViewModel(string path, IconImageService icons, int iconSize)
     {
         _path = path;
+        _iconSize = iconSize < 16 ? 16 : (iconSize > 256 ? 256 : iconSize);
         _icons = icons;
         _isDirectory = Directory.Exists(path);
         _displayName = System.IO.Path.GetFileName(path);
@@ -69,18 +102,18 @@ private bool _isSelected;
     public bool IsSelected { get => _isSelected; set { if (_isSelected != value) { _isSelected = value; OnPropertyChanged(); } } }
     public bool IsEditing { get => _isEditing; set { if (_isEditing != value) { _isEditing = value; OnPropertyChanged(); } } }
 
-      /// <summary>True when the portal is filtered and this row does not match the text.</summary>
-      /// <remarks>A property rather than a filtered collection, so every index in
-      /// <c>FolderItems</c> - which selection, focus and scrolling all address - stays valid.</remarks>
-      public bool IsFilteredOut { get => _isFilteredOut; set { if (_isFilteredOut != value) { _isFilteredOut = value; OnPropertyChanged(); } } }
+    /// <summary>True when the portal is filtered and this row does not match the text.</summary>
+    /// <remarks>A property rather than a filtered collection, so every index in
+    /// <c>FolderItems</c> - which selection, focus and scrolling all address - stays valid.</remarks>
+    public bool IsFilteredOut { get => _isFilteredOut; set { if (_isFilteredOut != value) { _isFilteredOut = value; OnPropertyChanged(); } } }
 
-  private bool _isFilterExempt;
-  /// <summary>
-  /// Shown even when it does not match the filter - set when the row arrives (a paste) while a
-  /// filter is active, so the files the user just pasted cannot vanish on landing. Dropped by
-  /// <see cref="BoxViewModel"/> as soon as the filter text changes, kept across a refresh.
-  /// </summary>
-  public bool IsFilterExempt { get => _isFilterExempt; set { if (_isFilterExempt != value) { _isFilterExempt = value; OnPropertyChanged(); } } }
+    private bool _isFilterExempt;
+    /// <summary>
+    /// Shown even when it does not match the filter - set when the row arrives (a paste) while a
+    /// filter is active, so the files the user just pasted cannot vanish on landing. Dropped by
+    /// <see cref="BoxViewModel"/> as soon as the filter text changes, kept across a refresh.
+    /// </summary>
+    public bool IsFilterExempt { get => _isFilterExempt; set { if (_isFilterExempt != value) { _isFilterExempt = value; OnPropertyChanged(); } } }
     public string RenameText { get => _renameText; set { if (_renameText != value) { _renameText = value; OnPropertyChanged(); } } }
 
     public System.Windows.Media.ImageSource? Icon
@@ -103,7 +136,7 @@ private bool _isSelected;
     {
         try
         {
-            var src = await _icons.GetIconAsync(_path).ConfigureAwait(false);
+            var src = await _icons.GetIconAsync(_path, _iconSize).ConfigureAwait(false);
             if (src != null)
             {
                 System.Windows.Application.Current?.Dispatcher.Invoke(() => { _icon = src; OnPropertyChanged(nameof(Icon)); });

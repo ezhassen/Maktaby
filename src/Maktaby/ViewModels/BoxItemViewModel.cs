@@ -1,6 +1,5 @@
 using Maktaby.Core.Models;
 using Maktaby.WPFServices;
-using System.Threading.Tasks;
 using System.Windows.Media;
 
 namespace Maktaby.ViewModels;
@@ -16,11 +15,12 @@ public sealed class BoxItemViewModel : ViewModelBase
     private string _displayName;
     private ImageSource? _icon;
 
-    public BoxItemViewModel(BoxItem model, IconImageService icons)
+    public BoxItemViewModel(BoxItem model, IconImageService icons, int iconSize)
     {
         _model = model;
         _icons = icons;
         _displayName = model.DisplayName;
+        _iconSize = iconSize < 16 ? 16 : (iconSize > 256 ? 256 : iconSize);
     }
 
     public BoxItem Model => _model;
@@ -72,6 +72,43 @@ public sealed class BoxItemViewModel : ViewModelBase
 
     private bool _iconLoadRequested;
 
+    private int _iconSize = 32;
+
+    /// <summary>
+    /// The display size (in device-independent pixels) this item's icon is drawn at. Setting it
+    /// re-resolves the icon.
+    /// </summary>
+    /// <remarks>
+    /// The shell only returns 32 or 48 px icons, so a tile drawn at 96 px was an upscale - the blur
+    /// the large icon size showed. The service renders the icon at the physical size the display
+    /// size needs, and changing the size has to re-resolve it (the cached one is the wrong
+    /// resolution).
+    /// </remarks>
+    public int IconSize
+    {
+        get => _iconSize;
+        set
+        {
+            int normalized = value < 16 ? 16 : (value > 256 ? 256 : value);
+            if (normalized == _iconSize)
+            {
+                return;
+            }
+
+            _iconSize = normalized;
+            ReloadIconAtCurrentSize();
+        }
+    }
+
+    /// <summary>Drops the current icon and resolves it again at the current size.</summary>
+    private void ReloadIconAtCurrentSize()
+    {
+        _iconLoadRequested = false;
+        _icon = null;
+        Icon = null;
+        EnsureIconLoaded();
+    }
+
     //fire and forget
     private async void EnsureIconLoaded()
     {
@@ -115,8 +152,8 @@ public sealed class BoxItemViewModel : ViewModelBase
     private Task<ImageSource?> ResolveIconAsync()
     {
         return string.IsNullOrEmpty(_model.Pidl)
-            ? (string.IsNullOrEmpty(_model.Path) ? Task.FromResult((ImageSource?)null) : _icons.GetIconAsync(_model.Path))
-            : _icons.GetIconFromPidlAsync(_model.Pidl, _model.Path);
+            ? (string.IsNullOrEmpty(_model.Path) ? Task.FromResult((ImageSource?)null) : _icons.GetIconAsync(_model.Path, _iconSize))
+            : _icons.GetIconFromPidlAsync(_model.Pidl, _model.Path, _iconSize);
     }
 
     /// <summary>Forces the icon to reload from the (possibly changed) <see cref="BoxItem.Path"/> — used

@@ -185,11 +185,28 @@ public partial class BoxControl : WidgetControlBase
     /// falls back to the LIVE desktop icon size (watched by DesktopIconSizeService).</summary>
     public void RefreshIconSize()
     {
-        int resolved = Box?.Model.IconSize
-            ?? App.Services.GetRequiredService<Core.Interfaces.ISettingsService>().UserSettings.DefaultBoxIconSize
-            ?? App.Services.GetRequiredService<Core.Interfaces.IDesktopIconSizeService>().Current;
+        int resolved = Helpers.BoxIconSize.Resolve(Box?.Model);
 
         IconSize = System.Math.Clamp(resolved, 16, 128);
+
+        // Push the size to the items so their icons are resolved sharp enough for it. The shell
+        // only hands back 32/48 px, so a tile at 96 px was an upscale - and after a size change
+        // the cached icon is the wrong resolution, so the items have to re-resolve.
+        PushIconSizeToItems();
+    }
+
+    private void PushIconSizeToItems()
+    {
+        if (Box is not { } box)
+        {
+            return;
+        }
+
+        int size = Helpers.BoxIconSize.Resolve(Box?.Model);
+        foreach (var item in box.Items)
+        {
+            item.IconSize = size;
+        }
     }
 
     public MainViewModel? Host { get; set; }

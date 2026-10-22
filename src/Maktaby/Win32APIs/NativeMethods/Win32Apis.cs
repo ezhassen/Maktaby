@@ -660,42 +660,82 @@ internal static class Win32Apis
         }
     }
 
+
+
+
+
     /// <summary>Resolves the icon for a filesystem path (e.g. a <c>.lnk</c> on the desktop) as an
     /// <see cref="HBITMAP"/> using <c>IShellItemImageFactory</c>. Unlike <c>SHGetFileInfo</c>, this correctly
     /// follows PIDL-only link targets (such as the shortcuts we create for Start Menu apps). Returns
     /// <see cref="IntPtr.Zero"/> on failure. Caller must <see cref="DeleteObject"/> the result.</summary>
     public static IntPtr GetIconBitmapForPath(string path)
     {
-        try
-        {
-            if (Shell32.SHCreateItemFromParsingName(path, IntPtr.Zero, Shell32.IID_IShellItem, out IShellItem item) != 0 || item is null)
-            {
-                return IntPtr.Zero;
-            }
+    return GetIconBitmapForPath(path, 32);
+    }
 
-            try
-            {
-                if (item is IShellItemImageFactory factory)
-                {
-                    var size = new SIZE { Cx = 32, Cy = 32 };
-                    const uint SIIGBF_ICONONLY = 0x00000004;
-                    if (factory.GetImage(size, SIIGBF_ICONONLY, out IntPtr hbmp) == 0 && hbmp != IntPtr.Zero)
-                    {
-                        return hbmp;
-                    }
-                }
+    /// <summary>Resolves the icon for a filesystem path at a requested pixel size.</summary>
+    /// <remarks>
+    /// <c>IShellItemImageFactory</c> renders the icon at whatever size is asked for, which is the only
+    /// way to get a sharp image for the large icon sizes (48 and up) — the shell's own
+    /// <c>SHGetFileInfo</c> only ever hands back 32 or 48 px, and scaling those up is what made the
+    /// big tiles look blurry. Sizes are clamped to what the factory supports.
+    /// </remarks>
+    /// <returns>An <c>HBITMAP</c> the caller must delete, or <see cref="IntPtr.Zero"/> on failure.</returns>
+    public static IntPtr GetIconBitmapForPath(string path, int size)
+    {
+    try
+    {
 
-                return IntPtr.Zero;
-            }
-            finally
-            {
-                Marshal.ReleaseComObject(item);
-            }
-        }
-        catch
-        {
-            return IntPtr.Zero;
-        }
+    // Ask the shell for the image factory directly. Casting an IShellItem to the interface does a
+    // QueryInterface behind the scenes, but the shell's item for a parsing name does not always
+    // answer it - requesting the interface up front is the reliable route.
+    int createHr = Shell32.SHCreateItemFromParsingNameFactory(path, IntPtr.Zero, Shell32.IID_IShellItemImageFactory, out IShellItemImageFactory factory);
+    if (createHr != 0 || factory is null)
+    {
+        return IntPtr.Zero;
+    }
+
+    try
+    {
+    int edge = Math.Clamp(size, 16, 256);
+    var requested = new SIZE { Cx = edge, Cy = edge };
+    // SIIGBF_ICONONLY (icon, no thumbnail) | SIIGBF_BIGGERSIZEOK (give the icon at the requested
+    // size even when that is larger than the native one). Without the second flag the factory
+    // refuses anything above the native icon size and returns nothing.
+    const uint SIIGBF_ICONONLY = 0x00000004;
+    const uint SIIGBF_BIGGERSIZEOK = 0x00000001;
+
+
+    if (factory.GetImage(requested, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK, out IntPtr hbmp) == 0 &&
+        hbmp != IntPtr.Zero)
+    {
+    return hbmp;
+    }
+
+    // Fall back to the factory's own choice of size.
+    if (factory.GetImage(requested, SIIGBF_BIGGERSIZEOK, out IntPtr fallback) == 0 && fallback != IntPtr.Zero)
+    {
+    return fallback;
+    }
+
+    // Last resort: no flags at all - the shell then returns a thumbnail when the item has one
+    // (which is how a large shortcut to an application gets its sharp, high-resolution image).
+    if (factory.GetImage(requested, 0, out IntPtr thumb) == 0 && thumb != IntPtr.Zero)
+    {
+    return thumb;
+    }
+
+    return IntPtr.Zero;
+    }
+    finally
+    {
+    Marshal.ReleaseComObject(factory);
+    }
+    }
+    catch
+    {
+    return IntPtr.Zero;
+    }
     }
 
     /// <summary>Resolves a stored (base64) absolute PIDL to a filesystem path when the item has one
