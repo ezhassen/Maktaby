@@ -616,7 +616,22 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
             }
             else
             {
-                OpenItem(vm);
+                if (Box is { } box)
+                {
+                    var selected = box.Items.Where(i => i.IsSelected).ToList();
+                    if (selected.Count > 0)
+                    {
+                        foreach (var it in selected) OpenItem(it);
+                    }
+                    else
+                    {
+                        OpenItem(vm);
+                    }
+                }
+                else
+                {
+                    OpenItem(vm);
+                }
             }
 
             e.Handled = true;
@@ -801,6 +816,7 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     private static void OpenItem(BoxItemViewModel item)
     {
         _lastOpenUtc = DateTime.UtcNow;
+        item.IsSelected = false;
         if (!string.IsNullOrEmpty(item.Model.Pidl))
         {
             try

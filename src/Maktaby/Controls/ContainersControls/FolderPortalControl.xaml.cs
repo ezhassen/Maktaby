@@ -1341,7 +1341,18 @@ public partial class FolderPortalControl : WidgetControlBase
                 UpdateView();
                 if (Window.GetWindow(this) is BoxContainerWindow bcw2) bcw2.ManageFolderWatcher();
             }
-            else OpenItem(vm);
+            else
+            {
+                var selected = Box?.FolderItems.Where(i => i.IsSelected).ToList() ?? new List<FolderItemViewModel>();
+                if (selected.Count > 0)
+                {
+                    foreach (var it in selected) OpenItem(it);
+                }
+                else
+                {
+                    OpenItem(vm);
+                }
+            }
             e.Handled = true;
         }
         else if (key == Key.Back)
@@ -1606,6 +1617,7 @@ public partial class FolderPortalControl : WidgetControlBase
     private static void OpenItem(FolderItemViewModel item)
     {
         _lastOpenUtc = DateTime.UtcNow;
+        item.IsSelected = false;
         try
         {
             var path = item.Path;
