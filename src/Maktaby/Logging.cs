@@ -97,6 +97,9 @@ public static class Logging
         // Initialize the default loggers
         if (_log is null)
         {
+            // The settings were just parsed by AppJSettings.Reload(); reuse that level instead of
+            // building a configuration provider to read the same file again.
+            ApplyLoadedLevelSwitch();
             _log = GetNewLogger("Maktaby.log", LevelSwitch);
             Serilog.Log.Logger = _log;
             if (_watcher is null)
@@ -147,6 +150,24 @@ public static class Logging
         {
             levelSwitch.MinimumLevel = Serilog.Events.LogEventLevel.Warning;
         }
+    }
+
+    /// <summary>
+    /// Applies the log level from the already-loaded settings, without reading the file again.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ReReadLevelSwitch"/> builds a whole configuration provider and parses the same
+    /// JSON file a second time to read one key — and the startup path has already parsed that very
+    /// file in <see cref="AppJSettings.Reload"/>. This is the fast path for startup; the
+    /// configuration-provider version stays for the file watcher, which must see an *external*
+    /// edit of the file that the in-memory instance knows nothing about.
+    /// </remarks>
+    public static void ApplyLoadedLevelSwitch()
+    {
+        if (levelSwitch is null) levelSwitch = new LoggingLevelSwitch();
+
+        var level = AppJSettings.Instance?.LogEventLevel;
+        levelSwitch.MinimumLevel = level ?? Serilog.Events.LogEventLevel.Warning;
     }
 
     public static void OpenLogsFolderInExplorer()

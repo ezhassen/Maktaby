@@ -143,9 +143,12 @@ public static class ApplicationSingleInstance
         string exePath;
         try
         {
-            exePath = Process.GetCurrentProcess().MainModule?.FileName
-                      ?? Assembly.GetEntryAssembly()?.Location
-                      ?? Assembly.GetExecutingAssembly().Location;
+            // Environment.ProcessPath, not Process.MainModule: MainModule enumerates the process
+            // module list, which costs tens of milliseconds at startup. ProcessPath is a single
+            // cheap OS lookup and is the same value.
+            exePath = Environment.ProcessPath
+            ?? Assembly.GetEntryAssembly()?.Location
+            ?? Assembly.GetExecutingAssembly().Location;
         }
         catch
         {

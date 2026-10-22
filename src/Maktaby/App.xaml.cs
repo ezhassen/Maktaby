@@ -1113,6 +1113,15 @@ public partial class App : Application
         // Keep the system-theme watcher in step with the preference, for the same "one place
         // owns it" reason.
         SyncSystemThemeFollower(selectedTheme);
+
+        // Diagnostics: the merged-dictionary count is how a duplicated theme dictionary would
+        // show up (ApplicationThemeManager.Apply is called on every theme change — if it added a
+        // dictionary without removing the old one, the list would grow and every resource lookup
+        // would walk one more entry).
+        if (Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
+        {
+            Log.Information("Theme applied: merged dictionaries = {Count}", Application.Current.Resources.MergedDictionaries.Count);
+        }
     }
 
     /// <summary>Attaches the system-theme watcher only while the user theme is "System"
