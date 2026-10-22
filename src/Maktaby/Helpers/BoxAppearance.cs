@@ -12,17 +12,18 @@ namespace Maktaby.Helpers;
 /// (<see cref="UserSettings.DefaultBoxTheme"/> is <c>null</c>), and any explicit box colors
 /// override the theme palette. Transparency is supplied per-container via the override.
 /// </summary>
-internal sealed class BoxPalette
-{
-    public Brush Back { get; init; } = Brushes.Transparent;
-    public Brush HeaderBack { get; init; } = Brushes.Transparent;
-    public Brush HeaderBorder { get; init; } = Brushes.Transparent;
-    //public Brush TabBack { get; init; } = Brushes.Transparent;
-    public Brush Fore { get; init; } = Brushes.White;
-    public Brush HeaderFore { get; init; } = Brushes.White;
-    public Brush Border { get; init; } = Brushes.Transparent;
-    public Thickness Thickness { get; init; } = new Thickness(1);
-}
+    internal sealed class BoxPalette
+    {
+        public Brush Back { get; init; } = Brushes.Transparent;
+        public Brush HeaderBack { get; init; } = Brushes.Transparent;
+        public Brush HeaderBorder { get; init; } = Brushes.Transparent;
+        //public Brush TabBack { get; init; } = Brushes.Transparent;
+        public Brush Fore { get; init; } = Brushes.White;
+        public Brush HeaderFore { get; init; } = Brushes.White;
+        public Brush Border { get; init; } = Brushes.Transparent;
+        public Brush Hover { get; init; } = Brushes.Transparent;
+        public Thickness Thickness { get; init; } = new Thickness(1);
+    }
 
 internal static class BoxAppearance
 {
@@ -34,9 +35,13 @@ internal static class BoxAppearance
         Color back = dark ? Color.FromRgb(0x12, 0x12, 0x12) : Color.FromRgb(0xF3, 0xF3, 0xF3);
         Color fore = dark ? Colors.White : Colors.Black;
         Color border = dark ? Color.FromRgb(0x3F, 0x3F, 0x46) : Color.FromRgb(0xCC, 0xCC, 0xCC);
-        Color headerBack = dark ? Color.FromRgb(0x25, 0x25, 0x25) : Color.FromRgb(0xE5, 0xE5, 0xE5);
-        Color headerFore = fore;
-        Color headerBorder = border;
+      Color headerBack = dark ? Color.FromRgb(0x25, 0x25, 0x25) : Color.FromRgb(0xE5, 0xE5, 0xE5);
+      Color headerFore = fore;
+      Color headerBorder = border;
+      // The hover shade is a step away from the background *in the direction that keeps the text
+      // readable*: lighter in the dark theme, darker in the light one. A fixed colour cannot do
+      // both - a hardcoded dark hover over the light theme's background made the row unreadable.
+      Color hover = dark ? Color.FromRgb(0x22, 0x22, 0x22) : Color.FromRgb(0xE4, 0xE4, 0xE4);
         //Color tabBack = dark ? Color.FromRgb(0x25, 0x25, 0x25) : Color.FromRgb(0xDD, 0xDD, 0xDD);
 
         // Explicit box colors override the theme palette.
@@ -83,17 +88,18 @@ internal static class BoxAppearance
         // even at "full transparency".
         double alpha = Clamp(1.0 - transparency, MinimumAlpha, 1.0);
 
-        return new BoxPalette
-        {
-            Back = new SolidColorBrush(back) { Opacity = alpha },
-            HeaderBack = new SolidColorBrush(headerBack),// { Opacity = titleBarColorsSameAsBox ? 1.0 : alpha },
-            //TabBack = new SolidColorBrush(tabBack) { Opacity = alpha },
-            Fore = new SolidColorBrush(fore),
-            HeaderFore = new SolidColorBrush(headerFore),
-            Border = new SolidColorBrush(border),
-            HeaderBorder = new SolidColorBrush(headerBorder),
-            Thickness = new Thickness(s.DefaultBoxBorderThickness ?? 1),
-        };
+      return new BoxPalette
+      {
+      Back = new SolidColorBrush(back) { Opacity = alpha },
+      HeaderBack = new SolidColorBrush(headerBack),// { Opacity = titleBarColorsSameAsBox ? 1.0 : alpha },
+      //TabBack = new SolidColorBrush(tabBack) { Opacity = alpha },
+      Fore = new SolidColorBrush(fore),
+      HeaderFore = new SolidColorBrush(headerFore),
+      Border = new SolidColorBrush(border),
+      HeaderBorder = new SolidColorBrush(headerBorder),
+      Hover = new SolidColorBrush(hover),
+      Thickness = new Thickness(s.DefaultBoxBorderThickness ?? 1),
+      };
     }
 
     public static bool ResolveDark(string? theme)

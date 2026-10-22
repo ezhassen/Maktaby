@@ -382,21 +382,25 @@
                             <DataTrigger Binding="{Binding IsFilteredOut}" Value="True">
                                 <Setter Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#3A3A3A" />
-                                <Setter Property="BorderBrush" Value="#5A5A5A" />
-                            </Trigger>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter Property="Background" Value="#407FB2FF" />
-                                <Setter Property="BorderBrush" Value="#FF7FB2FF" />
-                            </Trigger>
-                            <MultiTrigger>
-                                <MultiTrigger.Conditions>
-                                    <Condition Property="IsSelected" Value="True" />
-                                    <Condition Property="IsMouseOver" Value="True" />
-                                </MultiTrigger.Conditions>
-                                <Setter Property="Background" Value="#4A6EAF" />
-                            </MultiTrigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <!--  Theme-aware: a fixed dark hover over the light theme's background
+                                  made the row unreadable.  -->
+                            <Setter Property="Background" Value="{DynamicResource BoxHoverBackground}" />
+                            <Setter Property="BorderBrush" Value="{DynamicResource BoxBorder}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#407FB2FF" />
+                            <Setter Property="BorderBrush" Value="#FF7FB2FF" />
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="True" />
+                                <Condition Property="IsMouseOver" Value="True" />
+                            </MultiTrigger.Conditions>
+                            <!--  A stronger tint of the same blue, so the text stays readable over
+                                  it in both themes.  -->
+                            <Setter Property="Background" Value="#66A0FF" />
+                        </MultiTrigger>
                             <Trigger Property="IsFocused" Value="True">
                                 <Setter Property="BorderBrush" Value="#FF7FB2FF" />
                             </Trigger>
