@@ -9,11 +9,15 @@ namespace Maktaby.Win32.Services;
 
 /// <summary>
 /// Win32 implementation of <see cref="IExplorerDesktopService"/>. Hides or shows the Explorer
-/// desktop icons by toggling the desktop's <c>SHELLDLL_DefView</c> via the same <c>WM_COMMAND</c>
-/// Explorer's own "Show desktop icons" menu uses. This hides the icon container while keeping the
-/// desktop view alive, so the right-click "New" verb keeps working — unlike hiding the list-view
-/// window directly, which breaks that verb with error 16389.
+/// desktop icons by hiding the desktop's <c>SHELLDLL_DefView</c>'s list-view, keeping the desktop
+/// view itself alive so the right-click "New" verb and the app's own input forwarding keep
+/// working.
 /// </summary>
+/// <remarks>
+/// It used to send the shell's "toggle desktop icons" command instead, but that flips a state the
+/// shell keeps globally: the desktop's icons went away and so did the icons in every open Explorer
+/// window. Hiding the one list-view touches nothing else.
+/// </remarks>
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class ExplorerDesktopService : IExplorerDesktopService
 {
@@ -26,7 +30,16 @@ public sealed class ExplorerDesktopService : IExplorerDesktopService
         bool hide = !visible;
 
         IntPtr listView = FindDesktopListView();
-        bool currentlyHidden = listView != IntPtr.Zero && !Win32Apis.IsWindowVisible(listView);
+        if (listView == IntPtr.Zero)
+        {
+            // Explorer has no desktop view yet (it is still starting). The shell's own toggle is the
+            // only thing that can work before the list-view exists.
+            _lastApplied = hide;
+            Win32Apis.ToggleDesktopIcons();
+            return;
+        }
+
+        bool currentlyHidden = !Win32Apis.IsWindowVisible(listView);
         if (currentlyHidden == hide)
         {
             _lastApplied = hide;
@@ -34,7 +47,23 @@ public sealed class ExplorerDesktopService : IExplorerDesktopService
         }
 
         _lastApplied = hide;
-        Win32Apis.ToggleDesktopIcons();
+
+        // Hide the desktop's icon list-view directly, rather than sending the shell's "toggle
+        // desktop icons" command (WM_COMMAND 0x7402).
+        //
+        // That command flips a state the shell keeps *globally*: the desktop's icons went away, and
+        // so did the icons in every open Explorer window, which is not something a desktop
+        // organiser should be doing to the user's file windows. Hiding the one list-view touches
+        // nothing else - the other windows keep their icons and their own state.
+        //
+        // The desktop view itself stays alive, so the right-click "New" verb and the app's own
+        // input forwarding keep working: the surface posts its mouse messages to the DefView when
+        // the list-view is hidden, which is exactly the state this leaves behind.
+        //
+        // The user can still get their desktop icons back the same way as before - Explorer's
+        // "Show desktop icons" re-shows the list-view, the app's visibility watch notices and
+        // steps its surface aside.
+        Win32Apis.ShowWindow(listView, hide ? 0 : 5); // SW_HIDE / SW_SHOW
     }
     public async Task SetDesktopIconsVisibleAsync(bool visible)
     {

@@ -299,11 +299,21 @@ internal static class Win32Apis
 
     /// <summary>
     /// Toggles desktop icon visibility the same way Explorer's "Show desktop icons" context-menu item
-    /// does: it sends <c>WM_COMMAND</c> 0x7402 to the desktop's <c>SHELLDLL_DefView</c> window. This
-    /// hides/shows the icon container while keeping the desktop view alive, so the right-click "New"
-    /// verb keeps working (unlike <c>ShowWindow(SW_HIDE)</c> on the list-view, which breaks it).
-    /// The operation flips the current state, so callers should only invoke it on a real state change.
+    /// does: it sends <c>WM_COMMAND</c> 0x7402 to the desktop's <c>SHELLDLL_DefView</c> window.
     /// </summary>
+    /// <remarks>
+    /// <b>Only a fallback.</b> The command flips a state the shell keeps globally, so the icons also
+    /// vanish from every open Explorer window — which is not a desktop organiser's business. The
+    /// normal path hides the desktop's icon list-view directly (see
+    /// <c>ExplorerDesktopService.SetDesktopIconsVisible</c>), which touches nothing else.
+    /// <para>
+    /// This is still needed for the one case the direct hide cannot cover: before Explorer's desktop
+    /// view exists at all, there is no list-view to hide.
+    /// </para>
+    /// <para>
+    /// The operation flips the current state, so callers should only invoke it on a real state change.
+    /// </para>
+    /// </remarks>
     public static void ToggleDesktopIcons()
     {
         IntPtr defView = FindDesktopFolderView();
