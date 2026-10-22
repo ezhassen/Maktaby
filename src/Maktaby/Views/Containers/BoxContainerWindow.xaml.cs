@@ -1335,9 +1335,16 @@ public partial class BoxContainerWindow : WidgetWindow
     {
         // Capture the unrotated header thickness. Once rolled Left/Right the header is rotated and spans
         // the full window height, so its measured height can no longer stand in for the strip thickness.
-        if (HeaderContent.LayoutTransform == null && HeaderBorder.ActualHeight > 0)
+        // Measure with infinity so we get the natural (unrolled) header height even while the window is
+        // already collapsed into a rolled strip; ActualHeight would just echo the strip height and shrink
+        // the title bar on every toggle. Never let it shrink below the largest value seen.
+        if (HeaderContent.LayoutTransform == null)
         {
-            _headerThickness = HeaderBorder.ActualHeight;
+            HeaderBorder.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            if (HeaderBorder.DesiredSize.Height > 0)
+            {
+                _headerThickness = Math.Max(_headerThickness, HeaderBorder.DesiredSize.Height);
+            }
         }
 
         if (!_vm.IsRolled)
