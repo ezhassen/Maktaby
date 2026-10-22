@@ -1521,6 +1521,18 @@ public sealed class DesktopManager
     }
 
     /// <summary>
+    /// Re-anchors the desktop band after something else has touched it.
+    /// </summary>
+    /// <remarks>
+    /// The wallpaper engine re-parents its own windows into the desktop band and can move the
+    /// WorkerW to the bottom while it does. A box that was positioned against the old anchor can
+    /// then end up below the desktop icons — invisible, and not obviously related to the
+    /// wallpaper. This re-anchors the surface and re-orders the boxes above it, so the final
+    /// band does not depend on how the two threads interleaved.
+    /// </remarks>
+    internal void ReassertDesktopBand() => RefreshDesktopLayer();
+
+    /// <summary>
     /// True when every open <see cref="BoxContainerWindow"/> is currently hidden via
     /// <see cref="HideAllBoxes"/>. Session-only (not persisted across restarts).</summary>
     public bool AllBoxesHidden => _allBoxesHidden;

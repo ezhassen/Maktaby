@@ -265,25 +265,32 @@ public partial class App : Application
                   }
                   catch { }
               };
+
         await loading.ShowAsync(async report =>
         {
             report(Localization.Loc.Get("Loading.Loading"));
-            Helpers.StartupProfiler.Mark("splash-shown");            // Wait for the splash to actually be on screen, instead of a fixed 800 ms that was
+            Helpers.StartupProfiler.Mark("splash-shown");
+
+            // Wait for the splash to actually be on screen, instead of a fixed 800 ms that was
             // only ever a guess at how long that takes. The cap is the safety net for a dialog
             // that never reports a paint.
             await WaitForSplashPaint(loading);
             Helpers.StartupProfiler.Mark("splash-painted");
 
-            // The tray is built here, not before the splash: it costs ~750 ms (XAML parse, hidden
-            // host window, the mouse monitor, the TaskbarCreated hook) and none of it is needed
-            // before the splash appears. Building it inside the splash means the user sees the
-            // loading indicator ~750 ms earlier, and the tray is still ready before the splash
-            // lifts.
-            // The tray is built AFTER the splash (see below), not here: Wpf.Ui's NotifyIcon
-            // registers with the shell from its host window's Loaded event, and a window shown
-            // while a modal dialog owns the dispatcher never gets that event — the icon simply
-            // never appears. Building it before the splash is also ~750 ms of work the user
-            // would spend staring at a frozen desktop instead of the loading indicator.
+            // The wallpaper engine is not interactive, so it does not have to hold the splash —
+            // but it must not start before the splash is up either: PostExclusiveAsync blocks the
+            // calling thread in EnsureEngineThread (up to 10 s if the engine thread fails to
+            // start), and doing that before the splash appears would freeze the desktop with no
+            // loading indicator to show for it. From here it overlaps the box creation below,
+            // which is where the overlap was wanted: the engine works on its own thread, so the
+            // D3D device, the desktop-layer probe and the per-monitor load happen while the UI
+            // thread builds the boxes.
+            _ = StartWallpaperEngineAsync();
+
+            // The service graph is materialized here rather than before the splash: resolving
+            // DesktopManager pulls in ~20 singletons, and the desktop-icon-size service reads
+            // Explorer's list-view across process boundaries on construction. Both are startup
+            // work, not something the user has to stare at a frozen desktop for.
             var manager = Services.GetRequiredService<DesktopManager>();
             manager.LayoutRefreshed += ScheduleTrayRefresh;
             SyncDesktopIconSizeWatcher();
@@ -291,10 +298,6 @@ public partial class App : Application
 
             await manager.InitializeAsync();
             Helpers.StartupProfiler.Mark("desktop-init-done");
-
-            // Standalone live wallpaper (own windows, own lifecycle — independent from DesktopManager).
-            try { await Services.GetRequiredService<LiveWallpaperManager>().InitializeAsync(); } catch { }
-            Helpers.StartupProfiler.Mark("wallpaper-init-done");
             return null;
         }, pausePlayback: false);
 
@@ -307,6 +310,8 @@ public partial class App : Application
         // time before the user sees the loading indicator.
         BuildTrayAndMenuItems(Services);
         Helpers.StartupProfiler.Mark("tray-ready");
+
+
 
         // Update checks start only after the loading dialog is gone: a release check must
         // never overlap initialisation, and the prompt window is useless before the desktop
@@ -335,6 +340,33 @@ public partial class App : Application
         if (Maktaby.WidgetSdk.WidgetDev.SimulateData)
         {
             Log.Warning("Native widget data simulation is ON: widgets may serve generated data instead of calling live services.");
+        }
+    }
+
+    /// <summary>
+    /// Starts the live wallpaper engine outside the startup gate.
+    /// </summary>
+    /// <remarks>
+    /// The engine owns its own thread and its own windows (the wallpaper band, below the icons),
+    /// so it is independent from the boxes. It is not interactive, so it has no business holding
+    /// the splash up — the user gets a usable desktop first and the wallpaper arrives behind it.
+    /// </remarks>
+    private async Task StartWallpaperEngineAsync()
+    {
+        try
+        {
+            await Services.GetRequiredService<LiveWallpaperManager>().InitializeAsync();
+            Helpers.StartupProfiler.Mark("wallpaper-init-done");
+
+            // The engine re-parents its own windows into the desktop band and can move the
+            // WorkerW to the bottom while it does. The boxes were attached against the old
+            // anchor, so re-assert the band now that it has settled — otherwise a box can end up
+            // below the desktop icons, which looks like a wallpaper bug and is not one.
+            try { Services.GetRequiredService<DesktopManager>().ReassertDesktopBand(); } catch { }
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Warning(ex, "Live wallpaper initialization failed");
         }
     }
 
