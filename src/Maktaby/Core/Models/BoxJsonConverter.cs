@@ -30,7 +30,8 @@ public sealed class BoxJsonConverter : JsonConverter<Box>
             FolderPath = box.FolderPath,
             FolderPortalViewMode = box.FolderPortalViewMode,
             FolderSortBy = box.FolderSortBy,
-            FolderSortAscending = box.FolderSortAscending
+            FolderSortAscending = box.FolderSortAscending,
+            FolderPortalColumns = box.FolderPortalColumns
         };
     }
 
@@ -64,6 +65,8 @@ public sealed class BoxJsonConverter : JsonConverter<Box>
         writer.WriteNumber("FolderPortalViewMode", (int)value.FolderPortalViewMode);
         writer.WriteNumber("FolderSortBy", (int)value.FolderSortBy);
         writer.WriteBoolean("FolderSortAscending", value.FolderSortAscending);
+        if (value.FolderPortalColumns != null) writer.WriteString("FolderPortalColumns", value.FolderPortalColumns);
+        else writer.WriteNull("FolderPortalColumns");
         writer.WriteEndObject();
     }
 
@@ -80,5 +83,6 @@ public sealed class BoxJsonConverter : JsonConverter<Box>
         public FolderPortalViewMode FolderPortalViewMode { get; set; }
         public FolderSortMode FolderSortBy { get; set; }
         public bool FolderSortAscending { get; set; } = true;
+        public string? FolderPortalColumns { get; set; }
     }
 }

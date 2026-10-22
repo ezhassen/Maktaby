@@ -45,4 +45,7 @@ public sealed class Box
 
     /// <summary>True = ascending, false = descending.</summary>
     public bool FolderSortAscending { get; set; } = true;
+
+    /// <summary>Persisted Details-view column layout: display order and widths (e.g. "0:220|2:90|1:90|3:150").</summary>
+    public string? FolderPortalColumns { get; set; }
 }

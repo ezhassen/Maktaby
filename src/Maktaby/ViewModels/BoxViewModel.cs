@@ -207,6 +207,19 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
         }
     }
 
+    public string? FolderPortalColumns
+    {
+        get => _box.FolderPortalColumns;
+        set
+        {
+            if (_box.FolderPortalColumns != value)
+            {
+                _box.FolderPortalColumns = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     public bool HasFolder => !string.IsNullOrWhiteSpace(_box.FolderPath) && Directory.Exists(_box.FolderPath);
 
     public bool HasFolderPath => !string.IsNullOrWhiteSpace(_box.FolderPath);

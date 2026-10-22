@@ -143,6 +143,7 @@ public partial class FolderPortalControl : WidgetControlBase
     {
         if (e.OldValue is BoxViewModel oldVm)
         {
+            SaveFolderPortalColumnLayout(oldVm);
             oldVm.PropertyChanged -= OnBoxPropertyChanged;
             oldVm.FolderItems.CollectionChanged -= OnFolderItemsChanged;
         }
@@ -156,6 +157,8 @@ public partial class FolderPortalControl : WidgetControlBase
         }
         RefreshIconSize();
         UpdateView();
+        CaptureDefaultFolderPortalColumnLayout();
+        ApplyFolderPortalColumnLayout();
         if (newVm != null && newVm.IsFolderPortal && newVm.HasFolder)
         {
             _ = newVm.EnsureFolderLoadedAsync();
@@ -224,6 +227,8 @@ public partial class FolderPortalControl : WidgetControlBase
         DetailsGrid.AddHandler(UIElement.GotKeyboardFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
         DetailsGrid.AddHandler(Keyboard.GotKeyboardFocusEvent, new RoutedEventHandler(DetailsGrid_OnGotFocus), true);
         DetailsGrid.AddHandler(FrameworkElement.ContextMenuOpeningEvent, new ContextMenuEventHandler(DetailsGrid_OnContextMenuOpening), true);
+        DetailsGrid.ColumnReordered += (_, _) => SaveFolderPortalColumnLayout();
+        DetailsGrid.PreviewMouseLeftButtonUp += (_, _) => SaveFolderPortalColumnLayout();
     }
 
     protected override void OnReloadedCore()
@@ -233,6 +238,8 @@ public partial class FolderPortalControl : WidgetControlBase
         DetailsGrid.CanUserResizeColumns = true;
         foreach (var col in DetailsGrid.Columns)
             col.CanUserResize = true;
+        CaptureDefaultFolderPortalColumnLayout();
+        ApplyFolderPortalColumnLayout();
         // The folder VM outlives this control (tab switches re-parent it): (re)attach
         // idempotently — Loaded refires on hide/show without a DataContext change.
         if (Box is BoxViewModel loadedVm)
@@ -242,6 +249,69 @@ public partial class FolderPortalControl : WidgetControlBase
         }
     }
 
+    private string? _defaultColumnLayout;
+
+    private void CaptureDefaultFolderPortalColumnLayout()
+    {
+        if (_defaultColumnLayout != null) return;
+        if (DetailsGrid.Columns.Count == 0) return;
+        var ordered = DetailsGrid.Columns.OrderBy(c => c.DisplayIndex).ToList();
+        _defaultColumnLayout = string.Join("|", ordered.Select(c =>
+        {
+            int origIndex = DetailsGrid.Columns.IndexOf(c);
+            double w = c.ActualWidth > 0 ? c.ActualWidth : (c.Width.UnitType == DataGridLengthUnitType.Pixel ? c.Width.Value : c.MinWidth);
+            return $"{origIndex}:{w.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        }));
+    }
+
+    private void ApplyFolderPortalColumnLayout()
+    {
+        if (Box is not BoxViewModel vm) return;
+        var layout = vm.FolderPortalColumns;
+        if (string.IsNullOrWhiteSpace(layout))
+        {
+            layout = _defaultColumnLayout;
+        }
+        if (string.IsNullOrWhiteSpace(layout)) return;
+        var columns = DetailsGrid.Columns.ToList();
+        int displayIndex = 0;
+        foreach (var part in layout.Split('|', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = part.Split(':');
+            if (kv.Length != 2) continue;
+            if (!int.TryParse(kv[0], out var origIndex)) continue;
+            if (origIndex < 0 || origIndex >= columns.Count) continue;
+            if (!double.TryParse(kv[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var width)) continue;
+            var col = columns[origIndex];
+            col.Width = new DataGridLength(width);
+            col.DisplayIndex = displayIndex++;
+        }
+        foreach (var col in columns)
+        {
+            if (col.DisplayIndex < displayIndex)
+            {
+                continue;
+            }
+            col.DisplayIndex = displayIndex++;
+        }
+    }
+
+    private void SaveFolderPortalColumnLayout(BoxViewModel? vm = null)
+    {
+        vm ??= Box;
+        if (vm is not BoxViewModel target) return;
+        vm = target;
+        if (DetailsGrid.Columns.Count == 0) return;
+        var ordered = DetailsGrid.Columns.OrderBy(c => c.DisplayIndex).ToList();
+        var parts = ordered.Select(c =>
+        {
+            int origIndex = DetailsGrid.Columns.IndexOf(c);
+            double w = c.ActualWidth > 0 ? c.ActualWidth : (c.Width.UnitType == DataGridLengthUnitType.Pixel ? c.Width.Value : c.MinWidth);
+            return $"{origIndex}:{w.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        });
+        vm.FolderPortalColumns = string.Join("|", parts);
+    }
+
     protected override void OnUnloadedCore()
     {
         if (_renameService.IsEditing) _renameService.Dismiss();
@@ -249,6 +319,7 @@ public partial class FolderPortalControl : WidgetControlBase
         // (re-attached in OnReloadedCore / OnDataContextChanged).
         if (Box is BoxViewModel vm)
         {
+            SaveFolderPortalColumnLayout();
             vm.PropertyChanged -= OnBoxPropertyChanged;
         }
     }

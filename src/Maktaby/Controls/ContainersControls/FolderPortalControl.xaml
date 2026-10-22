@@ -301,7 +301,7 @@
                 BorderThickness="0"
                 CanUserAddRows="False"
                 CanUserDeleteRows="False"
-                CanUserReorderColumns="False"
+                CanUserReorderColumns="True"
                 CanUserResizeColumns="True"
                 CanUserResizeRows="False"
                 CanUserSortColumns="True"
@@ -438,6 +438,7 @@
                         Width="220"
                         MinWidth="60"
                         CanUserResize="True"
+                        CanUserReorder="True"
                         CanUserSort="True"
                         Header="Name"
                         SortMemberPath="DisplayName">
