@@ -2487,7 +2487,7 @@ public partial class BoxContainerWindow : WidgetWindow
             bool isLast = bi == bounds.Count - 1;
             // Small gap: most of tab is "before", only near right edge counts as "after".
             // Far-right tab gets larger zone so dropping at end is easy.
-            var threshold = right - Math.Min(tWidth * (isLast ? 0.45 : 0.22), isLast ? 32 : 18);
+            var threshold = right - (isLast ? tWidth * 0.5 : Math.Min(tWidth * 0.25, 20));
             if (screenP.X > threshold)
             {
                 index++;
