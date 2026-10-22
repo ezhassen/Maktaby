@@ -110,6 +110,23 @@ namespace Maktaby.ViewModels
 
         public ObservableCollection<PerformanceItem> Items { get; } = new();
 
+    /// <summary>
+    /// The overview's chip row: the secondary metrics, each short enough to sit on one line.
+    /// </summary>
+    /// <remarks>
+    /// The items are created once and their text is updated in place — rebuilding the collection
+    /// every second would churn the bindings for no reason.
+    /// </remarks>
+    public ObservableCollection<PerfChip> Chips { get; } = new();
+
+    private PerfChip _chipHeap = new();
+    private PerfChip _chipWorkingSet = new();
+    private PerfChip _chipCommit = new();
+    private PerfChip _chipHandles = new();
+    private PerfChip _chipIo = new();
+    private PerfChip _chipRender = new();
+    private PerfChip _chipIcons = new();
+
         public ObservableCollection<LiveWallpaperMonitorItem> LiveWallpaperMonitors { get; } = new();
 
         public ObservableCollection<WebView2ProcessItem> WebView2Processes { get; } = new();
@@ -153,11 +170,139 @@ namespace Maktaby.ViewModels
         private string _renderTier = "Render: ?";
         public string RenderTier { get => _renderTier; set => SetField(ref _renderTier, value); }
 
-        private bool _isSoftwareRendering;
-        public bool IsSoftwareRendering { get => _isSoftwareRendering; set => SetField(ref _isSoftwareRendering, value); }
+    private bool _isSoftwareRendering;
+    public bool IsSoftwareRendering { get => _isSoftwareRendering; set => SetField(ref _isSoftwareRendering, value); }
 
-        private static (string Text, bool IsSoftware) DescribeRenderTier()
+    /// <summary>
+    /// One compact stat in the overview's chip row.
+    /// </summary>
+    /// <remarks>
+    /// A chip is a short label plus the detail in its tooltip. The overview used to be a column of
+    /// full sentences, which grew the section until the last line was cut off - the chips wrap
+    /// instead, so nothing is ever truncated.
+    /// </remarks>
+    public sealed class PerfChip : ViewModelBase
+    {
+        private string _text = "";
+        public string Text { get => _text; set => SetField(ref _text, value); }
+
+        private string _toolTip = "";
+        public string ToolTip { get => _toolTip; set => SetField(ref _toolTip, value); }
+
+        /// <summary>True when the chip reports something that needs attention (the software
+        /// rendering fallback). The chip is then highlighted.</summary>
+        private bool _isAlarm;
+        public bool IsAlarm { get => _isAlarm; set => SetField(ref _isAlarm, value); }
+    }
+
+    /// <summary>
+    /// The icon caches: a short summary for the chip, and the split for its tooltip.
+    /// </summary>
+    /// <remarks>
+    /// An icon is a frozen ARGB bitmap, so the cost depends on the size it was rendered at — 4 KB at
+    /// 32 px, 36 KB at 96 px. The byte figure is therefore the one that matters: the entry count
+    /// alone would hide a cache of large icons, and vice versa.
+    /// </remarks>
+    private string _iconCache = "?";
+    public string IconCache { get => _iconCache; set => SetField(ref _iconCache, value); }
+
+    private string _iconCacheDetail = "";
+    public string IconCacheDetail { get => _iconCacheDetail; set => SetField(ref _iconCacheDetail, value); }
+
+
+    /// <summary>
+    /// Refreshes the overview's chip row. Each chip is one short phrase; the full wording lives in
+    /// the tooltip.
+    /// </summary>
+    private void UpdateChips()
+    {
+        _chipHeap.Text = $"Heap {ManagedMemoryMB} MB";
+        _chipHeap.ToolTip = ".NET managed heap. If this stays flat while the total climbs, the growth is native (media, COM, graphics) rather than .NET objects.";
+
+        _chipWorkingSet.Text = $"Working set {WorkingSetMB} MB";
+        _chipWorkingSet.ToolTip = "Total working set (resident, including shared pages). Reads higher than the headline private working set because of the shared .NET/WPF/Edge DLLs.";
+
+        _chipCommit.Text = $"Commit {TotalPrivateMB} MB";
+        _chipCommit.ToolTip = "Private bytes (commit): committed virtual memory including paged-out pages, so always higher than the resident reading.";
+
+        _chipHandles.Text = $"GDI {GdiHandles} · USER {UserHandles}";
+        _chipHandles.ToolTip = "GDI / USER handle counts (10k GDI quota per process). Climbing GDI with a flat managed heap means an HBITMAP/HICON/DC leak; flat GDI with climbing private bytes means driver mappings or pools.";
+
+        _chipIo.Text = TotalIo;
+        _chipIo.ToolTip = "I/O throughput: bytes read and written per second across disk, network and device.";
+
+        _chipRender.Text = RenderTier;
+        _chipRender.IsAlarm = IsSoftwareRendering;
+        _chipRender.ToolTip = "WPF render tier: hardware (tiers 1-2, GPU composition) or the software fallback (tier 0 — everything rasterized through GDI: high CPU, GDI churn, GBs of native memory).";
+
+        _chipIcons.Text = $"Icons {IconCache}";
+        _chipIcons.ToolTip = string.IsNullOrEmpty(IconCacheDetail)
+            ? "The icon caches: how many icons are held and the managed memory they take. An icon is a frozen ARGB bitmap, so a cache of large icons costs far more per entry than a cache of small ones — the byte figure is the one that matters."
+            : $"The icon caches. {IconCacheDetail}. An icon is a frozen ARGB bitmap, so a cache of large icons costs far more per entry than a cache of small ones — the byte figure is the one that matters.";
+    }
+
+    /// <summary>
+    /// One line describing the icon caches: entries and the managed bytes they hold.
+    /// </summary>
+    private static string DescribeIconCache()
+    {
+        var icons = App.Services?.GetService<WPFServices.IconImageService>();
+        if (icons is null)
         {
+            return "?";
+        }
+
+        var (pathBytes, pathEntries, pidlBytes, pidlEntries) = icons.CacheStats();
+        long bytes = pathBytes + pidlBytes;
+        return $"{pathEntries + pidlEntries} · {FormatBytes(bytes)}";
+    }
+
+    /// <summary>
+    /// A byte count in the unit that reads best: B, KB, MB, GB.
+    /// </summary>
+    /// <remarks>
+    /// The unit is chosen from the size, not fixed — "1233 KB" says far less than "1.2 MB" when
+    /// the point of the number is how much memory the cache holds.
+    /// </remarks>
+    internal static string FormatBytes(long bytes)
+    {
+        if (bytes < 1024)
+        {
+            return $"{bytes} B";
+        }
+
+        double kb = bytes / 1024.0;
+        if (kb < 1024)
+        {
+            return $"{kb:0.#} KB";
+        }
+
+        double mb = kb / 1024.0;
+        if (mb < 1024)
+        {
+            return $"{mb:0.#} MB";
+        }
+
+        return $"{mb / 1024:0.##} GB";
+    }
+
+    /// <summary>
+    /// The icon cache split (the two caches), for the chip's tooltip.
+    /// </summary>
+    private static string DescribeIconCacheDetail()
+    {
+        var icons = App.Services?.GetService<WPFServices.IconImageService>();
+        if (icons is null)
+        {
+            return "";
+        }
+
+        var (pathBytes, pathEntries, pidlBytes, pidlEntries) = icons.CacheStats();
+        return $"paths {pathEntries} / {pathBytes / 1024} KB · pidl {pidlEntries} / {pidlBytes / 1024} KB";
+    }
+
+    private static (string Text, bool IsSoftware) DescribeRenderTier()
+    {
             try
             {
                 int tier = System.Windows.Media.RenderCapability.Tier >> 16;
@@ -214,15 +359,24 @@ namespace Maktaby.ViewModels
         private string _layoutAnchorStatus = "";
         public string LayoutAnchorStatus { get => _layoutAnchorStatus; set => SetField(ref _layoutAnchorStatus, value); }
 
-        public PerformanceMonitorViewModel()
-        {
-            // Designer: no timers, no live windows/services — representative sample rows so
-            // the grids, badges and summary shape render in Blend/VS.
-            if (IsInDesignMode)
-            {
-                LoadDesignData();
-                return;
-            }
+    public PerformanceMonitorViewModel()
+    {
+    // The chips exist in the designer too, so the overview's shape is representative there.
+    Chips.Add(_chipHeap);
+    Chips.Add(_chipWorkingSet);
+    Chips.Add(_chipCommit);
+    Chips.Add(_chipHandles);
+    Chips.Add(_chipIo);
+    Chips.Add(_chipRender);
+    Chips.Add(_chipIcons);
+
+    // Designer: no timers, no live windows/services ? representative sample rows so
+    // the grids, badges and summary shape render in Blend/VS.
+    if (IsInDesignMode)
+    {
+    LoadDesignData();
+    return;
+    }
             _prevTotalProcessorTime = _process.TotalProcessorTime;
             _prevTime = DateTime.UtcNow;
             _timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
@@ -403,6 +557,10 @@ namespace Maktaby.ViewModels
                 // GPU-fallback sensor (UI thread here): a post-resume driver drop to tier 0
                 // explains sawtooth GDI in the thousands + GBs native + idle CPU with flat heap.
                 try { (RenderTier, IsSoftwareRendering) = DescribeRenderTier(); } catch { }
+                // Icon cache: entries and the managed bytes they hold (a bitmap's cost scales with
+                // the size it was rendered at, so the entry count alone would mislead).
+                try { IconCache = DescribeIconCache(); IconCacheDetail = DescribeIconCacheDetail(); } catch { }
+                UpdateChips();
 
                 // I/O throughput (read + write bytes/sec across disk/network/device).
                 try

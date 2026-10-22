@@ -2,10 +2,10 @@
     x:Class="Maktaby.Views.PerformanceMonitorWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:appwin="clr-namespace:Maktaby.Views.AppWindows"
     xmlns:controls="clr-namespace:Maktaby.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:loc="clr-namespace:Maktaby.Localization"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
     xmlns:vm="clr-namespace:Maktaby.ViewModels"
@@ -31,7 +31,10 @@
                 below takes over the star in that state so the footer stays pinned to the
                 window bottom in both states.
             -->
-            <RowDefinition x:Name="WindowsRow" Height="*" MinHeight="140" />
+            <RowDefinition
+                x:Name="WindowsRow"
+                Height="*"
+                MinHeight="140" />
             <RowDefinition Height="Auto" />
             <RowDefinition x:Name="BottomSpacerRow" Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -103,129 +106,182 @@
                 </Grid>
             </controls:CollapsibleGroupBox.HeaderContent>
             <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0">
-                    <TextBlock
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{loc:LocKey Perf.AppProcess}"
-                        ToolTip="{loc:LocKey Perf.PrivateWsTooltip}" />
-                    <StackPanel Margin="0,4,0,0" Orientation="Horizontal">
+                <!--
+                    The stat row sizes to its content (Auto columns) so the three tiles sit
+                    together instead of being spread across thirds of the window.
+                -->
+                <Grid
+                    Grid.Row="0"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="3">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <!--
+                        The stat row. GROUP comes first and is the primary number: it is the whole
+                        app group's footprint, which is what the window is really about. The other two
+                        are its parts, so they are visually subordinate. A hairline rule separates
+                        them instead of more spacing, which keeps the row compact.
+                    -->
+                    <Border
+                        Grid.Column="0"
+                        Padding="0,0,18,0"
+                        VerticalAlignment="Center"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,1,0">
+                        <StackPanel>
+                            <TextBlock
+                                FontSize="10"
+                                FontWeight="SemiBold"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="{loc:LocKey Perf.Group}"
+                                ToolTip="{loc:LocKey Perf.GroupTooltip}" />
+                            <StackPanel Margin="0,3,0,0" Orientation="Horizontal">
+                                <TextBlock
+                                    FontSize="22"
+                                    FontWeight="SemiBold"
+                                    Text="{Binding GroupMemoryMB, StringFormat={}{0} MB}"
+                                    ToolTip="{loc:LocKey Perf.GroupWsTooltip}" />
+                                <TextBlock
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding GroupCpu, StringFormat={}{0:0.0}% CPU}"
+                                    ToolTip="{loc:LocKey Perf.GroupCpuTooltip}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <Border
+                        Grid.Column="1"
+                        Padding="0,0,18,0"
+                        VerticalAlignment="Center"
+                        BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,1,0">
+                        <StackPanel>
+                            <TextBlock
+                                FontSize="10"
+                                Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                                Text="{loc:LocKey Perf.AppProcess}"
+                                ToolTip="{loc:LocKey Perf.PrivateWsTooltip}" />
+                            <StackPanel Margin="0,3,0,0" Orientation="Horizontal">
+                                <TextBlock
+                                    FontSize="18"
+                                    FontWeight="SemiBold"
+                                    Text="{Binding TotalMemoryMB, StringFormat={}{0} MB}"
+                                    ToolTip="{loc:LocKey Perf.PrivateWsTooltip2}" />
+                                <TextBlock
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center"
+                                    FontSize="11"
+                                    Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding TotalCpu, StringFormat={}{0:0.0}% CPU}"
+                                    ToolTip="{loc:LocKey Perf.CpuTooltip}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center">
                         <TextBlock
-                            FontSize="15"
-                            FontWeight="SemiBold"
-                            Text="{Binding TotalMemoryMB, StringFormat={}{0} MB}"
-                            ToolTip="{loc:LocKey Perf.PrivateWsTooltip2}" />
+                            FontSize="10"
+                            Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                            Text="{loc:LocKey Perf.WebView2}"
+                            ToolTip="{loc:LocKey Perf.WebView2Tooltip}" />
+                        <StackPanel Margin="0,3,0,0" Orientation="Horizontal">
+                            <TextBlock
+                                FontSize="18"
+                                FontWeight="SemiBold"
+                                Text="{Binding WebView2MemoryMB, StringFormat={}{0} MB}"
+                                ToolTip="{loc:LocKey Perf.WebView2WsTooltip}" />
+                            <TextBlock
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                FontSize="11"
+                                Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                Text="{Binding WebView2Cpu, StringFormat={}{0:0.0}% CPU}"
+                                ToolTip="{loc:LocKey Perf.WebView2CpuTooltip}" />
+                        </StackPanel>
                         <TextBlock
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Bottom"
-                            FontSize="11"
-                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                            Text="{Binding TotalCpu, StringFormat={}{0:0.0}% CPU}"
-                            ToolTip="{loc:LocKey Perf.CpuTooltip}" />
+                            Margin="0,2,0,0"
+                            FontSize="10.5"
+                            Foreground="{DynamicResource TextFillColorTertiaryBrush}"
+                            Text="{Binding WebView2ProcessCount, StringFormat={}{0} processes}"
+                            ToolTip="{loc:LocKey Perf.BrowserVsChild}" />
                     </StackPanel>
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{Binding TotalIo}"
-                        ToolTip="{loc:LocKey Perf.IOThumb}" />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding ManagedMemoryMB, StringFormat={}Managed heap: {0} MB}"
-                        ToolTip=".NET managed heap. If this stays flat while the total climbs, the growth is native (media, COM, graphics) rather than .NET objects." />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding WorkingSetMB, StringFormat={}Working set: {0} MB}"
-                        ToolTip="{loc:LocKey Perf.WorkingSetTooltip}" />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding TotalPrivateMB, StringFormat={}Private (commit): {0} MB}"
-                        ToolTip="{loc:LocKey Perf.CommitTooltip}" />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        ToolTip="{loc:LocKey Perf.HandlesTooltip}">
-                        <TextBlock.Text>
-                            <MultiBinding StringFormat="GDI: {0} · USER: {1}">
-                                <Binding Path="GdiHandles" />
-                                <Binding Path="UserHandles" />
-                            </MultiBinding>
-                        </TextBlock.Text>
-                    </TextBlock>
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Text="{Binding RenderTier}"
-                        ToolTip="{loc:LocKey Perf.TierTooltip}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Foreground" Value="{DynamicResource TextFillColorTertiaryBrush}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsSoftwareRendering}" Value="True">
-                                        <Setter Property="Foreground" Value="#EB5757" />
-                                        <Setter Property="FontWeight" Value="SemiBold" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </StackPanel>
-                <StackPanel Grid.Column="1" HorizontalAlignment="Center">
-                    <TextBlock
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{loc:LocKey Perf.WebView2}"
-                        ToolTip="{loc:LocKey Perf.WebView2Tooltip}" />
-                    <TextBlock
-                        Margin="0,4,0,0"
-                        FontSize="15"
-                        FontWeight="SemiBold"
-                        Text="{Binding WebView2MemoryMB, StringFormat={}{0} MB}"
-                        ToolTip="{loc:LocKey Perf.WebView2WsTooltip}" />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{Binding WebView2Cpu, StringFormat={}{0:0.0}% CPU}"
-                        ToolTip="{loc:LocKey Perf.WebView2CpuTooltip}" />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorTertiaryBrush}"
-                        Text="{Binding WebView2ProcessCount, StringFormat={}{0} processes}"
-                        ToolTip="{loc:LocKey Perf.BrowserVsChild}" />
-                </StackPanel>
-                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-                    <TextBlock
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{loc:LocKey Perf.Group}"
-                        ToolTip="{loc:LocKey Perf.GroupTooltip}" />
-                    <TextBlock
-                        Margin="0,4,0,0"
-                        FontSize="15"
-                        FontWeight="SemiBold"
-                        Text="{Binding GroupMemoryMB, StringFormat={}{0} MB}"
-                        ToolTip="{loc:LocKey Perf.GroupWsTooltip}" />
-                    <TextBlock
-                        Margin="0,2,0,0"
-                        FontSize="11"
-                        Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                        Text="{Binding GroupCpu, StringFormat={}{0:0.0}% CPU}"
-                        ToolTip="{loc:LocKey Perf.GroupCpuTooltip}" />
-                </StackPanel>
+                </Grid>
+
+                <!--
+                    The secondary metrics as a wrapping row of chips. They used to be a column of
+                    full sentences, which made the section tall enough for the last line to be cut
+                    off; a chip is one short phrase and the wording lives in its tooltip, so the row
+                    wraps instead of truncating.
+                -->
+                <ItemsControl
+                    Grid.Row="1"
+                    Grid.Column="0"
+                    Grid.ColumnSpan="3"
+                    Margin="0,10,0,0"
+                    ItemsSource="{Binding Chips}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border
+                                Margin="0,0,6,6"
+                                Padding="8,3"
+                                CornerRadius="10">
+                                <!--
+                                    The colours live in the style, not as local values: a locally
+                                    set value outranks a style trigger, so the alarm would never
+                                    show.
+                                -->
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                                        <Style.Triggers>
+                                            <!--
+                                                The software-rendering fallback is the one thing in
+                                                this window that must not be missed.
+                                            -->
+                                            <DataTrigger Binding="{Binding IsAlarm}" Value="True">
+                                                <Setter Property="Background" Value="#33EB5757" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <TextBlock
+                                    FontSize="10.5"
+                                    Text="{Binding Text}"
+                                    ToolTip="{Binding ToolTip}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsAlarm}" Value="True">
+                                                    <Setter Property="Foreground" Value="#EB5757" />
+                                                    <Setter Property="FontWeight" Value="SemiBold" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Grid>
         </controls:CollapsibleGroupBox>
 
