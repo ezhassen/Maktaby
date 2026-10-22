@@ -132,6 +132,17 @@ public partial class App : Application
 
         Services.GetRequiredService<ISettingsService>().Load();
         Helpers.StartupProfiler.Mark("settings-loaded");
+
+        // Publish the dev-only widget data hook once, at startup. A native widget that talks
+        // to a live service can then serve generated data instead of refetching on every
+        // window open, every resume and every refresh tick. Off in release.
+#if DEBUG
+        Maktaby.WidgetSdk.WidgetDev.SimulateData = GlobalFeaturesSwitches.SimulateNativeWidgetData;
+        if (Maktaby.WidgetSdk.WidgetDev.SimulateData)
+        {
+            Log.Warning("Native widget data simulation is ON: widgets may serve generated data instead of calling live services.");
+        }
+#endif
         // Localization MUST be initialized before BuildTrayAndMenuItems: the tray XAML
         // resolves its {loc:LocKey …} extensions at parse time, and parsing before the
         // provider is attached caches "[key]" into every tray header for the session.
@@ -324,14 +335,6 @@ public partial class App : Application
         //StartHealthSnapshots, when logging
         if (GlobalFeaturesSwitches.EnableHealthSnapshots) StartHealthSnapshots();
 
-        // Publish the dev-only widget data hook once, at startup. A native widget that talks
-        // to a live service can then serve generated data instead of refetching on every
-        // window open, every resume and every refresh tick. Off in release.
-        Maktaby.WidgetSdk.WidgetDev.SimulateData = GlobalFeaturesSwitches.SimulateNativeWidgetData;
-        if (Maktaby.WidgetSdk.WidgetDev.SimulateData)
-        {
-            Log.Warning("Native widget data simulation is ON: widgets may serve generated data instead of calling live services.");
-        }
     }
 
     /// <summary>

@@ -50,5 +50,5 @@ public static class GlobalFeaturesSwitches
     /// widget's own code still has to opt in by checking the flag before touching the
     /// network. Off in release.
     /// </remarks>
-    public static bool SimulateNativeWidgetData { get; } = false;
+    public static bool SimulateNativeWidgetData { get; } = true;
 }

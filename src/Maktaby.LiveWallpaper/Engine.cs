@@ -1068,8 +1068,15 @@ public sealed class Engine : IDisposable
             thread.Start();
             _engineThread = thread;
         }
-        if (!_wakeReady.Wait(TimeSpan.FromSeconds(10)))
+        // The wait is for the thread to create its wake window - a few milliseconds. It runs on
+        // the calling thread, which is the UI thread when the engine is enabled at startup, so the
+        // bound is kept short: a thread that cannot get up in five seconds is not going to get up
+        // in ten, and the failure mode (no wallpaper) is better than a ten-second UI freeze.
+        if (!_wakeReady.Wait(TimeSpan.FromSeconds(5)))
+        {
+            Serilog.Log.Error("Live-wallpaper engine thread did not start within 5s");
             throw new InvalidOperationException("Live-wallpaper engine thread did not start.");
+        }
     }
 
     private void EngineThreadMain()

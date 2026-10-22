@@ -208,7 +208,16 @@ public sealed class PlaybackSupervisor : IDisposable
         _hookThread.Start();
         // Bounded wait: close the gap where a foreground switch could land before the hooks
         // exist. The initial Reevaluate below covers the state regardless.
-        _hookReady.Wait(TimeSpan.FromSeconds(10));
+        //
+        // The bound is short on purpose: this runs on the *subscribing* thread, which is the UI
+        // thread when the widget host is the first subscriber. The wait normally lasts a couple of
+        // milliseconds (the thread has to create a window and install three hooks); ten seconds
+        // would be a ten-second UI freeze for a failure that the code survives anyway - the
+        // evaluation below still runs and the supervisor falls back to pushed notifications.
+        if (!_hookReady.Wait(TimeSpan.FromSeconds(2)))
+        {
+            Serilog.Log.Warning("Playback event hooks were not ready within 2s; pause automation falls back to pushed notifications only");
+        }
         Reevaluate();
     }
 
