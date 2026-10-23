@@ -65,7 +65,7 @@ public partial class AboutView : AppWindows.AppFluentWindow
     private void ProjectLink_RequestNavigate(object sender, RequestNavigateEventArgs e)
     {
         // UseShellExecute=true is required on .NET Core+ so the default browser opens the URL.
-        Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        using (Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true })) { }
         e.Handled = true;
     }
 

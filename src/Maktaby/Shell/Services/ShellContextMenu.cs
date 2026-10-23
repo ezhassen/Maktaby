@@ -308,7 +308,7 @@ internal static class ShellContextMenu
                 Verb = "runas",
             };
 
-            Process.Start(psi);
+            using (Process.Start(psi)) { }
         }
         catch
         {

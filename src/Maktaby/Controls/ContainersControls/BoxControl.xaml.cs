@@ -842,16 +842,16 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
         {
             if (File.Exists(path) || Directory.Exists(path))
             {
-                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                using (Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })) { }
             }
             else if (path.Contains('!') && path.Contains('_'))
             {
                 // AppUserModelID fallback (UWP/Store app) when no PIDL was resolved.
-                Process.Start(new ProcessStartInfo("explorer.exe", "shell:appsFolder\\" + path) { UseShellExecute = true });
+                using (Process.Start(new ProcessStartInfo("explorer.exe", "shell:appsFolder\\" + path) { UseShellExecute = true })) { }
             }
             else
             {
-                Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true });
+                using (Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true })) { }
             }
         }
         catch

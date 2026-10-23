@@ -260,7 +260,7 @@ public partial class WidgetsListWindow : AppWindows.AppFluentWindow, INotifyProp
             if (vm.Kind == WidgetGalleryKind.Native)
             {
                 // Native widgets are code: open the folder instead of the HTML editor.
-                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(vm.FolderPath) { UseShellExecute = true }); }
+                try { using (System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(vm.FolderPath) { UseShellExecute = true })) { } }
                 catch (System.Exception ex)
                 {
                     await _dialogs.ShowMessageAsync(ex.Message, "Widgets");

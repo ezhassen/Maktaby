@@ -923,7 +923,7 @@ public partial class FolderPortalControl : WidgetControlBase
         if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return;
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+            using (System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true })) { }
         }
         catch { }
     }
@@ -1622,7 +1622,7 @@ public partial class FolderPortalControl : WidgetControlBase
         {
             var path = item.Path;
             if (File.Exists(path) || Directory.Exists(path))
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+                using (System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true })) { }
         }
         catch { }
     }
@@ -1884,7 +1884,7 @@ public partial class FolderPortalControl : WidgetControlBase
             if (string.IsNullOrWhiteSpace(path)) return;
             // Explorer /select opens parent and selects the item
             var psi = new System.Diagnostics.ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true };
-            System.Diagnostics.Process.Start(psi);
+            using (System.Diagnostics.Process.Start(psi)) { }
         }
         catch { }
     }

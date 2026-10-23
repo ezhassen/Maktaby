@@ -280,7 +280,7 @@ internal static class UpdateInstaller
                           + InstallerLanguageArgument();
         }
 
-        System.Diagnostics.Process.Start(psi);
+        using (System.Diagnostics.Process.Start(psi)) { }
     }
 
     /// <summary>

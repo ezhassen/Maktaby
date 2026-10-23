@@ -172,12 +172,12 @@ public static class Logging
 
     public static void OpenLogsFolderInExplorer()
     {
-        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
+        using (System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo()
         {
             FileName = LogsFolder,
             UseShellExecute = true,
             Verb = "open"
-        });
+        })) { }
     }
 
     /// <summary>
