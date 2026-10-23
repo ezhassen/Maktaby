@@ -129,6 +129,10 @@ public sealed class ImageRenderer : IWallpaperRenderer
                 DrawAndPresent(image, highQuality: true);
             }
             CaptureStatic();
+            // Static images are drawn once; release the full-resolution canvas now that the
+            // composed frame has been presented and the static fallback captured.
+            _canvas?.Dispose();
+            _canvas = null;
             loaded = true;
         }
     }
