@@ -6,6 +6,7 @@ Follow it to keep the architecture clean and the build green.
 ## Golden rules
 
 - **Never** use scripts to edit project files, use only the Edit Tool
+- **Never** auto-commit. Do not run `git commit` unless the user explicitly requests a commit.
 - **Never** put WPF, Win32 P/Invoke, or Shell COM code in the `Core` project folders.
   Core may only define models, interfaces, and pure-.NET service implementations.
 - **Never** scatter `DllImport` / P/Invoke declarations outside the shared `Maktaby.Native`

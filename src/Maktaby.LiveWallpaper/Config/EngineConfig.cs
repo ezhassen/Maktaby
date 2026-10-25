@@ -7,7 +7,7 @@ public enum FitMode { Fill, Fit, Stretch }
 
 public sealed class WallpaperAssignment
 {
-    /// <summary>Monitor device name (e.g. \\.\DISPLAY1); "*" applies to all monitors.</summary>
+    /// <summary>Monitor device name (e.g. \.\DISPLAY1); "*" applies to all monitors.</summary>
     public string Monitor { get; set; } = "*";
     public string Path { get; set; } = "";
 }
@@ -31,10 +31,9 @@ public sealed class EngineConfig
     public long PreloadMaxBytes { get; set; } = 100L * 1024 * 1024;
 
     /// <summary>
-    /// 
+    /// Get the wallpaper path for a specific monitor.
+    /// Returns the per-monitor assignment if set, otherwise falls back to the "*" (all monitors) assignment.
     /// </summary>
-    /// <param name="monitorDevice"></param>
-    /// <returns></returns>
     public string? WallpaperFor(string monitorDevice)
     {
         var exact = Wallpapers.FirstOrDefault(w => string.Equals(w.Monitor, monitorDevice, StringComparison.OrdinalIgnoreCase));
@@ -44,14 +43,27 @@ public sealed class EngineConfig
     }
 
     /// <summary>
-    /// Assign a wallpaper to a monitor
+    /// Assign a wallpaper to a monitor.
+    /// If monitorDevice is "*", sets the default for all monitors.
+    /// If a specific monitor device name, sets wallpaper only for that monitor.
     /// </summary>
-    /// <param name="monitorDevice">target monitor. * for all</param>
-    /// <param name="path"></param>
+    /// <param name="monitorDevice">target monitor. * for all, or a specific monitor device name.</param>
+    /// <param name="path">wallpaper file path (empty string to clear).</param>
     public void Assign(string monitorDevice, string path)
     {
+        if (string.IsNullOrWhiteSpace(monitorDevice)) return;
         var existing = Wallpapers.FirstOrDefault(w => string.Equals(w.Monitor, monitorDevice, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null) existing.Path = path;
-        else Wallpapers.Add(new WallpaperAssignment { Monitor = monitorDevice, Path = path });
+        if (existing is not null)
+        {
+            existing.Path = path;
+            // Remove any per-monitor entry that matches when clearing
+            if (string.IsNullOrWhiteSpace(path) && existing.Monitor != "*")
+                Wallpapers.Remove(existing);
+        }
+        else if (!string.IsNullOrWhiteSpace(path))
+        {
+            Wallpapers.Add(new WallpaperAssignment { Monitor = monitorDevice, Path = path });
+        }
+        // If assigning "" to "*", just leave the star entry as-is (it's the default)
     }
 }

@@ -41,6 +41,7 @@ public partial class TrayIconUI
     public event EventHandler? LiveWallpaperTogglePlayPause;
     public event EventHandler? LiveWallpaperChangeRequested;
     public event EventHandler? LiveWallpaperRemoveRequested;
+    public event EventHandler? LiveWallpaperPerMonitorRequested;
 
     public TrayIconUI()
     {
@@ -132,6 +133,21 @@ public partial class TrayIconUI
             : Localization.Loc.Get("Tray.Play");
         menuLiveWallpaperPlayPause.Icon = Application.Current.FindResource(liveWallpaper?.IsPlaying == true ? "ItemIcon_Pause" : "ItemIcon_Play") as object;
         menuLiveWallpaperRemove.IsEnabled = liveWallpaper?.HasWallpaper == true;
+        // Per-monitor entry only when more than one monitor is connected or there are
+        // presaved per-monitor assignments.
+        try
+        {
+            var monitorService = App.Services.GetService<Maktaby.Core.Interfaces.IMonitorService>();
+            int monitorCount = monitorService?.GetAllMonitors().Count ?? 0;
+            bool hasPresaved = liveWallpaper is not null
+                && App.Services.GetService<Maktaby.Core.Interfaces.ISettingsService>()?.UserSettings.LiveWallpaperAssignments is { Count: > 0 };
+            menuLiveWallpaperPerMonitor.Visibility = (monitorCount > 1 || hasPresaved)
+                ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch
+        {
+            menuLiveWallpaperPerMonitor.Visibility = Visibility.Visible;
+        }
     }
 
     #endregion
@@ -218,6 +234,11 @@ public partial class TrayIconUI
         LiveWallpaperRemoveRequested?.Invoke(this, EventArgs.Empty);
         // Menu stays open (StaysOpenOnClick), so refresh enabled state immediately.
         SyncMenuItemState_LiveWallPaperItems();
+    }
+
+    private void LiveWallpaperPerMonitor_Click(object sender, RoutedEventArgs e)
+    {
+        LiveWallpaperPerMonitorRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void PerformanceMonitor_Click(object sender, RoutedEventArgs e)

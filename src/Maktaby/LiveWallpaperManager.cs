@@ -4,6 +4,7 @@ using Maktaby.LiveWallpaper;
 using Maktaby.LiveWallpaper.Config;
 using Microsoft.Win32;
 using System.IO;
+using System.Linq;
 using System.Runtime.Versioning;
 using System.Windows;
 using System.Windows.Threading;
@@ -20,6 +21,8 @@ namespace Maktaby;
 [SupportedOSPlatform("windows10.0.14393")]
 public sealed class LiveWallpaperManager
 {
+    public event EventHandler? SettingsChanged;
+
     private readonly ISettingsService _settings;
     //private DispatcherTimer? _layoutDebounce;
 
@@ -55,6 +58,11 @@ public sealed class LiveWallpaperManager
     {
         get
         {
+            var assignments = _settings.UserSettings.LiveWallpaperAssignments;
+            if (assignments is { Count: > 0 } && assignments.Any(a => !string.IsNullOrWhiteSpace(a.Path) && File.Exists(a.Path)))
+            {
+                return true;
+            }
             var path = _settings.UserSettings.LiveWallpaperPath;
             return !string.IsNullOrWhiteSpace(path) && File.Exists(path);
         }
@@ -79,10 +87,25 @@ public sealed class LiveWallpaperManager
     {
         if (ShouldShow && _engine is null)
         {
-            WallpaperAssignment wallpaperAssignment = new WallpaperAssignment() { Monitor = "*", Path = _settings.UserSettings.LiveWallpaperPath! };
             var _config = new EngineConfig();
-            //_config.Wallpapers.Add(wallpaperAssignment);
-            _config.Assign("*", _settings.UserSettings.LiveWallpaperPath!);
+            // Per-monitor assignments take precedence; fall back to the single global path.
+            var assignments = _settings.UserSettings.LiveWallpaperAssignments;
+            if (assignments is { Count: > 0 })
+            {
+                foreach (var a in assignments)
+                {
+                    if (!string.IsNullOrWhiteSpace(a.Path) && File.Exists(a.Path))
+                    {
+                        _config.Assign(a.Monitor, a.Path);
+                    }
+                }
+            }
+            // Always carry the global default ("*") so monitors without an explicit
+            // per-monitor assignment still receive it, even when assignments exist.
+            if (!string.IsNullOrWhiteSpace(_settings.UserSettings.LiveWallpaperPath))
+            {
+                _config.Assign("*", _settings.UserSettings.LiveWallpaperPath!);
+            }
             _config.PreloadMaxBytes = PreloadCapBytes(_settings.UserSettings.LiveWallpaperPreloadMaxMB);
             _engine = new Engine(_config, SettingsService.AppDataDir);
         }
@@ -152,6 +175,7 @@ public sealed class LiveWallpaperManager
         _settings.UserSettings.LiveWallpaperEnabled = true;
         _settings.UserSettings.LiveWallpaperPlaying = true;
         _settings.Save();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
         //
         return RunExclusiveAsync(async () =>
         {
@@ -160,6 +184,54 @@ public sealed class LiveWallpaperManager
             if (eng is null) return;
             eng.Config.Assign("*", path);
             await eng.RefreshWallpapersAsync().ConfigureAwait(false);
+        });
+    }
+
+    public Task SetWallpaperForMonitorAsync(string monitorDevice, string path)
+    {
+        if (string.IsNullOrWhiteSpace(monitorDevice)) return Task.CompletedTask;
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return Task.CompletedTask;
+        // Update assignments list.
+        var list = new List<Maktaby.Settings.LiveWallpaperMonitorAssignment>(
+            _settings.UserSettings.LiveWallpaperAssignments ?? new List<Maktaby.Settings.LiveWallpaperMonitorAssignment>());
+        list.RemoveAll(a => string.Equals(a.Monitor, monitorDevice, StringComparison.OrdinalIgnoreCase));
+        list.Add(new Maktaby.Settings.LiveWallpaperMonitorAssignment { Monitor = monitorDevice, Path = path });
+        _settings.UserSettings.LiveWallpaperAssignments = list;
+        _settings.UserSettings.LiveWallpaperEnabled = true;
+        _settings.UserSettings.LiveWallpaperPlaying = true;
+        _settings.Save();
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
+        return RunExclusiveAsync(async () =>
+        {
+            if (!ShouldShow) return;
+            var eng = GetEngine();
+            if (eng is null) return;
+            await eng.EnsureEnabledAsync().ConfigureAwait(false);
+            await eng.ApplyUserSelectionAsync(path, monitorDevice).ConfigureAwait(false);
+        });
+    }
+
+    public Task ClearWallpaperForMonitorAsync(string monitorDevice)
+    {
+        if (string.IsNullOrWhiteSpace(monitorDevice)) return Task.CompletedTask;
+        var list = _settings.UserSettings.LiveWallpaperAssignments;
+        if (list is not null)
+        {
+            int removed = list.RemoveAll(a => string.Equals(a.Monitor, monitorDevice, StringComparison.OrdinalIgnoreCase));
+            if (removed > 0)
+            {
+                _settings.UserSettings.LiveWallpaperAssignments = list.Count > 0 ? list : null;
+                _settings.Save();
+                SettingsChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+        return RunExclusiveAsync(async () =>
+        {
+            if (!ShouldShow) return;
+            var eng = GetEngine();
+            if (eng is null) return;
+            await eng.EnsureEnabledAsync().ConfigureAwait(false);
+            await eng.ClearMonitorAsync(monitorDevice).ConfigureAwait(false);
         });
     }
 
@@ -233,16 +305,34 @@ public sealed class LiveWallpaperManager
     public Task RemoveAsync()
     {
         if (Serilog.Log.IsEnabled(Serilog.Events.LogEventLevel.Information))
-            Serilog.Log.Information("Live wallpaper removed");
+            Serilog.Log.Information("Live wallpaper removed (default)");
         _settings.UserSettings.LiveWallpaperPath = null;
+        // Also drop any "*" entry persisted in the per-monitor assignments.
+        try
+        {
+            var list = _settings.UserSettings.LiveWallpaperAssignments;
+            if (list is not null)
+            {
+                list.RemoveAll(a => string.Equals(a.Monitor, "*", StringComparison.OrdinalIgnoreCase));
+                _settings.UserSettings.LiveWallpaperAssignments = list.Count > 0 ? list : null;
+            }
+        }
+        catch { }
         _settings.Save();
-        //
+        SettingsChanged?.Invoke(this, EventArgs.Empty);
         return RunExclusiveAsync(async () =>
         {
-            var eng = _engine;
-            if (eng is null) return;
-            eng.Config.Assign("*", string.Empty);
-            await eng.DisableAsync().ConfigureAwait(false);
+            if (!ShouldShow)
+            {
+                var eng = _engine;
+                if (eng is not null) await eng.DisableAsync().ConfigureAwait(false);
+                return;
+            }
+            var eng2 = GetEngine();
+            if (eng2 is null) return;
+            await eng2.EnsureEnabledAsync().ConfigureAwait(false);
+            eng2.Config.Assign("*", "");
+            await eng2.RefreshWallpapersAsync().ConfigureAwait(false);
         });
     }
 

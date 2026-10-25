@@ -92,6 +92,12 @@
                     Header="{loc:LocKey Tray.Remove}"
                     Icon="{StaticResource ItemIcon_Delete}"
                     StaysOpenOnClick="True" />
+                <Separator />
+                <MenuItem
+                    x:Name="menuLiveWallpaperPerMonitor"
+                    Click="LiveWallpaperPerMonitor_Click"
+                    Header="{loc:LocKey Tray.LiveWallpaperPerMonitor}"
+                    Icon="{StaticResource ItemIcon_Gallery}" />
             </MenuItem>
             <MenuItem
                 x:Name="menu_theme"

@@ -1,4 +1,6 @@
 using System.ComponentModel;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Wpf.Ui.Appearance;
 
 namespace Maktaby.Settings;
@@ -167,6 +169,11 @@ public class UserSettings
     [Category("LiveWallpaper"), DefaultValue(null)]
     public string? LiveWallpaperPath { get; set; }
 
+    /// <summary>Per-monitor wallpaper assignments (monitor device name -> file path).</summary>
+    [Category("LiveWallpaper"), DefaultValue(null)]
+    [JsonConverter(typeof(LiveWallpaperAssignmentsConverter))]
+    public List<LiveWallpaperMonitorAssignment>? LiveWallpaperAssignments { get; set; }
+
     /// <summary>Master switch. When false all wallpaper windows are closed (settings kept).</summary>
     [Category("LiveWallpaper"), DefaultValue(true)]
     public bool LiveWallpaperEnabled { get; set; } = false;
@@ -209,3 +216,56 @@ public class UserSettings
 //    public string? BackColor { get; set; }
 //    public string? ForeColor { get; set; }
 //}
+
+public sealed class LiveWallpaperMonitorAssignment
+{
+    public string Monitor { get; set; } = string.Empty;
+    public string Path { get; set; } = string.Empty;
+}
+
+/// <summary>Reads both legacy (JSON string containing a dictionary) and new (array of objects) forms.</summary>
+public sealed class LiveWallpaperAssignmentsConverter : JsonConverter<List<LiveWallpaperMonitorAssignment>?>
+{
+    public override List<LiveWallpaperMonitorAssignment>? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType == JsonTokenType.Null) return null;
+
+        // Legacy: a JSON string holding a dictionary<string,string>.
+        if (reader.TokenType == JsonTokenType.String)
+        {
+            var json = reader.GetString();
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try
+            {
+                var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json, options);
+                if (dict is null) return null;
+                return dict.Select(kv => new LiveWallpaperMonitorAssignment { Monitor = kv.Key, Path = kv.Value }).ToList();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        if (reader.TokenType == JsonTokenType.StartArray)
+        {
+            var list = JsonSerializer.Deserialize<List<LiveWallpaperMonitorAssignment>>(ref reader, options);
+            return list;
+        }
+
+        if (reader.TokenType == JsonTokenType.StartObject)
+        {
+            var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(ref reader, options);
+            if (dict is null) return null;
+            return dict.Select(kv => new LiveWallpaperMonitorAssignment { Monitor = kv.Key, Path = kv.Value }).ToList();
+        }
+
+        return null;
+    }
+
+    public override void Write(Utf8JsonWriter writer, List<LiveWallpaperMonitorAssignment>? value, JsonSerializerOptions options)
+    {
+        if (value is null) { writer.WriteNullValue(); return; }
+        JsonSerializer.Serialize(writer, value, options);
+    }
+}

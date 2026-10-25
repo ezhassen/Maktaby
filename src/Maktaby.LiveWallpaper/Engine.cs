@@ -595,9 +595,33 @@ public sealed class Engine : IDisposable
     public Task ApplyUserSelectionAsync(string path, string monitorDevice = "*")
         => PostExclusiveAsync(() => ApplyUserSelectionCore(path, monitorDevice));
 
+    /// <summary>Clears the wallpaper for a single monitor (if connected) without re-applying
+    /// the others. Falls back to the "*" assignment when one exists.</summary>
+    public Task ClearMonitorAsync(string monitorDevice) => PostExclusiveAsync(() => ClearMonitorCore(monitorDevice));
+
+    private void ClearMonitorCore(string monitorDevice)
+    {
+        if (string.IsNullOrWhiteSpace(monitorDevice)) return;
+        _config.Assign(monitorDevice, "");
+        var monitor = MonitorTracker.Enumerate()
+            .FirstOrDefault(m => string.Equals(m.Device, monitorDevice, StringComparison.OrdinalIgnoreCase));
+        string? resolved = _config.WallpaperFor(monitorDevice);
+        if (monitor is not null && !string.IsNullOrWhiteSpace(resolved) &&
+            (File.Exists(resolved) || Directory.Exists(resolved)))
+        {
+            try { ApplyToMonitor(monitor, resolved); }
+            catch (Exception ex) { Serilog.Log.Error($"Clear fallback apply failed on {monitorDevice}", ex); }
+        }
+        else if (_windows.TryGetValue(monitorDevice, out var window))
+        {
+            try { window.Dispose(); } catch { }
+            _windows.TryRemove(monitorDevice, out _);
+        }
+        UpdatePauseSupervision();
+    }
+
     private void ApplyUserSelectionCore(string path, string monitorDevice = "*")
     {
-        bool anyApplied = false;
         foreach (var monitor in MonitorTracker.Enumerate())
         {
             if (monitorDevice != "*" && !string.Equals(monitor.Device, monitorDevice, StringComparison.OrdinalIgnoreCase))
@@ -605,18 +629,15 @@ public sealed class Engine : IDisposable
             try
             {
                 ApplyToMonitor(monitor, path);
-                anyApplied = true;
             }
             catch (Exception ex)
             {
                 Serilog.Log.Error($"Failed to apply {path} on {monitor.Device}", ex);
             }
         }
-        if (anyApplied)
-        {
-            _config.Assign(monitorDevice, path);
-            //ConfigStore.Save(_config);
-        }
+        // Assign even when no monitor is currently connected so a presaved assignment
+        // survives in the in-memory config (and the caller persists it to settings).
+        _config.Assign(monitorDevice, path);
         UpdatePauseSupervision();
     }
 
@@ -1261,7 +1282,17 @@ public sealed class Engine : IDisposable
             foreach (var monitor in MonitorTracker.Enumerate())
             {
                 var path = _config.WallpaperFor(monitor.Device);
-                if (path is null || (!File.Exists(path) && !Directory.Exists(path))) continue;
+                if (string.IsNullOrWhiteSpace(path) || (!File.Exists(path) && !Directory.Exists(path)))
+                {
+                    // No (valid) wallpaper for this monitor: tear down any live window so a
+                    // removed/cleared assignment actually stops showing instead of lingering.
+                    if (_windows.TryGetValue(monitor.Device, out var stale))
+                    {
+                        try { stale.Dispose(); } catch { }
+                        _windows.TryRemove(monitor.Device, out _);
+                    }
+                    continue;
+                }
                 try
                 {
                     ApplyToMonitor(monitor, path);

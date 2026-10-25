@@ -748,6 +748,44 @@ internal static class Win32Apis
     }
     }
 
+    /// <summary>Resolves a thumbnail (e.g. first frame of a video) as an HBITMAP, avoiding the
+    /// icon-only path that returns a generic file-type glyph.</summary>
+    public static IntPtr GetThumbnailBitmapForPath(string path, int size)
+    {
+        try
+        {
+            int createHr = Shell32.SHCreateItemFromParsingNameFactory(path, IntPtr.Zero, Shell32.IID_IShellItemImageFactory, out IShellItemImageFactory factory);
+            if (createHr != 0 || factory is null)
+            {
+                return IntPtr.Zero;
+            }
+            try
+            {
+                int edge = Math.Clamp(size, 16, 256);
+                var requested = new SIZE { Cx = edge, Cy = edge };
+                const uint SIIGBF_THUMBNAILONLY = 0x00000008;
+                const uint SIIGBF_BIGGERSIZEOK = 0x00000001;
+                if (factory.GetImage(requested, SIIGBF_THUMBNAILONLY | SIIGBF_BIGGERSIZEOK, out IntPtr hbmp) == 0 && hbmp != IntPtr.Zero)
+                {
+                    return hbmp;
+                }
+                if (factory.GetImage(requested, 0, out IntPtr thumb) == 0 && thumb != IntPtr.Zero)
+                {
+                    return thumb;
+                }
+                return IntPtr.Zero;
+            }
+            finally
+            {
+                try { Marshal.ReleaseComObject(factory); } catch { }
+            }
+        }
+        catch
+        {
+            return IntPtr.Zero;
+        }
+    }
+
     /// <summary>Resolves a stored (base64) absolute PIDL to a filesystem path when the item has one
     /// (e.g. a Start Menu <c>.lnk</c> shortcut). Returns <c>null</c> for pure virtual shell items.</summary>
     public static string? GetPathFromPidl(string base64)

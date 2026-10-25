@@ -1455,10 +1455,33 @@ public partial class App : Application
             var newFile = Maktaby.LiveWallpaper.WallpaperFilePicker.PickMedia();
             if (string.IsNullOrEmpty(newFile) || !File.Exists(newFile)) return;
             try { await Services.GetRequiredService<LiveWallpaperManager>().SetWallpaperAsync(newFile); } catch { }
+            _ = Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var w in Application.Current.Windows.OfType<Views.AppWindows.WallpaperPerMonitorWindow>())
+                    w.Reload();
+            });
         };
         tray.LiveWallpaperRemoveRequested += async (_, _) =>
         {
             try { await Services.GetRequiredService<LiveWallpaperManager>().RemoveAsync(); } catch { }
+            _ = Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var w in Application.Current.Windows.OfType<Views.AppWindows.WallpaperPerMonitorWindow>())
+                    w.Reload();
+            });
+        };
+        tray.LiveWallpaperPerMonitorRequested += (_, _) =>
+        {
+            Application.Current.Dispatcher.BeginInvoke(() =>
+            {
+                foreach (var w in Application.Current.Windows.OfType<Views.AppWindows.WallpaperPerMonitorWindow>())
+                {
+                    if (w.WindowState == WindowState.Minimized) w.WindowState = WindowState.Normal;
+                    w.Activate();
+                    return;
+                }
+                new Views.AppWindows.WallpaperPerMonitorWindow().Show();
+            });
         };
         tray.ResetRequested += async (_, _) =>
         {
