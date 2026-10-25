@@ -32,7 +32,7 @@ public interface ILoadingDialogService
     /// is skipped when the task faults. Not cancellable — the dialog has no Cancel button.
     /// Playback is paused during the dialog only when <paramref name="pausePlayback"/> is set.
     /// </summary>
-    Task<object?> ShowAsync(Func<Action<string>, Task<object?>> loadingTask, Action<object?>? afterFinished = null, bool pausePlayback = true);
+    Task<object?> ShowAsync(Func<Action<string>, Task<object?>> loadingTask, Action<object?>? afterFinished = null, bool pausePlayback = true, bool showActivated = true);
 
     /// <summary>
     /// Cancellable overload: the dialog shows a Cancel button and the task receives a
@@ -47,5 +47,5 @@ public interface ILoadingDialogService
         Func<Action<string>, CancellationToken, Task<object?>> loadingTask,
         Action<object?>? afterFinished,
         CancellationToken cancellationToken = default,
-        bool pausePlayback = false);
+        bool pausePlayback = false, bool showActivated = true);
 }

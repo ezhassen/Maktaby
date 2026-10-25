@@ -312,7 +312,7 @@ public partial class App : Application
             await manager.InitializeAsync();
             Helpers.StartupProfiler.Mark("desktop-init-done");
             return null;
-        }, pausePlayback: false);
+        }, pausePlayback: false, showActivated: false);
 
         Helpers.StartupProfiler.Mark("splash-closed");
 
@@ -1299,13 +1299,13 @@ public partial class App : Application
         var app = Application.Current;
         if (app != null)
         {
-    app.Resources["BoxBackground"] = palette.Back;
-    app.Resources["BoxForeground"] = palette.Fore;
-    app.Resources["BoxBorder"] = palette.Border;
-    app.Resources["BoxHeaderBackground"] = palette.HeaderBack;
-    app.Resources["BoxHeaderForeground"] = palette.HeaderFore;
-    app.Resources["BoxHoverBackground"] = palette.Hover;
-    app.Resources["BoxBorderThickness"] = palette.Thickness;
+            app.Resources["BoxBackground"] = palette.Back;
+            app.Resources["BoxForeground"] = palette.Fore;
+            app.Resources["BoxBorder"] = palette.Border;
+            app.Resources["BoxHeaderBackground"] = palette.HeaderBack;
+            app.Resources["BoxHeaderForeground"] = palette.HeaderFore;
+            app.Resources["BoxHoverBackground"] = palette.Hover;
+            app.Resources["BoxBorderThickness"] = palette.Thickness;
 
             foreach (var window in app.Windows.OfType<BoxContainerWindow>())
             {

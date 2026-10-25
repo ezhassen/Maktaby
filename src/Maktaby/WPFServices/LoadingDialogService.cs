@@ -43,15 +43,15 @@ public sealed class LoadingDialogService : ILoadingDialogService
         _wallpaper = wallpaper;
     }
 
-    public Task<object?> ShowAsync(Func<Action<string>, Task<object?>> loadingTask, Action<object?>? afterFinished = null, bool pausePlayback = true)
-        => RunAsync((report, _) => loadingTask(report), afterFinished, CancellationToken.None, canCancel: false, pausePlayback);
+    public Task<object?> ShowAsync(Func<Action<string>, Task<object?>> loadingTask, Action<object?>? afterFinished = null, bool pausePlayback = true, bool showActivated = true)
+        => RunAsync((report, _) => loadingTask(report), afterFinished, CancellationToken.None, canCancel: false, pausePlayback, showActivated: showActivated);
 
     public Task<object?> ShowAsync(
         Func<Action<string>, CancellationToken, Task<object?>> loadingTask,
         Action<object?>? afterFinished,
         CancellationToken cancellationToken = default,
-        bool pausePlayback = false)
-        => RunAsync(loadingTask, afterFinished, cancellationToken, canCancel: true, pausePlayback);
+        bool pausePlayback = false, bool showActivated = true)
+        => RunAsync(loadingTask, afterFinished, cancellationToken, canCancel: true, pausePlayback, showActivated: showActivated);
 
     /// <summary>
     /// Completes when the loading dialog has painted its first frame.
@@ -70,7 +70,7 @@ public sealed class LoadingDialogService : ILoadingDialogService
         Action<object?>? afterFinished,
         CancellationToken externalToken,
         bool canCancel,
-        bool pausePlayback)
+        bool pausePlayback, bool showActivated = true)
     {
         if (externalToken.IsCancellationRequested) return null;
         try
@@ -83,7 +83,7 @@ public sealed class LoadingDialogService : ILoadingDialogService
         }
         try
         {
-            return await RunCoreAsync(loadingTask, afterFinished, externalToken, canCancel, pausePlayback).ConfigureAwait(false);
+            return await RunCoreAsync(loadingTask, afterFinished, externalToken, canCancel, pausePlayback, showActivated: showActivated).ConfigureAwait(false);
         }
         finally
         {
@@ -96,7 +96,7 @@ public sealed class LoadingDialogService : ILoadingDialogService
         Action<object?>? afterFinished,
         CancellationToken externalToken,
         bool canCancel,
-        bool pausePlayback)
+        bool pausePlayback, bool showActivated = true)
     {
         var done = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(externalToken);
@@ -106,7 +106,10 @@ public sealed class LoadingDialogService : ILoadingDialogService
         await _dispatcher.InvokeAsync(() =>
         {
             Helpers.StartupProfiler.Mark("loading-dialog-dispatch-entered");
-            var dialog = new LoadingDialog();
+            var dialog = new LoadingDialog()
+            {
+                ShowActivated = showActivated
+            };
             Helpers.StartupProfiler.Mark("loading-dialog-created");
             if (canCancel)
                 dialog.EnableCancel(() => { try { cts.Cancel(); } catch { } });
