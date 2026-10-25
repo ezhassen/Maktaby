@@ -45,6 +45,7 @@ public partial class App : Application
     private bool _shellRecoveryPending;
     private bool _isSecondInstanceExit;
     private bool _isExiting;
+    private bool _windowsStartup;
     #endregion
 
     #region Startup
@@ -52,6 +53,9 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        _windowsStartup = e.Args.Any(a =>
+            a.Equals("/WindowsStartup", StringComparison.OrdinalIgnoreCase) ||
+            a.Equals("--windows-startup", StringComparison.OrdinalIgnoreCase));
         // Installer post-install flag: handle startup enable/disable before the
         // single-instance guard so the flag is honored even when another instance
         // is already running (the running instance isn't the one that should write
@@ -247,7 +251,7 @@ public partial class App : Application
                   catch { }
               };
 
-        await loading.ShowAsync(async report =>
+        Func<Action<string>, Task<object?>> initTask = async report =>
         {
             report(Localization.Loc.Get("Loading.Loading"));
             Helpers.StartupProfiler.Mark("splash-shown");
@@ -255,7 +259,7 @@ public partial class App : Application
             // Wait for the splash to actually be on screen, instead of a fixed 800 ms that was
             // only ever a guess at how long that takes. The cap is the safety net for a dialog
             // that never reports a paint.
-            await WaitForSplashPaint(loading);
+            if (!_windowsStartup) await WaitForSplashPaint(loading);
             Helpers.StartupProfiler.Mark("splash-painted");
 
             // The wallpaper engine is not interactive, so it does not have to hold the splash —
@@ -312,7 +316,16 @@ public partial class App : Application
             await manager.InitializeAsync();
             Helpers.StartupProfiler.Mark("desktop-init-done");
             return null;
-        }, pausePlayback: false, showActivated: false);
+        };
+
+        if (_windowsStartup)
+        {
+            await initTask(_ => { });
+        }
+        else
+        {
+            await loading.ShowAsync(initTask, pausePlayback: false, showActivated: false);
+        }
 
         Helpers.StartupProfiler.Mark("splash-closed");
 

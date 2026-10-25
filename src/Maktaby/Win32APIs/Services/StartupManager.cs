@@ -44,10 +44,11 @@ public static class StartupManager
                 object? value = key.GetValue(AppName);
                 if (value is string s)
                 {
-                    return string.Equals(
-                        s.Trim('"').Trim(),
-                        exe,
-                        StringComparison.OrdinalIgnoreCase);
+                    // The value may include a launch flag (e.g. /WindowsStartup); compare only
+                    // the executable token.
+                    var token = s.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+                    token = token.Trim('"').Trim();
+                    return string.Equals(token, exe, StringComparison.OrdinalIgnoreCase);
                 }
                 return false;
             }
@@ -66,7 +67,8 @@ public static class StartupManager
         if (string.IsNullOrEmpty(exe)) return;
 
         // Quote the path in case it contains spaces. The Run key treats the value as a command line.
-        string value = $"\"{exe}\"";
+        // Launch with /WindowsStartup so the app starts hidden (no loading dialog).
+        string value = $"\"{exe}\" /WindowsStartup";
 
         try
         {
