@@ -46,6 +46,7 @@ Everything runs from the system tray, persists your layout between sessions, and
  🎨 **Per-box appearance** | Override transparency, background, foreground, border color and thickness, and title-bar colors per box. Set sensible defaults globally.
  📏 **Icon size** | Shortcut icon size inside boxes (16–128 px). Pin a fixed size or let it follow the Windows desktop automatically.
  🖼️ **Hide desktop icons** | Toggle Windows desktop icons off/on from the tray menu for a clean look.
+ 📁 **Folder portal** | A box that syncs with chosen folder contents.
 
 ### Widgets
 
@@ -62,10 +63,11 @@ Everything runs from the system tray, persists your layout between sessions, and
 
 | | |
 | --- | --- |
- 🎬 **Live wallpaper** | Set any image, animated GIF or video as your desktop wallpaper. Renders across monitors with layout tracking.
- 🎞️ **Formats** | Still images, animated GIFs and video files (via the codecs the system provides).
+ 🎬 **Live wallpaper** | Set any image, animated GIF, video or a web page (html,css,js) as your desktop wallpaper. Renders across monitors with layout tracking.
+ 🎞️ **Formats** | Still images, animated GIFs, video files (via the codecs the system provides) and web pages (html,css,js).
  💾 **Preload cache** | Optionally keep up to 1024 MB of video / GIF bytes in shared RAM so playback starts instant on multi-monitor setups.
- ⏯️ **Play / pause / change / remove** | All managed from the tray menu and the Settings → Live Wallpaper panel.
+ ⏯️ **Play / pause / change / remove** | All managed from the tray menu and the Settings ? Live Wallpaper panel.
+ 🖥️ **Per-monitor assignment** | Assign a different wallpaper (or the default * for all monitors) to each display from the tray "Per Monitor..." dialog; assignments can be presaved for monitors that are not currently connected.
  🔇 **Auto-pause** | Pauses automatically when nothing is visible (all boxes hidden / suspended) to keep idle resource use low.
 
 ### System integration
@@ -99,7 +101,6 @@ Everything runs from the system tray, persists your layout between sessions, and
  🔍 **Debug desktop tree** | Diagnostic overlay that draws, at the cursor, the hit-test result, z-order and the surface window style/ex-style.
  💾 **Backups & restore** | Export a `.dbe1` bundle (layout, settings, UserWidgets) and restore it later. Reset is destructive and rebuilds from scratch.
  📐 **Snap overlay** | Live snap guide lines when dragging or resizing boxes.
- 📁 **Folder portal** | A box that opens a chosen folder in Explorer when activated.
 
 ## 📸 Screenshots
 
@@ -211,7 +212,7 @@ Full details: **[docs/releasing.md](docs/releasing.md)**.
 
 ## 🌐 Website
 
-The project page lives at **https://ezhassen.github.io/Maktaby/** and its source is [`website/`](website) — plain HTML, CSS and one dependency-free JS file, no build tooling. `website/build.ps1` stages it (merging the screenshots straight out of `.github/assets`, so this README and the site can never show different captures) and `.github/workflows/pages.yml` publishes the result on every push that touches `website/`, `.github/assets/` or the workflow itself.
+The project page lives at **<https://ezhassen.github.io/Maktaby/**> and its source is [`website/`](website) — plain HTML, CSS and one dependency-free JS file, no build tooling. `website/build.ps1` stages it (merging the screenshots straight out of `.github/assets`, so this README and the site can never show different captures) and `.github/workflows/pages.yml` publishes the result on every push that touches `website/`, `.github/assets/` or the workflow itself.
 
 To preview a change locally:
 
@@ -256,7 +257,7 @@ Maktaby stands on the shoulders of some excellent open-source projects. Thank yo
 
  Package | Version | Used for | Project
 | --- | --- | --- | --- |
- [Microsoft.Web.WebView2](https://github.com/MicrosoftEdge/WebView2Feedback) | 1.0.4258.31 | Chromium host for web widgets and HTML live wallpapers. Requires the [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) at runtime. | `Maktaby`, `Maktaby.Shared`, `Maktaby.LiveWallpaper`
+ [Microsoft.Web.WebView2](https://github.com/MicrosoftEdge/WebView2Feedback) | 1.0.4314.35 | Chromium host for web widgets and HTML live wallpapers. Requires the [Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) at runtime. | `Maktaby`, `Maktaby.Shared`, `Maktaby.LiveWallpaper`
 
 ### Graphics & rendering (live wallpaper engine)
 
