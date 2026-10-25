@@ -490,7 +490,7 @@ public partial class FolderPortalControl : WidgetControlBase
         if (!hasFolder) return;
 
         bool isIcons = box.FolderPortalViewMode == Core.Models.FolderPortalViewMode.Icons;
-        IconsScroll.Visibility = isIcons ? Visibility.Visible : Visibility.Collapsed;
+        if (IconsScroll is not null) IconsScroll.Visibility = isIcons ? Visibility.Visible : Visibility.Collapsed;
         IconsSortBar.Visibility = isIcons ? Visibility.Visible : Visibility.Collapsed;
         DetailsGrid.Visibility = isIcons ? Visibility.Collapsed : Visibility.Visible;
         BackButton.IsEnabled = !box.IsAtRoot;
@@ -506,7 +506,7 @@ public partial class FolderPortalControl : WidgetControlBase
     public void UpdateChrome(bool show)
     {
         if (this.DataContext is null) return;
-        IconsScroll.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
+        if (IconsScroll is not null) IconsScroll.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
         DetailsGrid.VerticalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
         DetailsGrid.HorizontalScrollBarVisibility = show ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden;
     }
@@ -590,6 +590,8 @@ public partial class FolderPortalControl : WidgetControlBase
         UpdateView();
         if (Window.GetWindow(this) is BoxContainerWindow bcw) bcw.ManageFolderWatcher();
     }
+
+    private ScrollViewer? IconsScroll => IconsList?.ScrollViewerHost;
 
     private void ToggleView_Click(object sender, RoutedEventArgs e)
     {
@@ -1431,7 +1433,7 @@ public partial class FolderPortalControl : WidgetControlBase
             panel.BringIndexIntoView(index);
             IconsList.UpdateLayout();
         }
-        var cp = IconsList.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
+        var cp = IconsList.ItemsControl.ItemContainerGenerator.ContainerFromIndex(index) as FrameworkElement;
         var border = (cp?.FindName("ItemBorder") as Border) ?? FindVisualChild<Border>(cp);
         border?.Focus();
     }

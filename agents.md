@@ -387,10 +387,6 @@ WinEvent was delivered twice and every evaluation walked all top-level windows t
   surrounding `try/catch`/`finally` and land on the dispatcher. `StreamRemainingContainersAsync`
   is typed this way for exactly that reason.
 
-## VirtualizingIconPanel
-
-- `Controls/VirtualizingIconPanel.cs` is a custom `VirtualizingPanel` + `IScrollInfo` for the Icons view (`ItemWidth`, `ItemHeight`, `HorizontalSpacing`, `VerticalSpacing`, `CacheRows`). It was created to virtualize the wrapping icon grid but currently has unresolved layout issues (on load `MeasureOverride` returned `PositiveInfinity` → `InvalidOperationException`; icons disappearing; high CPU/memory even for small collections; `ScrollViewer` not syncing and affecting `DetailsGrid` scrolling). **Icons view currently uses the simple `WrapPanel` (`FolderPortalControl.xaml:152` `ItemsControl` + `WrapPanel`) which works reliably.** Keep `VirtualizingIconPanel.cs` (and `IconContainer` `Controls/IconContainer.xaml`) for future work — do not delete — but do not switch Icons back to it without fixing measure/scroll and verifying with `dotnet build` + manual toggle Icons/Details.
-
 ## Known issues
 
 - **`BoxContainerWindow` custom tab-drag** (moving a box tab between containers) has two unfixed bugs:

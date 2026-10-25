@@ -7,6 +7,12 @@ using System.Windows.Media;
 
 namespace Maktaby.Controls;
 
+/// <summary>
+/// A virtualizing wrapping panel. MUST be used as the ItemsPanel of an ItemsControl whose
+/// template contains a ScrollViewer (see <see cref="VirtualizingItemsControl"/>), NOT placed
+/// inside an outer &lt;ScrollViewer&gt;: the panel implements IScrollInfo and must be the
+/// ScrollViewer's direct content for logical scrolling/virtualization to work.
+/// </summary>
 public sealed class VirtualizingIconPanel :
     VirtualizingPanel,
     IScrollInfo
@@ -657,11 +663,20 @@ public sealed class VirtualizingIconPanel :
         if (count <= 0)
             return;
 
-        _generator.Remove(
-            new GeneratorPosition(
-                childIndex,
-                0),
-            count);
+        try
+        {
+            _generator.Remove(
+                new GeneratorPosition(
+                    childIndex,
+                    0),
+                count);
+        }
+        catch
+        {
+            // Drop stale references so the next measure rebuilds from a clean state.
+            _generator = null;
+            _owner = null;
+        }
 
         RemoveInternalChildRange(
             childIndex,
@@ -679,9 +694,21 @@ public sealed class VirtualizingIconPanel :
 
         if (_generator != null)
         {
-            _generator.Remove(
-                new GeneratorPosition(0, 0),
-                InternalChildren.Count);
+            try
+            {
+                _generator.RemoveAll();
+                //_generator.Remove(
+                //    new GeneratorPosition(0, 0),
+                //    InternalChildren.Count);
+            }
+            catch
+            {
+                // The generator can be in a transient state during folder navigation
+                // (automation peers referencing stale items). Drop the stale references
+                // so EnsureOwner() re-acquires a fresh generator on the next measure.
+                _generator = null;
+                _owner = null;
+            }
         }
 
         RemoveInternalChildRange(
