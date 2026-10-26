@@ -18,6 +18,8 @@ using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Shapes;
 using System.Windows.Threading;
 
 namespace Maktaby.Controls.ContainersControls;
@@ -73,6 +75,10 @@ public partial class BoxControl : WidgetControlBase
     private bool _marqueeActive;
     private Point _marqueeStart;
     private HashSet<BoxItemViewModel>? _marqueeBase;
+    private BoxItemViewModel? _openWithTarget;
+    private BoxItemViewModel? _deleteTarget;
+    private Border? _openWithBorder;
+    private bool _deleteParticlesPlayed;
 
     private readonly ItemRenameService _renameService = new();
 
@@ -350,8 +356,14 @@ public partial class BoxControl : WidgetControlBase
             return;
         }
 
-        if (e.LeftButton != MouseButtonState.Pressed || _dragging)
+        if (e.LeftButton != MouseButtonState.Pressed)
         {
+            return;
+        }
+
+        if (_dragging)
+        {
+            _suppressNextContextMenu = true;
             return;
         }
 
@@ -571,6 +583,7 @@ public partial class BoxControl : WidgetControlBase
         {
             return;
         }
+        _suppressNextContextMenu = false;
 
         // When a modifier such as Alt is held, the key arrives as a system key: e.Key is Key.System and
         // the real key lives in e.SystemKey. Normalise so Alt+Enter (properties) and friends are recognised.
@@ -789,8 +802,154 @@ public partial class BoxControl : WidgetControlBase
         return null;
     }
 
+    private static bool IsRecycleBin(Maktaby.Core.Models.BoxItem item)
+    {
+        if (item is null) return false;
+        if (!string.IsNullOrEmpty(item.Pidl) && item.Pidl.Contains("645FF040", StringComparison.OrdinalIgnoreCase)) return true;
+        if (!string.IsNullOrEmpty(item.Path) && item.Path.Contains("645FF040", StringComparison.OrdinalIgnoreCase)) return true;
+        return (item.DisplayName ?? "").IndexOf("Recycle", StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private static bool IsOpenable(Maktaby.Core.Models.BoxItem item)
+    {
+        if (item is null) return false;
+        if (!string.IsNullOrEmpty(item.Pidl)) return true;
+        if (string.IsNullOrEmpty(item.Path)) return false;
+        if (Directory.Exists(item.Path)) return true;
+        if (File.Exists(item.Path)) return true;
+        return false;
+    }
+
+    private static void SetOpenHighlight(Border border, bool on)
+    {
+        try
+        {
+            var transform = border.RenderTransform as ScaleTransform;
+            if (transform is null)
+            {
+                transform = new ScaleTransform(1, 1, border.ActualWidth / 2, border.ActualHeight / 2);
+                border.RenderTransform = transform;
+            }
+            var to = on ? 1.2 : 1.0;
+            var animX = new DoubleAnimation(transform.ScaleX, to, TimeSpan.FromMilliseconds(150));
+            var animY = new DoubleAnimation(transform.ScaleY, to, TimeSpan.FromMilliseconds(150));
+            transform.BeginAnimation(ScaleTransform.ScaleXProperty, animX);
+            transform.BeginAnimation(ScaleTransform.ScaleYProperty, animY);
+        }
+        catch { }
+    }
+
+    private static void SpawnDeleteParticles(Border border)
+    {
+        try
+        {
+            var layer = AdornerLayer.GetAdornerLayer(border);
+            if (layer is null) return;
+            var adorner = new ParticleAdorner(border, Colors.Red);
+            layer.Add(adorner);
+            adorner.Burst();
+        }
+        catch { }
+    }
+
+    private static void SpawnParticles(Border border)
+    {
+        try
+        {
+            var layer = AdornerLayer.GetAdornerLayer(border);
+            if (layer is null) return;
+            var adorner = new ParticleAdorner(border);
+            layer.Add(adorner);
+            adorner.Burst();
+        }
+        catch { }
+    }
+
+    private static void PlayOpenBonus(Border border)
+    {
+        try
+        {
+            var transform = border.RenderTransform as ScaleTransform;
+            if (transform is null)
+            {
+                transform = new ScaleTransform(1, 1, border.ActualWidth / 2, border.ActualHeight / 2);
+                border.RenderTransform = transform;
+            }
+            var upX = new DoubleAnimation(transform.ScaleX, 1.35, TimeSpan.FromMilliseconds(120));
+            var upY = new DoubleAnimation(transform.ScaleY, 1.35, TimeSpan.FromMilliseconds(120));
+            transform.BeginAnimation(ScaleTransform.ScaleXProperty, upX);
+            transform.BeginAnimation(ScaleTransform.ScaleYProperty, upY);
+            var downX = new DoubleAnimation(1.35, 1.0, TimeSpan.FromMilliseconds(180)) { BeginTime = TimeSpan.FromMilliseconds(120) };
+            var downY = new DoubleAnimation(1.35, 1.0, TimeSpan.FromMilliseconds(180)) { BeginTime = TimeSpan.FromMilliseconds(120) };
+            transform.BeginAnimation(ScaleTransform.ScaleXProperty, downX);
+            transform.BeginAnimation(ScaleTransform.ScaleYProperty, downY);
+        }
+        catch { }
+    }
+
+    private sealed class ParticleAdorner : Adorner
+    {
+        private readonly Canvas _canvas = new();
+        private readonly List<Ellipse> _particles = new();
+        private readonly Color _color;
+
+        public ParticleAdorner(UIElement adorned, Color color = default) : base(adorned)
+        {
+            _color = color == default ? Colors.Gold : color;
+            IsHitTestVisible = false;
+            AddVisualChild(_canvas);
+            AddLogicalChild(_canvas);
+        }
+
+        public void Burst()
+        {
+            _canvas.Children.Clear();
+            _particles.Clear();
+            double w = AdornedElement.RenderSize.Width;
+            double h = AdornedElement.RenderSize.Height;
+            var center = new Point(w / 2, h / 2);
+            for (int i = 0; i < 8; i++)
+            {
+                var e = new Ellipse { Width = 4, Height = 4, Fill = new SolidColorBrush(_color), Opacity = 1 };
+                Canvas.SetLeft(e, center.X);
+                Canvas.SetTop(e, center.Y);
+                _canvas.Children.Add(e);
+                _particles.Add(e);
+
+                double angle = i * Math.PI * 2 / 8;
+                double dx = Math.Cos(angle) * 28;
+                double dy = Math.Sin(angle) * 28;
+                var ax = new DoubleAnimation(0, dx, TimeSpan.FromMilliseconds(350));
+                var ay = new DoubleAnimation(0, dy, TimeSpan.FromMilliseconds(350));
+                var ao = new DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(350));
+                var t = new TranslateTransform();
+                e.RenderTransform = t;
+                t.BeginAnimation(TranslateTransform.XProperty, ax);
+                t.BeginAnimation(TranslateTransform.YProperty, ay);
+                e.BeginAnimation(UIElement.OpacityProperty, ao);
+            }
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                var layer = AdornerLayer.GetAdornerLayer(AdornedElement);
+                layer?.Remove(this);
+            };
+            timer.Start();
+        }
+
+        protected override int VisualChildrenCount => 1;
+        protected override Visual GetVisualChild(int index) => _canvas;
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            _canvas.Arrange(new Rect(finalSize));
+            return finalSize;
+        }
+    }
+
     private static void FocusItem(Border? border)
     {
+        _suppressNextContextMenu = false;
         if (border is null)
         {
             return;
@@ -806,6 +965,7 @@ public partial class BoxControl : WidgetControlBase
 
     private void ShowProperties(BoxItemViewModel vm)
     {
+        _suppressNextContextMenu = false;
         var window = Window.GetWindow(this);
         IntPtr hwnd = window != null ? new System.Windows.Interop.WindowInteropHelper(window).Handle : IntPtr.Zero;
 
@@ -814,8 +974,33 @@ public partial class BoxControl : WidgetControlBase
         Win32Apis.ShowProperties(hwnd, path, pidl);
     }
 
+    private static void OpenWith(BoxItemViewModel target, IEnumerable<string>? sourcePaths = null)
+    {
+        _suppressNextContextMenu = false;
+        var path = target?.Model?.Path;
+        if (string.IsNullOrEmpty(path)) return;
+        try
+        {
+            var psi = new ProcessStartInfo(path) { UseShellExecute = true };
+            if (sourcePaths is not null)
+            {
+                var args = string.Join(" ", sourcePaths.Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => $"\"{p}\""));
+                if (!string.IsNullOrWhiteSpace(args))
+                {
+                    psi.Arguments = args;
+                }
+            }
+            using (Process.Start(psi)) { }
+        }
+        catch
+        {
+            // Best-effort; ignore failures.
+        }
+    }
+
     private static void OpenItem(BoxItemViewModel item)
     {
+        _suppressNextContextMenu = false;
         _lastOpenUtc = DateTime.UtcNow;
         item.IsSelected = false;
         if (!string.IsNullOrEmpty(item.Model.Pidl))
@@ -869,6 +1054,7 @@ public partial class BoxControl : WidgetControlBase
     {
         // Let our own container/tab drag payloads bubble up to the owning window (which handles the
         // highlight and the merge/move). Everything else is an item/file drop handled here.
+        _suppressNextContextMenu = true;
         if (e.Data.GetDataPresent(DndFormats.SourceContainer))
         {
             StopDragAutoScroll();
@@ -885,6 +1071,59 @@ public partial class BoxControl : WidgetControlBase
             _hasDragPoint = true;
             RefreshDropIndicatorForPoint(_lastDragPoint);
             StartDragAutoScroll();
+
+            // "Open with" hotspot: a centered square (half the icon) of an openable item.
+            var previousBorder = _openWithBorder;
+            var previousOpenWith = _openWithTarget;
+            _openWithTarget = null;
+            _openWithBorder = null;
+            bool hotspotHit = false;
+            if (e.OriginalSource is DependencyObject src)
+            {
+                var border = FindItemBorder(src);
+                if (border?.DataContext is BoxItemViewModel vm && (IsOpenable(vm.Model) || IsRecycleBin(vm.Model)))
+                {
+                    var pos = e.GetPosition(border);
+                    double w = border.ActualWidth;
+                    double h = border.ActualHeight;
+                    double size = Math.Min(w, h) / 2;
+                    double left = (w - size) / 2;
+                    double top = (h - size) / 2;
+                    if (pos.X >= left && pos.X <= left + size && pos.Y >= top && pos.Y <= top + size)
+                    {
+                        hotspotHit = true;
+                        RemoveDropIndicator();
+                        if (IsRecycleBin(vm.Model))
+                        {
+                            _deleteTarget = vm;
+                            _openWithTarget = null;
+                            _openWithBorder = border;
+                            if (!_deleteParticlesPlayed)
+                            {
+                                SetOpenHighlight(border, true);
+                                SpawnDeleteParticles(border);
+                                _deleteParticlesPlayed = true;
+                            }
+                        }
+                        else
+                        {
+                            _openWithTarget = vm;
+                            _openWithBorder = border;
+                            if (!ReferenceEquals(previousOpenWith, vm))
+                            {
+                                SetOpenHighlight(border, true);
+                                SpawnParticles(border);
+                            }
+                        }
+                    }
+                }
+            }
+            if (!hotspotHit && previousBorder is not null)
+            {
+                SetOpenHighlight(previousBorder, false);
+                _deleteParticlesPlayed = false;
+            }
+
             e.Effects = e.Data.GetDataPresent(DndFormats.BoxItems) ? DragDropEffects.Move : DropHelper.GetEffect(e);
             e.Handled = true;
             return;
@@ -1021,6 +1260,7 @@ public partial class BoxControl : WidgetControlBase
 
     private void BoxControl_DragLeave(object sender, DragEventArgs e)
     {
+        _suppressNextContextMenu = false;
         StopDragAutoScroll();
         RemoveDropIndicator();
         _insertIndex = -1;
@@ -1028,6 +1268,7 @@ public partial class BoxControl : WidgetControlBase
 
     private async void BoxControl_Drop(object sender, DragEventArgs e)
     {
+        _suppressNextContextMenu = false;
         if (e.Data.GetDataPresent(DndFormats.SourceContainer))
         {
             // Handled by the owning BoxContainerWindow's Drop handler.
@@ -1039,6 +1280,68 @@ public partial class BoxControl : WidgetControlBase
         if (DataContext is not BoxViewModel targetBox)
         {
             StopDragAutoScroll();
+            return;
+        }
+
+        // Recycle-bin hotspot: delete (move to recycle bin) the dragged items.
+        if (_deleteTarget is { } deleteTarget)
+        {
+            _deleteTarget = null;
+            _openWithBorder = null;
+            _deleteParticlesPlayed = false;
+
+            var sources = new List<string>();
+            if (e.Data.GetData(DndFormats.BoxItems) is List<BoxItemViewModel> boxItems)
+            {
+                sources.AddRange(boxItems.Select(i => i.Model?.Path).Where(p => !string.IsNullOrWhiteSpace(p))!);
+            }
+            else if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
+            {
+                sources.AddRange(files);
+            }
+
+            if (sources.Count > 0)
+            {
+                try
+                {
+                    var fileOps = App.Services.GetRequiredService<IFileOperationService>();
+                    _ = fileOps.DeleteAsync(sources, permanent: false);
+                }
+                catch { }
+            }
+
+            if (_openWithBorder is { } b) PlayOpenBonus(b);
+            StopDragAutoScroll();
+            RemoveDropIndicator();
+            _insertIndex = -1;
+            e.Handled = true;
+            return;
+        }
+
+        // "Open with" hotspot: open the target item instead of dropping/moving.
+        if (_openWithTarget is { } openTarget)
+        {
+            _openWithTarget = null;
+
+            var sources = new List<string>();
+            if (e.Data.GetData(DndFormats.BoxItems) is List<BoxItemViewModel> boxItems)
+            {
+                sources.AddRange(boxItems.Select(i => i.Model?.Path).Where(p => !string.IsNullOrWhiteSpace(p))!);
+            }
+            else if (e.Data.GetData(DataFormats.FileDrop) is string[] files)
+            {
+                sources.AddRange(files);
+            }
+
+            OpenWith(openTarget, sources);
+            if (_openWithBorder is { } b)
+            {
+                PlayOpenBonus(b);
+            }
+            StopDragAutoScroll();
+            RemoveDropIndicator();
+            _insertIndex = -1;
+            e.Handled = true;
             return;
         }
 
@@ -1762,6 +2065,14 @@ public partial class BoxControl : WidgetControlBase
     /// </summary>
     private void BoxControl_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
+        // While dragging, right-click only cancels the drag; never open the menu.
+        if (_dragging || _marqueeActive)
+        {
+            _suppressNextContextMenu = true;
+            DisarmDrag("right-click-cancel");
+            e.Handled = true;
+            return;
+        }
         if (Box is not { } box || Host is null) { return; }
         if (IsOverItem(e.OriginalSource as DependencyObject)) { return; }
 
@@ -1891,6 +2202,13 @@ public partial class BoxControl : WidgetControlBase
 
     private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (_dragging || _marqueeActive)
+        {
+            _suppressNextContextMenu = true;
+            DisarmDrag("right-click-cancel");
+            e.Handled = true;
+            return;
+        }
         if (_suppressNextContextMenu)
         {
             _suppressNextContextMenu = false;
@@ -1930,6 +2248,13 @@ public partial class BoxControl : WidgetControlBase
 
     private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
+        if (_dragging || _marqueeActive)
+        {
+            _suppressNextContextMenu = true;
+            DisarmDrag("right-click-cancel");
+            e.Handled = true;
+            return;
+        }
         DisarmDrag("context-menu");
 
         // The menu is modal over the tile, so a tooltip still up would float above it or hang around

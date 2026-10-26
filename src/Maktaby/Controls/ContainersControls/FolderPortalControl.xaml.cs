@@ -1690,6 +1690,12 @@ public partial class FolderPortalControl : WidgetControlBase
     /// </summary>
     private void FolderPortal_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (_dragging)
+        {
+            DisarmDrag();
+            e.Handled = true;
+            return;
+        }
         if (Box is not { } box || !box.HasFolder) { return; }
         if (IsOverFolderItem(e.OriginalSource as DependencyObject)) { return; }
 
