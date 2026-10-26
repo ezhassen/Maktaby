@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.IO;
+using System.Windows;
 using System.Linq;
 
 namespace Maktaby.ViewModels;
@@ -1246,7 +1247,17 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>Adds an item to the underlying model; the <see cref="Items"/> view collection mirrors it.</summary>
-    public void AddItem(BoxItem item) => _box.Items.Add(item);
+    public void AddItem(BoxItem item)
+    {
+        if (Application.Current?.Dispatcher is { } d && !d.CheckAccess())
+        {
+            d.Invoke(() => _box.Items.Add(item));
+        }
+        else
+        {
+            _box.Items.Add(item);
+        }
+    }
 
     /// <summary>Inserts an item at <paramref name="index"/> in the underlying model (used for drag-reordering).</summary>
     public void InsertItem(BoxItem item, int index)
@@ -1262,11 +1273,28 @@ public sealed class BoxViewModel : ViewModelBase, IDisposable
             index = count;
         }
 
-        _box.Items.Insert(index, item);
+        if (Application.Current?.Dispatcher is { } d && !d.CheckAccess())
+        {
+            d.Invoke(() => _box.Items.Insert(index, item));
+        }
+        else
+        {
+            _box.Items.Insert(index, item);
+        }
     }
 
     /// <summary>Removes an item from the underlying model; the <see cref="Items"/> view collection mirrors it.</summary>
-    public void RemoveItem(BoxItem item) => _box.Items.Remove(item);
+    public void RemoveItem(BoxItem item)
+    {
+        if (Application.Current?.Dispatcher is { } d && !d.CheckAccess())
+        {
+            d.Invoke(() => _box.Items.Remove(item));
+        }
+        else
+        {
+            _box.Items.Remove(item);
+        }
+    }
 
     private void OnBoxItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {

@@ -1623,7 +1623,9 @@ public partial class FolderPortalControl : WidgetControlBase
         try
         {
             var path = item.Path;
-            if (File.Exists(path) || Directory.Exists(path))
+            if (Directory.Exists(path))
+                using (System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true })) { }
+            else if (File.Exists(path))
                 using (System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true })) { }
         }
         catch { }

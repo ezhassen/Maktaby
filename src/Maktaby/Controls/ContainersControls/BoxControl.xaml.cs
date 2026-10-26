@@ -840,7 +840,11 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
 
         try
         {
-            if (File.Exists(path) || Directory.Exists(path))
+            if (Directory.Exists(path))
+            {
+                using (Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true })) { }
+            }
+            else if (File.Exists(path))
             {
                 using (Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })) { }
             }

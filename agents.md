@@ -387,6 +387,10 @@ WinEvent was delivered twice and every evaluation walked all top-level windows t
   surrounding `try/catch`/`finally` and land on the dispatcher. `StreamRemainingContainersAsync`
   is typed this way for exactly that reason.
 
+## Debugging
+
+- Logs are written to `%tmp%\Maktaby` (see `Logging`/Serilog configuration). Check there for runtime issues.
+
 ## Known issues
 
 - **`BoxContainerWindow` custom tab-drag** (moving a box tab between containers) has two unfixed bugs:

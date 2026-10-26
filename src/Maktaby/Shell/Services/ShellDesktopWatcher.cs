@@ -235,8 +235,18 @@ public sealed class ShellDesktopWatcher : IShellWatcherService, IDisposable
             case (int)SHCNE.RENAMEITEM:
             case (int)SHCNE.RENAMEFOLDER:
                 var pidl2 = Marshal.ReadIntPtr(pppidl, IntPtr.Size);
-                RaiseDeleted(Resolve(pidl1));
-                RaiseCreated(Resolve(pidl2));
+                // Some shells report a freshly created folder as a rename with a null
+                // destination PIDL. Treat that as a creation rather than deleting the
+                // (just-added) item.
+                if (pidl2 == IntPtr.Zero)
+                {
+                    RaiseCreated(Resolve(pidl1));
+                }
+                else
+                {
+                    RaiseDeleted(Resolve(pidl1));
+                    RaiseCreated(Resolve(pidl2));
+                }
                 break;
         }
     }

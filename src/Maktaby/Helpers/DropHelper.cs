@@ -179,6 +179,7 @@ internal static class DropHelper
         var fileOps = App.Services.GetRequiredService<IFileOperationService>();
         var watcher = App.Services.GetRequiredService<IShellWatcherService>();
         var entries = (await GetShellItemsAsync(e)).ToArray();
+        var dropped = new List<BoxItem>();
         watcher.Pause();
         try
         {
@@ -210,18 +211,21 @@ internal static class DropHelper
             }
 
             int at = insertIndex < 0 ? -1 : Math.Min(insertIndex, target.Items.Count);
+            var added = new List<BoxItem>();
             foreach (var (bi, _) in resolvedItems.OrderBy(x => x.origIdx))
             {
                 if (bi is null) continue;
+                Serilog.Log.Information("DropHelper: adding {Path}", bi.Path);
                 if (at >= 0) { target.InsertItem(bi, at); at++; }
                 else target.AddItem(bi);
+                dropped.Add(bi);
             }
         }
         finally { watcher.Resume(); }
 
         if (e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(ShellIdListFormat))
             e.Handled = true;
-        return null;
+        return dropped;
     }
 
     private static IEnumerable<Win32Apis.ShellItemEntry> GetShellItems(DragEventArgs e)
