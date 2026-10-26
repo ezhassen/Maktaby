@@ -278,6 +278,7 @@
             </controls:VirtualizingItemsControl>
 
 
+            <!--  Details view: DataGrid  -->
             <DataGrid
                 x:Name="DetailsGrid"
                 Grid.Row="2"
@@ -306,6 +307,7 @@
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                 SelectionMode="Extended"
                 SelectionUnit="FullRow"
+                SelectionChanged="DetailsGrid_SelectionChanged"
                 Sorting="DetailsGrid_Sorting"
                 VirtualizingPanel.IsContainerVirtualizable="True"
                 VirtualizingPanel.IsVirtualizing="True"

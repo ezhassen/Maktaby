@@ -410,13 +410,27 @@ public partial class FolderPortalControl : WidgetControlBase
         e.Handled = true;
     }
 
+    private void DetailsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        foreach (var item in e.RemovedItems.OfType<FolderItemViewModel>()) item.IsSelected = false;
+        foreach (var item in e.AddedItems.OfType<FolderItemViewModel>()) item.IsSelected = true;
+    }
+
     private void DetailsGrid_OnKeyDown(object sender, KeyEventArgs e)
     {
         var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
         if (row == null)
         {
-            // Also handle when focus is on DataGrid itself (e.g., Ctrl+A without row)
-            if (sender is DataGrid dg && dg.SelectedItems.Count > 0) { /* let ItemBorder_KeyDown handle via focused row */ }
+            // Ctrl+A (select all) must work even with no focused row.
+            if (e.Key == Key.A && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+            {
+                if (Box != null)
+                {
+                    foreach (var it in Box.FolderItems) it.IsSelected = true;
+                    e.Handled = true;
+                }
+                return;
+            }
             return;
         }
         ItemBorder_KeyDown(row, e);
@@ -651,6 +665,8 @@ public partial class FolderPortalControl : WidgetControlBase
     {
         if (Box == null) return;
         foreach (var it in Box.FolderItems) it.IsSelected = false;
+        DetailsGrid.SelectedItems.Clear();
+        //IconsList.sele
         _anchorIndex = -1;
     }
 
@@ -697,11 +713,23 @@ public partial class FolderPortalControl : WidgetControlBase
     private void IconsHost_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (e.OriginalSource is DependencyObject src && FindItemBorder(src) != null) return;
+        if (e.OriginalSource is DependencyObject s2 && IsDescendantOfScrollBar(s2)) return;
         // Press began on empty space — must never start an item drag from here.
         _dragOrigin = null;
         if (_renameService.IsEditing) return;
         bool additive = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
         if (!additive) ClearSelection();
+    }
+
+    private static bool IsDescendantOfScrollBar(DependencyObject source)
+    {
+        DependencyObject? cur = source;
+        while (cur != null)
+        {
+            if (cur is ScrollBar) return true;
+            cur = VisualTreeHelper.GetParent(cur);
+        }
+        return false;
     }
 
     private static Border? FindItemBorder(DependencyObject src)
@@ -1105,7 +1133,19 @@ public partial class FolderPortalControl : WidgetControlBase
         // Click on empty area (not on a DataGridRow) — clear selection unless Ctrl/Shift held (like IconsHost)
         if (e.OriginalSource is DependencyObject src)
         {
-            if (FindDataGridRow(src) != null) return;
+            var row = FindDataGridRow(src);
+            if (IsDescendantOfScrollBar(src)) return;
+            if (row != null)
+            {
+                bool isAdditive = (Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Shift)) != 0;
+                if (!isAdditive)
+                {
+                    // Keep VM selection in sync with the DataGrid: a plain click must
+                    // clear the stale IsSelected flags left by a previous Select All.
+                    ClearSelection();
+                }
+                return;
+            }
             DependencyObject? cur = src;
             while (cur != null)
             {
@@ -1305,6 +1345,12 @@ public partial class FolderPortalControl : WidgetControlBase
         _dragging = false;
         _moved = false;
         e.Handled = true;
+    }
+
+    public void SelectAllFolderItems()
+    {
+        if (Box is null) return;
+        foreach (var it in Box.FolderItems) it.IsSelected = true;
     }
 
     private void ItemBorder_KeyDown(object sender, KeyEventArgs e)

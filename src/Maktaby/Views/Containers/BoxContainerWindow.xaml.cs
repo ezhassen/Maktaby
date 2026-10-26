@@ -1954,6 +1954,22 @@ public partial class BoxContainerWindow : WidgetWindow
 
         Key key = e.Key == Key.System ? e.SystemKey : e.Key;
         bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+        // Ctrl+A: select all (works even with no focused item).
+        if (ctrl && key == Key.A)
+        {
+            if (_vm.ActiveBox?.BoxType == BoxType.FolderPortal)
+            {
+                FolderPortalContent?.SelectAllFolderItems();
+            }
+            else if (BoxContent?.DataContext is Maktaby.ViewModels.BoxViewModel boxVm)
+            {
+                foreach (var it in boxVm.Items) it.IsSelected = true;
+            }
+            e.Handled = true;
+            return;
+        }
+
         if (!ctrl || key is not (Key.C or Key.X or Key.V))
         {
             return;

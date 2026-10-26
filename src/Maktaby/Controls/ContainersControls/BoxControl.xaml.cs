@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -340,7 +341,7 @@ public partial class BoxControl : WidgetControlBase
     }
 
 
-private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
+    private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
     {
         if (_suppressDragUntilMouseUp)
         {
@@ -1120,10 +1121,10 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
                     vm.IsSelected = true;
                 }
             }
-// Focus first dropped item so keyboard navigation and dotted focus rect resume there
-                var firstVm = box.Items.FirstOrDefault(i => i.Model == moved[0]);
-                if (firstVm is { IsFilteredOut: false })
-                {
+            // Focus first dropped item so keyboard navigation and dotted focus rect resume there
+            var firstVm = box.Items.FirstOrDefault(i => i.Model == moved[0]);
+            if (firstVm is { IsFilteredOut: false })
+            {
                 _focusedIndex = box.Items.IndexOf(firstVm);
                 _anchorIndex = _focusedIndex;
                 _ = Dispatcher.BeginInvoke(() => FocusItem(_focusedIndex), System.Windows.Threading.DispatcherPriority.Input);
@@ -1296,6 +1297,11 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
         // otherwise swallow the bubbling MouseLeftButtonDown, so empty-area marquee selection works.
         // Clicks that land on an item are handled by ItemBorder_MouseLeftButtonDown, so skip those.
         if (e.OriginalSource is DependencyObject src && FindItemBorder(src) is not null)
+        {
+            return;
+        }
+        // Clicking the scrollbar must not clear the selection.
+        if (e.OriginalSource is DependencyObject s && IsDescendantOfScrollBar(s))
         {
             return;
         }
@@ -1728,6 +1734,17 @@ private void ItemBorder_MouseMove(object sender, MouseEventArgs e)
         }
 
         return null;
+    }
+
+    private static bool IsDescendantOfScrollBar(DependencyObject source)
+    {
+        DependencyObject? current = source;
+        while (current is not null)
+        {
+            if (current is ScrollBar) return true;
+            current = VisualTreeHelper.GetParent(current);
+        }
+        return false;
     }
 
     private void DisarmDrag(string reason)
