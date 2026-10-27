@@ -39,7 +39,6 @@ public partial class BoxControl : WidgetControlBase
     private long _dragEpoch;
     private bool _suppressDragUntilMouseUp;
     public bool IsDragging => _dragging || _suppressDragUntilMouseUp;
-    private static bool _suppressNextContextMenu;
     private DropIndicatorAdorner? _dropAdorner;
     private int _insertIndex = -1;
     private DragGhostWindow? _ghost;
@@ -363,7 +362,6 @@ public partial class BoxControl : WidgetControlBase
 
         if (_dragging)
         {
-            _suppressNextContextMenu = true;
             return;
         }
 
@@ -463,6 +461,7 @@ public partial class BoxControl : WidgetControlBase
                 _ghost.Show();
                 PositionGhost(border);
                 DragDrop.AddGiveFeedbackHandler(border, OnGiveFeedback);
+                DragDrop.AddQueryContinueDragHandler(border, OnQueryContinueDrag);
                 var data = new DataObject(DndFormats.BoxItems, dragged);
                 // Also expose as FileDrop / Shell IDList so external apps (Explorer, etc.) can receive the files
                 try
@@ -484,6 +483,7 @@ public partial class BoxControl : WidgetControlBase
             finally
             {
                 DragDrop.RemoveGiveFeedbackHandler(border, OnGiveFeedback);
+                DragDrop.RemoveQueryContinueDragHandler(border, OnQueryContinueDrag);
                 _ghost?.Close();
                 _ghost = null;
                 _dragging = false;
@@ -499,6 +499,13 @@ public partial class BoxControl : WidgetControlBase
                 // in an inactive container). Only an Esc-cancel with the button still held keeps it
                 // until the real mouse-up arrives.
                 _suppressDragUntilMouseUp = Mouse.LeftButton != MouseButtonState.Released;
+                // The right-click that cancelled this drag is delivered as its own button-up after
+                // DoDragDrop returns — to whichever box sits under the cursor, not necessarily this
+                // one. Arm the process-wide guard so that release can only close the drag.
+                if (Mouse.RightButton == MouseButtonState.Pressed)
+                {
+                    WindowDragController.SuppressContextMenuUntilRelease();
+                }
                 if (dragEffect == DragDropEffects.None || IsDropTargetExternal())
                 {
                     // Canceled, refused, or dropped outside our windows (another app took it):
@@ -522,6 +529,29 @@ public partial class BoxControl : WidgetControlBase
         {
             PositionGhost(source);
         }
+    }
+
+    /// <summary>
+    /// A right-click during an item drag cancels the drag, the same gesture Explorer has. This is
+    /// the only callback that runs for that press: the OLE drag loop owns every mouse message
+    /// while it is active, so the box is never handed a right-button event of its own mid-drag.
+    /// </summary>
+    /// <remarks>
+    /// WPF's own default (in <c>OleDragSource</c>) already cancels when a second button goes down,
+    /// but it does so silently, and the release that follows then reaches the box as an ordinary
+    /// right-click — which used to reopen the item's shell menu right where the drag was dropped.
+    /// Arming the shared guard here is what marks that release as "interrupt only".
+    /// </remarks>
+    private void OnQueryContinueDrag(object? sender, QueryContinueDragEventArgs e)
+    {
+        if ((e.KeyStates & DragDropKeyStates.RightMouseButton) == 0)
+        {
+            return;
+        }
+
+        WindowDragController.SuppressContextMenuUntilRelease();
+        e.Action = DragAction.Cancel;
+        e.Handled = true;
     }
 
     private void PositionGhost(UIElement source)
@@ -583,7 +613,6 @@ public partial class BoxControl : WidgetControlBase
         {
             return;
         }
-        _suppressNextContextMenu = false;
 
         // When a modifier such as Alt is held, the key arrives as a system key: e.Key is Key.System and
         // the real key lives in e.SystemKey. Normalise so Alt+Enter (properties) and friends are recognised.
@@ -949,7 +978,6 @@ public partial class BoxControl : WidgetControlBase
 
     private static void FocusItem(Border? border)
     {
-        _suppressNextContextMenu = false;
         if (border is null)
         {
             return;
@@ -965,7 +993,6 @@ public partial class BoxControl : WidgetControlBase
 
     private void ShowProperties(BoxItemViewModel vm)
     {
-        _suppressNextContextMenu = false;
         var window = Window.GetWindow(this);
         IntPtr hwnd = window != null ? new System.Windows.Interop.WindowInteropHelper(window).Handle : IntPtr.Zero;
 
@@ -976,7 +1003,6 @@ public partial class BoxControl : WidgetControlBase
 
     private static void OpenWith(BoxItemViewModel target, IEnumerable<string>? sourcePaths = null)
     {
-        _suppressNextContextMenu = false;
         var path = target?.Model?.Path;
         if (string.IsNullOrEmpty(path)) return;
         try
@@ -1000,7 +1026,6 @@ public partial class BoxControl : WidgetControlBase
 
     private static void OpenItem(BoxItemViewModel item)
     {
-        _suppressNextContextMenu = false;
         _lastOpenUtc = DateTime.UtcNow;
         item.IsSelected = false;
         if (!string.IsNullOrEmpty(item.Model.Pidl))
@@ -1054,7 +1079,6 @@ public partial class BoxControl : WidgetControlBase
     {
         // Let our own container/tab drag payloads bubble up to the owning window (which handles the
         // highlight and the merge/move). Everything else is an item/file drop handled here.
-        _suppressNextContextMenu = true;
         if (e.Data.GetDataPresent(DndFormats.SourceContainer))
         {
             StopDragAutoScroll();
@@ -1260,7 +1284,6 @@ public partial class BoxControl : WidgetControlBase
 
     private void BoxControl_DragLeave(object sender, DragEventArgs e)
     {
-        _suppressNextContextMenu = false;
         StopDragAutoScroll();
         RemoveDropIndicator();
         _insertIndex = -1;
@@ -1268,7 +1291,6 @@ public partial class BoxControl : WidgetControlBase
 
     private async void BoxControl_Drop(object sender, DragEventArgs e)
     {
-        _suppressNextContextMenu = false;
         if (e.Data.GetDataPresent(DndFormats.SourceContainer))
         {
             // Handled by the owning BoxContainerWindow's Drop handler.
@@ -2055,7 +2077,25 @@ public partial class BoxControl : WidgetControlBase
         _dragOrigin = null;
         _dragging = false;
         _moved = false;
+        // Consumed by the gesture that disarms: this is a one-shot "the click that follows a drag
+        // may only interrupt" marker, and every right-click path calls through here. Clearing it
+        // here also guarantees it can never wedge, e.g. when the release that should have cleared
+        // it was delivered to another application.
+        _suppressDragUntilMouseUp = false;
         WindowDragController.InvalidateItemDrags();
+    }
+
+    /// <summary>
+    /// Press half of the right-click: while a drag owns the gesture - or while the release that
+    /// ended one is still pending - swallow it as well, so the click cannot arm a menu at all.
+    /// </summary>
+    private void BoxControl_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        if (_dragging || _marqueeActive || _suppressDragUntilMouseUp || WindowDragController.IsContextMenuSuppressed)
+        {
+            DisarmDrag("right-click-cancel");
+            e.Handled = true;
+        }
     }
 
     /// <summary>
@@ -2065,10 +2105,11 @@ public partial class BoxControl : WidgetControlBase
     /// </summary>
     private void BoxControl_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        // While dragging, right-click only cancels the drag; never open the menu.
-        if (_dragging || _marqueeActive)
+        // While dragging - or while the release that ended a drag is still pending - right-click
+        // only cancels the drag; it never opens a menu. The shared guard covers the cross-window
+        // case: the release belongs to a drag that may have started in another box.
+        if (_dragging || _marqueeActive || _suppressDragUntilMouseUp || WindowDragController.IsContextMenuSuppressed)
         {
-            _suppressNextContextMenu = true;
             DisarmDrag("right-click-cancel");
             e.Handled = true;
             return;
@@ -2202,17 +2243,9 @@ public partial class BoxControl : WidgetControlBase
 
     private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (_dragging || _marqueeActive)
+        if (_dragging || _marqueeActive || _suppressDragUntilMouseUp || WindowDragController.IsContextMenuSuppressed)
         {
-            _suppressNextContextMenu = true;
             DisarmDrag("right-click-cancel");
-            e.Handled = true;
-            return;
-        }
-        if (_suppressNextContextMenu)
-        {
-            _suppressNextContextMenu = false;
-            DisarmDrag("suppress-menu");
             e.Handled = true;
             return;
         }
@@ -2248,9 +2281,8 @@ public partial class BoxControl : WidgetControlBase
 
     private void ItemBorder_ContextMenuOpening(object sender, ContextMenuEventArgs e)
     {
-        if (_dragging || _marqueeActive)
+        if (_dragging || _marqueeActive || _suppressDragUntilMouseUp || WindowDragController.IsContextMenuSuppressed)
         {
-            _suppressNextContextMenu = true;
             DisarmDrag("right-click-cancel");
             e.Handled = true;
             return;
@@ -2260,12 +2292,6 @@ public partial class BoxControl : WidgetControlBase
         // The menu is modal over the tile, so a tooltip still up would float above it or hang around
         // after it closes.
         Helpers.ToolTipGuard.Close();
-        if (_suppressNextContextMenu)
-        {
-            _suppressNextContextMenu = false;
-            e.Handled = true;
-            return;
-        }
         e.Handled = true;
     }
 }

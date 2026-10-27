@@ -1090,6 +1090,13 @@ public partial class BoxContainerWindow : WidgetWindow
     {
         try
         {
+            // A right-click that belongs to a drag (cancel it, or the release that just ended one)
+            // must not open the box menu either - same guard the box body uses.
+            if (WindowDragController.IsContextMenuSuppressed)
+            {
+                e.Handled = true;
+                return;
+            }
             // Commits an in-progress rename first so the menu never opens over the editor.
             if (_isRenaming) CommitRename();
             BoxMenu.PlacementTarget = HeaderBorder;

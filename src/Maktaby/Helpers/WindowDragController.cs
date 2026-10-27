@@ -45,6 +45,10 @@ internal sealed class WindowDragController
     private const int HtBottomLeft = 16;
     private const int HtBottomRight = 17;
 
+    // Virtual-key codes for the buttons that own a gesture (GetAsyncKeyState, high bit = down).
+    private const int VkLButton = 0x01;
+    private const int VkMButton = 0x04;
+
     private const double SnapPaddingDip = 10;
 
     private readonly Window _window;
@@ -169,6 +173,95 @@ internal sealed class WindowDragController
     /// arming sites compare <see cref="System.Windows.Input.InputEventArgs.Timestamp"/> against
     /// this to recognise (and not arm from) that eaten press.</summary>
     public static int MenuCloseTick;
+
+    // --- Right-click that ends a drag ---------------------------------------
+
+    /// <summary>Set by <see cref="SuppressContextMenuUntilRelease"/>; expires once the click it
+    /// guards is over. See <see cref="IsContextMenuSuppressed"/>.</summary>
+    private static bool _suppressContextMenu;
+
+    private static int _suppressContextMenuTick;
+
+    /// <summary>How long a suppression outlives the button that armed it. Only a release queued a
+    /// few milliseconds behind the button-up needs covering, and every extra millisecond is a menu
+    /// the user cannot open, so this stays short.</summary>
+    private const int ContextMenuSuppressionGraceMs = 400;
+
+    /// <summary>
+    /// Arms <see cref="IsContextMenuSuppressed"/>: the drag that just ended was cancelled by a
+    /// right-click, so the button-up that follows may only close the drag, never open a menu.
+    /// </summary>
+    /// <remarks>
+    /// This state is process-wide, and it lives here rather than in the control that started the
+    /// drag, for two reasons that together explain why a per-control "we just dragged" flag
+    /// (<c>BoxControl._suppressDragUntilMouseUp</c>) never managed to block the menu:
+    /// <para>
+    /// 1. An OLE drag owns every mouse message while it runs (<c>DoDragDrop</c>'s modal loop), so
+    /// the drag source never sees the right-press at all — only <c>QueryContinueDrag</c> reports
+    /// it. The button-up that follows is delivered afterwards to whichever window sits under the
+    /// cursor, which is frequently a different box than the source.
+    /// </para>
+    /// <para>
+    /// 2. The release that ends a drag is the LEFT button, so a flag computed at
+    /// <c>DoDragDrop</c> return is already false by the time the right button is released — and
+    /// the control that owns the flag is often not the one receiving the click anyway.
+    /// </para>
+    /// </remarks>
+    public static void SuppressContextMenuUntilRelease()
+    {
+        _suppressContextMenu = true;
+        _suppressContextMenuTick = Environment.TickCount;
+        // Left in at Debug so a report of "the menu still opened" can be checked against the log
+        // in %tmp%\Maktaby: no line here means the drag never reported the right-click at all.
+        Serilog.Log.Debug(
+            "Drag right-click: context menu suppression armed (left={Left}, right={Right})",
+            Mouse.LeftButton,
+            Mouse.RightButton);
+    }
+
+    /// <summary>
+    /// True while a right-click must only interrupt (cancel the drag / disarm) and never open a
+    /// context menu. Consult it from every right-click and menu-opening entry point of a box item,
+    /// a folder portal row and the empty surface behind them.
+    /// </summary>
+    /// <remarks>
+    /// Stays true while the button that belongs to the interrupted gesture is still held — normally
+    /// the left one, since a drag is cancelled by a right-press and the left is released after it —
+    /// and for <see cref="ContextMenuSuppressionGraceMs"/> past the arming tick, so a release that
+    /// lands after that button came up is still covered. Then it disarms itself.
+    /// <para>
+    /// The RIGHT button must never count as "gesture still live": every later right-click holds it
+    /// down for a moment, so counting it re-anchored the grace on each attempt and the suppression
+    /// never expired — after one drag cancelled by a right-click, no menu could be opened again for
+    /// the rest of the session. Disarming on expiry for the same reason: a stale arm must not
+    /// resurface on some later left press.
+    /// </para>
+    /// </remarks>
+    public static bool IsContextMenuSuppressed
+    {
+        get
+        {
+            if (!_suppressContextMenu) return false;
+
+            // Read the REAL button state: WPF's Mouse.LeftButton is fed by messages delivered to
+            // our own windows, so a release that landed in another application can leave it
+            // reporting Pressed — which would pin this true and kill menus until the next move over
+            // a Maktaby window. GetAsyncKeyState is authoritative at any moment.
+            if (Win32Apis.GetAsyncKeyState(VkLButton) < 0 || Win32Apis.GetAsyncKeyState(VkMButton) < 0)
+            {
+                _suppressContextMenuTick = Environment.TickCount;
+                return true;
+            }
+
+            if (unchecked(Environment.TickCount - _suppressContextMenuTick) < ContextMenuSuppressionGraceMs)
+            {
+                return true;
+            }
+
+            _suppressContextMenu = false;
+            return false;
+        }
+    }
 
     public static void NoteMenuClosed()
     {

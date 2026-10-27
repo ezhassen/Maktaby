@@ -21,6 +21,7 @@
     MouseMove="BoxControl_MouseMove"
     PreviewMouseLeftButtonDown="BoxControl_PreviewMouseLeftButtonDown"
     PreviewMouseLeftButtonUp="BoxControl_PreviewMouseLeftButtonUp"
+    PreviewMouseRightButtonDown="BoxControl_PreviewMouseRightButtonDown"
     PreviewMouseRightButtonUp="BoxControl_PreviewMouseRightButtonUp"
     mc:Ignorable="d">
     <UserControl.Resources>

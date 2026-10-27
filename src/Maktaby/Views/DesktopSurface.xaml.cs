@@ -88,6 +88,22 @@ public sealed partial class DesktopSurface : Window
     private const int VK_ESCAPE = 0x1B;
     private const int VK_LBUTTON = 0x01;
     private const int VK_RBUTTON = 0x02;
+    private const int VK_MBUTTON = 0x04;
+
+    /// <summary>
+    /// Set when a gesture had to be aborted mid-way — Escape, a second button, capture loss, or a
+    /// right-click while a drag owned the input — and cleared once the last held button is released.
+    /// Every button message in between is swallowed: not forwarded to Explorer, never turned into a
+    /// menu.
+    /// </summary>
+    /// <remarks>
+    /// The marquee used to rely on "capture is kept, so the matching UP dies here", but it does not:
+    /// the abort clears <see cref="_marqueeActive"/>, the button-up branches all test that flag, so
+    /// the stray release fell through to the generic forward. Explorer then saw a lone
+    /// <c>WM_RBUTTONUP</c> and opened the desktop context menu exactly where the gesture had just
+    /// been cancelled — the same failure the boxes had.
+    /// </remarks>
+    private bool _swallowButtonsUntilRelease;
 
     public DesktopSurface(MainViewModel host, System.Action save)
     {
@@ -134,6 +150,12 @@ public sealed partial class DesktopSurface : Window
     {
         // Hide→Show refires Loaded: drop the previous cycle's hooks before reinstalling.
         DetachLayerGlue();
+        // A gesture cannot survive the window being hidden, and the button that ended it was never
+        // delivered here — start the new cycle clean so the first click after re-show is not eaten.
+        _swallowButtonsUntilRelease = false;
+        _marqueeActive = false;
+        _marqueeCancelled = false;
+        HideMarquee();
         var helper = new WindowInteropHelper(this);
         _surfaceHwnd = helper.Handle;
         var source = HwndSource.FromHwnd(_surfaceHwnd);
@@ -240,6 +262,41 @@ public sealed partial class DesktopSurface : Window
     }
 
     /// <summary>
+    /// Aborts the active gesture and swallows every button message that still belongs to it.
+    /// </summary>
+    /// <remarks>
+    /// Also arms <see cref="WindowDragController.IsContextMenuSuppressed"/>: the releases that close
+    /// an interrupted gesture can land on a Box instead of the surface (the cursor is wherever the
+    /// user let go), and a right-click there must only close the gesture — never open an item or
+    /// paste menu. Box item drags arm the same guard from their own drag source.
+    /// </remarks>
+    private void AbortGestureUntilRelease()
+    {
+        _marqueeActive = false;
+        _marqueeCancelled = true;
+        _swallowButtonsUntilRelease = true;
+        HideMarquee();
+        WindowDragController.SuppressContextMenuUntilRelease();
+    }
+
+    /// <summary>
+    /// Ends the swallow window opened by <see cref="AbortGestureUntilRelease"/>.
+    /// </summary>
+    /// <remarks>
+    /// Releasing the capture is part of it: the abort deliberately kept the capture so the aborted
+    /// gesture's releases would arrive here, and those releases are swallowed — so without this
+    /// nothing would ever release it, and a stale capture would route every later click in the
+    /// session to this window.
+    /// </remarks>
+    private void EndSwallowGesture()
+    {
+        _swallowButtonsUntilRelease = false;
+        User32.ReleaseCapture();
+    }
+
+    private static bool IsButtonDown(int virtualKey) => (Win32Apis.GetAsyncKeyState(virtualKey) & 0x8000) != 0;
+
+    /// <summary>
     /// The surface sits above the Explorer list-view and owns every mouse event on the empty desktop.
     /// It forwards that input to the real shell list-view (so icon selection, marquee, wheel,
     /// right-click context menu and double-click-to-open keep working) and only intercepts it for
@@ -256,9 +313,7 @@ public sealed partial class DesktopSurface : Window
         {
             if (_marqueeActive)
             {
-                _marqueeActive = false;
-                _marqueeCancelled = true;
-                HideMarquee();
+                AbortGestureUntilRelease();
             }
 
             return IntPtr.Zero;
@@ -370,6 +425,30 @@ public sealed partial class DesktopSurface : Window
         if (m is WM_MOUSEMOVE or WM_LBUTTONDOWN or WM_LBUTTONUP or WM_LBUTTONDBLCLK
             or WM_RBUTTONDOWN or WM_RBUTTONUP or WM_MOUSEWHEEL)
         {
+            // A gesture that was aborted owns every remaining button message until the last held
+            // button comes up — swallowed here, so its stray release can neither reach Explorer as a
+            // click nor open a menu (see _swallowButtonsUntilRelease). A press with nothing held
+            // starts a NEW gesture and is let through: menus have to come back immediately after a
+            // cancelled drag, they may not silently eat the next click.
+            if (_swallowButtonsUntilRelease)
+            {
+                bool anythingHeld = IsButtonDown(VK_LBUTTON) || IsButtonDown(VK_RBUTTON) || IsButtonDown(VK_MBUTTON);
+                bool startsNewGesture = !anythingHeld && (m == WM_LBUTTONDOWN || m == WM_RBUTTONDOWN);
+
+                if (!startsNewGesture)
+                {
+                    if (!anythingHeld)
+                    {
+                        EndSwallowGesture();
+                    }
+
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
+                EndSwallowGesture();
+            }
+
             // Live marquee tracking: while a marquee drag is active we own the moves (no forwarding,
             // so Explorer's list-view never reacts to the drag). Keyboard messages can NEVER reach
             // this WS_EX_NOACTIVATE window, so Esc / other-button aborts are polled from the async key
@@ -384,9 +463,7 @@ public sealed partial class DesktopSurface : Window
                 {
                     // Abort but KEEP capture: the matching button-up must still arrive here so it
                     // can be swallowed silently instead of leaking to whatever sits under the cursor.
-                    _marqueeActive = false;
-                    _marqueeCancelled = true;
-                    HideMarquee();
+                    AbortGestureUntilRelease();
                     handled = true;
                     return IntPtr.Zero;
                 }
@@ -416,9 +493,7 @@ public sealed partial class DesktopSurface : Window
             // kept so its matching UP lands here and dies too.
             if (_marqueeActive && !_marqueeIsLeftButton && m == WM_LBUTTONDOWN)
             {
-                _marqueeActive = false;
-                _marqueeCancelled = true;
-                HideMarquee();
+                AbortGestureUntilRelease();
                 handled = true;
                 return IntPtr.Zero;
             }
@@ -463,12 +538,22 @@ public sealed partial class DesktopSurface : Window
             // show the [Create New Box] marquee menu (drag) or the desktop context menu (click).
             if (m == WM_RBUTTONDOWN)
             {
+                // A right-press that belongs to a drag may only interrupt it. The drag source (a box
+                // item drag, or this surface's own marquee) arms the process-wide guard precisely
+                // because an OLE drag hands the release to whoever is under the cursor — so this
+                // window can receive a right-click that has nothing to do with what is under it.
+                if (WindowDragController.IsContextMenuSuppressed)
+                {
+                    AbortGestureUntilRelease();
+                    handled = true;
+                    return IntPtr.Zero;
+                }
+
                 if (_marqueeActive && _marqueeIsLeftButton)
                 {
-                    // Right press during an active LEFT marquee: cancel it and swallow.
-                    _marqueeActive = false;
-                    _marqueeCancelled = true;
-                    HideMarquee();
+                    // Right press during an active LEFT marquee: cancel it, and swallow the press
+                    // together with the release that follows.
+                    AbortGestureUntilRelease();
                     handled = true;
                     return IntPtr.Zero;
                 }
@@ -545,6 +630,20 @@ public sealed partial class DesktopSurface : Window
                 }
 
                 ShowCreateBoxMenu();
+                handled = true;
+                return IntPtr.Zero;
+            }
+
+            // A right-release that closes an interrupted gesture must not become a desktop
+            // right-click. There are two ways to be here with no marquee of our own: the press
+            // belonged to a drag (its source armed the shared guard), or the left button is still
+            // held — the release that ends a cancelled drag is the right one, and an interrupted
+            // Explorer icon drag arms nothing at all because that drag source lives in another
+            // process. Forwarding this message is what had Explorer open its desktop context menu
+            // right where the drag had just been cancelled.
+            if (m == WM_RBUTTONUP
+                && (WindowDragController.IsContextMenuSuppressed || IsButtonDown(VK_LBUTTON)))
+            {
                 handled = true;
                 return IntPtr.Zero;
             }

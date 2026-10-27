@@ -401,6 +401,16 @@ public partial class FolderPortalControl : WidgetControlBase
 
     private void DetailsGrid_OnRightButtonUp(object sender, MouseButtonEventArgs e)
     {
+        // A right-click that cancels an in-flight drag (or lands while one is active) must only
+        // disarm — never open the row's shell menu. The shared guard is the reliable signal: an OLE
+        // drag hands the release to whoever is under the cursor, and _suppressDragUntilMouseUp is
+        // already gone by then (the release that ends a drag is the left button).
+        if (_dragging || _suppressDragUntilMouseUp || WindowDragController.IsContextMenuSuppressed)
+        {
+            DisarmDrag();
+            e.Handled = true;
+            return;
+        }
         var row = e.OriginalSource is DependencyObject d ? FindDataGridRow(d) : null;
         if (row == null) return;
         DisarmDrag();
@@ -752,6 +762,10 @@ public partial class FolderPortalControl : WidgetControlBase
         _moved = false;
         _gridDragRow = null;
         _gridDragVm = null;
+        // Consumed by the gesture that disarms: one-shot "the click that follows a drag may only
+        // interrupt" marker. Clearing it here also keeps it from wedging when the release that
+        // should have cleared it went to another application.
+        _suppressDragUntilMouseUp = false;
         WindowDragController.InvalidateItemDrags();
     }
 
@@ -895,6 +909,7 @@ public partial class FolderPortalControl : WidgetControlBase
             _dragGhost.Show();
             PositionDragGhost(fe);
             DragDrop.AddGiveFeedbackHandler(fe, OnGiveFeedback);
+            DragDrop.AddQueryContinueDragHandler(fe, OnQueryContinueDrag);
             var data = new DataObject(DataFormats.FileDrop, paths);
             // Also set as Shell IDList for virtual items if needed, but FileDrop covers most
             dragEffect = DragDrop.DoDragDrop(fe, data, DragDropEffects.Copy | DragDropEffects.Link);
@@ -902,6 +917,7 @@ public partial class FolderPortalControl : WidgetControlBase
         finally
         {
             DragDrop.RemoveGiveFeedbackHandler(fe, OnGiveFeedback);
+            DragDrop.RemoveQueryContinueDragHandler(fe, OnQueryContinueDrag);
             _dragGhost?.Close();
             _dragGhost = null;
             _dragging = false;
@@ -914,6 +930,13 @@ public partial class FolderPortalControl : WidgetControlBase
             // in an inactive container). Only an Esc-cancel with the button still held keeps it
             // until the real mouse-up arrives.
             _suppressDragUntilMouseUp = Mouse.LeftButton != MouseButtonState.Released;
+            // The right-click that cancelled this drag arrives as its own button-up after
+            // DoDragDrop returns, possibly over another box/portal: arm the process-wide guard so
+            // that release can only close the drag and never opens a menu.
+            if (Mouse.RightButton == MouseButtonState.Pressed)
+            {
+                WindowDragController.SuppressContextMenuUntilRelease();
+            }
             if (dragEffect == DragDropEffects.None || IsDropTargetExternal())
             {
                 // Canceled, refused, or dropped outside our windows (another app took it):
@@ -934,6 +957,24 @@ public partial class FolderPortalControl : WidgetControlBase
     {
         if (_dragGhost != null && sender is UIElement src)
             PositionDragGhost(src);
+    }
+
+    /// <summary>
+    /// A right-click during a row drag cancels the drag, the same gesture Explorer has. It is the
+    /// only callback that runs for that press — the OLE drag loop owns every mouse message while
+    /// it is active — so this is where the release that follows gets marked "interrupt only".
+    /// </summary>
+    /// <remarks>
+    /// WPF's own default already cancels when a second button goes down, but silently: the release
+    /// then reached the portal as an ordinary right-click and opened the row's shell menu.
+    /// </remarks>
+    private void OnQueryContinueDrag(object? sender, QueryContinueDragEventArgs e)
+    {
+        if ((e.KeyStates & DragDropKeyStates.RightMouseButton) == 0) return;
+
+        WindowDragController.SuppressContextMenuUntilRelease();
+        e.Action = DragAction.Cancel;
+        e.Handled = true;
     }
 
     private void PositionDragGhost(UIElement src)
@@ -1690,7 +1731,9 @@ public partial class FolderPortalControl : WidgetControlBase
     /// </summary>
     private void FolderPortal_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
-        if (_dragging)
+        // A right-click that ends a drag only cancels it (see WindowDragController for why the
+        // guard is process-wide: the release lands on whichever portal is under the cursor).
+        if (_dragging || _suppressDragUntilMouseUp || WindowDragController.IsContextMenuSuppressed)
         {
             DisarmDrag();
             e.Handled = true;
@@ -1855,6 +1898,16 @@ public partial class FolderPortalControl : WidgetControlBase
 
     private void ItemBorder_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
     {
+        // Right-click that cancels a drag (or fires while one is active) only disarms; no menu.
+        // WindowDragController.IsContextMenuSuppressed is the cross-window half of that: the
+        // release that follows a cancelled drag is delivered to whichever portal is under the
+        // cursor, which is frequently a different one than the drag source.
+        if (_dragging || _suppressDragUntilMouseUp || WindowDragController.IsContextMenuSuppressed)
+        {
+            DisarmDrag();
+            e.Handled = true;
+            return;
+        }
         if ((sender as FrameworkElement)?.DataContext is not FolderItemViewModel vm) return;
         DisarmDrag();
         var window = Window.GetWindow(this);
@@ -1875,6 +1928,15 @@ public partial class FolderPortalControl : WidgetControlBase
 
     private void Control_PreviewMouseDown(object sender, MouseButtonEventArgs e)
     {
+        // Press half of a right-click that belongs to a drag (or to the release that just ended
+        // one): swallow it so the click cannot arm a menu at all.
+        if (e.ChangedButton == MouseButton.Right &&
+            (_dragging || _suppressDragUntilMouseUp || WindowDragController.IsContextMenuSuppressed))
+        {
+            DisarmDrag();
+            e.Handled = true;
+            return;
+        }
         if (Box == null) return;
         if (e.ChangedButton == MouseButton.XButton1)
         {
