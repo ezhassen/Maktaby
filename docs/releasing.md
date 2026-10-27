@@ -98,6 +98,18 @@ Each leg installs the toolchain (.NET 10 SDK; Inno Setup with a Chocolatey fallb
 
 **`release`** — downloads all four artifacts, refuses to publish if any is missing, composes the notes (a download table with real sizes, a SHA-256 block for all four, requirements), merges the auto-generated changelog, and creates the release with `gh release create`.
 
+### Where the changelog starts
+
+The commit list is a `compare` range, and the **baseline is chosen by channel**, not by "the newest tag":
+
+| Release | Baseline | Result |
+| --- | --- | --- |
+| `v1.0.33-beta.1` | the immediately preceding tag (`v1.0.32`) | everything developed since the last stable |
+| `v1.0.33-beta.2` | `v1.0.33-beta.1` | only what changed in that beta |
+| `v1.0.33` (stable) | the previous **stable** tag (`v1.0.32`) | the aggregate of the whole beta series |
+
+A stable release is the promotion of a series, so its notes must read as the whole series at once — comparing against `v1.0.33-beta.N` (which *is* the newest tag) would hide everything the betas already contained. Tags come from the GitHub API (`gh api --paginate`, since a single page is capped at 100) and are ordered with `sort -V`, so `beta.10` correctly follows `beta.9`; the baseline is the tag immediately *below* the released tag in that order, never simply the highest one.
+
 The four targets are declared **once**, in `TARGETS_JSON` at the top of the workflow. The build matrix and the notes composer both read it, so the table in the release notes cannot drift from what was actually built.
 
 ### Two flavours, and why both

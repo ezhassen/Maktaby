@@ -127,6 +127,7 @@ jobs:
       # upload-artifact@v5 advertises Node 24 support but still ran on Node 20 by
       # default - v6 is the first release that genuinely moves the runtime, and it
       # is otherwise identical to v4. Inputs are unchanged across all three.
+      # (download-artifact is the exception - see its use in the `release` job.)
       - uses: actions/checkout@v7
         with:
           # The branch policy below compares against origin/<branch>, which does not
@@ -341,8 +342,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # download-artifact is the one action here that was still on Node 20 at v6:
+      # v6 only gained *preliminary* Node 24 support and still defaulted to
+      # `runs.using: node20`, which is the deprecation warning the release run
+      # printed. v7 is the first release that is genuinely node24 (v8 adds ESM and a
+      # `digest-mismatch` policy that now errors instead of warning). Our inputs -
+      # pattern / path / merge-multiple - are unchanged across v6-v8.
       - name: Download the four installers
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           # One flat directory: the notes job reads exactly the four expected file names
           # out of it and fails if any is missing, so a partial build can never be
@@ -457,16 +464,86 @@ jobs:
             echo
           } > NOTES.md
 
-          # Previous tag from the API, not from git: this job has no checkout and no remote.
-          prev=$(gh api "repos/$GITHUB_REPOSITORY/tags?per_page=100" -q '.[].name' 2>/dev/null \
-                 | grep -E '^v[0-9]' | grep -vxF "$TAG" | sort -V | tail -n1)
+          # Where the changelog STARTS is a channel decision, not "the newest tag".
+          #
+          #   beta   - from the immediately preceding tag of any kind, so a series reads
+          #            incrementally: 1.0.33-beta.2 lists what changed since beta.1, and
+          #            the first beta of a series lists everything since the last stable.
+          #   stable - from the previous STABLE tag, skipping every beta of the series
+          #            being promoted. A stable release is the aggregate of its whole
+          #            series, so comparing against 1.0.33-beta.2 (the newest tag) would
+          #            have hidden everything that beta.1 and the develop work before it
+          #            shipped.
+          #
+          # Tags come from the API, not from git: this job has no checkout and no remote.
+          # --paginate because a single page is capped at 100 tags - without it the
+          # comparison would silently stop at the 100th-newest tag.
+          all_tags=$(gh api --paginate "repos/$GITHUB_REPOSITORY/tags?per_page=100" \
+                       -q '.[].name' 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' || true)
+          if [ "$PRERELEASE" = "true" ]; then
+            candidates="$all_tags"
+          else
+            # Plain X.Y.Z only: a `-beta.N` tag is the same core that this release is
+            # promoting, so it is already covered.
+            candidates=$(printf '%s\n' "$all_tags" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          fi
+
+          # The tag immediately BELOW $TAG in version order, never simply the highest
+          # one - so re-releasing an older beta cannot pick up a newer tag as its
+          # baseline.
+          #
+          # Ordering is SemVer precedence, which plain `sort -V` does NOT give:
+          # version sort ranks v1.0.1 ABOVE v1.0.1-beta.1 (it reads "-beta.1" as an
+          # extra part), so a re-released beta would compare against the stable that
+          # superseded it and the range would run backwards. Rewriting "-" as "~"
+          # flips that, because version sort places "~" before the end of a part;
+          # "beta.10" still follows "beta.9" because the counter is numeric.
+          previous_tag() {
+            local result="" candidate
+            while read -r candidate; do
+              [ -n "$candidate" ] || continue
+              if [ "$candidate" = "$TAG" ]; then
+                break
+              fi
+              result="$candidate"
+            done < <(printf '%s\n' "$1" |
+                       awk '{ k = $0; gsub(/-/, "~", k); print k "\t" $0 }' |
+                       sort -V -u | cut -f2)
+            printf '%s' "$result"
+          }
+
+          prev=$(previous_tag "$candidates")
+          # The very first stable release has no earlier stable to compare against, but
+          # it does have a beta series behind it - fall back to the newest tag of any
+          # kind so the notes are not empty.
+          if [ -z "$prev" ] && [ "$PRERELEASE" != "true" ]; then
+            prev=$(previous_tag "$all_tags")
+          fi
+
+          if [ -n "$prev" ]; then
+            echo "Changelog baseline: $prev -> $TAG"
+          else
+            echo "Changelog baseline: none (first release in this channel)"
+          fi
+
           # Two forms, deliberately: the API path is repos/OWNER/REPO/..., the web path is
           # github.com/OWNER/REPO/... Prefix one with the other and the link 404s.
           api_compare="repos/$GITHUB_REPOSITORY/compare/${prev}...${TAG}"
           web_compare="https://github.com/$GITHUB_REPOSITORY/compare/${prev}...${TAG}"
           if [ -n "$prev" ]; then
-            gh api "$api_compare" -q '.commits' 2>/dev/null \
-              | jq -r '.[].commit.message | split("\n")[0]' > /tmp/maktaby-subjects.txt || true
+            # Parsed once: the compare payload also carries `total_commits`, which is how
+            # the truncation check below knows the list it got is not the whole range.
+            compare_json=$(gh api "$api_compare" 2>/dev/null || true)
+            printf '%s' "$compare_json" \
+              | jq -r '.commits[]?.commit.message | split("\n")[0]' > /tmp/maktaby-subjects.txt || true
+            # A stable release compares against the previous stable, so its range is a
+            # whole beta series and can outgrow what one compare response returns. Say so
+            # in the log instead of quietly shipping a short changelog.
+            total=$(printf '%s' "$compare_json" | jq -r '.total_commits // 0' 2>/dev/null || true)
+            listed=$(grep -c . /tmp/maktaby-subjects.txt || true)
+            if [[ "${total:-}" =~ ^[0-9]+$ ]] && [ "$total" -gt "${listed:-0}" ]; then
+              echo "::warning::Compare ${prev}...${TAG} has $total commits; the changelog lists $listed (API response cap)."
+            fi
           else
             # No earlier tag: this is the first release, so there is nothing to compare against.
             : > /tmp/maktaby-subjects.txt
