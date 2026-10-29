@@ -9,6 +9,7 @@ using Maktaby.Views.HelpersViews;
 using Maktaby.Win32.NativeMethods;
 using Maktaby.WPFServices;
 using Microsoft.Extensions.DependencyInjection;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -68,6 +69,12 @@ public partial class BoxControl : WidgetControlBase
     private readonly List<UIElement> _collapsedForDrag = new();
     private WrapPanel? _wrapPanelCache;
 
+    // Icon window: the item rows whose icons are resolved right now (see UpdateIconWindow).
+    // -1 = "not computed yet", so the next pass always applies.
+    private int _iconWindowFrom = -1;
+    private int _iconWindowTo = -1;
+    private BoxViewModel? _iconWindowBox;
+
     // Selection / marquee state.
     private int _anchorIndex = -1;
     private int _focusedIndex = -1;
@@ -89,9 +96,137 @@ public partial class BoxControl : WidgetControlBase
     public BoxControl()
     {
         InitializeComponent();
-        // Tab switches re-assign DataContext (UpdateBody) — re-resolve the icon size with it.
-        DataContextChanged += (_, _) => RefreshIconSize();
+        // Tab switches re-assign DataContext (UpdateBody) — gate the icons and re-resolve the size.
+        DataContextChanged += (_, _) => OnBoxDataContextChanged();
+        // Which rows are on screen changes with the scroll offset, the box size and visibility.
+        Scroll.ScrollChanged += (_, _) => UpdateIconWindow();
+        Scroll.SizeChanged += (_, _) => UpdateIconWindow();
+        IsVisibleChanged += (_, _) => UpdateIconWindow();
         // Drag timer + visibility lifecycle come from WidgetControlBase (Suspend/Unloaded stop it).
+    }
+
+    private void OnBoxDataContextChanged()
+    {
+        if (_iconWindowBox is { } previous)
+        {
+            previous.Items.CollectionChanged -= OnBoxItemsChangedForIconWindow;
+        }
+
+        _iconWindowBox = Box;
+        _iconWindowFrom = -1;
+        _iconWindowTo = -1;
+
+        if (_iconWindowBox is { } box)
+        {
+            box.Items.CollectionChanged += OnBoxItemsChangedForIconWindow;
+        }
+
+        // Order matters: gate before anything binds. A box realizes every tile at once, and each
+        // realized tile asks for its icon the first time it binds.
+        UpdateIconWindow();
+        RefreshIconSize();
+    }
+
+    private void OnBoxItemsChangedForIconWindow(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _iconWindowFrom = -1;
+        _iconWindowTo = -1;
+        UpdateIconWindow();
+    }
+
+    /// <summary>
+    /// Marks the items that should resolve their icon now: the rows inside the viewport plus one row
+    /// of prefetch on each side. Everything else stays blank until it is scrolled into view.
+    /// </summary>
+    /// <remarks>
+    /// Why this exists: the items panel is a plain <c>WrapPanel</c>, so a box realizes every tile
+    /// together — and <see cref="BoxItemViewModel.Icon"/> starts a shell extraction on first binding.
+    /// That made opening a box cost one cold icon per item (~15 ms each; 135 icons ≈ 2 s measured).
+    /// Bounding the request to the viewport keeps visible tiles sharp and defers the rest, while
+    /// leaving the panel (marquee, drop-slot math, filter collapse) exactly as it was.
+    /// </remarks>
+    private void UpdateIconWindow()
+    {
+        if (Box is not { } box)
+        {
+            return;
+        }
+
+        int count = box.Items.Count;
+        if (count == 0)
+        {
+            _iconWindowFrom = 0;
+            _iconWindowTo = 0;
+            return;
+        }
+
+        // Filtered: matching tiles keep their cells and the rest collapse out of the flow, so an
+        // index → cell mapping no longer holds. The matches are the visible set and are few;
+        // resolve those and leave the collapsed rows blank.
+        if (box.IsFilterActive)
+        {
+            _iconWindowFrom = -1;
+            _iconWindowTo = -1;
+            for (int i = 0; i < count; i++)
+            {
+                var item = box.Items[i];
+                item.IsIconWanted = !item.IsFilteredOut;
+            }
+            return;
+        }
+
+        double viewportHeight = Scroll.ViewportHeight;
+        double viewportWidth = Scroll.ViewportWidth;
+        if (viewportHeight <= 0 || viewportWidth <= 0)
+        {
+            // Not laid out yet (or the box is hidden): nothing is on screen, so nothing is wanted.
+            // Loaded / the first ScrollChanged / SizeChanged come back with a viewport.
+            _iconWindowFrom = -1;
+            _iconWindowTo = -1;
+            for (int i = 0; i < count; i++)
+            {
+                box.Items[i].IsIconWanted = false;
+            }
+            return;
+        }
+
+        // Cell size measured off a realized tile, so this cannot silently desync from the template
+        // (tile edge = IconSize + 36, plus the template's 2px margin on each side).
+        double cellWidth = IconSize + 40;
+        double cellHeight = IconSize + 40;
+        if (ItemsList.ItemContainerGenerator.ContainerFromIndex(0) is FrameworkElement first
+            && first.Visibility == Visibility.Visible
+            && first.ActualWidth > 0
+            && first.ActualHeight > 0)
+        {
+            cellWidth = first.ActualWidth;
+            cellHeight = first.ActualHeight;
+        }
+
+        int columns = Math.Max(1, (int)Math.Floor(viewportWidth / cellWidth));
+        double top = Scroll.VerticalOffset;
+        int firstRow = Math.Max(0, (int)Math.Floor(top / cellHeight) - 1);
+        int lastRow = (int)Math.Floor((top + viewportHeight) / cellHeight) + 1;
+
+        int from = firstRow * columns;
+        int to = Math.Min(count, (lastRow + 1) * columns);
+        if (to <= from)
+        {
+            to = Math.Min(count, from + columns);
+        }
+
+        if (from == _iconWindowFrom && to == _iconWindowTo)
+        {
+            return;
+        }
+
+        _iconWindowFrom = from;
+        _iconWindowTo = to;
+
+        for (int i = 0; i < count; i++)
+        {
+            box.Items[i].IsIconWanted = i >= from && i < to;
+        }
     }
 
     public override bool IsSuspended { get; protected set; }
@@ -199,6 +334,9 @@ public partial class BoxControl : WidgetControlBase
         // only hands back 32/48 px, so a tile at 96 px was an upscale - and after a size change
         // the cached icon is the wrong resolution, so the items have to re-resolve.
         PushIconSizeToItems();
+
+        // Bigger tiles mean fewer columns and fewer rows on screen, so the icon window moves.
+        UpdateIconWindow();
     }
 
     private void PushIconSizeToItems()

@@ -359,7 +359,6 @@ public sealed class IconImageService
         // the blur the large tiles showed.
         if (size > ShellNativeIconSize)
         {
-            Serilog.Log.Information("DIAG requesting a scaled icon for {Path} at {Size}px", path, size);
             var scaled = await LoadScaledIconAsync(path, size, cancellationToken).ConfigureAwait(false);
             if (scaled is not null)
             {

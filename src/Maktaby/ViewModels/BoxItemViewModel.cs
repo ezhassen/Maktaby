@@ -60,10 +60,16 @@ public sealed class BoxItemViewModel : ViewModelBase
     public ImageSource? Icon
     {
         // Lazily start the icon load on first access — i.e. when the binding realises the item in the
-        // visual tree — rather than eagerly in the constructor. Keeps startup/VM construction cheap and
-        // naturally limits work to items that are actually displayed.
+        // visual tree — rather than eagerly in the constructor. Keeps startup/VM construction cheap.
         get
         {
+            if (!_iconWanted)
+            {
+                // Gated: the tile is outside the box viewport, so its icon is deferred (see
+                // IsIconWanted). The already-resolved bitmap, if any, is kept for the way back.
+                return null;
+            }
+
             EnsureIconLoaded();
             return _icon;
         }
@@ -71,6 +77,41 @@ public sealed class BoxItemViewModel : ViewModelBase
     }
 
     private bool _iconLoadRequested;
+
+    private bool _iconWanted = true;
+
+    /// <summary>
+    /// Whether this item's icon is wanted right now. A box layers its items in a plain
+    /// <c>WrapPanel</c>, so every tile realizes together and binding asks for every icon at once —
+    /// a cold 135-icon launch measured ~2 s of shell extraction. <c>BoxControl</c> narrows this to
+    /// the rows in (and one row around) its viewport instead.
+    /// </summary>
+    /// <remarks>
+    /// Defaults to true so a consumer with no viewport (drag ghost, settings preview, tests) still
+    /// resolves its icon. Turning it off keeps a resolved icon for re-entry — scrolling back to a
+    /// seen item is instant, only never-seen items pay the shell.
+    /// </remarks>
+    public bool IsIconWanted
+    {
+        get => _iconWanted;
+        set
+        {
+            if (_iconWanted == value)
+            {
+                return;
+            }
+
+            _iconWanted = value;
+
+            if (value)
+            {
+                EnsureIconLoaded();
+            }
+
+            // The tile bound while this was false (or is still bound now): re-read the getter.
+            OnPropertyChanged(nameof(Icon));
+        }
+    }
 
     private int _iconSize = 32;
 
@@ -106,13 +147,19 @@ public sealed class BoxItemViewModel : ViewModelBase
         _iconLoadRequested = false;
         _icon = null;
         Icon = null;
-        EnsureIconLoaded();
+
+        // A gated item re-resolves when it scrolls back in (IsIconWanted), not now: a box-wide icon
+        // size change must not drag every off-screen tile back through the shell.
+        if (_iconWanted)
+        {
+            EnsureIconLoaded();
+        }
     }
 
     //fire and forget
     private async void EnsureIconLoaded()
     {
-        if (_iconLoadRequested)
+        if (_iconLoadRequested || !_iconWanted)
         {
             return;
         }
