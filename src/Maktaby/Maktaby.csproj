@@ -37,6 +37,14 @@
 			i.e. the normal updatable build.
 		-->
 		<PortableBuild Condition="'$(PortableBuild)' == ''">false</PortableBuild>
+		<!--
+		  English only: the app's own UI localization is Langs\*.xlf (loaded at runtime), so the
+		  framework/toolkit satellite folders (cs, de, es, fr, it, ja, ko, pl, pt-BR, ru, tr,
+		  zh-Hans, zh-Hant) only contribute localized framework strings - 28 MB of the
+		  self-contained publish tree. Restore a language here if a shipped window ever needs
+		  the framework's own translations.
+		-->
+		<SatelliteResourceLanguages>en</SatelliteResourceLanguages>
 	</PropertyGroup>
 
 	<ItemGroup Condition="'$(PortableBuild)' == 'true'">
