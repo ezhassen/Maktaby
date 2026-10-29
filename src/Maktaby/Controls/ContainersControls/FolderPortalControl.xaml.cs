@@ -515,7 +515,6 @@ public partial class FolderPortalControl : WidgetControlBase
 
         bool isIcons = box.FolderPortalViewMode == Core.Models.FolderPortalViewMode.Icons;
         if (IconsScroll is not null) IconsScroll.Visibility = isIcons ? Visibility.Visible : Visibility.Collapsed;
-        IconsSortBar.Visibility = isIcons ? Visibility.Visible : Visibility.Collapsed;
         DetailsGrid.Visibility = isIcons ? Visibility.Collapsed : Visibility.Visible;
         BackButton.IsEnabled = !box.IsAtRoot;
         if (ViewToggleIcon != null)
@@ -536,7 +535,6 @@ public partial class FolderPortalControl : WidgetControlBase
     }
 
     private static readonly string[] OriginalHeaders = ["Name", "Size", "Type", "Date modified"];
-    private bool _isUpdatingSortUi;
 
     private void UpdateSortArrows()
     {
@@ -564,27 +562,23 @@ public partial class FolderPortalControl : WidgetControlBase
                 else col.SortDirection = null;
             }
         }
-        // IconsSortBar sync
-        if (IconsSortCombo != null && IconsSortArrow != null)
+        // Toolbar overflow menu sync: the check marks are the current sort and direction.
+        // Re-synced on every menu open too, so a toggle WPF applies after our Click handler
+        // can never leave a stale check behind.
+        if (SortByNameMenuItem != null && SortAscendingMenuItem != null)
         {
-            _isUpdatingSortUi = true;
-            try
+            string tag = Box.FolderSortBy switch
             {
-                string tag = Box.FolderSortBy switch
-                {
-                    FolderSortMode.Size => "Size",
-                    FolderSortMode.Type => "Type",
-                    FolderSortMode.DateModified => "Date modified",
-                    _ => "Name",
-                };
-                foreach (ComboBoxItem cbi in IconsSortCombo.Items)
-                {
-                    if ((cbi.Tag as string) == tag) { IconsSortCombo.SelectedItem = cbi; break; }
-                }
-                IconsSortArrow.Text = Box.FolderSortAscending ? "▲" : "▼";
-                IconsSortDirectionButton.ToolTip = Box.FolderSortAscending ? "Ascending" : "Descending";
-            }
-            finally { _isUpdatingSortUi = false; }
+                FolderSortMode.Size => "Size",
+                FolderSortMode.Type => "Type",
+                FolderSortMode.DateModified => "Date modified",
+                _ => "Name",
+            };
+            SortByNameMenuItem.IsChecked = tag == "Name";
+            SortBySizeMenuItem.IsChecked = tag == "Size";
+            SortByTypeMenuItem.IsChecked = tag == "Type";
+            SortByDateMenuItem.IsChecked = tag == "Date modified";
+            SortAscendingMenuItem.IsChecked = Box.FolderSortAscending;
         }
     }
 
@@ -2013,11 +2007,21 @@ public partial class FolderPortalControl : WidgetControlBase
         if (_suppressDragUntilMouseUp) _suppressDragUntilMouseUp = false;
     }
 
-    private void IconsSortCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    /// <summary>Opens the toolbar's overflow (⋯) menu, anchored to its button.</summary>
+    private void HeaderMenuButton_Click(object sender, RoutedEventArgs e)
     {
-        if (_isUpdatingSortUi) return;
-        if (IconsSortCombo.SelectedItem is not ComboBoxItem cbi) return;
-        string tag = cbi.Tag as string ?? "Name";
+        if (HeaderMenuButton.ContextMenu is not ContextMenu menu) return;
+        menu.PlacementTarget = HeaderMenuButton;
+        menu.IsOpen = true;
+    }
+
+    /// <summary>Refreshes the sort check marks every time the menu opens.</summary>
+    private void HeaderMenu_Opened(object sender, RoutedEventArgs e) => UpdateSortArrows();
+
+    private void SortMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (Box == null) return;
+        if (sender is not MenuItem { Tag: string tag }) return;
         FolderSortMode newMode = tag switch
         {
             "Size" => FolderSortMode.Size,
@@ -2025,15 +2029,16 @@ public partial class FolderPortalControl : WidgetControlBase
             "Date modified" => FolderSortMode.DateModified,
             _ => FolderSortMode.Name,
         };
-        if (Box == null) return;
-        if (Box.FolderSortBy == newMode) return;
-        Box.FolderSortBy = newMode;
-        // Box setter already calls ApplyFolderSort
+        if (Box.FolderSortBy != newMode)
+        {
+            Box.FolderSortBy = newMode;
+            // Box setter already calls ApplyFolderSort
+        }
         UpdateSortArrows();
         RequestSave?.Invoke();
     }
 
-    private void IconsSortDirection_Click(object sender, RoutedEventArgs e)
+    private void SortAscendingMenuItem_Click(object sender, RoutedEventArgs e)
     {
         if (Box == null) return;
         Box.FolderSortAscending = !Box.FolderSortAscending;

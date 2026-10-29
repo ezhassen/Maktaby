@@ -112,17 +112,21 @@
         <Grid x:Name="ContentPanel" Visibility="Collapsed">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-            <!--  Navigation bar  -->
+            <!--
+                Compact toolbar: ONE row for everything. The path keeps the star column and
+                ellipsizes, so the row survives narrow boxes; the actions that used to sit inline
+                (Open / Change folder / the Icons-view sort controls) moved into the "⋯" menu,
+                which is why there is no second header row anymore.
+            -->
             <Border
                 Grid.Row="0"
-                Padding="4"
+                Padding="4,2"
                 Background="{DynamicResource BoxBackground}"
                 BorderBrush="{DynamicResource BoxBorder}"
                 BorderThickness="0,0,0,1">
-                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
                     <Button
                         x:Name="BackButton"
                         Grid.Column="0"
@@ -150,69 +154,78 @@
                         <ui:SymbolIcon x:Name="ViewToggleIcon" Symbol="AppsListDetail24" />
                     </Button>
                     <Button
+                        x:Name="HeaderMenuButton"
                         Grid.Column="3"
-                        Margin="8,0,0,0"
-                        Padding="6,2"
-                        Click="OpenFolder_Click"
-                        Content="Open"
-                        Cursor="Hand"
-                        ToolTip="Open folder in Explorer" />
-                    <Button
-                        Grid.Column="4"
-                        Margin="4,0,0,0"
-                        Padding="6,2"
-                        Click="SelectFolder_Click"
-                        Content="Change..."
-                        Cursor="Hand"
-                        ToolTip="Change folder" />
-                </Grid>
-            </Border>
-
-            <!--  Icons sorting bar  -->
-            <Border
-                x:Name="IconsSortBar"
-                Grid.Row="1"
-                Padding="4,2"
-                Background="{DynamicResource BoxBackground}"
-                BorderBrush="{DynamicResource BoxBorder}"
-                BorderThickness="0,0,0,1"
-                Visibility="Collapsed">
-                <StackPanel VerticalAlignment="Center" Orientation="Horizontal">
-                    <TextBlock
-                        Margin="0,0,6,0"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        Foreground="{DynamicResource BoxForeground}"
-                        Opacity="0.7"
-                        Text="Sort:" />
-                    <ComboBox
-                        x:Name="IconsSortCombo"
-                        Width="130"
-                        FontSize="11"
-                        SelectionChanged="IconsSortCombo_SelectionChanged">
-                        <ComboBoxItem Content="Name" Tag="Name" />
-                        <ComboBoxItem Content="Size" Tag="Size" />
-                        <ComboBoxItem Content="Type" Tag="Type" />
-                        <ComboBoxItem Content="Date modified" Tag="Date modified" />
-                    </ComboBox>
-                    <Button
-                        x:Name="IconsSortDirectionButton"
                         Margin="6,0,0,0"
                         Padding="6,2"
-                        Click="IconsSortDirection_Click"
-                        ToolTip="Toggle ascending/descending">
-                        <TextBlock
-                            x:Name="IconsSortArrow"
-                            FontSize="11"
-                            Text="▲" />
+                        Click="HeaderMenuButton_Click"
+                        Cursor="Hand"
+                        ToolTip="More options">
+                        <ui:SymbolIcon Symbol="MoreHorizontal24" />
+                        <!--
+                            Toolbar overflow: the actions that used to sit inline in the header
+                            plus the Icons-view sort controls. Declared on the button (not in
+                            Resources) so its items get generated fields. Headers are plain for
+                            the same reason as FolderEmptySpaceMenu above - the LocKey markup
+                            extension does not compile in this file.
+                        -->
+                        <Button.ContextMenu>
+                            <ContextMenu Opened="HeaderMenu_Opened">
+                                <MenuItem Click="OpenFolder_Click" Header="Open in Explorer">
+                                    <MenuItem.Icon>
+                                        <ui:SymbolIcon FontSize="16" Symbol="FolderOpen24" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Click="SelectFolder_Click" Header="Change folder...">
+                                    <MenuItem.Icon>
+                                        <ui:SymbolIcon FontSize="16" Symbol="Folder24" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator />
+                                <MenuItem Header="Sort by">
+                                    <MenuItem.Icon>
+                                        <ui:SymbolIcon FontSize="16" Symbol="ArrowUp24" />
+                                    </MenuItem.Icon>
+                                    <MenuItem
+                                        x:Name="SortByNameMenuItem"
+                                        Click="SortMenuItem_Click"
+                                        Header="Name"
+                                        IsCheckable="True"
+                                        Tag="Name" />
+                                    <MenuItem
+                                        x:Name="SortBySizeMenuItem"
+                                        Click="SortMenuItem_Click"
+                                        Header="Size"
+                                        IsCheckable="True"
+                                        Tag="Size" />
+                                    <MenuItem
+                                        x:Name="SortByTypeMenuItem"
+                                        Click="SortMenuItem_Click"
+                                        Header="Type"
+                                        IsCheckable="True"
+                                        Tag="Type" />
+                                    <MenuItem
+                                        x:Name="SortByDateMenuItem"
+                                        Click="SortMenuItem_Click"
+                                        Header="Date modified"
+                                        IsCheckable="True"
+                                        Tag="Date modified" />
+                                </MenuItem>
+                                <MenuItem
+                                    x:Name="SortAscendingMenuItem"
+                                    Click="SortAscendingMenuItem_Click"
+                                    Header="Ascending"
+                                    IsCheckable="True" />
+                            </ContextMenu>
+                        </Button.ContextMenu>
                     </Button>
-                </StackPanel>
+                </Grid>
             </Border>
 
             <!--  Icons view: VirtualizingIconPanel (now stable) instead plain WrapPanel  -->
             <controls:VirtualizingItemsControl
                 x:Name="IconsList"
-                Grid.Row="2"
+                Grid.Row="1"
                 Background="{DynamicResource BoxBackground}"
                 HorizontalScrollBarVisibility="Disabled"
                 HorizontalSpacing="0"
@@ -281,7 +294,7 @@
             <!--  Details view: DataGrid  -->
             <DataGrid
                 x:Name="DetailsGrid"
-                Grid.Row="2"
+                Grid.Row="1"
                 AutoGenerateColumns="False"
                 Background="{DynamicResource BoxBackground}"
                 BorderBrush="{DynamicResource BoxBorder}"
@@ -305,9 +318,9 @@
                 ScrollViewer.CanContentScroll="True"
                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                SelectionChanged="DetailsGrid_SelectionChanged"
                 SelectionMode="Extended"
                 SelectionUnit="FullRow"
-                SelectionChanged="DetailsGrid_SelectionChanged"
                 Sorting="DetailsGrid_Sorting"
                 VirtualizingPanel.IsContainerVirtualizable="True"
                 VirtualizingPanel.IsVirtualizing="True"
@@ -483,7 +496,7 @@
                 Last sibling so it renders above the views; hit-test off so it never blocks input.
             -->
             <StackPanel
-                Grid.Row="2"
+                Grid.Row="1"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
                 IsHitTestVisible="False"
@@ -504,7 +517,7 @@
                 Collapsed, which is a permanent render loop per portal.
             -->
             <Border
-                Grid.Row="2"
+                Grid.Row="1"
                 Margin="0,0,0,8"
                 Padding="10,6"
                 HorizontalAlignment="Center"
