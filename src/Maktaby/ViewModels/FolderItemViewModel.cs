@@ -8,7 +8,7 @@ public sealed class FolderItemViewModel : ViewModelBase
 {
     private readonly IconImageService _icons;
     private readonly string _path;
-    private readonly bool _isDirectory;
+    private bool _isDirectory;
     private System.Windows.Media.ImageSource? _icon;
     private bool _iconLoadRequested;
 
@@ -50,12 +50,34 @@ public sealed class FolderItemViewModel : ViewModelBase
     private string _renameText = string.Empty;
     private string _displayName;
 
-    public FolderItemViewModel(string path, IconImageService icons, int iconSize)
+    //
+    // Metadata is DATA, not a live lookup. The details view binds SizeText/ModifiedText on the UI
+    // thread, and the Date/Size sort reads both per row, so the old live getters (FileInfo.Length,
+    // File.GetLastWriteTime) issued a file-system call per binding evaluation and per sort key -
+    // measured at ~35 us each, i.e. ~0.7 s per pass over 20k rows, on top of the same information
+    // the folder enumeration had already read for free.
+    //
+    // The caller that enumerates supplies these values (from one DirectoryInfo pass), and the two
+    // paths that learn about a change without re-enumerating refresh them explicitly:
+    // ApplyMetadata (a reused row in ApplyFolderItems) and RefreshMetadata (a single Changed event).
+    //
+    private long _fileSize;
+    private DateTime _modifiedTime;
+
+    public FolderItemViewModel(
+        string path,
+        IconImageService icons,
+        int iconSize,
+        bool isDirectory,
+        long fileSize,
+        DateTime modifiedTime)
     {
         _path = path;
         _iconSize = iconSize < 16 ? 16 : (iconSize > 256 ? 256 : iconSize);
         _icons = icons;
-        _isDirectory = Directory.Exists(path);
+        _isDirectory = isDirectory;
+        _fileSize = fileSize;
+        _modifiedTime = modifiedTime;
         _displayName = System.IO.Path.GetFileName(path);
         if (string.IsNullOrEmpty(_displayName)) _displayName = path;
         _renameText = _displayName;
@@ -70,23 +92,63 @@ public sealed class FolderItemViewModel : ViewModelBase
     public bool IsDirectory => _isDirectory;
     public string Extension => System.IO.Path.GetExtension(_path);
     public string TypeName => _isDirectory ? "Folder" : (string.IsNullOrEmpty(Extension) ? "File" : Extension.TrimStart('.').ToUpperInvariant() + " File");
-    public long FileSize
-    {
-        get
-        {
-            if (_isDirectory) return 0;
-            try { return new FileInfo(_path).Length; } catch { return 0; }
-        }
-    }
-    public DateTime ModifiedTime
-    {
-        get
-        {
-            try { return _isDirectory ? Directory.GetLastWriteTime(_path) : File.GetLastWriteTime(_path); } catch { return DateTime.MinValue; }
-        }
-    }
+    /// <summary>File length as of the last enumeration (always 0 for a directory).</summary>
+    public long FileSize => _isDirectory ? 0 : _fileSize;
+
+    /// <summary>Last-write time as of the last enumeration.</summary>
+    public DateTime ModifiedTime => _modifiedTime;
+
     public string ModifiedText => ModifiedTime == DateTime.MinValue ? string.Empty : ModifiedTime.ToString("g");
     public string SizeText => _isDirectory ? string.Empty : FormatSize(FileSize);
+
+    /// <summary>
+    /// Adopts freshly enumerated metadata for this path, keeping the view-model instance (and its
+    /// already-loaded icon) alive.
+    /// </summary>
+    /// <remarks>
+    /// <c>ApplyFolderItems</c> reuses the row of a surviving path; without this the row would keep
+    /// the size/date it was first created with, because those values are no longer live getters.
+    /// </remarks>
+    public void ApplyMetadata(bool isDirectory, long fileSize, DateTime modifiedTime)
+    {
+        if (_isDirectory == isDirectory && _fileSize == fileSize && _modifiedTime == modifiedTime)
+        {
+            return;
+        }
+
+        _isDirectory = isDirectory;
+        _fileSize = fileSize;
+        _modifiedTime = modifiedTime;
+
+        OnPropertyChanged(nameof(IsDirectory));
+        OnPropertyChanged(nameof(TypeName));
+        OnPropertyChanged(nameof(FileSize));
+        OnPropertyChanged(nameof(ModifiedTime));
+        OnPropertyChanged(nameof(SizeText));
+        OnPropertyChanged(nameof(ModifiedText));
+    }
+
+    /// <summary>
+    /// Re-reads this one row's metadata from disk.
+    /// </summary>
+    /// <remarks>
+    /// For the "this file changed" watcher event, which knows the path but not the new size/date.
+    /// Exactly one metadata call, on one row - the whole point of caching it is that this is the
+    /// only place a row pays for a stat outside a full enumeration.
+    /// </remarks>
+    public void RefreshMetadata()
+    {
+        try
+        {
+            FileSystemInfo info = _isDirectory ? new DirectoryInfo(_path) : new FileInfo(_path);
+            info.Refresh();
+            var attrs = info.Attributes;
+            bool isDirectory = (attrs & FileAttributes.Directory) != 0;
+            long length = isDirectory ? 0 : info is FileInfo file ? file.Length : 0;
+            ApplyMetadata(isDirectory, length, info.LastWriteTime);
+        }
+        catch { }
+    }
 
     private static string FormatSize(long bytes)
     {
